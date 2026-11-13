@@ -37,6 +37,11 @@ def layout(W, H, s, st, slide):
     if st['target']: r['target'] = R(8 * s, 82 * s, 332 * s, 158 * s)
     # 38% of the height in whole numbers, a half going up: the same in any language, with no fractions involved
     oh = st['obj_h']; top = min((38 * H + 50) // 100, r['chat'][1] - (GAP + oh) * s)
+    # The room a list has is worked out first: from 8 below where the target panel ends (its place is kept whether
+    # or not it is showing) to 8 above the chat. A list taller than its title is placed inside that room: at 38%,
+    # moved up only as far as the room's top. If the room is too short the list is held at the room's top, runs
+    # into the chat, and the ordinary clash test sends it to its title. It never goes above the room.
+    if oh > 24: top = max(top, (82 + 158 + GAP) * s)
     r['objectives'] = R(8 * s, top, 272 * s, oh * s)
     return r
 def inter(a, b): return max(min(a[2], b[2]) - max(a[0], b[0]), 0) * max(min(a[3], b[3]) - max(a[1], b[1]), 0)
@@ -51,10 +56,6 @@ def clashes(r, W, H, s):
             # is b's first less a's last. Less than the clearance is a clash; exactly the clearance is not.
             if inter((a[0] - g, a[1] - g, a[2] + g, a[3] + g), b):
                 out.append((n[i], n[j]))
-    # The target panel's place is kept for it whether or not it is showing: a list of objectives taller than its
-    # title may not start above 8 below where the target panel ends. So the list can never grow into that place.
-    o = r.get('objectives')
-    if o and o[3] - o[1] > 24 * s and o[1] < (82 + 158 + GAP) * s and 'target' not in r: out.append(('objectives', 'target'))
     return out
 def unique(rects, W, H):
     xs = sorted({v for a in rects for v in (a[0], a[2])}); ys = sorted({v for a in rects for v in (a[1], a[3])}); area = 0

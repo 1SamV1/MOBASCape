@@ -581,11 +581,18 @@ stage 4. Sizes are at scale 1.
   3. **Lines are 24 and stay 24.** The panel is never scrolled, never
      clipped, never drawn outside its rectangle, lines are never dropped,
      and neither the pitch nor the font is changed to make a list fit.
-  4. **The target panel's place is kept for it**, showing or not: a list
-     taller than its title never starts higher than 8 below where the
-     target panel ends. A growing list cannot take that place.
+  4. **The target panel's place is kept for it**, showing or not, and it
+     is part of working out the room, not a check made afterwards. The
+     room a list has runs from 8 below where the target panel ends to 8
+     above the chat; that is worked out first, from the two neighbours.
+     A list taller than its title is then placed inside the room: at 38%
+     of the height if that is inside it, moved up only as far as the
+     room's top, and never above it. If the room is shorter than the list,
+     the list does not fit, and point 5 applies. At 1920 by 1080 the room
+     is from 248 to 922, 674 tall.
   5. **When it does not fit, in this order, each already a rule of this
-     plan:** its top moves up from 38% towards the target panel's place;
+     plan:** its top moves up from 38%, as far as the room's top and no
+     further;
      then a scale at which the longest list does not fit is not chosen
      (section 2); then, at scale 1, a list too long for the room at that
      moment is shown as its title and comes back in full the moment it
@@ -873,7 +880,8 @@ and a narrow window needs a rule for the top row, where the score strip and
 the kill feed meet (section 7).
 
 Why 5120 by 1440 cannot be scale 2 is the left column's height, not the
-width. At scale 2 the target panel ends at 480, so with 16 clear (8 at
+width: the room between the target panel's place and the chat (section
+5.4) is shorter than the longest list. At scale 2 the target panel ends at 480, so with 16 clear (8 at
 scale 2) the objectives may start no higher than 496. The chat starts at
 1140, and the longest objectives list is 796 tall, so to stay 16 above the
 chat it must start no lower than 328. It cannot do both: the column is 168
@@ -1265,6 +1273,8 @@ Added after the question about future objectives, still the fourth draft:
 | Fit and scale must use the actual objective count | The height is 158 plus 24 a line, from the counts; the script's 302 and 398 are now worked out that way and nothing uses a fixed figure (section 5.4, point 2) |
 | A defined response when a longer list does not fit, never clipping or a changed pitch | Six points in section 5.4: the order of responses, each an existing rule, and a test on the real counts that fails before anything is hidden |
 | Found while writing it | A list growing upward could have taken the target panel's place and kept the panel from showing. The place is now kept for it whether it shows or not. No reported figure changed; the script's output section 12 shows the panel staying on screen as the list grows |
+
+| The kept place must be part of the available height, not only a final check | It is: the room is worked out first from the target panel's place and the chat, and the list is placed inside it (section 5.4, point 4). The script does the same; its output is unchanged but for one line, where the 5120 by 1440 list at scale 2, now held at the room's top, is reported as running into the chat and not into the target panel. The shortfall is the same 168 |
 
 Settling the bottom row in one go also changed two rows of the table in
 section 6: at 1080 by 1920 the chat keeps its full height (it lost it for
