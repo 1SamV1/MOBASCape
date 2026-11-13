@@ -146,17 +146,28 @@ impl Font {
     }
 }
 
+/// Windows-1252's characters from 0x80 to 0x9F, the only stretch where it
+/// and Unicode part company.
+const HIGH: [char; 32] = [
+    '\u{20AC}', '\u{81}', '\u{201A}', '\u{192}', '\u{201E}', '\u{2026}', '\u{2020}', '\u{2021}',
+    '\u{2C6}', '\u{2030}', '\u{160}', '\u{2039}', '\u{152}', '\u{8D}', '\u{17D}', '\u{8F}',
+    '\u{90}', '\u{2018}', '\u{2019}', '\u{201C}', '\u{201D}', '\u{2022}', '\u{2013}', '\u{2014}',
+    '\u{2DC}', '\u{2122}', '\u{161}', '\u{203A}', '\u{153}', '\u{9D}', '\u{17E}', '\u{178}',
+];
+
+/// The character a number stands for in the fonts: the other way round from
+/// [`code_of`].
+pub fn char_of(code: u8) -> char {
+    match code {
+        0x80..=0x9F => HIGH[(code - 0x80) as usize],
+        other => other as char,
+    }
+}
+
 /// The number a character has in the fonts: its place in Windows-1252, the
 /// character set the game's text is kept in. Anything outside it is a
 /// question mark.
 pub fn code_of(c: char) -> u8 {
-    const HIGH: [char; 32] = [
-        '\u{20AC}', '\u{81}', '\u{201A}', '\u{192}', '\u{201E}', '\u{2026}', '\u{2020}',
-        '\u{2021}', '\u{2C6}', '\u{2030}', '\u{160}', '\u{2039}', '\u{152}', '\u{8D}', '\u{17D}',
-        '\u{8F}', '\u{90}', '\u{2018}', '\u{2019}', '\u{201C}', '\u{201D}', '\u{2022}', '\u{2013}',
-        '\u{2014}', '\u{2DC}', '\u{2122}', '\u{161}', '\u{203A}', '\u{153}', '\u{9D}', '\u{17E}',
-        '\u{178}',
-    ];
     let n = c as u32;
     if n < 0x80 || (0xA0..=0xFF).contains(&n) {
         return n as u8;
@@ -281,5 +292,14 @@ mod tests {
         assert_eq!(code_of('\u{20AC}'), 0x80); // euro
         assert_eq!(code_of('\u{2019}'), 0x92); // curly apostrophe
         assert_eq!(code_of('\u{4E2D}'), b'?');
+    }
+
+    #[test]
+    fn every_number_comes_back_from_its_character() {
+        for code in 0..=255u8 {
+            assert_eq!(code_of(char_of(code)), code, "{code}");
+        }
+        assert_eq!(char_of(0x80), '\u{20AC}');
+        assert_eq!(char_of(b'A'), 'A');
     }
 }

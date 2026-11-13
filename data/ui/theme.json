@@ -1,0 +1,19 @@
+{
+  "sprites": {
+    "test.sprite": { "sprite": 198 }
+  },
+  "panels": {
+    "panel": { "sprite": 170, "insets": [6, 6, 6, 6] }
+  },
+  "fonts": {
+    "small": { "font": 494 },
+    "body": { "font": 495 },
+    "bold": { "font": 496 },
+    "title": { "font": 497 }
+  },
+  "colours": {
+    "text": "#ffffff",
+    "announcement": "#ffff00",
+    "shade": "#00000080"
+  }
+}

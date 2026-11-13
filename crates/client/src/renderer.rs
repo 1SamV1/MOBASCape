@@ -6,6 +6,7 @@ use wgpu::util::DeviceExt;
 use winit::window::Window;
 
 use crate::scene::{HeightGrid, MeshData, SceneData, Vertex};
+use crate::ui_pass::UiPass;
 
 #[repr(C)]
 #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
@@ -102,6 +103,9 @@ pub struct Renderer {
     fog_vertex_capacity: usize,
     fog_index_capacity: usize,
     fog_index_count: u32,
+    /// The interface's own pass, drawn after the scene; none until it is
+    /// given an atlas.
+    ui: Option<UiPass>,
     pub camera: Camera,
     pub size: (u32, u32),
 }
@@ -398,6 +402,7 @@ impl Renderer {
             fog_vertex_capacity,
             fog_index_capacity,
             fog_index_count: 0,
+            ui: None,
             camera: initial_camera,
             size: (width, height),
         };
@@ -547,6 +552,23 @@ impl Renderer {
         self.hud_index_count = indices.len() as u32;
     }
 
+    /// Give the interface pass the one picture everything it draws is in.
+    pub fn set_ui_atlas(&mut self, atlas: &rift_ui::Atlas) {
+        self.ui = Some(UiPass::new(
+            &self.device,
+            &self.queue,
+            self.config.format,
+            atlas,
+        ));
+    }
+
+    /// This frame's interface, as quads placed in window pixels.
+    pub fn set_ui_mesh(&mut self, vertices: &[rift_ui::Vertex], indices: &[u32]) {
+        if let Some(ui) = self.ui.as_mut() {
+            ui.set_mesh(&self.device, &self.queue, self.size, vertices, indices);
+        }
+    }
+
     pub fn pick_ground(&self, cursor_x: f64, cursor_y: f64, height: &HeightGrid) -> Option<Vec3> {
         let (origin, dir) = self.screen_ray(cursor_x, cursor_y)?;
 
@@ -668,13 +690,18 @@ impl Renderer {
             }
         }
 
+        // the interface, over the finished scene
+        if let Some(ui) = self.ui.as_ref() {
+            ui.draw(&mut encoder, &view);
+        }
+
         self.queue.submit(std::iter::once(encoder.finish()));
         self.queue.present(output);
         Ok(())
     }
 }
 
-fn create_dynamic_buffer(
+pub(crate) fn create_dynamic_buffer(
     device: &wgpu::Device,
     label: &str,
     size: usize,

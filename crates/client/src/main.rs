@@ -5,6 +5,8 @@ mod items;
 mod movement;
 mod renderer;
 mod scene;
+mod theme_file;
+mod ui_pass;
 
 use std::collections::HashSet;
 use std::path::PathBuf;
@@ -67,6 +69,16 @@ struct Cli {
     /// Simulation speed multiplier for verification.
     #[arg(long, default_value_t = 1.0)]
     timescale: f32,
+    /// Draw the interface renderer's test screen over the game.
+    #[arg(long)]
+    ui_test: bool,
+    /// Force the interface's scale (1 to 4) instead of taking it from the
+    /// window's size.
+    #[arg(long)]
+    ui_scale: Option<u32>,
+    /// The theme: which images, fonts and colours the interface is made of.
+    #[arg(long, default_value = "data/ui/theme.json")]
+    ui_theme: PathBuf,
 }
 
 fn main() -> Result<()> {
@@ -93,6 +105,24 @@ fn main() -> Result<()> {
     let animated = AnimatedScene::new(&cache, &scene, &champion)?;
     let height = scene.height.clone();
     let collision = scene.collision.clone();
+    // The interface renderer's test screen, only when asked for. The game's
+    // own interface does not use the new drawing layer yet.
+    let ui_theme = if cli.ui_test {
+        let theme = theme_file::load(&cache, &cli.ui_theme)
+            .with_context(|| format!("loading theme {}", cli.ui_theme.display()))?;
+        tracing::info!(
+            "interface theme {}: atlas {} x {}, fonts {:?}, panels {:?}, sprites {:?}",
+            cli.ui_theme.display(),
+            theme.atlas.width,
+            theme.atlas.height,
+            theme.font_roles().collect::<Vec<_>>(),
+            theme.panel_roles().collect::<Vec<_>>(),
+            theme.sprite_roles().collect::<Vec<_>>()
+        );
+        Some(theme)
+    } else {
+        None
+    };
     tracing::info!(
         "scene ready: {} placements, {} animated units",
         scene.placements,
@@ -145,6 +175,9 @@ fn main() -> Result<()> {
         demo_combat_cast: false,
         demo_combat_target: None,
         hud: Hud::new(),
+        ui_theme,
+        ui_scale: cli.ui_scale,
+        ui_shown: (0, 0, 0),
         fog_timer: 0.0,
         lane_log_timer: 0.0,
         last_frame: Instant::now(),
@@ -190,6 +223,11 @@ struct App {
     demo_combat_cast: bool,
     demo_combat_target: Option<usize>,
     hud: Hud,
+    /// The theme for the interface test screen, when it was asked for.
+    ui_theme: Option<rift_ui::Theme>,
+    ui_scale: Option<u32>,
+    /// The window size and scale the test screen was last built for.
+    ui_shown: (u32, u32, u32),
     fog_timer: f32,
     lane_log_timer: f32,
     last_frame: Instant,
@@ -227,6 +265,9 @@ impl ApplicationHandler for App {
             }
         };
 
+        if let Some(theme) = self.ui_theme.as_ref() {
+            renderer.set_ui_atlas(&theme.atlas);
+        }
         renderer.camera.distance = self.initial_distance;
         renderer.update_camera();
         tracing::info!(
@@ -680,6 +721,22 @@ impl App {
             self.hud
                 .build_minimap(renderer.size.0 as f32, renderer.size.1 as f32, animated);
             renderer.set_hud_mesh(&self.hud.vertices, &self.hud.indices);
+            if let Some(theme) = self.ui_theme.as_ref() {
+                let list = rift_ui::test_screen::build(theme, renderer.size, self.ui_scale);
+                let shown = (renderer.size.0, renderer.size.1, list.scale() as u32);
+                if shown != self.ui_shown {
+                    tracing::info!(
+                        "interface test: window {} x {}, scale {}, {} quads",
+                        shown.0,
+                        shown.1,
+                        shown.2,
+                        list.len()
+                    );
+                    self.ui_shown = shown;
+                }
+                let (vertices, indices) = list.finish();
+                renderer.set_ui_mesh(&vertices, &indices);
+            }
             if self.follow {
                 renderer.camera.target = animated.player_pos() + Vec3::Y * 140.0;
                 renderer.update_camera();
