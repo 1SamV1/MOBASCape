@@ -1056,7 +1056,7 @@ interface still drawn and still the default.
 | 1 | Score strip | B | beside S2 and S3 |
 | 2 | Ability bar with health and resource | B | beside S2 and S3 |
 | 3 | Minimap | B | beside S2 |
-| 4 | Objectives | B | beside S2 for layout; each sample state shown |
+| 4 | Objectives | B | beside S2 for layout; each sample state shown; what is drawn stays inside its rectangle (below) |
 | 5 | Team frames | B | beside S2 and S4 |
 | 6 | Target panel | B | beside S4 |
 | 7 | Unit plates | B, the client's projection | beside S2; hidden where the old bars are hidden |
@@ -1101,6 +1101,14 @@ the real code:
 - identical rectangles for the same window and the same conditional
   pieces, whatever resizes came before (section 7);
 - every pair of pieces at least 8 apart, with no pair excused;
+- **the clearance at its edge, on the real clash test:** two rectangles 7
+  apart clash; exactly 8 apart are clear; 9 apart are clear; across and
+  down, and at scales 1 and 2 (where the figures are 15, 16 and 17);
+- **the scale in both modes:** chosen automatically, and forced by the
+  player, including a forced scale too large for the window so that
+  collapse is in force. In each mode the same window and the same pieces
+  wanted give identical rectangles; a forced scale is the scale used, and
+  the automatic choice never replaces it;
 - the same rectangles with the components listed in any order;
 - the objectives' top at window heights where 38% falls on a half (75,
   175, 275 and so on), against the whole-number rule;
@@ -1110,6 +1118,22 @@ the real code:
 - the budget read from the finished rectangles: for each window, the figure
   the collapse stopped at equals the area counted afresh from the
   rectangles it produced.
+
+**The objectives are checked by what is drawn, not only by their
+height (step 4).** The 302 and 398 are a calculation; drawing code can
+still put a line, a rule or a mark outside the rectangle it was given. So
+a test draws the list at its usual and its longest state with the clip
+turned off, into the reference rasteriser stage 2 has, and asserts that no
+pixel is touched outside the 272 by 302 or 272 by 398 it was given, and
+that each line's text starts 24 below the line before. The same is looked
+at in the game: every line inside the panel, none cut off, the pitch
+unchanged.
+
+**Three kinds of evidence, kept apart.** The Python script gives the
+proposed geometry and figures that can be reproduced. The step B tests
+show that the Rust placing code produces those figures. The labelled
+rectangles and then the components in the game show that it looks right.
+None stands in for another.
 
 **Everything at once.** Components are also checked together in the states
 that strain a layout: a long chat line that must wrap, the largest tooltip,
@@ -1275,6 +1299,13 @@ Added after the question about future objectives, still the fourth draft:
 | Found while writing it | A list growing upward could have taken the target panel's place and kept the panel from showing. The place is now kept for it whether it shows or not. No reported figure changed; the script's output section 12 shows the panel staying on screen as the list grows |
 
 | The kept place must be part of the available height, not only a final check | It is: the room is worked out first from the target panel's place and the chat, and the list is placed inside it (section 5.4, point 4). The script does the same; its output is unchanged but for one line, where the 5120 by 1440 list at scale 2, now held at the room's top, is reported as running into the chat and not into the target panel. The shortfall is the same 168 |
+
+Added after the review of sections 6 to 12 against the script, as
+acceptance requirements for step B and step 4 (section 8): the clearance
+tested at 7, 8 and 9 on the real clash test; the scale tested both chosen
+and forced, a forced scale never being replaced; the objectives checked by
+what they draw staying inside their rectangle at a pitch of 24. The 38%
+placing of the objectives stays provisional and is not reopened.
 
 Settling the bottom row in one go also changed two rows of the table in
 section 6: at 1080 by 1920 the chat keeps its full height (it lost it for
