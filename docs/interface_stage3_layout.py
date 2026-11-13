@@ -16,7 +16,7 @@ def layout(W, H, s, st, slide):
     r = {}
     R = lambda x, y, w, h: (x, y, x + w, y + h)
     mm = R(W - (8 + 266) * s, H - (16 + 264) * s, 266 * s, 264 * s); r['minimap'] = mm
-    if st['inv']: r['inventory'] = R(mm[0] - (6 + INV[0]) * s, H - (18 + INV[1]) * s, INV[0] * s, INV[1] * s)
+    if st['inv']: r['inventory'] = R(mm[0] - (GAP + INV[0]) * s, H - (18 + INV[1]) * s, INV[0] * s, INV[1] * s)
     r['chat'] = R(5 * s, H - (10 + st['chat_h']) * s, st['chat_w'] * s, st['chat_h'] * s)
     ax = (W - 458 * s) // 2
     if slide:
@@ -39,8 +39,10 @@ def clashes(r, W, H, s):
         if a[0] < 0 or a[1] < 0 or a[2] > W or a[3] > H: out.append((n[i], 'window'))
         for j in range(i + 1, len(n)):
             b = r[n[j]]; g = GAP * s
-            if inter((a[0] - g, a[1] - g, a[2] + g, a[3] + g), b):   # closer than the clearance counts as a clash
-                if not ({n[i], n[j]} == {'inventory', 'minimap'}): out.append((n[i], n[j]))
+            # Rectangles hold their first pixel and stop before their last coordinate, so the space between two
+            # is b's first less a's last. Less than the clearance is a clash; exactly the clearance is not.
+            if inter((a[0] - g, a[1] - g, a[2] + g, a[3] + g), b):
+                out.append((n[i], n[j]))
     return out
 def unique(rects, W, H):
     xs = sorted({v for a in rects for v in (a[0], a[2])}); ys = sorted({v for a in rects for v in (a[1], a[3])}); area = 0
@@ -69,17 +71,21 @@ def collapse(W, H, s, want, budget, slide):
     cover = lambda: unique(list(lay().values()), W, H)
     B, L, Rr = {'chat', 'ability', 'inventory', 'minimap'}, {'target', 'objectives', 'chat'}, {'feed', 'team', 'minimap', 'score'}
     # --- pass 1: the usual state
+    # The bottom row is settled in one go. The minimap never moves; the inventory sits against it; the bar is
+    # centred, or slid left only as far as leaves the clearance to the inventory (layout() does that); the chat
+    # takes what is left. The arrangements are tried in this order and the first with no clash in the row is
+    # kept, each with the widest chat that fits, so nothing is ever left smaller than the window requires.
     if bad(B):
-        for w in range(440, CHAT_MIN - 1, -2):
-            st['chat_w'] = w
-            if not [p for p in bad(B) if 'chat' in p]: break
-        steps.append(f"chat narrows to {st['chat_w']}")
-    if [p for p in bad(B) if 'chat' in p]:
-        st['chat_h'] = 24; steps.append('chat to its last line')
-        for w in range(st['chat_w'], CHAT_LINE_MIN - 1, -2):
-            st['chat_w'] = w
-            if not [p for p in bad(B) if 'chat' in p]: break
-    if bad(B): st['inv'] = False; steps.append('inventory hidden')
+        tries = [(inv, h, lo) for inv in (True, False) for h, lo in ((140, CHAT_MIN), (24, CHAT_LINE_MIN))]
+        for inv, h, lo in tries:
+            st['inv'], st['chat_h'] = inv, h
+            for w in range(440, lo - 1, -1):
+                st['chat_w'] = w
+                if not bad(B): break
+            if not bad(B): break
+        if st['chat_w'] < 440: steps.append(f"chat narrows to {st['chat_w']}")
+        if st['chat_h'] == 24: steps.append('chat to its last line')
+        if not st['inv']: steps.append('inventory hidden')
     if bad(L): st['obj_h'] = 24; steps.append('objectives to its title')
     if [p for p in bad(Rr) if set(p) == {'score', 'feed'}]: st['feed_y'] = 56; steps.append('kill feed moves under the score strip')
     if bad(Rr): st['team_compact'] = True; steps.append('team frames to portraits')
@@ -155,7 +161,27 @@ if __name__ == '__main__':
             if choose_scale(W + 32, H, 0.25) < s0 or choose_scale(W, H + 32, 0.25) < s0: falls += 1
     print('   times the scale fell:', falls)
     print('--- 8. clearances, all with 8 clear, bar centred')
-    print('   bar clears our inventory (144 wide) from width', next(W for W in range(900, 2400) if W // 2 - 229 + 458 + GAP <= W - (8 + 266 + 6 + 144)))
-    print('   bar clears the reference inventory (232 wide) from width', next(W for W in range(900, 2400) if (W - 458) // 2 + 458 + GAP <= W - (8 + 266 + 6 + 232)))
+    print('   bar clears our inventory (144 wide) from width', next(W for W in range(900, 2400) if (W - 458) // 2 + 458 + GAP <= W - (8 + 266 + GAP + 144)))
+    print('   bar clears the reference inventory (232 wide) from width', next(W for W in range(900, 2400) if (W - 458) // 2 + 458 + GAP <= W - (8 + 266 + GAP + 232)))
     print('   bar clears the chat at 440 from width', next(W for W in range(900, 2400) if 5 + 440 + GAP <= (W - 458) // 2))
     print('   bar clears the minimap alone from width', next(W for W in range(900, 2400) if (W - 458) // 2 + 458 + GAP <= W - (8 + 266)))
+    print('--- 9. the same window gives the same rectangles whatever came before')
+    # collapse() is given the window and what play wants to show and nothing else, so this can only fail if
+    # something is carried over by mistake. One walk keeps going from size to size; each size it reaches is
+    # then worked out again on its own, and the two sets of rectangles are compared.
+    import random
+    rng = random.Random(7); W, H = 1920, 1080; differ = 0; walk = []
+    for _ in range(400):
+        W = max(960, min(3840, W + rng.choice((-400, -64, -8, 8, 64, 400)))); H = max(384, min(2400, H + rng.choice((-300, -48, -6, 6, 48, 300))))
+        want = rng.choice((USUAL, BUSY)); s = choose_scale(W, H, 0.25)
+        walk.append((W, H, want, s, layout(W, H, s, collapse(W, H, s, want, 0.25, True)[1], True)))
+    for W, H, want, s, seen in reversed(walk):
+        s2 = choose_scale(W, H, 0.25)
+        differ += (s2, layout(W, H, s2, collapse(W, H, s2, dict(want), 0.25, True)[1], True)) != (s, seen)
+    print('   sizes reached by a wandering resize:', len(walk), '; differing when worked out again on their own, in another order:', differ)
+    print('--- 10. the bar and the chat together at scale 1 (inventory showing): where the bar starts, how wide the chat is')
+    for W in (1920, 1600, 1366, 1364, 1362, 1325, 1324, 1300, 1280, 1200, 1100, 1024, 960):
+        steps, end, left = collapse(W, 720, 1, USUAL, 1.0, True); r = layout(W, 720, 1, end, True)
+        inv = r.get('inventory'); a = r['ability']; c = r['chat']
+        print(f"   {W:5}: bar {a[0]:4} to {a[2]:4} (centre would be {(W - 458) // 2:4}), moved {(W - 458) // 2 - a[0]:3}; chat {c[2] - c[0]:3} wide, {a[0] - c[2]:3} from the bar; "
+              f"{'inventory ' + str(inv[0] - a[2]) + ' from the bar' if inv else 'inventory hidden'}{' | CLASH ' + str(left) if left else ''}")

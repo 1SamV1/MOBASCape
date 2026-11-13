@@ -1,14 +1,16 @@
 # Interface stage 3: plan for the static interface
 
-Status: **a plan for review, third draft. Nothing in it is built, and
-nothing in it is authorised to be built.** The second draft answered two reviews of the first: the layout worked
-out as rectangles from the anchors and not as sums of widths, the screen
-budget defined, the scale chosen by whether the interface fits, the scope
-narrowed. This draft answers the reviews of the second: one clearance
-figure corrected and one rule for clearance used everywhere, the three open
-decisions recorded, the largest content sizes and other shapes of window
-added to the arithmetic, and the layout settled in two passes. What changed
-is listed in section 12. It was asked for after stages 1 and 2 of
+Status: **a plan for review, fourth draft. Every section of this file is
+the fourth draft. Nothing in it is built, and nothing in it is authorised to
+be built.** The earlier drafts moved the layout onto rectangles worked out
+from anchors, defined the screen budget, chose the scale by fit, narrowed
+the scope, and settled the layout in two passes. This draft answers the
+review of the third, part by part: the inventory now keeps the same 8 from
+the minimap as every other pair of pieces; the bottom row is settled in one
+stated order; the budget is measured on the rectangles as they finally are;
+what `crates/ui` hands the client is said exactly; the frame kit has checks
+of its own; and the claim that resizing leaves no trace is given a test.
+What changed is listed in section 12. It was asked for after stages 1 and 2 of
 `docs/INTERFACE.md` passed. It does not change that document; where it would,
 the change is listed under "Changes this plan asks for" and waits for review.
 `crates/client/src/hud.rs` is untouched until a later go-ahead.
@@ -51,7 +53,10 @@ So, for every figure in this plan:
   guess.
 
 Figures are written as *left to right, top to bottom* on the 1920 by 1080
-grid. "Measured" means read off an enlarged, gridded crop. "From parts" means
+grid. "Measured" means read off an enlarged, gridded crop of a blurred
+picture, so every measured figure in this plan is an **approximate
+reference coordinate**, good to the 4 pixels above and no better, however
+exactly it is written. "From parts" means
 worked out from the real sizes of the cache sprites and fonts that would make
 the component; these are proposals, to be confirmed when the component is
 first drawn.
@@ -82,9 +87,16 @@ slots, about 144 by 160 where the reference's eighteen cells are 232 by
 ### Two checks, kept apart
 
 **1. Do pieces clash?** Two pieces clash if they are closer than 8 of the
-interface's own pixels. This is geometry and has no opinion.
+interface's own pixels, or if either leaves the window. This is geometry
+and has no opinion.
 
 **2. How much of the battlefield is covered?** The budget.
+
+Both checks, the choice of scale and every step of collapse read **one set
+of rectangles from one function**: the same anchors, the same margins, the
+same 8. There is no second, rougher sum anywhere that could disagree with
+it. The script is written that way (`layout()` and `clashes()` are the only
+geometry in it) and step B's code has to be.
 
 ### What the budget measures
 
@@ -151,20 +163,30 @@ makes pieces give way.
 ### One rule for clearance, and the figures it gives
 
 Two pieces are clear of each other when there are at least 8 of the
-interface's own pixels between them. Every figure in this plan, in the
-script and in its output uses that rule. With the ability bar centred:
+interface's own pixels between them, across or down. A rectangle holds its
+first pixel and stops before its last coordinate, so the space between two
+side by side is the left edge of one less the right edge of the other:
+exactly 8 is clear, 7 is a clash. Every figure in this plan, in the script
+and in its output uses that rule, and **no pair of pieces is excused from
+it**. With the ability bar centred:
 
 | The bar clears | From a window this wide | Why |
 |---|---|---|
 | the minimap alone | 1021 | the bar ends at half the width plus 229; the minimap starts 274 from the right |
-| our inventory (144 wide) | 1321 | the inventory starts 424 from the right |
+| our inventory (144 wide) | 1325 | the inventory starts 426 from the right: 8 of margin, 266 of minimap, 8 clear, 144 |
 | the chat at its full 440 | 1364 | the chat ends 445 from the left; the bar starts at half the width less 229 |
-| the reference's inventory (232 wide) | 1497 | it would start 512 from the right |
+| the reference's inventory (232 wide) | 1501 | it would start 514 from the right |
 
 So the least width for the whole interface, 1364, is set by the **chat on
-the left**, not by the inventory. The second draft said the inventory set
-it, and gave 1481 for the reference's inventory, which was a figure with no
-clearance at all from an earlier run. Both are corrected here.
+the left**, not by the inventory.
+
+The third draft had the inventory 6 from the minimap, copied from the
+reference, and let that one pair off the rule. That was wrong by the
+plan's own terms. The inventory now sits 8 from the minimap, which moves it
+2 to the left (1494 to 1638 at 1920 by 1080, where the reference's right
+edge is about 1640) and moves the two inventory figures above by 4 each,
+from 1321 and 1497. Two pixels is inside what the reference can be
+measured to.
 
 ### The least window
 
@@ -211,9 +233,16 @@ The boundary, stated once:
 - `crates/ui` turns a `HudState` and a theme into a list of quads over one
   atlas. It depends on nothing: not the client, not the cache, not the
   simulation, not the graphics card.
+- **The quads and the atlas are `crates/ui`'s own plain types**, the ones
+  stage 2 froze: a vertex is a position, a place in the atlas and a colour;
+  the atlas is one picture as bytes with named regions. None of them is a
+  graphics-library type, and nothing in `crates/ui` names a texture, a
+  buffer or a pipeline.
 - The client fills `HudState` (in stage 3 from `sample.rs`; in stage 4 from
-  the match), builds the theme from the cache, and hands the quads to the
-  stage 2 pass. Nothing flows the other way.
+  the match), builds the theme from the cache, and **translates** those
+  plain types for the graphics card in the stage 2 pass: the atlas into a
+  texture, the vertices into a buffer. That translation is the only place
+  the two meet, and nothing flows the other way.
 
 ### What a component is
 
@@ -239,6 +268,9 @@ Each frame, in this order:
 2. Choose the scale by fit (section 2).
 3. Place each at its anchor (section 5), in whole pixels.
 4. If pieces clash, or the usual state is over budget, apply section 7.
+   After every step taken there the rectangles are placed again from
+   scratch, and the clash test and the budget are read from those, never
+   from figures carried over from before the step.
 5. Draw them, lowest layer first.
 
 Unit plates are not part of this pass at all (section 5.6): they are placed
@@ -314,6 +346,23 @@ compose the kit into one image when it builds the theme; that keeps the
 drawing layer as it is. This is new work in the loader and is the first
 step of the order in section 8.
 
+Composing is where a frame goes quietly wrong, so step A checks the
+assembled image itself, before any component uses it:
+
+- **corners and edges meet**: each edge sprite continues its corner with no
+  gap, no doubled line and no step, on all four sides;
+- **transparency is kept**: what is see-through in the parts is see-through
+  in the whole, so a frame's clear corners do not come out black;
+- **it holds at the sizes it is used at**: drawn as a nine-slice at the
+  smallest panel that uses it (a 60-wide portrait frame), the largest (the
+  782 by 580 shop) and one whose sides are not multiples of the edge
+  sprite, with the edges repeating cleanly and no corner stretched;
+- the insets written in the theme are the corners' real sizes, read from
+  the sprites and not guessed.
+
+If the kit cannot be made to pass, `panel.stone` falls back to the single
+stone panel 1031, which stage 2's drawing already handles.
+
 ### Sprites
 
 | Role | Used by | Cache | Confidence |
@@ -333,6 +382,11 @@ step of the order in section 8.
 
 In stage 3 every ability, item and portrait is a labelled grey square. The
 plan does not choose art for systems that do not exist.
+
+The two icons not found, minimise and close, stay as plain placeholders (a
+drawn bar and a drawn cross in the text colour) through stage 3. Nothing
+waits on finding them, and no sprite is pressed into service because it
+looks roughly right.
 
 ### Colours
 
@@ -525,8 +579,10 @@ kept apart in the code.
 
 ### 5.7 Inventory
 
-- **Anchor:** bottom right, left of the minimap, its right edge 6 from the
-  minimap's left, 18 from the bottom.
+- **Anchor:** bottom right, left of the minimap, its right edge 8 from the
+  minimap's left, 18 from the bottom. The reference has about 6 there; this
+  plan keeps one clearance for every pair of pieces (section 2), and 2
+  pixels is less than the reference can be measured to.
 - **What the reference has:** a panel 232 by 224 (measured in S2: 1408 to
   1640, 838 to 1062) holding ten equipment cells in two rows of five, eight
   item cells, a gold count, and Shop and Teleport buttons. Cells are about
@@ -545,11 +601,11 @@ kept apart in the code.
 - **Stage 3:** six labelled squares, three of them filled. **Stage 4:**
   items, gold; buy, sell, use, open shop.
 - **Clearance:** at 144 wide the centred ability bar is clear of it from
-  1321 wide, so it is never what limits the layout; the chat is, at 1364
+  1325 wide, so it is never what limits the layout; the chat is, at 1364
   (section 2).
 - **If the item system later wants the reference's eighteen**, the panel
   grows to the reference's 232 by 224, the centred bar is clear of it only
-  from 1497 wide, and the inventory becomes what limits the layout.
+  from 1501 wide, and the inventory becomes what limits the layout.
 
 ### 5.8 Chat and event log
 
@@ -674,7 +730,7 @@ and has no file in the tree until it has one or the other.
 Every rectangle at 1920 by 1080, scale 1, from the anchors, beside what was
 measured:
 
-| Piece | From the anchors | Measured in the reference |
+| Piece | From the anchors | Approximate reference coordinates |
 |---|---|---|
 | Score strip | 693 to 1227, 10 to 48 | 692 to 1226, 10 to 48 |
 | Kill feed (four entries) | 1622 to 1908, 18 to 136 | one entry 1622 to 1908, 18 to 46 |
@@ -683,12 +739,15 @@ measured:
 | Objectives (ours, 290 to 370 tall) | 8 to 280, 410 to 700 or 780 | 8 to 280, 410 to 760 or 810 |
 | Chat | 5 to 445, 930 to 1070 | the same |
 | Ability bar | 731 to 1189, 968 to 1062 | 730 to 1188, 968 to 1062 |
-| Inventory (ours, 144 by 160) | 1496 to 1640, 902 to 1062 | 1408 to 1640, 838 to 1062 |
+| Inventory (ours, 144 by 160) | 1494 to 1638, 902 to 1062 | 1408 to 1640, 838 to 1062 |
 | Minimap | 1646 to 1912, 800 to 1064 | the same |
 
-The anchors reproduce the reference to a pixel wherever the content is the
-same. That checks the anchors at the one size the reference was recorded
-at, and nothing more: it does not show the layout is good at any other
+Wherever the content is the same the anchors land within a pixel or two of
+the reference coordinates, which are themselves good only to about 4, so
+"the same" in the table means "the same within what can be measured". The
+one deliberate difference is the inventory's right edge, 2 further left
+(section 5.7). This checks the anchors at the one size the reference was
+recorded at, and nothing more: it does not show the layout is good at any other
 shape of window. For that:
 
 | Window | Shape | Scale | What gives | Usual covers | Objectives, at their longest | Chat from |
@@ -698,10 +757,10 @@ shape of window. For that:
 | 5120 by 1440 | 32:9 | 1 | nothing | 4.6% | 547 to 917 | 1290 |
 | 1920 by 1200 | 16:10 | 1 | nothing | 14.7% | 456 to 826 | 1050 |
 | 1600 by 1200 | 4:3 | 1 | nothing | 17.7% | 456 to 826 | 1050 |
-| 1280 by 1024 | 5:4 | 1 | chat to 376; objectives to title, for the budget | 19.7% | title only | 874 |
+| 1280 by 1024 | 5:4 | 1 | chat to 375; objectives to title, for the budget | 19.6% | title only | 874 |
 | 1440 by 2560 | 9:16 | 1 | nothing | 9.2% | 973 to 1343 | 2410 |
-| 1080 by 1920 | 9:16 | 1 | chat to its last line; inventory hidden; kill feed under the score strip | 12.5% | 730 to 1100 | 1886 |
-| 1024 by 768 | 4:3, under the smallest supported | 1 | as the last, and objectives to title | 23.7% | title only | 734 |
+| 1080 by 1920 | 9:16 | 1 | inventory hidden; chat to 298, at its full height; kill feed under the score strip | 14.3% | 730 to 1100 | 1770 |
+| 1024 by 768 | 4:3, under the smallest supported | 1 | inventory hidden; chat to its last line, 270 wide; kill feed under the score strip; objectives to title, for the budget | 24.0% | title only | 734 |
 
 Nothing clashes at any of them. Two things these show that 16:9 sizes do
 not: a window can be wide enough for a higher scale and not tall enough
@@ -724,12 +783,48 @@ it is done in **two passes**.
 Decided for the usual state, so it depends on the window's size and nothing
 else.
 
-**If pieces clash along the bottom:**
+**If pieces clash along the bottom**, the row is settled in one go, from
+the right:
 
-1. The chat narrows, from 440 down to no less than 280.
-2. The ability bar slides left from the centre (see below).
-3. The chat shrinks to its last line, which may narrow further, to 200.
-4. The inventory is hidden.
+- the **minimap** is where its corner puts it and never moves;
+- the **inventory**, when it shows, is 8 to its left;
+- the **ability bar** is at the centre, or, if that would bring it within 8
+  of the piece on its right, exactly 8 from that piece;
+- the **chat** has what is left: its width is the lesser of 440 and the
+  space from its own left margin to 8 short of the bar.
+
+Four arrangements are tried in this order, and the first in which nothing
+in the row clashes is kept:
+
+| | Inventory | Chat | The chat may be as narrow as |
+|---|---|---|---|
+| 1 | shown | full height | 280 |
+| 2 | shown | its last line | 200 |
+| 3 | hidden | full height | 280 |
+| 4 | hidden | its last line | 200 |
+
+Within each, the chat is as wide as fits. So the inventory is kept before
+the chat's height is, and nothing is left smaller than the window needs:
+where the inventory has to go, the bar returns to the centre and the chat
+gets back whatever that frees. (The third draft took these as steps one
+after another, and a chat that had shrunk to make room for the inventory
+stayed shrunk after the inventory was hidden anyway. At 1080 by 1920 that
+cost the chat its height for nothing.)
+
+What that gives at scale 1, 720 high, before the budget is looked at:
+
+| Window width | Bar | Moved from the centre | Chat width | Inventory |
+|---|---|---|---|---|
+| 1364 and over | centred | 0 | 440 | shown |
+| 1325 | 433 to 891, centred | 0 | 420 | shown, 8 from the bar |
+| 1300 | 408 to 866 | 13 | 395 | shown, 8 from the bar |
+| 1280 | 388 to 846 | 23 | 375 | shown, 8 from the bar |
+| 1200 | 308 to 766 | 63 | 295 | shown, 8 from the bar |
+| 1100 | 321 to 779, centred | 0 | 308 | hidden |
+| 1024 | 283 to 741, centred | 0 | 270, last line | hidden |
+| 960 | 220 to 678 | 31 (against the minimap) | 207, last line | hidden |
+
+In every row the chat ends exactly 8 short of the bar.
 
 **If pieces clash down the left, or the objectives would leave the
 window:** the objectives shrink to their title line.
@@ -744,6 +839,16 @@ health bars; then, in a window too short even for that, they are hidden.
 order, each only until the budget is met: the objectives to their title;
 the team frames to portraits; the chat to its last line; the kill feed
 hidden; the score strip hidden; the inventory hidden.
+
+**The budget is measured after the clashes are dealt with, on the
+rectangles as they then are**, and again after each of its own steps: the
+pieces are placed afresh and the covered area is counted from those
+rectangles. So a chat that has already narrowed counts at its narrowed
+size, a slid bar where it has slid to, and a step stops being taken the
+moment the figure is within a quarter. Each budget step only shrinks or
+removes a piece in place, so none can make a new clash; the script checks
+anyway, and the last thing it does for every window is test the finished
+rectangles for clashes once more.
 
 ### Pass 2: what comes and goes with play
 
@@ -763,12 +868,14 @@ The ability bar and the minimap are never hidden.
 ### The ability bar sliding (approved, with conditions)
 
 - It is **at the centre whenever it is clear there**: from 1364 wide with
-  the chat at full width, and from 1321 wide once the chat has narrowed.
+  the chat at full width, and from 1325 wide once the chat has narrowed.
 - It moves **only when it would otherwise be within 8 of what is on its
   right**, and then to exactly 8 from it: its left edge is the lesser of
   the centred place and that. It is never placed anywhere else.
-- The chat's width and the bar's place are **worked out together**: the
-  chat narrows until it is 8 clear of where the bar will be.
+- The chat's width and the bar's place are **worked out together**, in the
+  order given under pass 1: the bar's place first, from what is on its
+  right; then the chat's width, from the bar's place. Neither is adjusted
+  again afterwards, so there is no back and forth between them.
 - It is a function of the window's width alone, so it is the same every
   time and goes back to the centre the moment there is room.
 
@@ -777,20 +884,34 @@ The ability bar and the minimap are never hidden.
 | Window | What gives | Usual state then covers |
 |---|---|---|
 | 1366 by 768 | nothing clashes; for the budget, the objectives go to their title and the team frames to portraits | 23.3% |
-| 1280 by 720 | the chat narrows to 376 and the bar slides left 21; for the budget, the objectives go to their title, the team frames to portraits and the chat to its last line | 20.8% |
+| 1280 by 720 | the chat narrows to 375 and the bar slides left 23; for the budget, the objectives go to their title, the team frames to portraits and the chat to its last line | 20.8% |
 
 The inventory and the target panel are on screen at both. Held strictly at
 the centre, 1280 by 720 would lose the inventory: the centred bar ends at
-869 and the inventory starts at 856.
+869 and the inventory starts at 854.
 
 ### Deterministic and reversible
 
 Pass 1 is decided from the window's size and nothing else; pass 2 from that
 and which conditional pieces are showing. Neither looks at what the layout
-was a frame ago. So the same window and the same pieces always give the
-same layout, a growing window brings pieces back in exactly the reverse
-order, and a window held at a threshold cannot flicker between two layouts.
-The tests at step B assert all three.
+was a frame ago, and the placing code is given nothing else to look at.
+
+The test, stated exactly: **for the same window width and height, the same
+forced or unforced scale setting, and the same conditional pieces wanted
+(target panel, number of feed entries, length of the objectives list), the
+rectangles are identical, whatever sizes the window passed through to get
+there.** From that it follows that a growing window brings pieces back in
+exactly the reverse order, and that a window held at a threshold cannot
+flicker between two layouts.
+
+The script tries it: one window is resized 400 times at random, in small
+and large steps both ways, with the conditional pieces changing as it goes;
+each size it reaches is then worked out again on its own, in a different
+order. None of the 400 differs. Since the script's function takes only the
+window and the pieces wanted, that result shows there is nothing carried
+over by mistake; it is not a proof about code not yet written. Step B has
+the same test on the real placing code, where it guards against someone
+later keeping a previous frame's layout to save work.
 
 ## 8. Order of building
 
@@ -800,7 +921,7 @@ interface still drawn and still the default.
 
 | Step | What | Depends on | How it is checked |
 |---|---|---|---|
-| A | The theme: the stage 3 roles, the frame kit composed into `panel.stone`, sprites chosen by eye beside the reference | stages 1 and 2 | a theme sheet in the game (below) |
+| A | The theme: the stage 3 roles, the frame kit composed into `panel.stone` and checked (section 4), sprites chosen by eye beside the reference | stages 1 and 2 | tests on the assembled frame; a theme sheet in the game (below) |
 | B | `HudState`, `sample.rs`, the scale by fit, the placing pass and collapse, with every component an empty labelled rectangle | A | tests on rectangles (below); the labelled rectangles over the game beside S2 |
 | 1 | Score strip | B | beside S2 and S3 |
 | 2 | Ability bar with health and resource | B | beside S2 and S3 |
@@ -824,8 +945,11 @@ the icons, and every colour. It also shows them **together**, because a
 font that reads well alone can be cramped in a panel: a line of each font
 inside each kind of panel; a button with its label; a slot with a count
 over it; a bar with figures on it; yellow outlined text over light ground
-and over dark. The stone frame is judged by eye beside the reference there;
-no time is spent proving the blurred original is the same sprite.
+and over dark. The assembled stone frame is on it at its smallest, its
+largest and an awkward size, over a bright ground so that a corner that
+lost its transparency shows. The frame is judged by eye beside the
+reference there; no time is spent proving the blurred original is the same
+sprite.
 
 **The rectangle tests (step B)** replace this plan's script with tests on
 the real code:
@@ -837,10 +961,15 @@ the real code:
 - width and height varied independently over every window from 960 by 384
   to 3840 by 2400, with no clash left at any, the usual state within a
   quarter, and the scale never falling as either grows;
-- the same layout whether a size is reached by growing or by shrinking;
-- the ability bar at the centre at every width from 1321, and exactly 8
-  from the inventory at every width below; the chat at its full 440 from
-  1364 and 8 clear of the bar below that.
+- identical rectangles for the same window and the same conditional
+  pieces, whatever resizes came before (section 7);
+- every pair of pieces at least 8 apart, with no pair excused;
+- the ability bar at the centre at every width from 1325, and exactly 8
+  from the inventory at every width below while the inventory shows; the
+  chat at its full 440 from 1364 and exactly 8 short of the bar below that;
+- the budget read from the finished rectangles: for each window, the figure
+  the collapse stopped at equals the area counted afresh from the
+  rectangles it produced.
 
 **Everything at once.** Components are also checked together in the states
 that strain a layout: a long chat line that must wrap, the largest tooltip,
@@ -899,7 +1028,7 @@ Each is a change to the frozen `docs/INTERFACE.md` and needs review.
 4. **The quarter** is defined: the area inside the rectangles of the fixed
    components showing in the usual state, each pixel once.
 5. **The collapse order** is by what is wrong, with the chat narrowing and
-   the kill feed added, and (if approved) the ability bar sliding.
+   the kill feed added, and the ability bar sliding as approved.
 6. **Health and resource bars** are part of the ability bar.
 7. **The kill feed** is a component.
 8. **The tooltip** is a dark panel, not parchment, as S5 shows it.
@@ -959,6 +1088,28 @@ checked and a separate go-ahead for stage 3.
 | Width and height independently | A sweep of 5,824 windows; nothing clashes, and the scale never falls (section 2, appendix B) |
 | The 1920 by 1080 match proves only the anchors | Said so (section 6) |
 | Exclusions from the budget stay explicit | Unchanged (section 2) |
+
+### From the third draft to the fourth
+
+| Review point | What was done |
+|---|---|
+| Figures read from a blurred picture are not exact | Called approximate reference coordinates, in section 1 and in the table of section 6 |
+| Scale and collapse must use the same rectangles, margins and 8 | Said in section 2; in the script both call the one placing function and the one clash test |
+| What `crates/ui` hands over must not be graphics-library types | Said in section 3: its own vertex and atlas types, translated by the client in the stage 2 pass |
+| The frame kit's composition needs checking | Four checks at step A, and a fallback to the single stone panel (sections 4 and 8) |
+| Missing icons may be placeholders | Minimise and close are drawn placeholders through stage 3 (section 4) |
+| Every part must be the same revision | The status line says so; the delivered parts are cut from this one file |
+| The inventory was 6 from the minimap, against the 8 rule | Moved to 8. No pair is excused. 1321 becomes 1325 and 1497 becomes 1501; the rectangle is 1494 to 1638 (sections 2, 5.7, 6) |
+| How the bar's shift and the chat's width are worked out together | Right to left: minimap, inventory, bar, chat; four arrangements in a fixed order; a table of widths (section 7) |
+| The budget must be measured after every change | Said, with why a budget step cannot make a clash (sections 3 and 7) |
+| A precise test that resizing leaves no trace | Stated, tried in the script over 400 resizes, and listed for step B (sections 7 and 8) |
+
+Settling the bottom row in one go also changed two rows of the table in
+section 6: at 1080 by 1920 the chat keeps its full height (it lost it for
+nothing before), and at 1024 by 768 the chat's last line is 270 wide, not
+280. The least width with nothing clashing stays 953.
+
+### What the other shapes of window found (third draft)
 
 Running the other shapes found three things the 16:9 sizes had hidden, all
 now in section 7: the score strip and kill feed meet in a narrow window; a
@@ -1083,8 +1234,8 @@ own pixels times the scale.
 wide and 776 high, by clashes alone.
 
 **Clearances, bar centred, 8 clear:** the minimap alone from 1021 wide; our
-inventory from 1321; the chat at 440 from 1364; the reference's inventory
-from 1497.
+inventory from 1325; the chat at 440 from 1364; the reference's inventory
+from 1501.
 
 **Where each scale first fits (16:9 windows):**
 
@@ -1100,7 +1251,7 @@ because nothing overlaps once collapse has run.
 
 | Window | Scale | What gives (pass 1) | Usual covers | Busy covers |
 |---|---|---|---|---|
-| 1280 by 720 | 1 | chat to 376; objectives to title; team frames to portraits; chat to last line | 20.8% | 29.3% |
+| 1280 by 720 | 1 | chat to 375; objectives to title; team frames to portraits; chat to last line | 20.8% | 29.3% |
 | 1366 by 768 | 1 | objectives to title; team frames to portraits | 23.3% | 30.7% |
 | 1600 by 900 | 1 | nothing | 23.5% | 30.5% |
 | 1920 by 1080 | 1 | nothing | 16.3% | 21.2% |
@@ -1123,11 +1274,18 @@ as they are showing.
 clash, and the scale never fell as a window grew. Nothing clashes down to
 953 wide and 280 high.
 
+**The bar and the chat together:** the table under pass 1 in section 7 is
+section 10 of the output.
+
+**Resizing leaves no trace:** 400 sizes reached by a wandering resize, each
+worked out again on its own in another order; none differs (section 9 of
+the output).
+
 **For comparison, the same at 30%:** 1366 by 768 gives up only the
 objectives' list; 1280 by 720 gives up the chat's width and the objectives'
 list. The plan keeps a quarter.
 
 **With the reference's own sizes** (inventory 232 by 224): the centred bar
-clears the inventory only from 1497 wide, and the inventory, not the chat,
+clears the inventory only from 1501 wide, and the inventory, not the chat,
 sets the layout's least width. That is what applies if the item system
 later takes the reference's eighteen cells.
