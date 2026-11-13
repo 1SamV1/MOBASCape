@@ -1,10 +1,11 @@
 # Interface
 
-Status: **design approved with clarifications, and frozen. Stage 1 is
-written and has not passed: its decoders are untested against real data
-until the dump tool has been run on the real cache and its pictures looked
-at. Nothing else is built.** Only stage 1 (cache decoding and the dump tool)
-is authorised. Each
+Status: **design approved with clarifications, and frozen. Stage 1 has
+passed. Stage 2 (the interface renderer) is authorised and written, and has
+not passed: its drawing is tested pixel by pixel without a graphics card,
+and the pass that puts it on screen is untested until its test screen has
+been run in the game and looked at. Nothing else is built.** Stage 3 is not
+authorised. Each
 later stage needs its own go-ahead after the stage before it has passed its
 check. A change to this document is a design change and is reviewed like one.
 
@@ -284,6 +285,33 @@ several frames, and every palette as swatches. The report's "unread" column
 counts bytes the decoder found between the last frame and the palette: a
 right reading leaves none.
 
+**Passed.** Run on the real cache (revision 235) on the user's machine:
+
+- All 7,318 sprites read, 13,304 frames, none failed and none left a byte
+  unread. Both ways of storing a frame occur (8,523 by row, 4,781 by
+  column), and 37 frames carry their own opacity.
+- All 21 fonts read, each with 257 bytes of measurements and 256 letters.
+- Looked at, as a sample and not all of it: 9 of the 21 test lines, 3 of the
+  91 overview sheets, all 6 strips written for sprites 420 to 445 and their
+  palettes, 19 frames over magenta, and 14 of the 37 frames with their own
+  opacity. Nothing was torn, sheared, wrongly coloured or wrongly
+  transparent; every line stood on its baseline.
+- Running it found a fault that was not in these decoders: the cache reader
+  refused every group stored uncompressed, which is how the 848 smallest
+  sprites are stored. That is fixed and tested, and the game's scene came
+  out the same after it as before.
+
+Left as an uncertainty, not a failure: 21 of the 37 frames with their own
+opacity are wholly clear. They are taken to be sprites the game's makers
+blanked. The other 16 are read by the same code and look right, and none of
+the 21 is anything the interface needs.
+
+Found in the dump, for the stages after: fonts 494 (small), 495 (regular),
+496 (bold), 497 (the one "Oh dear, you are dead!" is written in); a stone
+frame in pieces at 913 to 936 and 952 to 997; stone buttons at 170 to 191;
+spell icons at 15 to 64, prayer icons at 115 to 134, equipment slots at 156
+to 166.
+
 ### Stage 2: interface renderer
 
 The drawing layer of rule 3: its own pass after the scene, an atlas built from
@@ -294,6 +322,71 @@ layer order, and the scaling rule.
 panel at three sizes, each font's test line, a see-through rectangle over the
 scene, and a clipped panel. Resizing the window keeps every edge hard and
 every piece pinned where it should be, and steps the scale at the right sizes.
+
+**As built.** Three parts, each knowing less than the one after it:
+
+- `crates/ui` is the drawing layer. It has no dependencies: not the cache,
+  not the graphics card. It is given a **theme** (plain images, tables of
+  letters and colours, each under a role) and turns requests for a sprite, a
+  panel, a line of text or a rectangle into quads over one atlas, clipped on
+  whole pixels and sorted by layer. It also holds the scale rule and the
+  test screen.
+- `crates/client/src/ui_pass.rs` is the pass: one pipeline, drawn after the
+  scene with no depth, reading the atlas by whole pixel and laying each quad
+  over the scene by its opacity. It is given the atlas and the quads and
+  knows nothing of what they show.
+- `crates/client/src/theme_file.rs` reads `data/ui/theme.json`, which names
+  each role and says which cache sprite or font it is, and builds the theme
+  from the cache. It is the only code that sees both a role and an id.
+  Replacing the art is another theme file and, for art that is not in the
+  cache, another loader; nothing in the other two parts changes.
+
+Clipping is done on the quads themselves and not by the graphics card, so
+it is exact, costs no extra draws, and can be tested without one. Corners
+of a panel are kept and its edges and middle are repeated; where an area is
+too small for both corners, each keeps its outer half.
+
+**How it is tested without a graphics card.** A reference rasteriser in
+`crates/ui` draws the quads the way the pass is asked to. Against plain
+arithmetic for every pixel: a sprite at scales 1 to 4; clipping at
+rectangles and at every edge of the window; clips inside clips; layer
+order; opacity; a panel at six sizes and four scales, including sizes that
+are not whole multiples of its middle and one barely bigger than its
+corners; text on its baseline, in its colour, at its advances. The test
+screen is built at ten window sizes with every corner on a whole pixel
+inside the window, its pins are shown to move with the window's edges, and
+two themes with the same roles are shown to lay out identically.
+
+The rasteriser mixes colours as stored bytes and the graphics card mixes
+light, so a see-through edge will be a shade different on screen. That, and
+everything in `ui_pass.rs`, is what only the running game can show.
+
+**How to run the check:**
+
+```
+cargo test -p rift-ui
+cargo run -p rift-client --profile quick -- --champion monkey --ui-test
+```
+
+The test screen is drawn over the game, which goes on as usual underneath.
+Its first line says the window's size and the scale chosen, and the same is
+written to the log each time either changes. The scale steps at whole
+multiples of 640 by 360: 2 from 1280 by 720, 3 from 1920 by 1080, 4 from
+2560 by 1440. `--ui-scale 1` to `4` forces a scale. To pass, with the
+window resized through those sizes and dragged smaller than 640 by 360:
+
+- the four sprites are 1, 2, 3 and 4 times one size, with hard edges;
+- the three panels have identical corners and unbroken edges;
+- every font's line stands on its red baseline;
+- the scene shows through the dark, blue and red rectangles, and red is
+  over blue;
+- the panel inside the yellow frame stops at the frame on both sides;
+- the pieces marked TR, BL, BR, T and B stay the same distance from their
+  edges, and the pieces hanging off the right, bottom and top left are cut
+  at the window's edge;
+- nothing shimmers, blurs or moves by a part of a pixel while resizing.
+
+The old interface in `hud.rs` is untouched and still drawn.
 
 ### Stage 3: static HUD
 
