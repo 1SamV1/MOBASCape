@@ -13,9 +13,9 @@ pub struct Group {
 /// Decode one raw group. `raw` is the sector-chain payload as stored in the
 /// index entry; `key` is present for XTEA-encrypted map groups.
 pub fn decode(raw: &[u8], key: Option<[u32; 4]>) -> Result<Group> {
-    if raw.len() < 9 {
+    if raw.len() < 5 {
         return Err(Error::parse(format!(
-            "group too short: {} bytes (need at least 9)",
+            "group too short: {} bytes (need at least 5)",
             raw.len()
         )));
     }
@@ -23,27 +23,41 @@ pub fn decode(raw: &[u8], key: Option<[u32; 4]>) -> Result<Group> {
     let compression = raw[0];
     let compressed_len = u32::from_be_bytes([raw[1], raw[2], raw[3], raw[4]]) as usize;
 
-    // Everything from the compressed-length field onward is encrypted for map
-    // groups, including the 4-byte decompressed length.
+    // Everything after the length field is encrypted for map groups,
+    // including the 4-byte decompressed length where there is one.
     let mut body = raw[5..].to_vec();
     if let Some(key) = key {
         xtea::decrypt(&mut body, key);
     }
 
-    if body.len() < 4 {
-        return Err(Error::parse("group body missing decompressed length"));
-    }
-    let decompressed_len = u32::from_be_bytes([body[0], body[1], body[2], body[3]]);
-
-    let end = 4usize
-        .checked_add(compressed_len)
-        .ok_or_else(|| Error::parse("compressed length overflow"))?;
-    let payload = body.get(4..end).ok_or_else(|| {
-        Error::parse(format!(
-            "compressed payload out of range: need {end}, have {}",
-            body.len()
-        ))
-    })?;
+    // A group that is not compressed has no decompressed length: its bytes
+    // follow the length field directly. Small sprites are stored this way.
+    // Either kind may be followed by two bytes of version, which are not
+    // part of it.
+    let (decompressed_len, payload) = if compression == 0 {
+        let payload = body.get(..compressed_len).ok_or_else(|| {
+            Error::parse(format!(
+                "uncompressed payload out of range: need {compressed_len}, have {}",
+                body.len()
+            ))
+        })?;
+        (compressed_len as u32, payload)
+    } else {
+        if body.len() < 4 {
+            return Err(Error::parse("group body missing decompressed length"));
+        }
+        let decompressed_len = u32::from_be_bytes([body[0], body[1], body[2], body[3]]);
+        let end = 4usize
+            .checked_add(compressed_len)
+            .ok_or_else(|| Error::parse("compressed length overflow"))?;
+        let payload = body.get(4..end).ok_or_else(|| {
+            Error::parse(format!(
+                "compressed payload out of range: need {end}, have {}",
+                body.len()
+            ))
+        })?;
+        (decompressed_len, payload)
+    };
 
     let data = match compression {
         0 => payload.to_vec(),
@@ -145,5 +159,42 @@ mod tests {
     #[test]
     fn rejects_short_group() {
         assert!(decode(&[0u8; 4], None).is_err());
+    }
+
+    /// A group that is not compressed: its kind, its length, its bytes.
+    fn plain(data: &[u8]) -> Vec<u8> {
+        let mut raw = vec![0u8];
+        raw.extend_from_slice(&(data.len() as u32).to_be_bytes());
+        raw.extend_from_slice(data);
+        raw
+    }
+
+    #[test]
+    fn a_group_that_is_not_compressed_has_no_second_length() {
+        // sixteen bytes and two of version after them: the shape that was
+        // refused as "need 20, have 18"
+        let data: Vec<u8> = (1..=16).collect();
+        let mut raw = plain(&data);
+        raw.extend_from_slice(&[0, 7]);
+        let group = decode(&raw, None).unwrap();
+        assert_eq!(group.compression, 0);
+        assert_eq!(group.data, data);
+        assert_eq!(group.decompressed_len, 16);
+    }
+
+    #[test]
+    fn it_reads_the_same_without_the_version_after_it() {
+        let data: Vec<u8> = (1..=16).collect();
+        assert_eq!(decode(&plain(&data), None).unwrap().data, data);
+        // down to a single byte, and none at all
+        assert_eq!(decode(&plain(&[9]), None).unwrap().data, vec![9]);
+        assert_eq!(decode(&plain(&[]), None).unwrap().data, Vec::<u8>::new());
+    }
+
+    #[test]
+    fn one_that_claims_more_bytes_than_it_has_is_refused() {
+        let mut raw = plain(&[1, 2, 3]);
+        raw[4] = 9;
+        assert!(decode(&raw, None).is_err());
     }
 }
