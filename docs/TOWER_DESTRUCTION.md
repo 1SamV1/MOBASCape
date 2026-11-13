@@ -1,7 +1,10 @@
 # Tower destruction
 
-Status: **design for review. Nothing in this document is built**, and no
-physics library is added to the project by writing it.
+Status: **approved and frozen. Nothing in this document is built**, and no
+physics library is added to the project by it. No stage of building is
+authorised yet: movement stage 1 and its checking come first, and this work
+does not interrupt them. A change to this document is a design change and is
+reviewed like one.
 
 Today a tower whose health reaches zero stops being drawn and the ground it
 stood on opens. This document proposes that it comes down instead: the
@@ -44,10 +47,16 @@ Three ways to have a ruin, with what each does to the lane:
 | B. Mound sunk until its top is at step height | Nothing; all of it can be walked over | The tower's ground opens fully; the ruin is scenery |
 | **C. Mound sunk part-way, top at about 80** | **A core about five cells across** | **The lane opens by half; a real obstacle remains; a climber can stand on it** |
 
-**C is proposed.** It keeps the agreed idea (a fallen tower still shapes the
+**C is chosen.** It keeps the agreed idea (a fallen tower still shapes the
 ground) at a size that is fair, and it gives the monkey a perch the others
 do not have. The figure of 80 is a starting point; what matters is that the
 ruin's size is chosen, not inherited from a model built for something else.
+
+**A ruin is a structure in its own right and is tested as one.** It is not a
+smaller circle where the tower was. Its places to stand, its solid
+stretches, the room a body needs beside it and the paths round it are all
+read from its own shape, by the same rules as any other shape, and all four
+have to agree with what is drawn.
 
 ## The five states, and which of them the match knows
 
@@ -103,9 +112,18 @@ breaks:
    height.** Scattered stones are walked over by everyone, as the stones
    round a standing tower are now.
 
-And one it tests: every champion walks from every side of the ruin to every
-other, by the walk-round test that already exists, before the file is
-accepted.
+And two things it tests before a file is accepted:
+
+- **Round the ruin.** Every champion walks from every side of the ruin to
+  every other, by the walk-round test that already exists.
+- **Through the change.** Units are set walking toward the tower from every
+  direction, timed so that at the tick it becomes a ruin they are spread
+  across every position they could be in: far off, about to touch the old
+  edge, pressed against it, sliding round it. After the change every one of
+  them must be on open ground, must still reach its goal, and must take a
+  path that is right for the ruin and not for the tower that is gone. The
+  edge of the old footprint is where a mistake would show, so that is where
+  the test puts most of its units.
 
 Each tower stands on different ground, so each has its own ruin file:
 resting places are worked out on the slope it actually stands on.
@@ -168,13 +186,38 @@ tool uses on a developer's machine, not something the game contains.
 So there is one physics foundation, adopted in two steps: first where it
 cannot hurt, then, if it earns it, where it can.
 
+**The tool is kept apart from the game.**
+
+- It is its own program with its own list of dependencies. The game's build
+  does not include the physics library, directly or through anything else,
+  and a check in the build fails if that ever stops being true.
+- The game reads the prepared files and nothing more. It can be built and
+  run on a machine that has never had the tool or the library on it.
+- Recorded beside the tool: which version of the library it uses, the
+  library's licence and the notice that licence requires, and how to run it.
+- Recorded in every file it writes: the version of the tool and of the
+  library that made it, and what it was made from (which model, which
+  placement, which ground), so a file can be made again and checked.
+
 ### Variety without losing sameness
 
-Several collapses are prepared for each tower (proposed: four, the spire
-going over toward each side) and the event says which. Identical for
-everyone watching; different from the last tower. Which one is picked from
-the match's own state at the tick of the event, so it is the same on every
-machine and in every replay.
+Four collapses are prepared for each tower, the spire going over toward each
+of four sides, and the event says which. Identical for everyone watching;
+different from the last tower.
+
+**Which of the four** is decided by the match, from the direction of the
+last blow that counted:
+
+- The direction is from the tower to whoever or whatever dealt the blow that
+  brought it down, on the flat. The spire falls away from it.
+- That direction is rounded to the nearest of the four, in whole-number
+  arithmetic, with a fixed rule for a direction exactly between two.
+- If there is no such direction (the blow came from no place, or from the
+  tower's own position), the choice is taken from the tower's own identity
+  in the match: its number, which never changes. No machine's clock or
+  random numbers come into it.
+
+So it is the same on every machine and in every replay.
 
 Small things added on top by each client (dust, chips, a shake of the
 camera) may differ from machine to machine. They change nothing.
@@ -252,17 +295,20 @@ By hand, which decides it:
 - Nobody is ever stopped by something they cannot see, or walks through
   something they can.
 
-## Open questions for review
+## Decided at review
 
-- **The ruin's size:** A, B or C above, and if C, how tall.
+| Question | Decision |
+|---|---|
+| How pieces fall | Prepared offline and played back; no physics in the game |
+| The physics library | First used in the preparing tool only, kept apart from the game's build |
+| The ruin | C: the mound sunk part-way, tested as a structure in its own right |
+| Direction of fall | Four prepared; picked from the direction of the last blow that counted, with a fallback from the tower's identity |
+| The statue in a fallen crystal | Scenery only. It is never part of the match's state. |
+| Structures coming back | **Not permitted.** No structure may stand again until there is a separate, reviewed rule for the ground it would rise on and whoever is standing there. A structure never appears underneath a champion, a minion or any other unit. |
+
+## Still open
+
+- **How tall the ruin is.** 80 is the starting figure for C.
 - **Does a ruin block sight** when vision is built? Proposed: no.
-- **The statue in a fallen crystal:** scenery, or something in the match?
-- **Direction of fall:** one of four prepared, picked by the match. Should it
-  instead follow where the last blow came from? That needs more prepared
-  collapses for the same variety.
 - **How long the collapse takes.** Two and a half seconds is proposed; it is
   only for the eye, so it can be whatever looks right.
-- **Inhibitors that come back.** If a structure stands again, the ruin is
-  replaced by the structure on a tick, and a unit may be standing where it
-  rises. That needs a rule (push out to the nearest open ground, in a fixed
-  order) before any structure is allowed to return.

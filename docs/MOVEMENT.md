@@ -248,13 +248,23 @@ the walkable map at all.
 
 ## Proposed: getting about on rough ground
 
-Status: **design for review, third draft. Nothing in this section is
-built**, and none of it is to be built until the design as a whole has been
-approved and frozen. The direction was approved at the first review and the
-separated height data at the second. This draft settles the three points the
-second review left open: more than one surface or solid stretch in a cell,
-the arc of a leap over uneven ground, and the standing angle measured on the
-real tower. The collision system that exists is not changed by this document.
+Status: **approved and frozen. Nothing in this section is built.** Only
+stage 1 of the order of building below (height data) is authorised. Each
+later stage needs its own go-ahead after the one before it has passed its
+tests. A change to this section is a design change and is reviewed like one.
+
+It went through three drafts. The direction was approved at the first
+review, the separated height data at the second, and at the third the three
+points then left open: more than one surface or solid stretch in a cell, the
+arc of a leap over uneven ground, and the standing angle measured on the real
+tower. The collision system that exists is not changed by this document.
+
+What stage 1 may and may not do:
+
+- It adds height data, and nothing else.
+- What blocks a unit must stay exactly what blocks it today.
+- No climbing, hop, leap or slope enters with it.
+- The real tower is kept as a test for every later stage.
 
 Five things, in the order they depend on each other: what the map knows
 about height, climbing, hops, the leap, and slopes. The aim is that a
