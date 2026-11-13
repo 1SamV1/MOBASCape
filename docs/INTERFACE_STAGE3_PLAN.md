@@ -208,10 +208,24 @@ tested corner by themselves. The corner was therefore tried as well: 953
 by 280 leaves no clash, and neither does any window between it and 1280 by
 720 (every width, heights in steps of 8). What is left on screen at 953 by
 280 is the minimap, the ability bar, the chat's last line and the
-objectives' title. Below 953
-wide or 280 high the window refuses to shrink. 1280 by 720 remains the
-smallest size the game supports; the figures below it only say that nothing
-breaks on the way there.
+objectives' title.
+
+These are two different limits and should not be read as one:
+
+- **1280 by 720 is the smallest window the game supports.** Down to there
+  the interface is designed, tested and looked at.
+- **953 wide and 280 high is where the arithmetic stops working.** Below
+  either, the layout cannot fit: pieces would overlap whatever is given up.
+  Between there and 1280 by 720 nothing clashes, by the script, but nobody
+  has judged how it looks and it is not a supported size. The figures only
+  say that nothing breaks on the way down.
+
+What the game window itself does below 1280 by 720 is not decided by this
+plan. Today it can be dragged smaller (the stage 2 screen was run at 889
+by 455). Whether to stop it at 1280 by 720, or at 953 by 280, or leave it
+free, is a small client decision to make at step B; the only thing this
+plan asks is that it is never smaller than 953 by 280 at scale 1 while the
+new interface is drawn, since below that the interface must overlap.
 
 ## 3. How it is built
 
@@ -469,9 +483,33 @@ stage 4. Sizes are at scale 1.
     damage (red in S3).
   - **Resource bar:** 824 to 1094, 1048 to 1064, cyan, the same.
 - **Rank:** with the minimap, the strongest piece of interface.
-- **From parts:** portrait 76, four slots of 40 with 2 between, a gap of 12,
-  two slots of 40, a gap of 8, a block of 76, and 8 of frame each side: 462
-  by 92. Within measurement of 458 by 94.
+- **Its size is the measured 458 by 94**, and that is the figure the layout
+  uses everywhere. How the parts fill it, left to right, with what was
+  measured beside each (all good to about 4):
+
+  | Part | Ours | Measured |
+  |---|---|---|
+  | Frame and edge, left | 10 | 730 to 740: 10 |
+  | Portrait | 76 | 740 to 815: 75 |
+  | Gap | 8 | 815 to 822: 7 |
+  | Four ability slots of 40, 2 between | 166 | 822 to 990: 168 |
+  | Gap | 20 | 990 to 1010: 20 |
+  | Two spell slots of 40, 6 between | 86 | 1010 to 1096: 86 |
+  | Gap | 8 | 1096 to 1104: 8 |
+  | Block of four small slots, two by two | 76 | 1104 to 1180: 76 |
+  | Frame and edge, right | 8 | 1180 to 1188: 8 |
+  | **Total** | **458** | **458** |
+
+  Top to bottom: 10 above the slots, the slots 40, the strip under them 6,
+  a gap of 4, the health bar 14, a gap of 2, the resource bar 14, and 4
+  below: 94. The two bars were measured at about 16 each, the resource bar
+  ending at 1064, which is 2 past the bar's own measured bottom edge; the
+  two measurements cannot both be exact, and 14 each is what fits inside 94.
+  The earlier drafts gave "462 by 92" from a list of parts that added up to
+  434: it left out the gap after the portrait and the gap between the two
+  spell slots, and had 12 where the reference has 20. The table above
+  replaces it. The slot sizes inside the bar remain proposals until step 2
+  draws them; the bar's outer size does not depend on them.
 - **Stage 3:** sample cooldowns, one ability on cooldown, health at 60% with
   a damage stretch. **Stage 4:** abilities and cooldowns, spells, portrait,
   level, experience, health, shield, resource.
@@ -1306,6 +1344,13 @@ tested at 7, 8 and 9 on the real clash test; the scale tested both chosen
 and forced, a forced scale never being replaced; the objectives checked by
 what they draw staying inside their rectangle at a pitch of 24. The 38%
 placing of the objectives stays provisional and is not reopened.
+
+Added after the review of parts 1, 2 and 4:
+
+| Review point | What was done |
+|---|---|
+| The ability bar's parts added up to 434, not the 462 claimed | The list was wrong: it left out two gaps and had a third too small. Replaced by a table of parts beside the measurements, totalling the measured 458, which is the figure the layout has used throughout (section 5.2). No layout figure changes |
+| "The window refuses to shrink" below 953 by 280 read as the game's minimum, against 1280 by 720 | Two limits, stated apart: 1280 by 720 is the smallest supported window; 953 wide and 280 high is where the layout can no longer fit. What the window itself does below 1280 by 720 is left to step B (section 2) |
 
 Settling the bottom row in one go also changed two rows of the table in
 section 6: at 1080 by 1920 the chat keeps its full height (it lost it for
