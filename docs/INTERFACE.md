@@ -1,7 +1,10 @@
 # Interface
 
-Status: **design approved with clarifications, and frozen. Nothing in it is
-built.** Only stage 1 (cache decoding and the dump tool) is authorised. Each
+Status: **design approved with clarifications, and frozen. Stage 1 is
+written and has not passed: its decoders are untested against real data
+until the dump tool has been run on the real cache and its pictures looked
+at. Nothing else is built.** Only stage 1 (cache decoding and the dump tool)
+is authorised. Each
 later stage needs its own go-ahead after the stage before it has passed its
 check. A change to this document is a design change and is reviewed like one.
 
@@ -262,6 +265,24 @@ is torn, sheared, wrongly coloured or wrongly transparent fails the stage.
 
 Until that check passes, the decoders are **untested against real data**,
 whatever their unit tests say.
+
+How to run it (the output folder is kept out of the repository, under
+`.cache/`, because what it writes is the game's own artwork):
+
+```
+cargo run -p rift-tools -- dump-fonts .cache/interface_dump
+cargo run -p rift-tools -- dump-sprites .cache/interface_dump --overview-only
+cargo run -p rift-tools -- dump-sprites .cache/interface_dump --from 0 --to 400
+```
+
+`dump-fonts` writes, for each font, its letters in a grid, a test line at
+its own size and three times larger, and two reports. `dump-sprites` writes
+an overview sheet for every hundred ids, with each sprite's id, size and
+frame count over magenta, and a report; without `--overview-only` it also
+writes every frame clear and over magenta, a strip of every sheet with
+several frames, and every palette as swatches. The report's "unread" column
+counts bytes the decoder found between the last frame and the palette: a
+right reading leaves none.
 
 ### Stage 2: interface renderer
 
