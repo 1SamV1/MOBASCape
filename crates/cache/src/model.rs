@@ -528,25 +528,23 @@ impl Model {
                     vertices.extend_from_slice(group_vertices);
                 }
             }
+            if group_type == 0 {
+                // The pivot for the transforms that follow. It is set even
+                // when this model has none of the group's vertices: skipping
+                // it would leave the last pivot in place and swing the next
+                // part round the wrong point.
+                let points: Vec<[i32; 3]> = vertices
+                    .iter()
+                    .map(|&vertex| positions[vertex as usize])
+                    .collect();
+                offset = pivot_of(&points, [dx, dy, dz]);
+                continue;
+            }
             if vertices.is_empty() {
                 continue;
             }
 
             match group_type {
-                0 => {
-                    let mut sum = [0i64; 3];
-                    for &vertex in &vertices {
-                        sum[0] += positions[vertex as usize][0] as i64;
-                        sum[1] += positions[vertex as usize][1] as i64;
-                        sum[2] += positions[vertex as usize][2] as i64;
-                    }
-                    let count = vertices.len() as i64;
-                    offset = [
-                        dx + (sum[0] / count) as i32,
-                        dy + (sum[1] / count) as i32,
-                        dz + (sum[2] / count) as i32,
-                    ];
-                }
                 1 => {
                     for &vertex in &vertices {
                         let p = &mut positions[vertex as usize];
@@ -565,30 +563,7 @@ impl Model {
                         p[1] = p[1].saturating_sub(offset[1]);
                         p[2] = p[2].saturating_sub(offset[2]);
 
-                        if az != 0 {
-                            let sin = angle::sine(az) as i64;
-                            let cos = angle::cosine(az) as i64;
-                            let x = ((sin * p[1] as i64 + cos * p[0] as i64) >> 16) as i32;
-                            let y = ((cos * p[1] as i64 - sin * p[0] as i64) >> 16) as i32;
-                            p[0] = x;
-                            p[1] = y;
-                        }
-                        if ax != 0 {
-                            let sin = angle::sine(ax) as i64;
-                            let cos = angle::cosine(ax) as i64;
-                            let y = ((cos * p[1] as i64 - sin * p[2] as i64) >> 16) as i32;
-                            let z = ((sin * p[1] as i64 + cos * p[2] as i64) >> 16) as i32;
-                            p[1] = y;
-                            p[2] = z;
-                        }
-                        if ay != 0 {
-                            let sin = angle::sine(ay) as i64;
-                            let cos = angle::cosine(ay) as i64;
-                            let z = ((sin * p[2] as i64 + cos * p[0] as i64) >> 16) as i32;
-                            let x = ((cos * p[2] as i64 - sin * p[0] as i64) >> 16) as i32;
-                            p[2] = z;
-                            p[0] = x;
-                        }
+                        *p = rotate(*p, ax, ay, az);
 
                         p[0] = p[0].saturating_add(offset[0]);
                         p[1] = p[1].saturating_add(offset[1]);
@@ -613,6 +588,51 @@ impl Model {
             }
         }
     }
+}
+
+/// The pivot a frame's origin step sets: the average of the group's vertices,
+/// moved by the step's own offset. With no vertices it is the offset alone.
+fn pivot_of(points: &[[i32; 3]], delta: [i32; 3]) -> [i32; 3] {
+    if points.is_empty() {
+        return delta;
+    }
+    let mut sum = [0i64; 3];
+    for p in points {
+        sum[0] += p[0] as i64;
+        sum[1] += p[1] as i64;
+        sum[2] += p[2] as i64;
+    }
+    let count = points.len() as i64;
+    [
+        delta[0] + (sum[0] / count) as i32,
+        delta[1] + (sum[1] / count) as i32,
+        delta[2] + (sum[2] / count) as i32,
+    ]
+}
+
+/// Rotate a point about the origin by three angles, in the order the game
+/// applies them: z, then x, then y. Angles are in 2048ths of a turn.
+fn rotate(p: [i32; 3], ax: i32, ay: i32, az: i32) -> [i32; 3] {
+    let (mut x, mut y, mut z) = (p[0] as i64, p[1] as i64, p[2] as i64);
+    if az != 0 {
+        let (sin, cos) = (angle::sine(az) as i64, angle::cosine(az) as i64);
+        let nx = (sin * y + cos * x) >> 16;
+        y = (cos * y - sin * x) >> 16;
+        x = nx;
+    }
+    if ax != 0 {
+        let (sin, cos) = (angle::sine(ax) as i64, angle::cosine(ax) as i64);
+        let ny = (cos * y - sin * z) >> 16;
+        z = (sin * y + cos * z) >> 16;
+        y = ny;
+    }
+    if ay != 0 {
+        let (sin, cos) = (angle::sine(ay) as i64, angle::cosine(ay) as i64);
+        let nx = (sin * z + cos * x) >> 16;
+        z = (cos * z - sin * x) >> 16;
+        x = nx;
+    }
+    [x as i32, y as i32, z as i32]
 }
 
 fn check_range(len: usize, off: usize, size: usize, id: u32) -> Result<()> {
@@ -778,6 +798,64 @@ pub fn hsl_to_rgb(hsl: u16, brightness: f32) -> [u8; 3] {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn length(p: [i32; 3]) -> f64 {
+        ((p[0] as f64).powi(2) + (p[1] as f64).powi(2) + (p[2] as f64).powi(2)).sqrt()
+    }
+
+    #[test]
+    fn a_small_turn_barely_moves_a_point_on_any_axis() {
+        let p = [300, -120, 210];
+        for (ax, ay, az) in [(8, 0, 0), (0, 8, 0), (0, 0, 8)] {
+            let q = rotate(p, ax, ay, az);
+            let moved = length([q[0] - p[0], q[1] - p[1], q[2] - p[2]]);
+            assert!(
+                moved < 12.0,
+                "a 1.4 degree turn ({ax},{ay},{az}) moved {p:?} to {q:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_turn_keeps_a_points_distance_from_the_pivot() {
+        let p = [300, -120, 210];
+        for angle in [8, 100, 256, 511, 512, 700, 1024, 1500, 2047] {
+            for (ax, ay, az) in [
+                (angle, 0, 0),
+                (0, angle, 0),
+                (0, 0, angle),
+                (angle, angle / 2, angle / 3),
+            ] {
+                let q = rotate(p, ax, ay, az);
+                assert!(
+                    (length(q) - length(p)).abs() < 3.0,
+                    "({ax},{ay},{az}) changed the length of {p:?}: {q:?}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn quarter_turns_go_the_way_the_game_turns_them() {
+        // about z: x toward -y
+        assert_eq!(rotate([100, 0, 0], 0, 0, 512), [0, -100, 0]);
+        // about x: y toward z
+        assert_eq!(rotate([0, 100, 0], 512, 0, 0), [0, 0, 100]);
+        // about y: z toward x, x toward -z
+        assert_eq!(rotate([0, 0, 100], 0, 512, 0), [100, 0, 0]);
+        assert_eq!(rotate([100, 0, 0], 0, 512, 0), [0, 0, -100]);
+        // and a point on the axis it turns about stays where it is
+        assert_eq!(rotate([0, 100, 0], 0, 300, 0), [0, 100, 0]);
+    }
+
+    #[test]
+    fn an_origin_with_no_vertices_is_the_offset_alone() {
+        assert_eq!(pivot_of(&[], [5, -7, 9]), [5, -7, 9]);
+        assert_eq!(
+            pivot_of(&[[10, 20, 30], [30, 40, 50]], [1, 1, 1]),
+            [21, 31, 41]
+        );
+    }
 
     #[test]
     fn hsl_is_in_range() {
