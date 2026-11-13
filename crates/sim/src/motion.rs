@@ -219,12 +219,20 @@ impl Motion {
         (self.x.div_euclid(TILE * FP), self.y.div_euclid(TILE * FP))
     }
 
+    /// The cell of `grid` this position stands in. A grid's cells may be
+    /// finer than a tile.
+    fn cell(&self, grid: &Grid) -> (i32, i32) {
+        let size = grid.cell() * FP;
+        (self.x.div_euclid(size), self.y.div_euclid(size))
+    }
+
     fn open(grid: &Grid, from: (i32, i32), x: i32, y: i32) -> bool {
-        let to = (x.div_euclid(TILE * FP), y.div_euclid(TILE * FP));
+        let size = grid.cell() * FP;
+        let to = (x.div_euclid(size), y.div_euclid(size));
         if !grid.is_walkable(to.0, to.1) {
             return false;
         }
-        // stepping diagonally into the next tile must not squeeze between two
+        // stepping diagonally into the next cell must not squeeze between two
         // blocked ones
         if to.0 != from.0 && to.1 != from.1 {
             return grid.is_walkable(to.0, from.1) && grid.is_walkable(from.0, to.1);
@@ -318,7 +326,7 @@ impl Motion {
         // close enough to land on the point this tick
         if let Some((dist, arrive, target)) = seek {
             if dist <= ON_POINT || (dist <= speed && error.abs() < 8192) {
-                let from = self.tile();
+                let from = self.cell(grid);
                 if Self::open(grid, from, target.0, target.1) {
                     self.x = target.0;
                     self.y = target.1;
@@ -334,7 +342,7 @@ impl Motion {
 
         // move the way it is facing; if that is blocked, straight at the
         // target; then along one axis; then not at all
-        let from = self.tile();
+        let from = self.cell(grid);
         let along = |heading: u16| -> (i32, i32) {
             (
                 (sin_q14(heading) as i64 * speed / ONE_Q14) as i32,

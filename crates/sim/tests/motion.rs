@@ -373,3 +373,62 @@ fn a_champion_moves_the_same_whatever_rate_the_simulation_runs_at() {
         }
     }
 }
+
+/// On a grid finer than a tile, with obstacles marked as discs, a champion
+/// walks between two trunks that a tile-sized grid would have made a wall.
+#[test]
+fn it_walks_between_two_trunks_on_a_fine_grid() {
+    use rift_sim::{Grid, Intent, Motion, MotionParams, find_path};
+
+    let mut grid = Grid::with_cell(32, 32, 32);
+    grid.set_disc(448, 512, 46, true);
+    grid.set_disc(576, 512, 46, true);
+    // a wall either side, so between the trunks is the only way through
+    for cx in 0..32 {
+        if !(12..=19).contains(&cx) {
+            grid.set_blocked(cx, 16, true);
+        }
+    }
+
+    let start = (512 * FP, 200 * FP);
+    let goal = (512 * FP, 820 * FP);
+    let path = find_path(&grid, grid.cell_at(512, 200), grid.cell_at(512, 820))
+        .expect("there is a way between the trunks");
+    assert!(
+        path.iter()
+            .any(|&(cx, cy)| cy == 16 && (15..=16).contains(&cx)),
+        "and it goes through the gap"
+    );
+
+    let params = MotionParams {
+        speed: 540,
+        turn_ms: 150,
+        accel_ms: 100,
+        stop_ms: 50,
+    };
+    let mut m = Motion::at(start.0, start.1, 0);
+    let mut arrived = false;
+    for _ in 0..TICK_HZ * 6 {
+        let out = m.step(
+            &params,
+            1000,
+            &grid,
+            Intent::Seek {
+                target: goal,
+                arrive: true,
+            },
+        );
+        let (cx, cy) = grid.cell_at(m.x / FP, m.y / FP);
+        assert!(grid.is_walkable(cx, cy), "never inside a trunk: {cx},{cy}");
+        if out.arrived {
+            arrived = true;
+            break;
+        }
+    }
+    assert!(
+        arrived,
+        "it reached the far side, at {},{}",
+        m.x / FP,
+        m.y / FP
+    );
+}

@@ -89,6 +89,19 @@ impl HeightGrid {
 }
 
 #[derive(Clone)]
+/// Cells of the walkable map to a game tile, each way. At one cell to a tile
+/// a thin trunk closed a whole tile; at four, obstacles can be marked at the
+/// size they are seen.
+pub const NAV_PER_TILE: i32 = 4;
+/// The width of one cell of the walkable map, in world units.
+pub const NAV_CELL: i32 = 128 / NAV_PER_TILE;
+/// Half the width a unit needs to pass. Every obstacle is marked this much
+/// wider than it is, so a unit can be treated as a point. One size for every
+/// unit for now; a size per champion needs a map per size.
+pub const BODY_RADIUS: f32 = 28.0;
+/// Half the width of a tree's trunk. Leaves and fronds do not stop anyone.
+const TRUNK_RADIUS: f32 = 18.0;
+
 pub struct WorldCollision {
     grid: Grid,
     origin_tile_x: i32,
@@ -104,12 +117,14 @@ impl WorldCollision {
         }
     }
 
+    /// Width in game tiles (not cells).
     pub fn width(&self) -> i32 {
-        self.grid.width()
+        self.grid.width() / NAV_PER_TILE
     }
 
+    /// Height in game tiles (not cells).
     pub fn height(&self) -> i32 {
-        self.grid.height()
+        self.grid.height() / NAV_PER_TILE
     }
 
     pub fn grid(&self) -> &Grid {
@@ -120,42 +135,74 @@ impl WorldCollision {
         (self.origin_tile_x, self.origin_tile_y)
     }
 
-    pub fn tile_of(&self, world_x: f32, world_z: f32) -> (i32, i32) {
+    /// The cell of the walkable map that holds a point in the world.
+    pub fn cell_of(&self, world_x: f32, world_z: f32) -> (i32, i32) {
+        let cell = self.grid.cell() as f32;
         (
-            (world_x / 128.0).floor() as i32 - self.origin_tile_x,
-            (world_z / 128.0).floor() as i32 - self.origin_tile_y,
+            ((world_x - (self.origin_tile_x * 128) as f32) / cell).floor() as i32,
+            ((world_z - (self.origin_tile_y * 128) as f32) / cell).floor() as i32,
         )
     }
 
-    pub fn world_of_tile(&self, tx: i32, ty: i32, height: &HeightGrid) -> Vec3 {
-        let x = (self.origin_tile_x + tx) as f32 * 128.0 + 64.0;
-        let z = (self.origin_tile_y + ty) as f32 * 128.0 + 64.0;
+    /// The middle of a cell of the walkable map, on the ground.
+    pub fn world_of_cell(&self, cx: i32, cy: i32, height: &HeightGrid) -> Vec3 {
+        let cell = self.grid.cell() as f32;
+        let x = (self.origin_tile_x * 128) as f32 + (cx as f32 + 0.5) * cell;
+        let z = (self.origin_tile_y * 128) as f32 + (cy as f32 + 0.5) * cell;
         Vec3::new(x, height.height_at(x, z), z)
     }
 
     pub fn is_walkable_world(&self, world_x: f32, world_z: f32) -> bool {
-        let (tx, ty) = self.tile_of(world_x, world_z);
-        self.grid.is_walkable(tx, ty)
+        let (cx, cy) = self.cell_of(world_x, world_z);
+        self.grid.is_walkable(cx, cy)
     }
 
+    /// The nearest cell a unit may stand in, searching up to twelve tiles out.
     pub fn nearest_walkable_world(&self, world_x: f32, world_z: f32) -> Option<(i32, i32)> {
-        let (tx, ty) = self.tile_of(world_x, world_z);
-        self.grid.nearest_walkable(tx, ty, 12)
+        let (cx, cy) = self.cell_of(world_x, world_z);
+        self.grid.nearest_walkable(cx, cy, 12 * NAV_PER_TILE)
     }
 
     pub fn path_world(&self, start: Vec3, goal: Vec3, height: &HeightGrid) -> Vec<Vec3> {
-        let start_tile = self.tile_of(start.x, start.z);
-        let goal_tile = self.tile_of(goal.x, goal.z);
-        let Some(path) = find_path(&self.grid, start_tile, goal_tile) else {
+        // the pathfinder looks only a few cells for somewhere to stand; look
+        // as far as it used to in tiles before handing over
+        let reach = 8 * NAV_PER_TILE;
+        let (sx, sy) = self.cell_of(start.x, start.z);
+        let (gx, gy) = self.cell_of(goal.x, goal.z);
+        let (Some(start_cell), Some(goal_cell)) = (
+            self.grid.nearest_walkable(sx, sy, reach),
+            self.grid.nearest_walkable(gx, gy, reach),
+        ) else {
+            return Vec::new();
+        };
+        let Some(path) = find_path(&self.grid, start_cell, goal_cell) else {
             return Vec::new();
         };
         let simplified = simplify_path(&self.grid, &path);
         simplified
             .into_iter()
             .skip(1)
-            .map(|(tx, ty)| self.world_of_tile(tx, ty, height))
+            .map(|(cx, cy)| self.world_of_cell(cx, cy, height))
             .collect()
     }
+}
+
+/// Block, or open, a disc of the walkable map around a point in the world.
+fn mark_disc(
+    grid: &mut Grid,
+    origin_tile_x: i32,
+    origin_tile_y: i32,
+    world_x: f32,
+    world_z: f32,
+    radius: f32,
+    blocked: bool,
+) {
+    grid.set_disc(
+        (world_x - (origin_tile_x * 128) as f32).round() as i32,
+        (world_z - (origin_tile_y * 128) as f32).round() as i32,
+        radius.round() as i32,
+        blocked,
+    );
 }
 
 #[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
@@ -377,29 +424,40 @@ impl MapLayout {
             for pair in lane.waypoints.windows(2) {
                 let a = Vec2::new(pair[0].x, pair[0].z);
                 let b = Vec2::new(pair[1].x, pair[1].z);
-                let steps = ((a.distance(b) / 24.0).ceil() as i32).max(1);
+                let steps = ((a.distance(b) / 64.0).ceil() as i32).max(1);
                 for i in 0..=steps {
                     let p = a.lerp(b, i as f32 / steps as f32);
-                    let tx = (p.x / 128.0).floor() as i32 - origin_tile_x;
-                    let ty = (p.y / 128.0).floor() as i32 - origin_tile_y;
-                    let r = radius_tiles.ceil() as i32;
-                    for dy in -r..=r {
-                        for dx in -r..=r {
-                            if (dx * dx + dy * dy) as f32 <= radius_tiles * radius_tiles {
-                                grid.set_blocked(tx + dx, ty + dy, false);
-                            }
-                        }
-                    }
+                    mark_disc(
+                        grid,
+                        origin_tile_x,
+                        origin_tile_y,
+                        p.x,
+                        p.y,
+                        radius_tiles * 128.0,
+                        false,
+                    );
                 }
             }
         }
     }
 
+    /// A structure stands in the way as a disc about the width of what is
+    /// drawn, not as a square three tiles across.
     pub fn block_structures(&self, grid: &mut Grid, origin_tile_x: i32, origin_tile_y: i32) {
         for structure in &self.structures {
-            let tx = structure.tile[0].floor() as i32 - origin_tile_x;
-            let ty = structure.tile[1].floor() as i32 - origin_tile_y;
-            grid.block_rect(tx - 1, ty - 1, 3, 3);
+            let radius = match structure.kind {
+                StructureKind::Tower => 70.0,
+                StructureKind::Inhibitor | StructureKind::Nexus => 85.0,
+            };
+            mark_disc(
+                grid,
+                origin_tile_x,
+                origin_tile_y,
+                structure.pos.x,
+                structure.pos.z,
+                radius + BODY_RADIUS,
+                true,
+            );
         }
     }
 
@@ -645,7 +703,11 @@ pub fn build(
     // conservative; the editor will replace it with authored collision later.
     let tiles_x = ((max_x - min_x + 1) * 64) as usize;
     let tiles_y = ((max_y - min_y + 1) * 64) as usize;
-    let mut collision_grid = Grid::new(tiles_x, tiles_y);
+    let mut collision_grid = Grid::with_cell(
+        tiles_x * NAV_PER_TILE as usize,
+        tiles_y * NAV_PER_TILE as usize,
+        NAV_CELL,
+    );
     for ((rx, ry), terrain) in &terrains {
         for ty in 0..64 {
             for tx in 0..64 {
@@ -658,7 +720,12 @@ pub fn build(
                 if tile.underlay_id == 0 && tile.overlay_id == 0 {
                     let gx = (*rx as i32 * 64 + tx as i32) - origin_tile_x;
                     let gy = (*ry as i32 * 64 + ty as i32) - origin_tile_y;
-                    collision_grid.set_blocked(gx, gy, true);
+                    collision_grid.block_rect(
+                        gx * NAV_PER_TILE,
+                        gy * NAV_PER_TILE,
+                        NAV_PER_TILE,
+                        NAV_PER_TILE,
+                    );
                 }
             }
         }
@@ -736,13 +803,18 @@ pub fn build(
 
         // What stands in the way is what can be seen standing there, and
         // nothing else: a piece of scenery blocks only if it was drawn, only
-        // on the ground floor, and only the one tile its trunk stands on.
-        // (Every object in the map used to block its whole footprint whether
-        // or not it was drawn, which left walls in open grass.)
+        // on the ground floor, and only as a disc the width of its trunk
+        // (plus the room a body needs), centred where the trunk is drawn.
         if loc.z == 0 && is_blocking_object(&def) {
-            let gx = (rx as i32 * 64 + loc.x as i32) - origin_tile_x;
-            let gy = (ry as i32 * 64 + loc.y as i32) - origin_tile_y;
-            collision_grid.set_blocked(gx, gy, true);
+            mark_disc(
+                &mut collision_grid,
+                origin_tile_x,
+                origin_tile_y,
+                base.x,
+                base.z,
+                TRUNK_RADIUS + BODY_RADIUS,
+                true,
+            );
         }
     }
 

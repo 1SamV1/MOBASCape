@@ -263,7 +263,7 @@ impl AnimatedScene {
             .collision
             .nearest_walkable_world(dummy_world.x, dummy_world.z)
         {
-            let dummy_pos = scene.collision.world_of_tile(tx, ty, &scene.height);
+            let dummy_pos = scene.collision.world_of_cell(tx, ty, &scene.height);
             units.push(load_unit(
                 cache,
                 7744,
