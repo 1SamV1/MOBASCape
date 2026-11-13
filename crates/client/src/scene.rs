@@ -76,9 +76,15 @@ impl HeightGrid {
         let h10 = self.heights[y0 * self.size + x0 + 1];
         let h01 = self.heights[(y0 + 1) * self.size + x0];
         let h11 = self.heights[(y0 + 1) * self.size + x0 + 1];
-        let a = h00 + (h10 - h00) * fx;
-        let b = h01 + (h11 - h01) * fx;
-        a + (b - a) * fy
+        // The ground is drawn as two triangles a tile, split along the line
+        // from (1,0) to (0,1). Read the height off the same triangle that is
+        // drawn there, so a foot placed at this height is on the ground and
+        // neither in it nor above it.
+        if fx + fy <= 1.0 {
+            h00 + (h10 - h00) * fx + (h01 - h00) * fy
+        } else {
+            h11 + (h01 - h11) * (1.0 - fx) + (h10 - h11) * (1.0 - fy)
+        }
     }
 
     pub fn contains(&self, world_x: f32, world_z: f32) -> bool {
@@ -185,6 +191,15 @@ impl WorldCollision {
             .map(|(cx, cy)| self.world_of_cell(cx, cy, height))
             .collect()
     }
+}
+
+/// Half the width of a model as it is drawn at `scale`, for use as the disc it
+/// blocks. A model's box is measured corner to corner, and most things are
+/// rounder than their box, so a little is taken off.
+fn footprint_radius(model: &Model, scale: f32) -> f32 {
+    let (min, max) = model.bounds();
+    let across = (max[0] - min[0]).max(max[2] - min[2]) as f32 * scale;
+    (across * 0.5 * 0.85).clamp(40.0, 320.0)
 }
 
 /// Block, or open, a disc of the walkable map around a point in the world.
@@ -441,14 +456,17 @@ impl MapLayout {
         }
     }
 
-    /// A structure stands in the way as a disc about the width of what is
-    /// drawn, not as a square three tiles across.
-    pub fn block_structures(&self, grid: &mut Grid, origin_tile_x: i32, origin_tile_y: i32) {
-        for structure in &self.structures {
-            let radius = match structure.kind {
-                StructureKind::Tower => 70.0,
-                StructureKind::Inhibitor | StructureKind::Nexus => 85.0,
-            };
+    /// A structure stands in the way as a disc the width of what is drawn.
+    /// `radii` gives each structure's own half-width, in the order of
+    /// `self.structures`.
+    pub fn block_structures(
+        &self,
+        grid: &mut Grid,
+        origin_tile_x: i32,
+        origin_tile_y: i32,
+        radii: &[f32],
+    ) {
+        for (structure, radius) in self.structures.iter().zip(radii) {
             mark_disc(
                 grid,
                 origin_tile_x,
@@ -461,6 +479,9 @@ impl MapLayout {
         }
     }
 
+    /// The old road: a flat sheet drawn above the ground. No longer used; the
+    /// road is now coloured into the ground itself.
+    #[allow(dead_code)]
     pub fn build_mesh(&self, mesh: &mut MeshData, height: &HeightGrid, width: f32) {
         for lane in &self.lanes {
             for pair in lane.waypoints.windows(2) {
@@ -604,6 +625,15 @@ pub fn build(
         }
     }
 
+    let height = HeightGrid {
+        origin_tile_x,
+        origin_tile_y,
+        size,
+        heights,
+    };
+    let heights = &height.heights;
+    let map = MapLayout::load(map_path, &height)?;
+
     // Colour, tile by tile. The natural ground (grass, earth, sand) is
     // softened over its neighbours as the game does, so it has no hard
     // patches. What is laid over it (paths, floors, water) keeps its own
@@ -649,11 +679,25 @@ pub fn build(
                     count += 1.0;
                 }
             }
-            let colour = if count > 0.0 {
+            let mut colour = if count > 0.0 {
                 sum.map(|v| v / count)
             } else {
                 [60.0, 90.0, 50.0]
             };
+
+            // A lane's road is part of the ground, not a sheet laid above
+            // it: the ground is coloured as road near a lane's line, fading
+            // out over the road's edge. Feet stand on it, hills in it are
+            // road too, and it takes the same light as the grass beside it.
+            let world_x = (origin_tile_x + gx as i32) as f32 * 128.0;
+            let world_z = (origin_tile_y + gy as i32) as f32 * 128.0;
+            let from_lane = map.distance_to_lane(world_x, world_z);
+            let road = 1.0
+                - ((from_lane - (ROAD_HALF_WIDTH - ROAD_EDGE)) / (2.0 * ROAD_EDGE)).clamp(0.0, 1.0);
+            let road = road * road * (3.0 - 2.0 * road);
+            for k in 0..3 {
+                colour[k] += (ROAD_COLOUR[k] - colour[k]) * road;
+            }
 
             // the light at a corner: from the slope through its neighbours,
             // under the same sun as the models
@@ -692,13 +736,6 @@ pub fn build(
         }
     }
 
-    let height = HeightGrid {
-        origin_tile_x,
-        origin_tile_y,
-        size,
-        heights,
-    };
-
     // Collision: water and blocking scenery footprints. This is deliberately
     // conservative; the editor will replace it with authored collision later.
     let tiles_x = ((max_x - min_x + 1) * 64) as usize;
@@ -730,8 +767,6 @@ pub fn build(
             }
         }
     }
-
-    let map = MapLayout::load(map_path, &height)?;
 
     let center = Vec3::new(
         (center_x as f32 * 64.0 + 32.0) * 128.0,
@@ -819,10 +854,30 @@ pub fn build(
     }
 
     map.clear_collision(&mut collision_grid, origin_tile_x, origin_tile_y, 4.5);
-    map.block_structures(&mut collision_grid, origin_tile_x, origin_tile_y);
+    // each structure blocks a disc as wide as its own model is drawn
+    let structure_radii: Vec<f32> = map
+        .structures
+        .iter()
+        .map(|structure| {
+            let fallback = match structure.kind {
+                StructureKind::Tower => 110.0,
+                StructureKind::Inhibitor | StructureKind::Nexus => 85.0,
+            };
+            cache
+                .group(7, structure.model_id)
+                .ok()
+                .and_then(|group| Model::load(structure.model_id, &group.data).ok())
+                .map(|model| footprint_radius(&model, structure.scale))
+                .unwrap_or(fallback)
+        })
+        .collect();
+    map.block_structures(
+        &mut collision_grid,
+        origin_tile_x,
+        origin_tile_y,
+        &structure_radii,
+    );
     let collision = WorldCollision::new(collision_grid, origin_tile_x, origin_tile_y);
-
-    map.build_mesh(&mut model_mesh, &height, 3.0 * 128.0);
 
     let spawn_hint = map
         .lanes
@@ -1049,6 +1104,13 @@ fn load_overlays(cache: &Cache) -> Result<HashMap<u32, OverlayDefinition>> {
     }
     Ok(out)
 }
+
+/// Half the width of a lane's road, in world units.
+const ROAD_HALF_WIDTH: f32 = 1.5 * 128.0;
+/// How far either side of the road's edge its colour fades into the ground.
+const ROAD_EDGE: f32 = 56.0;
+/// The road's own colour, before light: a worn grey-brown.
+const ROAD_COLOUR: [f32; 3] = [128.0, 120.0, 104.0];
 
 /// How far the natural ground's colour is softened, in tiles each way. The
 /// game's own figure.
