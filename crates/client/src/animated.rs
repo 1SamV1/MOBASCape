@@ -117,6 +117,13 @@ pub struct Effect {
     pub color: [u8; 3],
 }
 
+/// Whether a team sees only what its own units are near. Off for now: the
+/// whole map and every unit on it are shown. The rule underneath is kept, but
+/// it hid the map behind black slabs and gave no sign of where sight ended or
+/// where the brush was, so it read as things popping in. It comes back on when
+/// vision is built as a system of its own, with a picture to go with the rule.
+const FOG_OF_WAR: bool = false;
+
 pub struct VisibilityGrid {
     pub width: usize,
     pub height: usize,
@@ -1325,6 +1332,14 @@ impl AnimatedScene {
     }
 
     fn update_visibility(&mut self) {
+        if !FOG_OF_WAR {
+            self.visibility.tiles.fill(true);
+            for unit in &mut self.units {
+                unit.visible = true;
+            }
+            return;
+        }
+
         self.visibility.tiles.fill(false);
         for unit in &mut self.units {
             unit.visible = unit.team == 0;
