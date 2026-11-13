@@ -9,7 +9,8 @@ use crate::champion::ChampionConfig;
 use crate::items::ItemConfig;
 use crate::movement::{ChampionMotion, Driven, Wish};
 use crate::scene::{
-    CampBuff, HeightGrid, SceneData, StructureKind, Vertex, WorldCollision, model_vertex_animated,
+    CampBuff, HeightGrid, MODEL_FORWARD_TURN, SceneData, StructureKind, Vertex, WorldCollision,
+    model_vertex_animated,
 };
 
 const Q_COOLDOWN: f32 = 5.0;
@@ -1808,13 +1809,6 @@ fn load_unit(
         lift: 0.0,
     })
 }
-
-/// The game's models are built facing down their own -z axis: at the game's
-/// angle 0 a character looks south. `unit.yaw` is the heading the unit travels
-/// and attacks along, measured from +z, so the body needs this half turn to
-/// put its face, and not its back, on that heading. Drawing only: `unit.yaw`
-/// and everything the match measures are untouched.
-const MODEL_FORWARD_TURN: f32 = std::f32::consts::PI;
 
 fn append_unit(scene: &mut AnimatedScene, unit: &AnimatedUnit, positions: &[[f32; 3]]) {
     let rot = Mat3::from_rotation_y(unit.yaw + MODEL_FORWARD_TURN);
