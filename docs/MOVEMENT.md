@@ -248,11 +248,15 @@ the walkable map at all.
 
 ## Proposed: getting about on rough ground
 
-Status: **design for review. Nothing in this section is built**, and none of
-it is to be built until it has been reviewed.
+Status: **design for review, second draft. Nothing in this section is
+built**, and none of it is to be built until the design as a whole has been
+approved. The direction (climbing by step height, hops, a committed leap,
+slopes by weight) was approved at the first review; the height data was sent
+back, and this draft replaces it. The collision system that exists is not
+changed by this document.
 
-Four things, in the order they depend on each other: a record of how tall
-things are, climbing, hopping, leaping, and slopes. The aim is that a
+Five things, in the order they depend on each other: what the map knows
+about height, climbing, hops, the leap, and slopes. The aim is that a
 champion's body decides how it crosses the map: what stops Jad should not
 stop a monkey, and a hill should mean something different to each.
 
@@ -265,57 +269,93 @@ and passes through anything in between. It has no wind-up, no travel time, and
 gives an opponent nothing to see or answer. It lives in the client, not the
 simulation.
 
-It stays as it is for every champion until that champion's own way of moving
-is designed. This section proposes the monkey's.
+### What the map knows about height
 
-### One number per cell: how tall the thing there is
+The first draft kept one number per cell, the height of the tallest thing
+there, and asked it three questions. They are three different questions. The
+tallest point over a cell cannot tell the top of a rock from the side of a
+trunk, cannot hold a ledge with a roof over it, and says nothing about
+whether a body gets from one cell to the next.
 
-Today the map records only whether a cell is blocked. It should record **how
-tall the solid thing over each cell is**: the height of the highest point of
-any drawn surface over that cell, counting only what is at or below head
-height for scenery (so leaves do not count) and everything for a structure
-(so nobody stands under a crystal's overhang). Open ground is 0.
+The map is still made from the triangles that are drawn, by the code that
+exists. What that code keeps for each cell becomes four separate things:
 
-The code that marks obstacles already samples those heights and throws them
-away. Kept, they answer every question below with one rule each:
+| Kept per cell | What it is | Where it comes from |
+|---|---|---|
+| **Ground** | The height of the ground itself | The map's own tile heights: whole numbers, the same on every machine |
+| **Standing surface** | The height above the ground of a surface a champion could stand on here, if there is one | Triangles over the cell that face upward and are no steeper than a set angle |
+| **Solid span** | From what height to what height a body is in the way here, if at all | Every other triangle over the cell: sides, undersides, anything too steep to stand on |
+| **Level** | Ground plus standing surface: how high a champion stands in this cell | Worked out from the two above |
 
-| Question | Rule |
-|---|---|
-| May a champion stand here? | The thing here is no taller than the champion's **step height** |
-| How high is it standing? | As high as the thing here (drawing only) |
-| May a leap pass over here? | The thing here is no taller than the leap's **clearance** |
+Whether a surface can be stood on is decided by its **slope**, not by its
+height. The top of a stone and the shoulder of a tower's mound face upward
+and can be stood on. The side of a trunk, the face of a spire and the flank
+of a steep rock cannot, however low they are; they go into the solid span.
 
-Today's fixed step height of 48 becomes the default. Because obstacles are
-widened by a body's width, there is one map per distinct step height in a
-match, built when the match loads.
+A cell may hold both: a ledge to stand on with rock rising beside it, or
+ground to stand on with a branch overhead. That is the case one number could
+not hold.
+
+Leaves and anything else above head height stay out of the solid span for
+scenery, as now, so a champion walks under a tree. A structure's solid span
+has no upper limit, so nobody stands under a crystal's overhang.
+
+**Getting from one cell to the next** is a fourth thing and is not stored: it
+is a rule applied to two neighbouring cells. A champion may step from A to B
+only if all of these hold:
+
+1. B has somewhere to stand (ground, or a standing surface).
+2. The difference between A's level and B's level is no more than the
+   champion's **step height**.
+3. The champion's body, standing at B's level, does not meet B's solid span,
+   nor the solid span of any cell within a body's half-width of B.
+
+Rule 2 is what the first draft lacked: two surfaces each within reach of the
+ground are not thereby within reach of each other. A stone 40 high next to a
+ledge 130 high is a step of 90, not two steps of under 96.
+
+The walker and the pathfinder already ask "may I go from this cell to that
+one"; today the answer ignores height. They would ask this rule instead.
+
+A body's own height is, for now, the one head height the map already uses
+(160). A height per champion, so that Jad cannot go where only something
+short fits, is the same rule with a different number and is left for when
+there is a champion who needs it.
 
 ### Climbing
 
-A champion file gains `step`: the tallest thing it can get on top of. Default
-48. Proposed: monkey 96, Jad 48.
+A champion file gains `step`: the greatest difference in level it can take
+in one stride. Default 48, today's fixed value. Proposed: monkey 96, Jad 48.
 
-With 96 the monkey gets onto the lower two thirds of a tower's mound (138
-tall), onto every loose stone, and onto the ruin of a fallen tower. It does
-not get onto the spire, a trunk, or a crystal.
+On the tower as measured (a mound 138 tall with a spire to 432 and loose
+stones 26 to 46 tall), the monkey would walk onto the stones and up the
+mound's shoulders wherever they are gentle enough to stand on, a cell at a
+time, each stride within 96. He would not get up the spire or a trunk, whose
+faces are too steep to stand on, nor onto a crystal. Jad would step over the
+lower stones and be stopped by the mound.
 
-- **It is a rule of the match.** A climber really does stand where others
-  cannot: closer to a tower, and with ground to retreat onto. That is worth
-  something in a fight and has to be balanced as such.
-- **Standing height is drawing only.** The simulation stays flat. A champion
-  on a rock is hit, targeted and measured from the point on the ground under
-  it. It is drawn as high as the thing it stands on, eased so it does not
-  snap.
-- **No climbing animation yet.** It walks up. That waits for the animation
-  system.
+The work is in three separate parts, built and judged separately:
+
+1. **Simulation.** Whether a stride is allowed, and the level it ends at.
+   This is a rule of the match: a climber really does stand where others
+   cannot, and that is worth something in a fight.
+2. **Drawing.** The champion is drawn at its level, eased so that it rises
+   and falls over the length of the stride and never snaps. Nothing the match
+   measures uses the drawn height.
+3. **Animation.** A clamber where the rise is large. Not in the first
+   version; it waits for the animation system, and until then a stride of 90
+   upward will look like a glide. That is accepted for a first test and not
+   for a finished champion.
+
+Everything the match measures (range, targeting, hits) uses the champion's
+position on the flat. Being on a rock does not put it out of reach.
 
 ### Hops
 
-Nothing new in the simulation. A champion already walks over anything under
-its step height. Drawn at the height of what it is on, eased with the same
-spring as its footfalls, it visibly hops onto and off a stone as it crosses
-it. Light champions with a large `bounce` make more of it; heavy ones tread
-over it. It never changes speed or path, so it cannot be an advantage or a
-penalty.
+Nothing new in the simulation: a hop is the drawing of a small stride up and
+down again. A light champion with a large `bounce` makes more of it; a heavy
+one treads over. It never changes speed or path, so it is neither an
+advantage nor a penalty.
 
 ### The leap
 
@@ -327,145 +367,229 @@ others must walk round.
 1. **Crouch, 0.10 s.** The monkey stops and gathers. The landing point is
    fixed at this moment and shown on the ground to everyone who can see him.
    He cannot move, attack or cast.
-2. **In the air.** He travels in a straight line over the ground from where
-   he crouched to the landing point, at a steady rate. Time in the air is
-   0.30 s plus 0.25 s for every 400 units, so the full 640 takes 0.70 s. He
-   cannot steer, attack or cast.
-3. **Landing.** He is on the ground at the landing point, facing the way he
-   travelled, moving at walking speed in that direction. A drawn squash and a
-   little dust; no pause.
+2. **In the air.** He travels in a straight line over the map from where he
+   crouched to the landing point, at a steady rate. Time in the air is 0.30 s
+   plus 0.25 s for every 400 units, so the full 640 takes 0.70 s. He cannot
+   steer, attack or cast.
+3. **Landing.** He stands at the landing point, at its level, facing the way
+   he travelled and moving at walking speed in that direction.
+
+**The arc is part of the match, and it is the arc that is drawn.** The first
+draft gave the simulation a clearance of 150 and the drawing an arc up to 180
+high, which could show him passing through something the match said he
+cleared, or over something it said he did not. There is now one arc. His
+height along the line rises smoothly from the level he left to a peak and
+down to the level he lands at. The peak is a quarter of the distance above
+the straight line between those two levels, no less than 60 and no more than
+180. The simulation holds it in whole numbers; the client draws exactly it
+and may add a tumble, a squash and dust, which change nothing.
+
+**What he clears** follows from the arc and his body, with no separate
+number. At each cell along the line, and each cell within a body's half-width
+of it, the space from his feet to his head at that point of the arc must not
+meet the cell's solid span, and his feet must not be below its standing
+surface. So:
+
+- Near the middle of a long leap he passes over a stone, a mound's shoulder,
+  a ruin, a low wall.
+- Near either end he is low, and will not clear what he would at the middle.
+- A trunk, a spire and a crystal reach higher than any arc. Aimed across one,
+  he lands short of it. A tower remains something to leap round.
+- A short leap has a low arc and clears little. It is a hop, not a way over a
+  wall.
 
 **Where he lands**
 
-- Range: at most 640 units (five tiles), at least 160. An aim nearer than the
-  least does nothing and costs nothing.
-- The line from crouch to aim is checked cell by cell. If any cell on it has
-  something taller than the leap's **clearance of 150**, the landing point is
-  pulled back to the last open cell before it.
-- If the landing cell is not somewhere he may stand, it is pulled back along
-  the line to the nearest that is.
-- If that leaves less than the least range, the leap does not happen and
-  costs nothing.
+- Range: at most 640 units (five tiles), at least 160. An aim nearer than
+  the least does nothing and costs nothing.
+- The landing point must be somewhere he may stand: open ground, or a
+  standing surface, with room for his body there. He may land on a rock. He
+  need not be able to walk up to where he lands: the arc is the approach, and
+  the arc being clear is what makes it legal.
+- If the aim fails either test, the landing point is drawn back along the
+  line to the furthest point that passes both. If that is nearer than the
+  least range, the leap does not happen and costs nothing.
 
-So he clears loose stones, the skirt of a tower's mound, a ruin, low walls,
-and any gap between trees. He does not clear a tree's trunk, a tower's
-spire, or a crystal; aimed across one, he lands short of it. A tower remains
-a wall to leap round, not over.
+**Once he has left the ground the leap is settled.** The line and the landing
+point were tested when he crouched and are not tested again in the air.
+
+- *Something comes to stand on the line while he is in the air.* He passes it.
+- *The landing point stops being somewhere he may stand* (a structure rises
+  there; later, another unit stands there). On the tick he lands he is put at
+  the nearest cell where he may stand, searched outward in a fixed order so
+  that every machine picks the same one. A leap never ends inside anything
+  and never fails to land.
+- *He dies in the air.* The leap ends on that tick. For everything the match
+  measures he died at the point on the flat under him, and that is where his
+  body lies and where anything that depends on where he died takes place.
+  The body falling from the arc is drawing only.
 
 **What others can do about it**
 
-- He can be seen crouching and the landing point can be seen. The whole thing
-  is fixed from the crouch: same range, same time, same line, every time.
+- He is seen crouching, and the landing point is seen. Range, time, line and
+  arc are the same every time.
 - He can be targeted and hit throughout. Being in the air protects him from
-  nothing. For anything that asks where he is, he is at the point on the
-  ground under him.
+  nothing. For anything that asks where he is, he is at the point on the flat
+  under him.
 - A stun or root that lands during the crouch cancels the leap, and the
   cooldown is spent.
-- A stun or root that lands while he is in the air does not stop the arc. It
-  takes effect when he lands, for its full length.
-- A knockback in the air: open question, below.
+- A stun, root or knockback that lands while he is in the air does not change
+  the arc. It takes effect when he lands, in full. The landing point shown to
+  everyone stays true.
 
 **Cost.** 30 mana and an 8 second cooldown, as W has now, until it has been
 played.
 
-**The arc is drawing only.** How high he rises (a quarter of the distance,
-no more than 180) and how he tumbles are for the eye. The simulation knows
-only the line, the time, and that he is in the air.
+### Where abilities live
+
+The leap runs in the simulation. Every other champion's W would still run in
+the client. That is a state to pass through, not the design. In a match
+between players, **every ability that moves a champion is decided by the
+simulation**, because a client that moves its own champion can move it
+anywhere.
+
+So the leap is followed, before any other champion's W is redesigned, by
+moving today's instant W into the simulation exactly as it behaves now. The
+other champions keep the ability they have; what changes is who decides it.
+New designs for their movement come later, one champion at a time.
 
 ### Slopes
 
 Top speed changes with the steepness of the ground under a champion, along
-the way it is heading. Steepness is rise over run of the drawn ground,
-limited to half (a climb of one in two).
+the way it is heading.
 
 | | Uphill, per unit of steepness | Downhill, per unit of steepness |
 |---|---|---|
 | Lightest (weight 0) | 15% slower | 10% faster |
 | Heaviest (weight 100) | 60% slower | 40% faster |
 
-In between it runs evenly with weight. On a hill of three in ten, which the
-map has plenty of, the monkey (weight 20) climbs 7% slower and descends 5%
-faster; Jad (85) climbs 16% slower and descends 11% faster. Across a slope,
-neither.
+In between it runs evenly with weight. On a hill of three in ten the monkey
+(weight 20) would climb 7% slower and descend 5% faster; Jad (85) 16% slower
+and 11% faster. Across a slope, neither. **These figures are a place to start
+and are not approved**; they are settled by playing the same routes with a
+light and a heavy champion.
 
-- **Only top speed changes** in the first version. Time to speed, time to
-  stop and time to turn are as on the flat. Whether a heavy champion should
-  also take longer to stop going downhill is an open question; it would feel
-  right and it would make stopping distance depend on the ground, which is
-  harder to read.
-- **It is the same for everyone on the same ground**, and the ground does not
-  change. A player can learn where the fast and slow lines are. Nothing is
-  random.
-- **It applies to walking only.** A leap covers its distance in its fixed
-  time whatever is under it.
+Two constraints on how it is built:
+
+- **Steepness is measured so that it cannot flicker.** Not from the one
+  triangle underfoot, which changes at every tile edge, but from the ground's
+  height a fixed distance ahead and the same distance behind along the
+  heading (proposed: 96 units each way, three quarters of a tile), limited to
+  one in two. And a change in top speed is not applied at once: it is a new
+  top speed, which the champion reaches through its own acceleration and
+  stopping times like any other. Speed never steps.
+- **The heights are the map's own.** The simulation works steepness out from
+  the tile heights in the map data, as whole numbers. It never asks a
+  client's renderer how high the ground is, and no two machines can disagree.
+
+Only top speed changes in the first version; time to speed, to stop and to
+turn are as on the flat. It applies to walking only: a leap covers its
+distance in its fixed time whatever is under it. It is the same for everyone
+on the same ground, and the ground does not change, so the fast and slow
+lines can be learned.
 
 ### Keeping it the same on every machine
 
-- Everything above that decides where a champion is lives in the simulation
-  and uses whole numbers: the heights of things, the line of a leap, its
-  time, the steepness of the ground.
-- The ground's heights, which today only the client holds, are given to the
-  simulation as the whole numbers they come from in the map.
-- Times are held in milliseconds and counted in ticks. At 30 Hz a leap's
-  phases land on tick boundaries to within one tick (33 ms); at 60 Hz, 17 ms.
-  A leap covers the same distance to the same point at any tick rate; its
-  duration can differ by at most one tick.
-- The drawn height, arc, squash and dust are in the client and can differ
-  between machines without changing anything that matters.
+- Everything that decides where a champion is lives in the simulation and
+  uses whole numbers: ground, standing surfaces, solid spans, levels, the
+  line and arc of a leap, its time, the steepness of the ground.
+- Times are held in milliseconds and counted in ticks. A leap ends at the
+  same point at any tick rate; its phases can differ in length by at most one
+  tick (33 ms at 30 Hz, 17 ms at 60 Hz).
+- Easing, tumbling, squash and dust are in the client and may differ between
+  machines without changing anything the match measures.
 
-### What has to exist first
+### The order of building, once approved
 
-1. The height of the thing over each cell, kept in the walkable map.
-2. The ground's heights in the simulation.
-3. A champion's state in the simulation able to say "crouching" and "in the
-   air", with where from, where to and how far along. The leap is the first
-   ability to move out of the client, and it sets the pattern for the rest.
-4. W read from the champion file, so the monkey leaps and the others keep
-   what they have.
+One step at a time, each tested before the next is begun. Climbing, hops, the
+leap and slopes are not built together.
+
+1. **Height data.** Ground, standing surface and solid span per cell, and the
+   rule for stepping between cells, in the simulation. No champion behaves
+   differently yet: with every step height at 48 the map must block exactly
+   what it blocks today, and a test says so.
+2. **Climbing.** `step` read from the champion file. The monkey and Jad
+   tried by hand on the real tower, stones, trees and crystal.
+3. **Drawn height and hops.** Checked for snapping, for floating, and for any
+   advantage it was not meant to give.
+4. **The leap**, in the simulation. Every direction, every kind of obstacle,
+   every landing case, every interruption above, and every tick rate.
+5. **Today's W for the other champions**, moved into the simulation unchanged.
+6. **Slopes**, on their own. A light and a heavy champion on the same routes.
+7. **The movement drills again**, with all of it on. Only then are the
+   numbers judged.
 
 ### How it will be tested
 
 In the simulation, by code:
 
-- A champion stands where the thing is no taller than its step and nowhere
-  taller; two champions with different steps disagree about the same rock.
-- A leap aimed at open ground lands on the aim, in the stated time, from any
+- With every step height at 48, the new map blocks the same cells as the map
+  that exists, on the real tower and crystal.
+- A trunk has no standing surface however low it is sampled; a stone's top
+  and a mound's shoulder have one.
+- A cell with a ledge and a roof over it lets a short body stand and stops a
+  tall one.
+- Two surfaces each within a step of the ground and more than a step from
+  each other cannot be walked between.
+- Two champions with different steps disagree about the same rock, and each
+  agrees with itself from every direction.
+- A leap over open ground lands on the aim, in the stated time, from any
   direction.
 - A leap aimed across a trunk, a spire and a crystal lands short of each; one
-  across a stone, a mound's skirt and a ruin does not.
-- A leap never ends where the champion may not stand, for every aim round a
-  ring, at every range.
+  across a stone, a mound's shoulder and a ruin does not, when they are near
+  the middle of the arc, and does when they are at its ends.
+- A leap never ends where he may not stand, for every aim round a ring at
+  every range, including when the landing point is taken away mid-air.
+- Death in the air leaves him at the point under him on that tick.
+- A stun in the crouch cancels; a stun or knockback in the air waits.
 - The same leap at 20, 30, 60 and 120 Hz ends at the same point, within one
   tick of the same time.
+- Walking a straight line over rolling ground, top speed never changes by
+  more than a set small amount from one tick to the next.
 - Uphill, downhill and across the same slope give the stated speeds for a
   light and a heavy champion; on the flat nothing changes.
 - The walk-round tests still pass with climbing on.
 
 By hand, which is what decides it:
 
+- Climbing reads as climbing, or at least not as a fault, before there is an
+  animation for it.
 - The leap feels like a jump and not a teleport with a delay.
 - An opponent watching can tell where he will land.
-- The numbers above (step 96, clearance 150, range 640, the times, the slope
-  figures) are starting points. Each is tuned in play and the tuned value
-  written back here.
+- Every number here (step 96, the arc's peak, range 640, the times, the slope
+  figures, the angle a surface may slope and still be stood on) is tuned in
+  play, and the tuned value written back into this document.
 
-### Open questions for review
+### Decided at the first review
 
-- **Knockback in the air.** Does a knockback move the landing point, or wait
-  until he lands? Moving it is more interesting and breaks "the landing point
-  is fixed". Proposed: it waits.
-- **Leaping onto things.** May he land on a rock he could stand on? Proposed:
-  yes, since landing only needs somewhere he may stand.
+| | Decision |
+|---|---|
+| Collision read from the drawn shape | Keep |
+| A step height per champion; the monkey climbs | Keep |
+| Hops as drawing only | Keep |
+| A committed leap with a fixed, shown landing point | Keep |
+| Knockback waits until he lands | Keep |
+| He may land on a rock he could stand on | Keep, with the landing tests above |
+| One height number for every purpose | Replaced by this draft |
+| A leap clearance separate from the drawn arc | Replaced: one arc, tested against his body |
+| The other champions' W in the client | Temporary; moved into the simulation at step 5 |
+| The slope figures | To be tested and tuned, not approved |
+
+### Still open
+
+- **The angle a surface may slope and still be stood on.** Proposed 45
+  degrees. It decides how much of the mound the monkey can use, and can only
+  be judged on the real models.
+- **Slopes and stopping.** Whether a heavy champion should also take longer
+  to stop going downhill. Proposed: not in the first version.
 - **Leaping over units.** Units do not collide yet. When they do, proposed:
-  he passes over them and cannot land inside one.
-- **Vision.** When vision is built, does being in the air reveal him over
-  brush? Proposed: no change in the first version.
-- **Slopes and stopping**, as above.
-- **Minions and slopes.** If slopes slow champions and not minions, waves
-  arrive differently from champions on hilly lanes. Proposed: the same rule
-  for every unit once minions are in the simulation.
+  he passes over them and is never put down inside one.
+- **Vision.** When vision is built, whether being in the air or on a rock
+  lets him see or be seen over brush. Proposed: no change at first.
+- **Minions and slopes.** Proposed: the same rule for every unit once minions
+  are in the simulation, so waves and champions keep pace with each other.
+- **A body height per champion.** Left until a champion needs it.
 - **Who else gets a step above the default.** Only the monkey is proposed.
-  Each champion's is a design decision of its own.
 
 ## Not in this document
 
