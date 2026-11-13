@@ -1,7 +1,11 @@
 # Interface
 
-Status: **design proposed. Nothing in this document is built.** It is written
-to be reviewed before any code, because the work replaces most of
+Status: **design approved with clarifications, and frozen. Nothing in it is
+built.** Only stage 1 (cache decoding and the dump tool) is authorised. Each
+later stage needs its own go-ahead after the stage before it has passed its
+check. A change to this document is a design change and is reviewed like one.
+
+It was written before any code because the work replaces most of
 `crates/client/src/hud.rs` and adds a drawing layer the client does not have.
 
 The interface copies the *composition and style* of the reference game: where
@@ -53,12 +57,43 @@ Positions are fractions of the screen, from the top left.
 - **Style.** Stone and parchment panels, the RuneScape fonts, yellow
   announcements with a dark outline, a parchment tooltip.
 
+### The inventory panel, from five more frames
+
+The panel was cropped from five moments of the match (2:00, 5:00, 8:40, 11:40
+and 15:00 of the recording) and is the same in all five. It is **not** six
+slots. Top to bottom:
+
+| Row | Slots | What is seen |
+|---|---|---|
+| 1 | 5 | equipment slots, each with a faint outline of what belongs there; the first holds a staff from the start |
+| 2 | 5 | equipment slots; one fills with boots, another with a book, as the match goes on |
+| 3 | 5 | item slots; four are filled from the start (two dark items, a blue orb, a dark pouch) |
+| 4 | 3, then gold | three item slots, then a gold-pile icon and the gold count |
+| 5 | 2 buttons | Shop and Teleport; Teleport turns red at one point |
+
+So: ten equipment slots in two rows of five, eight item slots (five and
+three), a gold count and two buttons. What each equipment outline stands for,
+what the four starting items are, and what a red Teleport button means cannot
+be read at this size; they are open questions for the item system, not for the
+layout.
+
+### More of the reference to measure before stage 3 is accepted
+
+One frame fixes a starting layout, not a specification. Before the static HUD
+is accepted it is compared against frames chosen to catch each component
+changing:
+
+- an announcement on screen ("Giant Mole has appeared!", "An enemy has been
+  slain")
+- a tooltip open, and a second tooltip of a different length
+- the objectives panel early (few entries) and late (every timer running)
+- the team frames with an ally dead, and with all five alive
+- the target panel open and closed
+- the shop open, the scoreboard open, the death screen, hero select
+- the chat box with one line and with a full box
+
 ### What is not known yet
 
-- The exact contents of the inventory panel. The measured frame shows a grid of
-  equipment-shaped slots above a row of item slots, a gold count, and Shop and
-  Teleport buttons. Slot counts are to be read from clearer frames, not
-  assumed.
 - Every size smaller than about six pixels in the recording.
 - Which cache sprites the reference uses for each panel. This is found by
   looking at the sprite dump (stage 1), not by guessing ids.
@@ -66,7 +101,7 @@ Positions are fractions of the screen, from the top left.
 
 ## Rules
 
-### 1. The interface shows the match; it does not run it
+### 1. The interface shows the match; it does not run it, and cannot overrule it
 
 A component reads a snapshot of match state and draws it. It never holds a
 timer, a cooldown, a gold count or a spawn rule of its own. The objectives
@@ -76,8 +111,16 @@ make one appear.
 Concretely there is one plain struct, `HudState`, filled once a frame from the
 match, and each component takes only the part it needs. What the player does to
 the interface (a click on an item slot, a key for an ability) leaves as a
-*command* to the match, the same command a network client would send. No
-component changes match state directly.
+*command* to the match. No component changes match state directly.
+
+There is one command path, not two. A click on the shop's Buy button and a
+buy order arriving over the network are the same command, enter the match at
+the same place, and are checked by the same code: is this player alive, in
+range of a shop, able to pay, holding a free slot. The interface may grey out
+a button it expects to be refused, as a courtesy, but that is only a guess at
+what the match will say. The match's answer is the only one that counts, and a
+command the interface should never have sent is still refused. Nothing a
+component draws or allows is ever taken as proof that an action is legal.
 
 This is the same line `docs/SPECTATING.md` draws: a spectator's interface is
 the same components fed a snapshot from someone else's match.
@@ -142,6 +185,26 @@ RuneScape's interface is pixel art and looks wrong the moment it is stretched.
   announcements) stay centred. Nothing is redesigned per monitor; a larger
   window shows more battlefield or steps the scale up.
 - **Positions are whole pixels** after scaling, so nothing shimmers.
+
+### How small the interface may be, and how much of the screen it may take
+
+In the measured frame the interface covers about a fifth of the screen and
+leaves the rest to the battlefield. That is the budget:
+
+- **The interface never covers more than a quarter of the window.** The scale
+  steps down, and then components give way in the order below, to keep that.
+- **The smallest supported window is 1280 by 720.** At that size, at scale 1,
+  every component is shown in full. This is a target until stage 1 gives the
+  real sizes of the sprites; it is then checked by adding up the native widths
+  of the bottom row and the native heights of the tallest column, and the
+  figure is corrected here if they do not fit.
+- **The native size of every component is written into this table** when it is
+  first laid out in stage 3, so the smallest window and the scale steps are
+  measured facts and not estimates:
+
+| Component | Native width | Native height | Measured in |
+|---|---|---|---|
+| (filled in at stage 3) | | | |
 
 ### When the window is too small
 
