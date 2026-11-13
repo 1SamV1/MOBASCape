@@ -104,8 +104,11 @@ pub const NAV_CELL: i32 = 128 / NAV_PER_TILE;
 /// wider than it is, so a unit can be treated as a point. One size for every
 /// unit for now; a size per champion needs a map per size.
 pub const BODY_RADIUS: f32 = 28.0;
-/// Half the width of a tree's trunk. Leaves and fronds do not stop anyone.
-const TRUNK_RADIUS: f32 = 18.0;
+/// The part of a thing that stands in the way: its surface between these two
+/// heights above the ground. What is lower can be stepped over (roots, loose
+/// stones); what is higher passes overhead (leaves, an overhang).
+const SOLID_FROM: f32 = 48.0;
+const SOLID_TO: f32 = 160.0;
 
 #[derive(Clone)]
 pub struct WorldCollision {
@@ -206,61 +209,39 @@ impl WorldCollision {
 /// that works out where a drawn model's parts are must apply the same turn.
 pub const MODEL_FORWARD_TURN: f32 = std::f32::consts::PI;
 
-/// Something that stands on the map and blocks a disc of it.
-#[derive(Debug, Clone, Copy)]
-pub struct Blocker {
-    pub x: f32,
-    pub z: f32,
-    /// How far out from its middle it blocks, before the room a body needs.
-    pub radius: f32,
-}
-
-/// The disc a structure blocks, worked out from its model as it is drawn at
-/// `pos` and `scale`.
+/// Block the ground a model stands on, from the shape it is drawn with.
 ///
-/// Two things about the models matter. A tower's includes rubble lying round
-/// its foot, and measuring to the furthest stone kept units off open ground.
-/// And a model is not built round the point it is placed by: the tower's rock
-/// stands well to one side of it, so a disc centred on that point sat beside
-/// the rock, not under it. So the disc's middle is the middle of the model's
-/// corners (the median, which loose stones do not drag about), turned the way
-/// the model is drawn, and it reaches as far as three quarters of the corners
-/// do from there.
-fn footprint(model: &Model, pos: Vec3, scale: f32) -> Blocker {
-    let count = model.vertex_count;
-    if count == 0 {
-        return Blocker {
-            x: pos.x,
-            z: pos.z,
-            radius: 60.0,
-        };
-    }
-    let by_size = |a: &f32, b: &f32| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal);
-    let mut xs: Vec<f32> = (0..count).map(|i| model.vertex_x[i] as f32).collect();
-    let mut zs: Vec<f32> = (0..count).map(|i| model.vertex_z[i] as f32).collect();
-    xs.sort_by(by_size);
-    zs.sort_by(by_size);
-    let (mid_x, mid_z) = (xs[count / 2], zs[count / 2]);
-
-    let mut reach: Vec<f32> = (0..count)
-        .map(|i| {
-            let (x, z) = (
-                model.vertex_x[i] as f32 - mid_x,
-                model.vertex_z[i] as f32 - mid_z,
-            );
-            (x * x + z * z).sqrt()
-        })
+/// The model's corners are turned and scaled by the very function that draws
+/// it (`model_vertex_scaled`), so the blocked ground lies under the drawn
+/// thing whichever way it is turned and wherever in its own space it was
+/// built. Returns how many cells of the map the thing itself covers.
+fn block_model(
+    grid: &mut Grid,
+    origin_tile_x: i32,
+    origin_tile_y: i32,
+    model: &Model,
+    base: Vec3,
+    rot: Mat3,
+    scale: f32,
+) -> usize {
+    // with no base added, a corner comes out as (across, height, along)
+    let corner = |i: u32| model_vertex_scaled(model, i as usize, Vec3::ZERO, rot, scale).to_array();
+    let triangles: Vec<[[f32; 3]; 3]> = model
+        .faces
+        .iter()
+        .filter(|face| face.iter().all(|&i| (i as usize) < model.vertex_count))
+        .map(|&[a, b, c]| [corner(a), corner(b), corner(c)])
         .collect();
-    reach.sort_by(by_size);
-    let body = reach[(count * 3 / 4).min(count - 1)];
-
-    // a structure is drawn unturned but for the half turn every model gets
-    let middle = Mat3::from_rotation_y(MODEL_FORWARD_TURN) * Vec3::new(mid_x, 0.0, mid_z) * scale;
-    Blocker {
-        x: pos.x + middle.x,
-        z: pos.z + middle.z,
-        radius: (body * scale).clamp(30.0, 240.0),
-    }
+    grid.block_solid(
+        &triangles,
+        (
+            base.x - (origin_tile_x * 128) as f32,
+            base.z - (origin_tile_y * 128) as f32,
+        ),
+        SOLID_FROM,
+        SOLID_TO,
+        BODY_RADIUS.round() as i32,
+    )
 }
 
 /// Block, or open, a disc of the walkable map around a point in the world.
@@ -514,27 +495,6 @@ impl MapLayout {
                     );
                 }
             }
-        }
-    }
-
-    /// Mark each structure's disc on the walkable map.
-    pub fn block_structures(
-        &self,
-        grid: &mut Grid,
-        origin_tile_x: i32,
-        origin_tile_y: i32,
-        blockers: &[Blocker],
-    ) {
-        for blocker in blockers {
-            mark_disc(
-                grid,
-                origin_tile_x,
-                origin_tile_y,
-                blocker.x,
-                blocker.z,
-                blocker.radius + BODY_RADIUS,
-                true,
-            );
         }
     }
 
@@ -897,54 +857,69 @@ pub fn build(
 
         // What stands in the way is what can be seen standing there, and
         // nothing else: a piece of scenery blocks only if it was drawn, only
-        // on the ground floor, and only as a disc the width of its trunk
-        // (plus the room a body needs), centred where the trunk is drawn.
+        // on the ground floor, and only where its own shape stands between
+        // knee and head height. A tree blocks at its trunk, not under its
+        // leaves.
         if loc.z == 0 && is_blocking_object(&def) {
-            mark_disc(
+            block_model(
                 &mut collision_grid,
                 origin_tile_x,
                 origin_tile_y,
-                base.x,
-                base.z,
-                TRUNK_RADIUS + BODY_RADIUS,
-                true,
+                model,
+                base,
+                Mat3::from_rotation_y(angle),
+                1.0,
             );
         }
     }
 
     map.clear_collision(&mut collision_grid, origin_tile_x, origin_tile_y, 4.5);
-    // each structure blocks a disc under its own model, as wide as its body
-    let blockers: Vec<Blocker> = map
-        .structures
-        .iter()
-        .map(|structure| {
-            let fallback = Blocker {
-                x: structure.pos.x,
-                z: structure.pos.z,
-                radius: match structure.kind {
-                    StructureKind::Tower => 110.0,
-                    StructureKind::Inhibitor | StructureKind::Nexus => 85.0,
-                },
-            };
-            cache
-                .group(7, structure.model_id)
-                .ok()
-                .and_then(|group| Model::load(structure.model_id, &group.data).ok())
-                .map(|model| footprint(&model, structure.pos, structure.scale))
-                .unwrap_or(fallback)
-        })
-        .collect();
-    for (structure, blocker) in map.structures.iter().zip(&blockers) {
-        tracing::info!(
-            "blocks: {:?} model {} out to {:.0} units, its middle {:.0},{:.0} from where it is placed",
-            structure.kind,
-            structure.model_id,
-            blocker.radius,
-            blocker.x - structure.pos.x,
-            blocker.z - structure.pos.z
-        );
+    // Each structure blocks the ground its own model stands on. It is drawn
+    // unturned but for the half turn every unit's model gets.
+    for structure in &map.structures {
+        let covered = cache
+            .group(7, structure.model_id)
+            .ok()
+            .and_then(|group| Model::load(structure.model_id, &group.data).ok())
+            .map(|model| {
+                block_model(
+                    &mut collision_grid,
+                    origin_tile_x,
+                    origin_tile_y,
+                    &model,
+                    structure.pos,
+                    Mat3::from_rotation_y(MODEL_FORWARD_TURN),
+                    structure.scale,
+                )
+            });
+        match covered {
+            Some(cells) => tracing::info!(
+                "blocks: {:?} model {} stands on {} cells of the map ({:.1} tiles of ground)",
+                structure.kind,
+                structure.model_id,
+                cells,
+                cells as f32 / (NAV_PER_TILE * NAV_PER_TILE) as f32
+            ),
+            None => {
+                // its model could not be read: block a plain disc so it is
+                // at least not walked through
+                tracing::warn!(
+                    "blocks: {:?} model {} could not be read; blocking a plain disc",
+                    structure.kind,
+                    structure.model_id
+                );
+                mark_disc(
+                    &mut collision_grid,
+                    origin_tile_x,
+                    origin_tile_y,
+                    structure.pos.x,
+                    structure.pos.z,
+                    90.0 + BODY_RADIUS,
+                    true,
+                );
+            }
+        }
     }
-    map.block_structures(&mut collision_grid, origin_tile_x, origin_tile_y, &blockers);
     let collision = WorldCollision::new(collision_grid, origin_tile_x, origin_tile_y);
 
     let spawn_hint = map

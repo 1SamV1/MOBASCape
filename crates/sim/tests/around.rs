@@ -146,3 +146,89 @@ fn it_gets_round_a_disc_from_every_side_to_every_other() {
         &failures[..failures.len().min(12)]
     );
 }
+
+/// The same, round a thing with an awkward shape: a rock with a second lump
+/// set against it, so its outline has an inside corner to get caught in.
+#[test]
+fn it_gets_round_an_awkward_shape_from_every_side() {
+    fn slab(cx: f32, cz: f32, half_x: f32, half_z: f32) -> Vec<[[f32; 3]; 3]> {
+        let c = [
+            [cx - half_x, cz - half_z],
+            [cx + half_x, cz - half_z],
+            [cx + half_x, cz + half_z],
+            [cx - half_x, cz + half_z],
+        ];
+        vec![
+            [
+                [c[0][0], 80.0, c[0][1]],
+                [c[1][0], 80.0, c[1][1]],
+                [c[2][0], 80.0, c[2][1]],
+            ],
+            [
+                [c[0][0], 80.0, c[0][1]],
+                [c[2][0], 80.0, c[2][1]],
+                [c[3][0], 80.0, c[3][1]],
+            ],
+        ]
+    }
+    let mut shape = slab(0.0, 0.0, 70.0, 40.0);
+    shape.extend(slab(50.0, 90.0, 30.0, 60.0));
+    let mut grid = Grid::with_cell(64, 64, 32);
+    grid.block_solid(&shape, (1024.0, 1024.0), 28.0, 160.0, 28);
+
+    let champions = [
+        (
+            "monkey",
+            MotionParams {
+                speed: 540,
+                turn_ms: 152,
+                accel_ms: 102,
+                stop_ms: 51,
+            },
+        ),
+        (
+            "jad",
+            MotionParams {
+                speed: 380,
+                turn_ms: 451,
+                accel_ms: 304,
+                stop_ms: 201,
+            },
+        ),
+    ];
+    let at = |k: i32, r: f64| {
+        let t = k as f64 / 32.0 * std::f64::consts::TAU;
+        (1024 + (t.cos() * r) as i32, 1024 + (t.sin() * r) as i32)
+    };
+    let mut failures = Vec::new();
+    let mut total = 0;
+    for (name, params) in &champions {
+        for ring in [150.0, 200.0, 260.0] {
+            for a in 0..32 {
+                for b in 0..32 {
+                    if a == b {
+                        continue;
+                    }
+                    let (start, goal) = (at(a, ring), at(b, ring));
+                    let (sc, gc) = (grid.cell_at(start.0, start.1), grid.cell_at(goal.0, goal.1));
+                    if !grid.is_walkable(sc.0, sc.1) || !grid.is_walkable(gc.0, gc.1) {
+                        continue;
+                    }
+                    total += 1;
+                    match walk(&grid, start, goal, params) {
+                        Some(ticks) if ticks <= TICK_HZ * 8 => {}
+                        other => failures.push((*name, ring as i32, a, b, other)),
+                    }
+                }
+            }
+        }
+    }
+    assert!(total > 2000, "enough walks were tried: {total}");
+    assert!(
+        failures.is_empty(),
+        "{} of {} walks failed: {:?}",
+        failures.len(),
+        total,
+        &failures[..failures.len().min(12)]
+    );
+}
