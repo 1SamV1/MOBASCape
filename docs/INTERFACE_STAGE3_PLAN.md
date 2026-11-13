@@ -80,9 +80,11 @@ the real placing code.
 
 Two of the sizes are no longer the reference's, because the reviews decided
 the content is our own (section 5.4 and 5.7): the objectives list is about
-290 tall where the reference's is 350 to 400, and the inventory is our six
-slots, about 144 by 160 where the reference's eighteen cells are 232 by
-224. Both are sizes worked out from parts and are proposals until drawn.
+302 to 398 tall where the reference's is 350 to 400, at the reference's
+own spacing and accounted for line by line in section 5.4; and the
+inventory is our six slots, about 144 by 160 where the reference's eighteen
+cells are 232 by 224. The inventory's size is worked out from parts and is
+a proposal until drawn.
 
 ### Two checks, kept apart
 
@@ -138,26 +140,26 @@ and height are tested each on its own; nothing assumes a 16:9 window.
 |---|---|---|---|---|
 | 1280 by 720 | 1 | see section 7 | | collapse in force |
 | 1366 by 768 | 1 | see section 7 | | collapse in force |
-| 1600 by 900 | 1 | 23.5% | 30.5% | nothing |
-| 1920 by 1080 | 1 | 16.3% | 21.2% | nothing |
-| 2560 by 1440 | 1 | 9.2% | 11.9% | nothing |
-| 3200 by 1800 | 2 | 23.5% | 30.5% | nothing |
-| 3840 by 2160 | 2 | 16.3% | 21.2% | nothing |
+| 1600 by 900 | 1 | 23.8% | 31.0% | nothing |
+| 1920 by 1080 | 1 | 16.5% | 21.5% | nothing |
+| 2560 by 1440 | 1 | 9.3% | 12.1% | nothing |
+| 3200 by 1800 | 2 | 23.8% | 31.0% | nothing |
+| 3840 by 2160 | 2 | 16.5% | 21.5% | nothing |
 
-For 16:9 windows the whole interface first fits at scale 1 from 1554 by 874,
-at scale 2 from 3106 by 1747 and at scale 3 from 4658 by 2620. In a sweep of
+For 16:9 windows the whole interface first fits at scale 1 from 1562 by 878,
+at scale 2 from 3120 by 1755 and at scale 3 from 4682 by 2633. In a sweep of
 5,824 windows from 960 by 384 to 3840 by 2400, with width and height varied
 independently, the scale never fell as a window grew. The player may force
 a scale in settings; a forced scale too big for the window gets the
 collapse order, as the stage 2 test screen showed it can.
 
 So the design's hope that everything shows in full at 1280 by 720 does not
-hold, and the corrected figure is about 1554 by 874, with 1600 by 900 the
+hold, and the corrected figure is about 1562 by 878, with 1600 by 900 the
 smallest common size that has it all. 1280 by 720 stays supported, with
 collapse.
 
-By clashes alone, without the budget, everything fits from 1364 wide and 776
-high. Between that and 1554 by 874 nothing clashes and the budget alone
+By clashes alone, without the budget, everything fits from 1364 wide and 804
+high. Between that and 1562 by 878 nothing clashes and the budget alone
 makes pieces give way.
 
 ### One rule for clearance, and the figures it gives
@@ -525,10 +527,58 @@ stage 4. Sizes are at scale 1.
   | Nexus | one line for each team: shielded, open, or its health |
   | Camps | four lines, one for each jungle camp, with what it grants (Might or Swift) and its state or timer |
 
-  That is the title, the table and six lines: about 290 tall, from parts.
-  A camp whose buff is running has a second, quieter line under it; with
-  all four so, the list is about 370 tall. **370 is the largest this stage
-  shows**, and it is the height every clash test uses.
+- **Height, accounted for line by line against the reference.** The
+  reference's panel is built on a line pitch of 24, and so is ours. What
+  each has, top to bottom:
+
+  | Line | Reference, S2 (350 tall) | Ours, usual (302) | Ours, longest (398) |
+  |---|---|---|---|
+  | Title, with minimise | 1 | 1 | 1 |
+  | Team names | 1 | 1 | 1 |
+  | One green word under each team's name | 1 | none | none |
+  | Lanes: Top, Mid, Bot | 3 | 3 | 3 |
+  | Rule | yes | yes | yes |
+  | Objective lines | 6: a dragon, TzKal-Zuk, Giant Mole, River chickens, Shooting star, Wards | 6: two nexus, four camps | 6 |
+  | Quieter second lines | 1, under the dragon | none | 4, one under each camp |
+
+  So the usual list is the reference's 350 less two lines of 24: **302**.
+  With a second line under all four camps it is **398**, against the
+  reference's tallest state of about 400 in S4, which has the same six
+  lines with three second lines. Ours is not a more compact panel; it is
+  the same panel with our game's lines in it. **398 is the largest this
+  stage shows**, and it is the height every clash test and the choice of
+  scale use.
+- **Nothing is scrolled, squeezed or left out.** The reference lists six
+  things its game has. Ours lists everything our game has that a player
+  would call an objective: every tower and inhibitor in the lane table,
+  both nexuses, all four camps. There is no seventh thing waiting for
+  room. The differences from the reference, all of them:
+  - *Two tower pips a lane, not three*, because our lanes have two towers.
+    This narrows a cell and changes no height.
+  - *No green word under the team names.* It cannot be read in the blur
+    (it is the same green word for both teams in the two frames enlarged,
+    S2 and S4), and this plan does not draw a line whose
+    meaning it would have to invent. If it turns out to be a team state
+    our game has, it is one more line of 24: 326 and 422, which the room
+    below allows.
+  - *Second lines only under camps*, saying whose buff is running and for
+    how long. The reference's dragon line always has one (a count of
+    kills for each team); we have no objective that keeps such a count.
+- **If the game later gains objectives**, each is one more line, and the
+  panel grows by 24 for each. It is never scrolled and lines are never
+  dropped to keep a size. The room it has at 1920 by 1080 is from 410 to
+  922 (8 above the chat), 512: eight more lines than the usual list, four
+  more than the longest. Past that the top moves up towards the target
+  panel, as the anchor already says, and where even that is not enough the
+  list goes to its title, which is the existing rule. A list that needed
+  that at 1920 by 1080 would be a new design question and would come back
+  for review, not be solved by shrinking text.
+- The figures before this were 290 and 370, "from parts". They assumed a
+  tighter head and second lines at a pitch of about 20, which the reference
+  does not have: its second lines are at the full 24. Measured against the
+  reference's own lines the honest figures are 302 and 398, and every
+  figure in this plan that depends on the height has been worked again
+  with them (section 12).
 - **Sample states for testing**, each plainly made up: a tower down, an
   inhibitor down, a nexus open, a camp alive, a camp on a timer, a camp
   taken with its buff running.
@@ -752,7 +802,7 @@ measured:
 | Kill feed (four entries) | 1622 to 1908, 18 to 136 | one entry 1622 to 1908, 18 to 46 |
 | Team frames | 1728 to 1908, 168 to 356 | the same |
 | Target panel | 8 to 340, 82 to 240 | the same |
-| Objectives (ours, 290 to 370 tall) | 8 to 280, 410 to 700 or 780 | 8 to 280, 410 to 760 or 810 |
+| Objectives (ours, 302 to 398 tall) | 8 to 280, 410 to 712 or 808 | 8 to 280, 410 to 760 or 810 |
 | Chat | 5 to 445, 930 to 1070 | the same |
 | Ability bar | 731 to 1189, 968 to 1062 | 730 to 1188, 968 to 1062 |
 | Inventory (ours, 144 by 160) | 1494 to 1638, 902 to 1062 | 1408 to 1640, 838 to 1062 |
@@ -768,14 +818,14 @@ shape of window. For that:
 
 | Window | Shape | Scale | What gives | Usual covers | Objectives, at their longest | Chat from |
 |---|---|---|---|---|---|---|
-| 2560 by 1080 | 21:9 | 1 | nothing | 12.3% | 410 to 780 | 930 |
-| 3440 by 1440 | 21:9 | 1 | nothing | 6.8% | 547 to 917 | 1290 |
-| 5120 by 1440 | 32:9 | 1 | nothing | 4.6% | 547 to 917 | 1290 |
-| 1920 by 1200 | 16:10 | 1 | nothing | 14.7% | 456 to 826 | 1050 |
-| 1600 by 1200 | 4:3 | 1 | nothing | 17.7% | 456 to 826 | 1050 |
+| 2560 by 1080 | 21:9 | 1 | nothing | 12.4% | 410 to 808 | 930 |
+| 3440 by 1440 | 21:9 | 1 | nothing | 6.9% | 547 to 945 | 1290 |
+| 5120 by 1440 | 32:9 | 1 | nothing | 4.6% | 547 to 945 | 1290 |
+| 1920 by 1200 | 16:10 | 1 | nothing | 14.9% | 456 to 854 | 1050 |
+| 1600 by 1200 | 4:3 | 1 | nothing | 17.8% | 456 to 854 | 1050 |
 | 1280 by 1024 | 5:4 | 1 | chat to 375; objectives to title, for the budget | 19.6% | title only | 874 |
-| 1440 by 2560 | 9:16 | 1 | nothing | 9.2% | 973 to 1343 | 2410 |
-| 1080 by 1920 | 9:16 | 1 | inventory hidden; chat to 298, at its full height; kill feed under the score strip | 14.3% | 730 to 1100 | 1770 |
+| 1440 by 2560 | 9:16 | 1 | nothing | 9.3% | 973 to 1371 | 2410 |
+| 1080 by 1920 | 9:16 | 1 | inventory hidden; chat to 298, at its full height; kill feed under the score strip | 14.4% | 730 to 1128 | 1770 |
 | 1024 by 768 | 4:3, under the smallest supported | 1 | inventory hidden; chat to its last line, 270 wide; kill feed under the score strip; objectives to title, for the budget | 24.0% | title only | 734 |
 
 Nothing clashes at any of them. Two things these show that 16:9 sizes do
@@ -787,10 +837,10 @@ the kill feed meet (section 7).
 Why 5120 by 1440 cannot be scale 2 is the left column's height, not the
 width. At scale 2 the target panel ends at 480, so with 16 clear (8 at
 scale 2) the objectives may start no higher than 496. The chat starts at
-1140, and the longest objectives list is 740 tall, so to stay 16 above the
-chat it must start no lower than 384. It cannot do both: the column is 112
+1140, and the longest objectives list is 796 tall, so to stay 16 above the
+chat it must start no lower than 328. It cannot do both: the column is 168
 short. Target panel, longest objectives and chat fit together at scale 2
-only from 1552 high, whatever the width.
+only from 1608 high, whatever the width.
 
 These are arithmetic. Whether the objectives look right two fifths of the
 way down a very tall window is for an eye at step B.
@@ -989,7 +1039,7 @@ the real code:
 
 - every rectangle at the seven 16:9 sizes of section 2 and the nine other
   shapes of section 6;
-- every component at its largest: the objectives at 370, four allies, four
+- every component at its largest: the objectives at 398, four allies, four
   kill-feed entries, the target panel open, the chat full;
 - width and height varied independently over every window from 960 by 384
   to 3840 by 2400, with no clash left at any, the usual state within a
@@ -1059,7 +1109,7 @@ Each is a change to the frozen `docs/INTERFACE.md` and needs review.
    the note that the screenshots are the recording enlarged.
 2. **The scale** is chosen by whether the whole interface fits, not by the
    bottom row and tallest column fitting.
-3. **The size at which everything shows in full** is about 1554 by 874, not
+3. **The size at which everything shows in full** is about 1562 by 878, not
    1280 by 720; 1280 by 720 stays supported, with collapse.
 4. **The quarter** is defined: the area inside the rectangles of the fixed
    components showing in the usual state, each pixel once.
@@ -1094,7 +1144,7 @@ checked and a separate go-ahead for stage 3.
 | Objectives and chat overlapped at 1600 by 900 | They did with a fixed top of 410; the top is now 38% of the height, and the rectangles are clear at every size tested (sections 5.4 and 6) |
 | Layout from rectangles, not sums | Done; script and output included (appendix B) |
 | Define the quarter | Done: unique area of the fixed components' rectangles in the usual state (section 2) |
-| Does the quarter force collapse at 1600 by 900 | No: 23.5% (section 2) |
+| Does the quarter force collapse at 1600 by 900 | No: 23.8% (section 2) |
 | A bigger screen must not show less | Scale is now chosen by fit; 1440p is scale 1, 1800p and 2160p are scale 2 (section 2) |
 | Our own objectives | Done (section 5.4) |
 | Do not imply eighteen inventory cells | Six slots drawn; the reference's panel kept only as a measurement (section 5.7) |
@@ -1120,7 +1170,7 @@ checked and a separate go-ahead for stage 3.
 | The bar slides only as far as needed, with the chat | Written as conditions; the script works the two out together (section 7) |
 | Objectives at 38% provisionally, tested at other shapes | Done at 16:10, 4:3, 5:4, 21:9, 32:9 and 9:16 (section 6) |
 | The objectives' position must not be frozen as a universal rule | The rule is "clashes with nothing"; 38% is a placing within it (section 5.4) |
-| Largest content sizes in the tests | The busy state now has the objectives at 370; it is what the scale and every clash test use (sections 2 and 5.4) |
+| Largest content sizes in the tests | The busy state now has the objectives at their longest; it is what the scale and every clash test use (sections 2 and 5.4) |
 | Width and height independently | A sweep of 5,824 windows; nothing clashes, and the scale never falls (section 2, appendix B) |
 | The 1920 by 1080 match proves only the anchors | Said so (section 6) |
 | Exclusions from the budget stay explicit | Unchanged (section 2) |
@@ -1145,11 +1195,21 @@ draft:
 
 | Review point | What was done |
 |---|---|
-| Why 5120 by 1440 stays at scale 1 | Explained in section 6 and appendix B: the left column is 112 short at scale 2 |
+| Why 5120 by 1440 stays at scale 1 | Explained in section 6 and appendix B: the left column is 168 short at scale 2 |
 | "953 wide and 280 high" read as one tested window | Stated as two measurements with their conditions; the corner itself and the windows between it and 1280 by 720 then tried, with no clash (section 2, appendix B) |
 | Rounding of the objectives' 38% | Whole-number rule, a half going up, stated for the Rust code (section 5.4). Python's own rounding gave one pixel less at heights such as 775; no reported figure changed |
 | `bad(group)` should not depend on order | It tests membership as a set. It requires both pieces to belong, not either, and section 7 says why |
 | Python is not the Rust tests | Unchanged and repeated: every figure here is the script's; step B's tests on the real code are what acceptance rests on |
+
+Added after the question about the objectives' height, still the fourth
+draft:
+
+| Review point | What was done |
+|---|---|
+| What happens to the information in the reference's taller objectives panel | Nothing is scrolled, squeezed or left out: the panel is the reference's, at its line pitch, with our game's lines. Accounted for line by line in section 5.4 |
+| 370 against the reference's 400 | 370 was not justified: it assumed second lines closer together than the reference has them. At the reference's pitch ours is 302 usually and 398 at its longest, and those are now the figures |
+| What that moves | The least height by clashes, 776 to 804. Everything first fitting at scale 1 from 1562 by 878 (was 1554 by 874), scale 2 from 3120 by 1755, scale 3 from 4682 by 2633. Coverage up by 0.1 to 0.5 of a point where the list shows (1600 by 900: 23.8% usual, 31.0% busy). 5120 by 1440 is 168 short at scale 2, not 112, and scale 2 needs 1608 of height. No window's scale changed, nothing new gives way at any listed size, and the sweep still leaves no clash |
+| What it does not move | 1280 by 720 and 1366 by 768, where the list is at its title; every bottom-row figure (1021, 1325, 1364, 1501, 953) |
 
 Settling the bottom row in one go also changed two rows of the table in
 section 6: at 1080 by 1920 the chat keeps its full height (it lost it for
@@ -1272,13 +1332,13 @@ of the recording, not of the game.
 
 Output of `docs/interface_stage3_layout.py`, which places every rectangle by
 its anchor and margins. "Usual" is every fixed piece but the target panel,
-with one kill-feed entry and the objectives at 290. "Busy" adds the target
-panel, three more entries, and the objectives at their longest, 370. Two
+with one kill-feed entry and the objectives at 302. "Busy" adds the target
+panel, three more entries, and the objectives at their longest, 398. Two
 pieces clash if they are within 8 of each other. Sizes are the interface's
 own pixels times the scale.
 
 **The least window at scale 1 for the whole interface, bar centred:** 1364
-wide and 776 high, by clashes alone.
+wide and 804 high, by clashes alone.
 
 **Clearances, bar centred, 8 clear:** the minimap alone from 1021 wide; our
 inventory from 1325; the chat at 440 from 1364; the reference's inventory
@@ -1288,9 +1348,9 @@ from 1501.
 
 | Budget | Scale 1 from | Scale 2 from | Scale 3 from |
 |---|---|---|---|
-| a quarter | 1554 by 874 | 3106 by 1747 | 4658 by 2620 |
-| 30% | 1418 by 797 | 2836 by 1595 | 4254 by 2392 |
-| none | 1380 by 776 | 2760 by 1552 | 4140 by 2328 |
+| a quarter | 1562 by 878 | 3120 by 1755 | 4682 by 2633 |
+| 30% | 1430 by 804 | 2860 by 1608 | 4288 by 2412 |
+| none | 1430 by 804 | 2860 by 1608 | 4288 by 2412 |
 
 **At a quarter, by window, bar sliding.** "Sum" adds the rectangles' areas
 and "unique" counts each pixel once; they came out equal at every size,
@@ -1300,11 +1360,11 @@ because nothing overlaps once collapse has run.
 |---|---|---|---|---|
 | 1280 by 720 | 1 | chat to 375; objectives to title; team frames to portraits; chat to last line | 20.8% | 29.3% |
 | 1366 by 768 | 1 | objectives to title; team frames to portraits | 23.3% | 30.7% |
-| 1600 by 900 | 1 | nothing | 23.5% | 30.5% |
-| 1920 by 1080 | 1 | nothing | 16.3% | 21.2% |
-| 2560 by 1440 | 1 | nothing | 9.2% | 11.9% |
-| 3200 by 1800 | 2 | nothing | 23.5% | 30.5% |
-| 3840 by 2160 | 2 | nothing | 16.3% | 21.2% |
+| 1600 by 900 | 1 | nothing | 23.8% | 31.0% |
+| 1920 by 1080 | 1 | nothing | 16.5% | 21.5% |
+| 2560 by 1440 | 1 | nothing | 9.3% | 12.1% |
+| 3200 by 1800 | 2 | nothing | 23.8% | 31.0% |
+| 3840 by 2160 | 2 | nothing | 16.5% | 21.5% |
 
 With the bar held at the centre instead, 1280 by 720 also hides the
 inventory and its usual state covers 23.3%; every other row is the same.
@@ -1327,8 +1387,8 @@ any window between it and 1280 by 720 (every width, heights in steps of 8).
 
 **Why 5120 by 1440 is scale 1.** At scale 2 the target panel ends at 480,
 so the objectives may start no higher than 496; the chat starts at 1140 and
-the longest objectives list is 740 tall, so it must start no lower than
-384. The left column is 112 short. It fits at scale 2 from 1552 high.
+the longest objectives list is 796 tall, so it must start no lower than
+328. The left column is 168 short. It fits at scale 2 from 1608 high.
 
 **All of this is the Python script's arithmetic.** It is evidence for the
 layout, not a test of the game; the tests of step B, on the Rust placing

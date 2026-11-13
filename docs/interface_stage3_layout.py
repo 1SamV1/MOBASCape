@@ -8,8 +8,12 @@ code. Run it with `python3 docs/interface_stage3_layout.py`.
 # The planned interface's rectangles, from anchors and margins. Units: the interface's own pixels, times the scale.
 GAP = 8
 INV = (144, 160)      # our six slots (proposal, from parts); the reference's panel is 232 by 224
-OBJ = 290             # our own objectives list as it usually is (proposal, from parts); the reference's is 350 to 400
-OBJ_MAX = 370         # the same with every camp line carrying a second line: the largest stage 3 shows
+# Our own objectives list at the reference's own spacing. The reference in S2 is 350 tall: a title, the team
+# names, a line of one word under each name, three lane lines, a rule, six objective lines and one second line,
+# at 24 a line. Ours has the same title, names, lane lines, rule and six lines, no word line and no second line
+# in its usual state: 350 less two lines.
+OBJ = 302
+OBJ_MAX = 398         # with a second line under each of the four camps: the largest stage 3 shows (the reference reaches about 400)
 CHAT_MIN = 280
 CHAT_LINE_MIN = 200   # the chat's last line alone may be narrower still
 def layout(W, H, s, st, slide):
