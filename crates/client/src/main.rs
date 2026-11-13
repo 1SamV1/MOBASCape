@@ -949,6 +949,38 @@ fn rebuild_fog(
             indices.extend_from_slice(&[base, base + 1, base + 2, base + 2, base + 1, base + 3]);
         }
     }
+
+    // RIFT_SHOW_NAV=1 paints every tile a unit cannot stand on in red, so a
+    // wall that should not be there can be pointed at.
+    if std::env::var_os("RIFT_SHOW_NAV").is_some() {
+        for gy in 0..height_tiles {
+            for gx in 0..width {
+                if !collision.grid().is_blocked(gx, gy) {
+                    continue;
+                }
+                let x0 = (ox + gx) as f32 * 128.0;
+                let z0 = (oy + gy) as f32 * 128.0;
+                let base = vertices.len() as u32;
+                for (x, z) in [
+                    (x0 + 8.0, z0 + 8.0),
+                    (x0 + 120.0, z0 + 8.0),
+                    (x0 + 8.0, z0 + 120.0),
+                    (x0 + 120.0, z0 + 120.0),
+                ] {
+                    let y = height.height_at(x, z) + 12.0;
+                    vertices.push(Vertex::new(Vec3::new(x, y, z), [215, 40, 40]));
+                }
+                indices.extend_from_slice(&[
+                    base,
+                    base + 1,
+                    base + 2,
+                    base + 2,
+                    base + 1,
+                    base + 3,
+                ]);
+            }
+        }
+    }
     renderer.set_fog_mesh(&vertices, &indices);
 }
 

@@ -650,7 +650,14 @@ pub fn build(
         for ty in 0..64 {
             for tx in 0..64 {
                 let tile = terrain.tile(0, tx, ty);
-                if tile.underlay_id == 0 {
+                // Ground blocks only where there is none to stand on: a tile
+                // with nothing on it at all, or open water at sea level. A
+                // hill, however steep, can be climbed. (Ground that is only
+                // laid over, with no natural ground beneath, used to count as
+                // water and walled off whole hillsides.)
+                let nothing = tile.underlay_id == 0 && tile.overlay_id == 0;
+                let sea = tile.underlay_id == 0 && tile.height == 0;
+                if nothing || sea {
                     let gx = (*rx as i32 * 64 + tx as i32) - origin_tile_x;
                     let gy = (*ry as i32 * 64 + ty as i32) - origin_tile_y;
                     collision_grid.set_blocked(gx, gy, true);
