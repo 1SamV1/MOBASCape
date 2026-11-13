@@ -28,7 +28,8 @@ def layout(W, H, s, st, slide):
     tw = 60 if st['team_compact'] else 180
     if st.get('team', True): r['team'] = R(W - (12 + tw) * s, 168 * s, tw * s, 188 * s)
     if st['target']: r['target'] = R(8 * s, 82 * s, 332 * s, 158 * s)
-    oh = st['obj_h']; top = min(round(0.38 * H), r['chat'][1] - (GAP + oh) * s)
+    # 38% of the height in whole numbers, a half going up: the same in any language, with no fractions involved
+    oh = st['obj_h']; top = min((38 * H + 50) // 100, r['chat'][1] - (GAP + oh) * s)
     r['objectives'] = R(8 * s, top, 272 * s, oh * s)
     return r
 def inter(a, b): return max(min(a[2], b[2]) - max(a[0], b[0]), 0) * max(min(a[3], b[3]) - max(a[1], b[1]), 0)
@@ -67,7 +68,11 @@ def collapse(W, H, s, want, budget, slide):
     st = dict(want, target=False, feed=min(want['feed'], 1), obj_h=min(want['obj_h'], OBJ)); steps = []
     lay = lambda: layout(W, H, s, st, slide)
     # a piece pushed off the window counts as trouble in its own row or column
-    bad = lambda group: [p for p in clashes(lay(), W, H, s) if p[0] in group and (p[1] in group or p[1] == 'window')]
+    # A clash belongs to a row or column when every piece in it does (the window's edge belongs to all of them).
+    # Both pieces, not either: the chat is in the bottom row and the left column, and a clash between the chat
+    # and the objectives is the left column's to settle, not the bottom row's. The test does not depend on the
+    # order the pieces are listed in.
+    bad = lambda group: [p for p in clashes(lay(), W, H, s) if set(p) - {'window'} <= group]
     cover = lambda: unique(list(lay().values()), W, H)
     B, L, Rr = {'chat', 'ability', 'inventory', 'minimap'}, {'target', 'objectives', 'chat'}, {'feed', 'team', 'minimap', 'score'}
     # --- pass 1: the usual state
@@ -153,6 +158,9 @@ if __name__ == '__main__':
     clean = lambda W, H: not any(collapse(W, H, choose_scale(W, H, 0.25), st, 0.25, True)[2] for st in (USUAL, BUSY))
     print('   least width with no clash left, at 720 high:', next(W for W in range(700, 1400) if clean(W, 720)))
     print('   least height with no clash left, at 1280 wide:', next(H for H in range(200, 900) if clean(1280, H)))
+    print('   these are two measurements, each with the other side large. The two together, 953x280: clash left?', not clean(953, 280),
+          '; and every window from 953x280 to 1280x720 in steps of 1 across and 8 down: left with a clash:',
+          sum(not clean(W, H) for W in range(953, 1281) for H in range(280, 721, 8)))
     print('--- 7. the scale never falls as a window grows (same sweep)')
     falls = 0
     for W in range(960, 3841, 32):
@@ -185,3 +193,9 @@ if __name__ == '__main__':
         inv = r.get('inventory'); a = r['ability']; c = r['chat']
         print(f"   {W:5}: bar {a[0]:4} to {a[2]:4} (centre would be {(W - 458) // 2:4}), moved {(W - 458) // 2 - a[0]:3}; chat {c[2] - c[0]:3} wide, {a[0] - c[2]:3} from the bar; "
               f"{'inventory ' + str(inv[0] - a[2]) + ' from the bar' if inv else 'inventory hidden'}{' | CLASH ' + str(left) if left else ''}")
+    print('--- 11. why 5120x1440 stays at scale 1: at scale 2 the left column does not fit in the height')
+    W, H, s = 5120, 1440, 2; r = layout(W, H, s, BUSY, False); g = GAP * s
+    print(f"   target panel ends at {r['target'][3]}; the objectives may start no higher than {r['target'][3] + g}")
+    print(f"   chat starts at {r['chat'][1]}; the objectives, {OBJ_MAX * s} tall, must start no lower than {r['chat'][1] - g - OBJ_MAX * s}")
+    print(f"   short by {r['target'][3] + g - (r['chat'][1] - g - OBJ_MAX * s)}; clashes at scale 2: {clashes(r, W, H, s)}")
+    print(f"   least height for scale 2 by clashes alone, any width: {next(h for h in range(1000, 2400) if not clashes(layout(6000, h, 2, BUSY, False), 6000, h, 2))}")

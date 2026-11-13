@@ -192,11 +192,24 @@ measured to.
 
 The first draft said the ability bar and the minimap fit side by side from
 about 740 wide. That is true only if the bar may leave the centre; centred,
-it is 1021. With every step of section 7 taken, nothing clashes down to 953
-wide (the chat's last line, the bar slid left, and the minimap) and 280 high
-(the minimap alone, top to bottom). Below 953 by 280 the window refuses to
-shrink. 1280 by 720 remains the smallest size the game supports; the figures
-below it only say that nothing breaks on the way there.
+it is 1021.
+
+With every step of section 7 taken, two separate measurements:
+
+- **across:** at 720 high, nothing clashes down to **953 wide** (the chat's
+  last line, the bar against the minimap, and the minimap);
+- **down:** at 1280 wide, nothing clashes down to **280 high** (the minimap
+  alone, top to bottom).
+
+Each was found with the other side large, so together they are not a
+tested corner by themselves. The corner was therefore tried as well: 953
+by 280 leaves no clash, and neither does any window between it and 1280 by
+720 (every width, heights in steps of 8). What is left on screen at 953 by
+280 is the minimap, the ability bar, the chat's last line and the
+objectives' title. Below 953
+wide or 280 high the window refuses to shrink. 1280 by 720 remains the
+smallest size the game supports; the figures below it only say that nothing
+breaks on the way there.
 
 ## 3. How it is built
 
@@ -490,7 +503,10 @@ stage 4. Sizes are at scale 1.
 - **The rule that is kept is that it clashes with nothing**: not the chat
   below it, not the target panel above it, not the window's edge. Where it
   sits within the room it has is provisional: 38% of the window's height,
-  moved up if that would bring it within 8 of the chat. That placing is
+  moved up if that would bring it within 8 of the chat. The 38% is worked
+  in whole numbers, a half going up: (38 × height + 50) ÷ 100 with the
+  remainder dropped. The Rust code is to use exactly that, in integers, so
+  that no language's rule for rounding a fraction comes into it. That placing is
   tried at 16:9, 16:10, 4:3, 5:4, 21:9, 32:9 and 9:16 (section 6); it is to
   be looked at in the game at step B and changed if it looks wrong at any
   of them, without the rule changing.
@@ -764,9 +780,17 @@ shape of window. For that:
 
 Nothing clashes at any of them. Two things these show that 16:9 sizes do
 not: a window can be wide enough for a higher scale and not tall enough
-(5120 by 1440 stays at scale 1, because the longest objectives list does
-not fit at scale 2 in 1440 of height); and a narrow window needs a rule for
-the top row, where the score strip and the kill feed meet (section 7).
+(5120 by 1440 stays at scale 1, though it is wide enough for scale 3);
+and a narrow window needs a rule for the top row, where the score strip and
+the kill feed meet (section 7).
+
+Why 5120 by 1440 cannot be scale 2 is the left column's height, not the
+width. At scale 2 the target panel ends at 480, so with 16 clear (8 at
+scale 2) the objectives may start no higher than 496. The chat starts at
+1140, and the longest objectives list is 740 tall, so to stay 16 above the
+chat it must start no lower than 384. It cannot do both: the column is 112
+short. Target panel, longest objectives and chat fit together at scale 2
+only from 1552 high, whatever the width.
 
 These are arithmetic. Whether the objectives look right two fifths of the
 way down a very tall window is for an eye at step B.
@@ -864,6 +888,15 @@ target panel to make room for an objectives list the budget then shrank
 anyway. In two passes the target panel shows at every supported size.
 
 The ability bar and the minimap are never hidden.
+
+**Which rule answers which clash.** A clash is the bottom row's, the left
+column's or the right column's when both pieces in it belong there (the
+window's edge belongs to all three). Both, not either: the chat is in the
+bottom row and in the left column, and if it and the objectives are too
+close that is for the left column's rule, not for narrowing the chat. The
+test is on membership alone and does not depend on the order in which the
+pieces are listed or placed; step B has a test that shuffles the order and
+expects the same rectangles.
 
 ### The ability bar sliding (approved, with conditions)
 
@@ -964,6 +997,9 @@ the real code:
 - identical rectangles for the same window and the same conditional
   pieces, whatever resizes came before (section 7);
 - every pair of pieces at least 8 apart, with no pair excused;
+- the same rectangles with the components listed in any order;
+- the objectives' top at window heights where 38% falls on a half (75,
+  175, 275 and so on), against the whole-number rule;
 - the ability bar at the centre at every width from 1325, and exactly 8
   from the inventory at every width below while the inventory shows; the
   chat at its full 440 from 1364 and exactly 8 short of the bar below that;
@@ -1103,6 +1139,17 @@ checked and a separate go-ahead for stage 3.
 | How the bar's shift and the chat's width are worked out together | Right to left: minimap, inventory, bar, chat; four arrangements in a fixed order; a table of widths (section 7) |
 | The budget must be measured after every change | Said, with why a budget step cannot make a clash (sections 3 and 7) |
 | A precise test that resizing leaves no trace | Stated, tried in the script over 400 resizes, and listed for step B (sections 7 and 8) |
+
+Added after the review of the algorithm and appendices, still the fourth
+draft:
+
+| Review point | What was done |
+|---|---|
+| Why 5120 by 1440 stays at scale 1 | Explained in section 6 and appendix B: the left column is 112 short at scale 2 |
+| "953 wide and 280 high" read as one tested window | Stated as two measurements with their conditions; the corner itself and the windows between it and 1280 by 720 then tried, with no clash (section 2, appendix B) |
+| Rounding of the objectives' 38% | Whole-number rule, a half going up, stated for the Rust code (section 5.4). Python's own rounding gave one pixel less at heights such as 775; no reported figure changed |
+| `bad(group)` should not depend on order | It tests membership as a set. It requires both pieces to belong, not either, and section 7 says why |
+| Python is not the Rust tests | Unchanged and repeated: every figure here is the script's; step B's tests on the real code are what acceptance rests on |
 
 Settling the bottom row in one go also changed two rows of the table in
 section 6: at 1080 by 1920 the chat keeps its full height (it lost it for
@@ -1271,8 +1318,21 @@ as they are showing.
 
 **The sweep:** 5,824 windows from 960 by 384 to 3840 by 2400 in steps of
 32, width and height independently, both states. None was left with a
-clash, and the scale never fell as a window grew. Nothing clashes down to
-953 wide and 280 high.
+clash, and the scale never fell as a window grew.
+
+**The smallest windows.** Two separate measurements: at 720 high nothing
+clashes down to 953 wide; at 1280 wide nothing clashes down to 280 high.
+The two together were then tried too: 953 by 280 leaves no clash, nor does
+any window between it and 1280 by 720 (every width, heights in steps of 8).
+
+**Why 5120 by 1440 is scale 1.** At scale 2 the target panel ends at 480,
+so the objectives may start no higher than 496; the chat starts at 1140 and
+the longest objectives list is 740 tall, so it must start no lower than
+384. The left column is 112 short. It fits at scale 2 from 1552 high.
+
+**All of this is the Python script's arithmetic.** It is evidence for the
+layout, not a test of the game; the tests of step B, on the Rust placing
+code, are what acceptance rests on.
 
 **The bar and the chat together:** the table under pass 1 in section 7 is
 section 10 of the output.
