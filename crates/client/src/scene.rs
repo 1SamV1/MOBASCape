@@ -334,6 +334,7 @@ fn block_model(
     );
     let found = agreement(
         &triangles,
+        at,
         true,
         STANDING_ANGLE,
         SOLID_FROM,

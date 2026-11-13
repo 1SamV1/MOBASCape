@@ -2,7 +2,7 @@
 //! terms, and against the walkable map that exists.
 
 use rift_sim::Grid;
-use rift_sim::heights::{HeightMap, Q, Reading, agreement};
+use rift_sim::heights::{HeightMap, Q, Reading, agreement, compare};
 
 type Tri = [[f32; 3]; 3];
 
@@ -164,11 +164,11 @@ fn a_ledge_clear_air_and_a_branch_above_keep_the_air_between_them() {
     );
     // a short body fits on the ledge under the branch; a tall one does not
     assert!(
-        !column.in_the_way(50 * Q, 60 * Q, 48 * Q),
+        !column.in_the_way(50 * Q, 60 * Q, 98 * Q),
         "60 tall fits in a gap of 70"
     );
     assert!(
-        column.in_the_way(50 * Q, 160 * Q, 48 * Q),
+        column.in_the_way(50 * Q, 160 * Q, 98 * Q),
         "160 tall does not"
     );
 }
@@ -349,15 +349,41 @@ fn it_blocks_what_the_walkable_map_blocks_for_every_kind_of_shape() {
             sheet(100.0, false),
         ),
         ("sheet seen from above, low", sheet(30.0, true)),
+        // one low stone with a taller one leaning over it: the low one must
+        // not lift a walker past the tall one
+        ("two stones, one on the other", {
+            let mut stones = solid_box(0.0, 0.0, 40.0, 40.0, 0.0, 34.0);
+            stones.extend(solid_box(20.0, 10.0, 40.0, 40.0, 39.0, 75.0));
+            stones
+        }),
+        // the map stops a walker at 48 exactly, and lets it over anything less
+        (
+            "stone exactly at step height",
+            solid_box(0.0, 0.0, 50.0, 50.0, 0.0, 48.0),
+        ),
+        (
+            "stone a hair under step height",
+            solid_box(0.0, 0.0, 50.0, 50.0, 0.0, 47.9),
+        ),
     ];
     for (name, shape) in &shapes {
         for body in [0, 28] {
-            let found = agreement(shape, true, 45.0, 48.0, 160.0, body, 32);
-            assert!(found.agrees(), "{name}, body {body}: {found:?}");
+            // wherever in a cell the shape happens to stand
+            for at in [
+                (0.0, 0.0),
+                (16.0, 16.0),
+                (7.5, 29.0),
+                (31.9, 0.1),
+                (2848.3, 3098.7),
+                (-13.0, 21.0),
+            ] {
+                let found = agreement(shape, at, true, 45.0, 48.0, 160.0, body, 32);
+                assert!(found.agrees(), "{name}, body {body}, at {at:?}: {found:?}");
+            }
         }
     }
     // and the comparison is not empty-handed: a tower blocks a good many cells
-    let found = agreement(&shapes[4].1, true, 45.0, 48.0, 160.0, 28, 32);
+    let found = agreement(&shapes[4].1, (0.0, 0.0), true, 45.0, 48.0, 160.0, 28, 32);
     assert!(found.both > 60, "{found:?}");
 }
 
@@ -489,4 +515,51 @@ fn the_ground_is_read_off_the_triangles_a_tile_is_drawn_with() {
     );
     // beyond the map's edge the last corner's height carries on
     assert_eq!(ground.at(-500, -500), 0);
+}
+
+#[test]
+fn the_same_number_of_cells_in_different_places_is_not_agreement() {
+    // the comparison is of the cells themselves, never of how many there are
+    let mut map = Grid::with_cell(8, 8, 32);
+    let mut other = Grid::with_cell(8, 8, 32);
+    for cell in [(2, 2), (3, 2), (4, 2)] {
+        map.set_blocked(cell.0, cell.1, true);
+    }
+    for cell in [(2, 2), (3, 2), (4, 3)] {
+        other.set_blocked(cell.0, cell.1, true);
+    }
+    let count = |grid: &Grid| {
+        (0..8)
+            .flat_map(|y| (0..8).map(move |x| (x, y)))
+            .filter(|&(x, y)| grid.is_blocked(x, y))
+            .count()
+    };
+    assert_eq!(count(&map), count(&other));
+    let found = compare(&map, &other);
+    assert!(!found.agrees(), "{found:?}");
+    assert_eq!((found.both, found.only_map, found.only_heights), (2, 1, 1));
+    // and a map agrees with itself
+    assert!(compare(&map, &map).agrees());
+}
+
+#[test]
+fn two_kerbs_are_not_one() {
+    // A stone 34 high with another over it reaching 75. Each is less than a
+    // kerb above the one before, but a walker on the ground does not get to
+    // add them up: the cell is closed to it, as the walkable map has it.
+    let mut stones = solid_box(0.0, 0.0, 40.0, 40.0, 0.0, 34.0);
+    stones.extend(solid_box(0.0, 0.0, 40.0, 40.0, 39.0, 75.0));
+    let map = read(&stones, &WHOLE);
+    let (cx, cy) = cell(0, 0);
+    let column = map.column(cx, cy).unwrap();
+    assert!(!column.open_from_the_ground(48 * Q - 1, 160 * Q, 48 * Q));
+    assert_eq!(
+        map.step_to(0, (cx, cy), 48 * Q - 1, 160 * Q, 0, 48 * Q),
+        None
+    );
+    // a champion whose step reaches the upper stone's top goes there
+    assert_eq!(
+        map.step_to(0, (cx, cy), 96 * Q, 160 * Q, 0, 48 * Q),
+        Some(75 * Q)
+    );
 }

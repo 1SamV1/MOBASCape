@@ -43,12 +43,18 @@ impl Column {
     }
 
     /// Whether a body `tall` high with its feet at `level` meets anything
-    /// solid here. Solid that ends less than a `kerb` above its feet does not
-    /// count: it is low enough to be stepped over by anyone.
-    pub fn in_the_way(&self, level: i32, tall: i32, kerb: i32) -> bool {
+    /// solid here. Solid that ends lower than `low` does not count: it is
+    /// low enough to be stepped over by anyone.
+    ///
+    /// `low` is a height above this cell's ground, not above the feet. A
+    /// walker on the ground passes `kerb`; one on a surface passes that
+    /// surface's level plus `kerb`. It is not measured from wherever the feet
+    /// happen to be put, or one low stone would lift a walker past the next,
+    /// taller one in the same cell: two kerbs are not one.
+    pub fn in_the_way(&self, level: i32, tall: i32, low: i32) -> bool {
         self.solid
             .iter()
-            .any(|&(bottom, top)| bottom < level + tall && top > level && top >= level + kerb)
+            .any(|&(bottom, top)| bottom < level + tall && top > level && top >= low)
     }
 
     /// Every height at which feet could be put down here, lowest first:
@@ -345,7 +351,9 @@ impl HeightMap {
                         continue;
                     }
                     if let Some(column) = self.columns.get(&(to.0 + dx, to.1 + dy)) {
-                        if column.in_the_way(at, tall, kerb) {
+                        // the kerb is measured from the lower of where it
+                        // stands and where it would stand
+                        if column.in_the_way(at, tall, level.min(at) + kerb) {
                             return false;
                         }
                     }
@@ -447,8 +455,33 @@ impl Agreement {
     }
 }
 
+/// Compare two maps of the same size cell by cell. Two maps that block the
+/// same number of cells in different places do not agree: every cell blocked
+/// in one and open in the other is counted, on whichever side it is.
+pub fn compare(map: &Grid, from_heights: &Grid) -> Agreement {
+    let mut out = Agreement::default();
+    let width = map.width().max(from_heights.width());
+    let height = map.height().max(from_heights.height());
+    for cy in 0..height {
+        for cx in 0..width {
+            match (map.is_blocked(cx, cy), from_heights.is_blocked(cx, cy)) {
+                (true, true) => out.both += 1,
+                (true, false) => out.only_map += 1,
+                (false, true) => out.only_heights += 1,
+                (false, false) => {}
+            }
+        }
+    }
+    out
+}
+
 /// Read one shape both ways, on a patch of map of its own, and count the
 /// cells on which the two disagree about whether it blocks.
+///
+/// `at` is where the shape stands on the real map. The patch keeps the part
+/// of that position that falls within a cell, so the shape lies across the
+/// patch's cells exactly as it lies across the map's, and the cells compared
+/// here are the cells the map gets.
 ///
 /// The walkable map's reading is [`Grid::block_solid`] with `low` and `high`.
 /// The height data's is: read the shape up to `high`, close every cell a
@@ -457,6 +490,7 @@ impl Agreement {
 /// for a body, exactly as the walkable map does.
 pub fn agreement(
     triangles: &[[[f32; 3]; 3]],
+    at: (f32, f32),
     mirrored: bool,
     standing_angle: f32,
     low: f32,
@@ -472,7 +506,11 @@ pub fn agreement(
         .fold(0.0f32, f32::max);
     let half = ((reach as i32 + body) / cell + 4).min(256);
     let size = (half * 2) as usize;
-    let at = ((half * cell) as f32, (half * cell) as f32);
+    let within = |v: f32| v.rem_euclid(cell as f32);
+    let at = (
+        (half * cell) as f32 + within(at.0),
+        (half * cell) as f32 + within(at.1),
+    );
 
     let mut map = Grid::with_cell(size, size, cell);
     map.block_solid(triangles, at, low, high, body);
@@ -484,19 +522,13 @@ pub fn agreement(
         head: Some(high),
     };
     heights.add_shape(triangles, at, &reading);
+    // The walkable map lets a walker over what is lower than `low` and stops
+    // it at what is `low` or more. A step reaches what is no more than a
+    // step up, so the step that matches the map is the smallest amount the
+    // height data can tell apart under `low`.
+    let step = low - 1.0 / Q as f32;
     let mut from_heights = Grid::with_cell(size, size, cell);
-    from_heights.block_cells(&heights.closed_from_the_ground(low, high, low), body);
+    from_heights.block_cells(&heights.closed_from_the_ground(step, high, low), body);
 
-    let mut out = Agreement::default();
-    for cy in 0..size as i32 {
-        for cx in 0..size as i32 {
-            match (map.is_blocked(cx, cy), from_heights.is_blocked(cx, cy)) {
-                (true, true) => out.both += 1,
-                (true, false) => out.only_map += 1,
-                (false, true) => out.only_heights += 1,
-                (false, false) => {}
-            }
-        }
-    }
-    out
+    compare(&map, &from_heights)
 }
