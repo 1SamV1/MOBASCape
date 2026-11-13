@@ -1,7 +1,11 @@
 # Interface stage 3: plan for the static interface
 
-Status: **a plan for review. Nothing in it is built, and nothing in it is
-authorised to be built.** It was asked for after stages 1 and 2 of
+Status: **a plan for review, second draft. Nothing in it is built, and
+nothing in it is authorised to be built.** This draft answers two reviews of
+the first: the layout is now worked out as rectangles from the anchors and
+not as sums of widths, the screen budget is defined, the scale is chosen by
+whether the interface fits, and the scope is narrowed. What changed is
+listed in section 12. It was asked for after stages 1 and 2 of
 `docs/INTERFACE.md` passed. It does not change that document; where it would,
 the change is listed under "Changes this plan asks for" and waits for review.
 `crates/client/src/hud.rs` is untouched until a later go-ahead.
@@ -49,45 +53,104 @@ worked out from the real sizes of the cache sprites and fonts that would make
 the component; these are proposals, to be confirmed when the component is
 first drawn.
 
-## 2. The one finding that changes a frozen figure
+## 2. Sizes, the scale, and the budget
 
 In the reference, at 1920 by 1080, the interface is drawn at the artwork's
 own size: an inventory cell is about 40 pixels, which is a 36 by 32 item
 sprite and its frame; text is about 12 to 16 pixels tall, which is the
-regular font at its own size. **The reference is scale 1 at 1080p.**
+regular font at its own size. **The reference is scale 1 at 1080p**, so the
+measured sizes are the interface's own sizes.
 
-That means the measured sizes below *are* the interface's own sizes, and
-they can be added up:
+The first draft added those sizes up along rows and columns. That was wrong
+in kind: the ability bar is centred, so what it needs is not its width but
+twice the room on its crowded side. Everything in this section comes
+instead from placing every rectangle by its anchor and margins and testing
+the rectangles against each other. The arithmetic is in
+`docs/interface_stage3_layout.py`, which prints every figure quoted here;
+appendix B has its output. At step B of the build it is replaced by tests on
+the real placing code.
 
-| Row or column | Pieces | Sum at scale 1 |
-|---|---|---|
-| Bottom row, across | chat 440, ability bar 458, inventory 232, minimap 266, plus the margins and gaps seen | about 1,430 |
-| Left column, down | target panel 158, objectives 350, chat 140, plus the 82 above the first | about 760 |
-| Right column, down | kill feed 28, team frames 188, minimap 264, plus gaps | about 520 |
+Two of the sizes are no longer the reference's, because the reviews decided
+the content is our own (section 5.4 and 5.7): the objectives list is about
+290 tall where the reference's is 350 to 400, and the inventory is our six
+slots, about 144 by 160 where the reference's eighteen cells are 232 by
+224. Both are sizes worked out from parts and are proposals until drawn.
 
-The design says: "The smallest supported window is 1280 by 720. At that
-size, at scale 1, every component is shown in full. This is a target until
-stage 1 gives the real sizes." **It does not hold.** At 1280 by 720 the
-bottom row is about 150 too wide and the left column about 40 too tall, and
-the interface would cover about 46% of the window against a budget of a
-quarter. At 1920 by 1080 it covers about 21%, which is the "about a fifth"
-the design measured.
+### Two checks, kept apart
 
-What this plan proposes, for review:
+**1. Do pieces clash?** Two pieces clash if they are closer than 8 of the
+interface's own pixels. This is geometry and has no opinion.
 
-- **The whole interface is shown in full from 1600 by 900.** That is the
-  smallest common window the sums fit in.
-- **1280 by 720 stays the smallest supported window**, and at that size the
-  collapse order applies: it is the normal state there, not a failure.
-- **The scale steps at whole multiples of 1280 by 720**: scale 2 from 2560
-  by 1440, scale 3 from 3840 by 2160. At 1920 by 1080 the interface is scale
-  1 and the same size as the reference.
+**2. How much of the battlefield is covered?** The budget.
 
-The consequence the reviewer should weigh: on a 1920 by 1080 screen the
-interface is small, as it is in the reference. Stepping to scale 2 earlier
-(say from 1920 by 1080) would double every piece and cover over 80% of the
-window, so it is not an option; the alternative is a player setting that
-forces scale 2 with the collapse order in force.
+### What the budget measures
+
+- **What is counted:** the area of the window inside the rectangles of the
+  fixed components that are showing, each pixel counted once however many
+  rectangles cover it.
+- **In which state:** the usual one, which is every fixed component but the
+  target panel, with one kill-feed entry. The target panel and further feed
+  entries come and go with play; counting them would make the layout change
+  when the player clicks on something, and a panel would hide itself by
+  appearing. The busy state (target panel and four feed entries) is
+  reported beside it and has to be free of clashes, but does not trigger
+  anything.
+- **What is not counted:** unit plates, which belong to the world;
+  announcements and the tooltip, which are brief and belong to the moment;
+  full-screen interfaces and the dimming behind them, which cover the
+  battlefield on purpose.
+- **Rectangles, not artwork.** A rectangle's clear corners and see-through
+  panels count in full. Counting only solid pixels would be truer to the
+  eye and would make the budget depend on the theme's artwork; the plan
+  keeps to rectangles and says so. The figure is therefore a little high.
+- **The limit stays a quarter**, as the design has it.
+
+Because the usual state depends on nothing but the window's size, the layout
+is a pure function of window size and of which conditional pieces are
+showing: the same inputs always give the same layout, and growing a window
+undoes exactly what shrinking it did.
+
+### The scale is chosen by fit
+
+The scale is the largest whole number, up to 4, at which **the whole
+interface fits with nothing given up**: no clash even in the busy state,
+with the ability bar centred, and the usual state within the budget. If
+that is true of no scale, the scale is 1 and section 7's collapse applies.
+
+| Window | Scale | Usual state covers | Busy state covers | What gives |
+|---|---|---|---|---|
+| 1280 by 720 | 1 | see section 7 | | collapse in force |
+| 1366 by 768 | 1 | see section 7 | | collapse in force |
+| 1600 by 900 | 1 | 23.5% | 29.0% | nothing |
+| 1920 by 1080 | 1 | 16.3% | 20.1% | nothing |
+| 2560 by 1440 | 1 | 9.2% | 11.3% | nothing |
+| 3200 by 1800 | 2 | 23.5% | 29.0% | nothing |
+| 3840 by 2160 | 2 | 16.3% | 20.1% | nothing |
+
+For 16:9 windows the whole interface first fits at scale 1 from 1554 by 874,
+at scale 2 from 3106 by 1747 and at scale 3 from 4658 by 2620. A bigger
+window never shows less: the scale only rises when everything still fits.
+The player may force a scale in settings; a forced scale too big for the
+window gets the collapse order, as the stage 2 test screen showed it can.
+
+So the design's hope that everything shows in full at 1280 by 720 does not
+hold, and the corrected figure is about 1554 by 874, with 1600 by 900 the
+smallest common size that has it all. 1280 by 720 stays supported, with
+collapse.
+
+Without the budget, by clashes alone, everything fits from 1364 by 767.
+Between that and 1554 by 874 nothing clashes and the budget alone makes
+pieces give way.
+
+### The ability bar and the minimap
+
+The first draft said these two fit side by side from about 740 wide. That
+is true only if the bar may leave the centre. Centred, the bar's right edge
+is at half the window plus 229 and the minimap's left edge is 274 from the
+right, so with 8 clear between them the window must be **1021** wide (1005
+with none). The plan's answer is in section 7: below the width at which the
+centred bar clears what is on its right, the bar slides left just far
+enough, and 745 is the width below which the window refuses to shrink.
 
 ## 3. How it is built
 
@@ -112,17 +175,21 @@ crates/ui/src/
     kill_feed.rs
     announcements.rs
     tooltip.rs
-    screens/
+    overlays/
       shop.rs
-      scoreboard.rs
-      hero_select.rs
       death.rs
 ```
 
 All of it is in `crates/ui`, which depends on nothing, so every component is
 tested without the game, the cache or a graphics card, the way stage 2 was.
-The client's part is two things: filling `HudState` (stage 4) and handing
-the finished quads to the pass that already exists.
+The boundary, stated once:
+
+- `crates/ui` turns a `HudState` and a theme into a list of quads over one
+  atlas. It depends on nothing: not the client, not the cache, not the
+  simulation, not the graphics card.
+- The client fills `HudState` (in stage 3 from `sample.rs`; in stage 4 from
+  the match), builds the theme from the cache, and hands the quads to the
+  stage 2 pass. Nothing flows the other way.
 
 ### What a component is
 
@@ -144,12 +211,14 @@ them.
 
 Each frame, in this order:
 
-1. Choose the scale from the window (section 2).
-2. Ask every component its size.
+1. Ask every component its size.
+2. Choose the scale by fit (section 2).
 3. Place each at its anchor (section 5), in whole pixels.
-4. If the pieces overlap, or cover more than a quarter of the window, apply
-   the collapse order one step at a time until they do not (section 7).
+4. If pieces clash, or the usual state is over budget, apply section 7.
 5. Draw them, lowest layer first.
+
+Unit plates are not part of this pass at all (section 5.6): they are placed
+by the world, not by the window.
 
 Steps 1 to 4 produce a list of rectangles and nothing else, so the whole of
 layout and collapse is tested by asserting on rectangles at many window
@@ -164,6 +233,14 @@ the match, and no component sends anything: clicks are stage 4. This is
 checked the way the design asks: with the interface removed, the match plays
 out identically, because nothing in the interface can write to it.
 
+### Sample values are marked
+
+In stage 3 every value on screen is made up. In development builds every
+component drawing sample values carries a small "sample" mark in its
+corner, so that a made-up kill feed, gold count, ally or objective is never
+taken for a working system. The mark goes when stage 4 connects that
+component, one at a time.
+
 ### Layers
 
 | Layer | What is on it |
@@ -171,7 +248,7 @@ out identically, because nothing in the interface can write to it.
 | 0 | unit plates (they belong to the world, under everything else) |
 | 1 | the fixed components |
 | 2 | the kill feed and announcements |
-| 3 | full-screen interfaces and the dimming behind them |
+| 3 | overlays that go over a match (shop, death screen) and their dimming |
 | 4 | the tooltip, always on top |
 
 ## 4. The theme
@@ -318,35 +395,46 @@ stage 4. Sizes are at scale 1.
   structures; a lighter box for what the camera sees; a small round button
   in its top right corner (unread).
 - **Rank:** with the ability bar, the strongest.
-- **Stage 3:** a flat picture of the real map made once from the walkable
-  map, with sample dots. **Stage 4:** units the viewer may see, the camera
-  box; clicks to move the camera and to order a move.
-- **Depends on:** a picture of the map. The client already draws a minimap
-  from the lanes; stage 3 may reuse that picture as it is.
+- **Stage 3:** the picture the client's old interface already draws from
+  the lanes, structures and camps, inside the new frame, with sample dots.
+  Stage 3 proves the frame, the dots, the scale and the place. It makes no
+  new picture of the map; in particular not from the walkable map, which
+  describes where a body may go and not what the battlefield looks like.
+  **Stage 4:** units the viewer may see, the camera box; clicks to move the
+  camera and to order a move.
 
 ### 5.4 Objectives
 
-- **Anchor:** left edge, top fixed. Measured in S2: 8 to 280, 410 to 760, so
-  272 wide; 8 from the left, top at 410.
-- **Height grows with what it lists:** 350 in S2, about 375 in S5, about 400
-  in S4.
-- **Contents:** title "Objectives" in orange with a minimise button at its
-  right; a small table with a column for each team (name in its colour over
-  a quiet green word that I read as "Keeps") and a row for each lane (Top,
-  Mid, Bot), each cell three tower pips and a green dot; a thin rule; then a
-  line for each objective with an icon, its name, and at the right its timer
-  or state. Some lines have a quieter second line under them ("Slain" with a
-  count for each team under the dragon; a line of where it is under others).
-- **Lines seen:** Black dragon (later Green, later Blue: it changes as the
-  match goes on), TzKal-Zuk, Giant Mole, River chickens, Shooting star,
-  Wards.
-- **Panel:** `panel.dark`. Row pitch about 24.
+- **Anchor:** left edge. Measured in S2: 8 to 280, 410 to 760; 272 wide, 8
+  from the left. Its top is at 410 in all three frames that show it, while
+  its height changes, so it hangs from its top. 410 is 38% of 1080, and with
+  only one window size in the reference that is all that is known. The
+  plan: the top is at 38% of the window's height, moved up if that would
+  bring it within 8 of the chat.
+- **Layout from the reference:** a title in orange with a minimise button at
+  its right; a small table with a column for each team (its name in its
+  colour) and a row for each lane, each cell a pip for each tower and a dot
+  for what stands behind them; a thin rule; then a line for each objective
+  with an icon, its name, and at the right its timer or state, some with a
+  quieter second line. `panel.dark`; row pitch about 24.
+- **Content is our game's, not the reference's.** The reference lists a
+  dragon, TzKal-Zuk, a mole and others. Ours:
+
+  | Part | Lines |
+  |---|---|
+  | Lane table | Top, Mid, Bot; for each team two tower pips and an inhibitor dot |
+  | Nexus | one line for each team: shielded, open, or its health |
+  | Camps | four lines, one for each jungle camp, with what it grants (Might or Swift) and its state or timer |
+
+  That is the title, the table and five or six lines: about 290 tall, from
+  parts.
+- **Sample states for testing**, each plainly made up: a tower down, an
+  inhibitor down, a nexus open, a camp alive, a camp on a timer, a camp
+  taken with its buff running.
 - **Rank:** dark and quiet until a line changes; a live objective's state is
-  green ("Alive").
-- **Stage 3:** the S2 contents as sample. **Stage 4:** structure counts,
-  objective timers and states. Most of those objectives do not exist in our
-  game; a line whose system is not built is marked in development builds, as
-  the design requires.
+  green.
+- **Stage 3:** the sample states above. **Stage 4:** structure counts and
+  camp timers, all of which our game has.
 
 ### 5.5 Team frames
 
@@ -379,6 +467,22 @@ stage 4. Sizes are at scale 1.
 
 **Unit plates**
 
+These are a different kind of thing from every other component and are
+kept apart in the code.
+
+- **Placed by the world, not the window.** A plate's place is where its
+  unit's head falls on the screen, which only the client's camera knows.
+  The client does that projection, decides which units' plates are shown,
+  and gives `crates/ui` a list of plates already placed in window pixels.
+  `crates/ui` draws a plate where it is told and never places one.
+- **Visibility and depth stay the game's.** A plate is shown only for a
+  unit the game shows: fog, brush and death hide it exactly as they hide
+  the bar the old interface draws today. Plates are drawn before the fixed
+  components, so a panel covers a plate and never the reverse. A plate is
+  not hidden by scenery in front of its unit, which is how the old bars
+  behave and how the reference's do.
+- **Not in the layout or the budget.** They take no part in placing,
+  clashing, collapse or the quarter.
 - **Anchor:** above each unit, in the world. Measured over the player's
   hero in S2: 915 to 1003, 395 to 425: the name in green, then a level box
   and a health bar about 80 by 8.
@@ -390,21 +494,28 @@ stage 4. Sizes are at scale 1.
 
 ### 5.7 Inventory
 
-- **Anchor:** bottom right, left of the minimap. Measured in S2: 1408 to
-  1640, 838 to 1062, so 232 by 224; its right edge 6 from the minimap's
-  left, 18 from the bottom.
-- **Contents, top to bottom,** as the design already records from five
-  frames, now with positions: two rows of five equipment cells (838 to 924),
-  each with a faint outline; a gap; a row of five item cells (940 to 985); a
-  row of three item cells and then the gold pile and gold count (990 to
-  1030); two buttons, Shop and Teleport (1036 to 1058).
-- **Cell pitch:** about 44 across and 42 down; a cell is about 40.
+- **Anchor:** bottom right, left of the minimap, its right edge 6 from the
+  minimap's left, 18 from the bottom.
+- **What the reference has:** a panel 232 by 224 (measured in S2: 1408 to
+  1640, 838 to 1062) holding ten equipment cells in two rows of five, eight
+  item cells, a gold count, and Shop and Teleport buttons. Cells are about
+  40, at a pitch of about 44 by 42.
+- **What this plan draws: our six item slots, and nothing that implies
+  more.** Equipment slots, a second kind of item and a Teleport button are
+  item-system and game decisions that have not been made. Drawing eighteen
+  cells would look like a promise. So: six cells in two rows of three, in
+  the reference's cell style and pitch, then the gold pile and count, then a
+  Shop button.
+- **From parts:** three cells of 40 with 4 between and 8 of frame each side
+  is 144 wide; two rows, a gold line and a button line come to about 160
+  tall. A proposal until drawn.
 - **Panel:** `panel.stone` with `panel.slot` cells.
-- **From parts:** five cells of 40 with 4 between and 8 of frame each side
-  is 232 wide. Matches.
 - **Rank:** quiet, but the gold count is yellow and is read often.
-- **Stage 3:** S2's contents as labelled squares. **Stage 4:** items, gold;
-  buy, sell, use, open shop.
+- **Stage 3:** six labelled squares, three of them filled. **Stage 4:**
+  items, gold; buy, sell, use, open shop.
+- **If the item system later wants the reference's eighteen**, the panel
+  grows to the reference's 232 by 224 and the figures in section 2 move:
+  the centred bar then clears it only from 1481 wide instead of 1364.
 
 ### 5.8 Chat and event log
 
@@ -466,143 +577,201 @@ Not in the design's list. Seen in S3 and S5.
 - **Stage 3:** S5's tooltip as sample. **Stage 4:** what is under the
   cursor.
 
-### 5.11 Full-screen interfaces
+### 5.11 Overlays, and what is put off
 
-Each dims the match behind it with `dim` and is one component.
+Two kinds, kept apart:
 
-**Shop** (S5)
+- **Overlays over a match** dim the match behind them with `dim` and leave
+  the rest of the interface on screen. The shop and the death screen.
+- **Screens before a match** have no match behind them and nothing to dim.
+  Hero selection. None is in this stage.
+
+Neither kind is part of the fixed layout, the clash test or the budget.
+
+**Shop** (S5), its own acceptance step
 
 - **Anchor:** centred. Measured: 568 to 1350, 250 to 830, so 782 by 580.
 - **Contents:** a title bar ("Grand Exchange") with a close button; at the
-  left a list of categories (Recommended, item sets, All items, then kinds
-  by slot, then by role); a search line; in the middle the items of the
+  left a list of categories; a search line; in the middle the items of the
   chosen category as rows of pictures with prices, arrows between an item
   and what it builds into; at the right the chosen item's name, price,
   stats, what it builds into, and a buy button; along the bottom "Your
   items" with a hint and the gold count.
-- **Stage 3:** S5's layout with labelled squares. **Stage 4:** the item
-  list, gold; buy and sell.
+- **Our content:** our six items in one category. The reference's long list
+  of categories is its item system, not ours; stage 3 shows the frame, one
+  category, the grid, the detail panel and the foot line.
+- **Stage 3:** that layout with labelled squares. **Stage 4:** the item
+  list, gold; buy.
 
-**Death screen** (S4)
+**Death screen** (S4), its own acceptance step
 
-- **Whole screen:** the match drawn in grey and darkened. That is a change
-  to how the scene is drawn, not an interface piece; in stage 3 it is a
-  `dim` rectangle only, and the grey is noted as a later rendering task.
+- **The match in grey:** in the reference the whole scene is drawn grey and
+  dark. That is a change to how the scene is drawn, not an interface piece;
+  in stage 3 it is a `dim` rectangle only, and the grey is noted as a later
+  rendering task.
 - **Contents, centred:** "Oh dear, you are dead!" in red, about 808 to 1108
   at 372 to 400; "Respawning in 3s" in yellow under it; a dark panel 795 to
   1125, 440 to 520 with who dealt the killing blow and a bar for each source
   of damage in the last seconds, its total at the right.
-- The rest of the interface stays on screen, dimmed.
 
-**Hero select** (S1)
+**Hero selection** (S1): put off
 
-- **Whole screen,** no match behind it.
-- **Top bar:** 30 to 1890, 22 to 100. Game mode at the left; "Ranked: choose
-  your hero" and a countdown at the centre; a sound button and Leave at the
-  right.
-- **Team columns:** left 30 to 395 and right 1522 to 1890, from 118 to 1055.
-  A team name over five player cards, pitch 171: portrait, name, rank and
-  rating, the hero picked or "Picking...", lane, two battle spells.
-- **Centre, top to bottom:** a lane row (415 to 1502, 118 to 205) of five
-  buttons, the chosen one red; the hero grid (415 to 1502, 222 to 522),
-  twelve across, three rows, pitch about 89 by 100, each a portrait with a
-  name under it, a green dot on some, "Picked" over taken ones; a parchment
-  panel (420 to 1500, 545 to 890) with the hero's portrait, name, title,
-  tags, a "Popular build" line, a description, and its passive and abilities
-  in a scrolling list; a battle-spells row (415 to 1500, 910 to 1055) with
-  the two chosen, the choices, rating at stake, and Lock in.
-- **Stage 3:** S1's layout with our three champions and labelled squares.
+A whole screen for a lobby that does not exist, whose way of working has
+not been decided. It is not built in stage 3. Its measurements are kept in
+appendix A for when a lobby is designed.
 
-**Scoreboard**
+**Scoreboard:** put off
 
-- No reference frame. Not planned in detail; it waits for one.
+There is no reference frame of one and no design. It is not in this stage
+and has no file in the tree until it has one or the other.
 
 ## 6. Behaviour at each scale and window size
 
-- **Scale** is one whole number for the whole interface (section 2). Every
-  size in section 5 is multiplied by it; every position is a whole pixel.
+- **Scale** is one whole number for the whole interface, chosen by fit
+  (section 2). Every size in section 5 is multiplied by it; every position
+  is a whole pixel.
 - **Anchors hold.** Corner components keep their margins from their corner;
-  centred ones stay centred; the objectives and team frames keep their
-  distance from the top. Extra window goes to the battlefield.
-- **Left-edge and right-edge tops are fixed from the top**, as measured (82,
-  168, 410), until the window is too short for the column, when section 7
-  applies.
-- **Full-screen interfaces** are centred at their own size; the shop and the
-  hero grid scroll inside themselves when the window is too small for them,
-  and are never scaled down.
+  centred ones stay centred while they fit; the team frames and target panel
+  keep their distance from the top; the objectives hang from 38% of the
+  height. Extra window goes to the battlefield.
+- **Overlays** are centred at their own size; the shop scrolls inside itself
+  when the window is too small for it, and is never scaled down.
 
-| Window | Scale | State |
+Every rectangle at 1920 by 1080, scale 1, from the anchors, beside what was
+measured:
+
+| Piece | From the anchors | Measured in the reference |
 |---|---|---|
-| 1280 by 720 | 1 | collapse steps 1 to 4 below in force |
-| 1600 by 900 | 1 | everything in full |
-| 1920 by 1080 | 1 | everything in full; the reference's size |
-| 2560 by 1440 | 2 | everything in full, as at 1280 by 720 doubled: collapse steps in force |
-| 3840 by 2160 | 3 | as 1280 by 720 tripled: collapse steps in force |
+| Score strip | 693 to 1227, 10 to 48 | 692 to 1226, 10 to 48 |
+| Kill feed (four entries) | 1622 to 1908, 18 to 136 | one entry 1622 to 1908, 18 to 46 |
+| Team frames | 1728 to 1908, 168 to 356 | the same |
+| Target panel | 8 to 340, 82 to 240 | the same |
+| Objectives (ours, 290 tall) | 8 to 280, 410 to 700 | 8 to 280, 410 to 760 |
+| Chat | 5 to 445, 930 to 1070 | the same |
+| Ability bar | 731 to 1189, 968 to 1062 | 730 to 1188, 968 to 1062 |
+| Inventory (ours, 144 by 160) | 1496 to 1640, 902 to 1062 | 1408 to 1640, 838 to 1062 |
+| Minimap | 1646 to 1912, 800 to 1064 | the same |
 
-The last two rows are a weakness of stepping at multiples of 1280 by 720:
-a 1440p screen gets the tight layout doubled. Stepping at multiples of 1600
-by 900 instead gives scale 2 from 3200 by 1800 and leaves 1440p at scale 1,
-small. Which is better is a judgment for someone looking at a 1440p screen,
-and neither the user's machine nor mine has one. It is one constant, and the
-plan is to make it a setting.
+The anchors reproduce the reference to a pixel wherever the content is the
+same, which is the check that the anchors are right.
 
-## 7. The collapse order
+## 7. When the whole interface does not fit
 
-Applied one step at a time, only while the pieces overlap or cover more than
-a quarter of the window; undone in reverse as soon as there is room. This is
-the design's order, with the steps the reference's real sizes add in front.
+Below the size at which everything fits (section 2), pieces give way. The
+first draft had one list applied from the top. Worked through with real
+rectangles, that hid things that were in nobody's way, so the order is now
+**by what is wrong**: a step is taken only if it relieves the trouble that
+exists.
 
-| Step | What gives | To what |
+**If pieces clash along the bottom:**
+
+1. The chat narrows, from 440 down to no less than 280.
+2. The ability bar slides left from the centre, just far enough to keep 8
+   clear of what is on its right.
+3. The chat shrinks to its last line.
+4. The inventory is hidden.
+
+**If pieces clash down the left:**
+
+1. The target panel is not shown.
+2. The objectives shrink to their title line.
+
+**If pieces clash down the right:**
+
+1. The kill feed shows one entry.
+2. The team frames shrink to portraits and health bars.
+
+**Then, if the usual state covers more than a quarter**, in the design's
+order, each only until the budget is met: the objectives to their title;
+the team frames to portraits; the chat to its last line; the kill feed
+hidden; the score strip hidden; the inventory hidden.
+
+The ability bar and the minimap are never hidden. Below 745 wide or about
+300 high the window refuses to shrink.
+
+What that gives at the two small sizes:
+
+| Window | What gives | Usual state then covers |
 |---|---|---|
-| 0 | Chat narrows | from 440 to no less than 300 |
-| 1 | Target panel | hidden |
-| 2 | Objectives | its title line only |
-| 3 | Team frames | portraits and health bars only |
-| 4 | Chat | its last line |
-| 5 | Kill feed | hidden |
-| 6 | Score strip | hidden |
-| 7 | Inventory | hidden |
+| 1366 by 768 | nothing clashes; for the budget, the objectives go to their title and the team frames to portraits | 23.3% |
+| 1280 by 720 | the chat narrows to 376 and the bar slides left; for the budget, the objectives go to their title, the team frames to portraits and the chat to its last line | 20.8% |
 
-The ability bar and the minimap are never hidden. Below the size at which
-those two fit side by side at scale 1, about 740 wide and 290 high, the
-window refuses to shrink.
+With the bar held strictly at the centre instead, 1280 by 720 loses the
+inventory: the centred bar ends at 869 and the inventory, even at 144 wide,
+starts at 856. Sliding the bar is what keeps the inventory on screen there.
+It is the one place this plan moves a piece away from where the reference
+has it, and only in windows narrower than 1364; **it needs the reviewer's
+yes or no.** The figures for both are in appendix B.
 
-Step 0 and step 5 are new; the rest is the design's order unchanged.
+**Deterministic and reversible.** Every step is decided from the window's
+size and which conditional pieces are showing, and from nothing else: not
+from what the layout was a frame ago. So the same window always gives the
+same layout, a growing window brings pieces back in exactly the reverse
+order, and a window held at a threshold cannot flicker between two layouts.
+The tests at step B assert all three.
 
 ## 8. Order of building
 
-Each step is one component or one piece of groundwork, with its own tests,
-and each leaves the game running with the old interface still drawn. The
-component order is the reviewer's.
+Each step is one component or one piece of groundwork, with its own tests
+and its own acceptance, and each leaves the game running with the old
+interface still drawn and still the default.
 
 | Step | What | Depends on | How it is checked |
 |---|---|---|---|
-| A | The theme: the stage 3 roles, the frame kit composed into `panel.stone`, sprites chosen by eye beside the reference | stages 1 and 2 | a theme sheet: every role drawn and named on one screen, in the game |
-| B | `HudState`, `sample.rs`, the placing pass and collapse order, with every component an empty labelled rectangle | A | rectangles asserted at twenty window sizes; the labelled rectangles over the game beside S2 |
+| A | The theme: the stage 3 roles, the frame kit composed into `panel.stone`, sprites chosen by eye beside the reference | stages 1 and 2 | a theme sheet in the game (below) |
+| B | `HudState`, `sample.rs`, the scale by fit, the placing pass and collapse, with every component an empty labelled rectangle | A | tests on rectangles (below); the labelled rectangles over the game beside S2 |
 | 1 | Score strip | B | beside S2 and S3 |
 | 2 | Ability bar with health and resource | B | beside S2 and S3 |
-| 3 | Minimap | B, a map picture | beside S2 |
-| 4 | Objectives | B | beside S2, S4 and S5 for its three heights |
+| 3 | Minimap | B | beside S2 |
+| 4 | Objectives | B | beside S2 for layout; each sample state shown |
 | 5 | Team frames | B | beside S2 and S4 |
-| 6 | Target panel and unit plates | B | beside S4 and S2 |
-| 7 | Inventory | B | beside S2 |
-| 8 | Chat and kill feed | B, paragraph wrapping | beside S2 and S3 |
-| 9 | Announcements and tooltip | B, paragraph wrapping, outlined text | beside S5 |
-| 10 | Shop, death screen, hero select | B, scrolling inside a panel | beside S5, S4 and S1 |
+| 6 | Target panel | B | beside S4 |
+| 7 | Unit plates | B, the client's projection | beside S2; hidden where the old bars are hidden |
+| 8 | Inventory | B | beside S2 for cell style |
+| 9 | Chat | B, paragraph wrapping | beside S2 |
+| 10 | Kill feed | B | beside S3 and S5 |
+| 11 | Announcements | B, outlined text | beside S5 |
+| 12 | Tooltip | B, paragraph wrapping | beside S5 |
+| 13 | Shop overlay | B, scrolling inside a panel | beside S5 |
+| 14 | Death overlay | B, outlined text | beside S4 |
+| 15 | The whole, together | all of the above | the final comparison (below) |
 
-Step B is the one that matters most: when it passes, the layout, anchors,
-scale and collapse are settled with nothing drawn but boxes, and every later
-step is filling one box.
+**The theme sheet (step A)** shows every role by name: the assembled stone
+frame, the dark and parchment panels, buttons and slots, all four fonts,
+the icons, and every colour. It also shows them **together**, because a
+font that reads well alone can be cramped in a panel: a line of each font
+inside each kind of panel; a button with its label; a slot with a count
+over it; a bar with figures on it; yellow outlined text over light ground
+and over dark. The stone frame is judged by eye beside the reference there;
+no time is spent proving the blurred original is the same sprite.
 
-**Each step's check** is the design's: a screenshot at 1920 by 1080 beside
-the reference frame. Anchor matches; size within what the measurements
-allow; the eye goes to the same things in the same order. Differences are
-listed. The old interface is hidden behind a switch for these screenshots
-and stays the default until the reviewer says otherwise.
+**The rectangle tests (step B)** replace this plan's script with tests on
+the real code: every rectangle at 1280 by 720, 1366 by 768, 1600 by 900,
+1920 by 1080, 2560 by 1440, 3200 by 1800 and 3840 by 2160; no clash at any
+size once collapse has run; the usual state within a quarter; the scale
+never falling as the window grows; every window from 745 by 300 to 3840 by
+2160 in steps giving the same layout whether reached by growing or by
+shrinking.
+
+**Everything at once.** Components are also checked together in the states
+that strain a layout: a long chat line that must wrap, the largest tooltip,
+every objective line in a changed state, an ally dead, the target panel
+open and four kill-feed entries, all in one screenshot, at 1920 by 1080 and
+at 1366 by 768.
+
+**The final comparison (step 15)** is the assembled interface at 1920 by
+1080 beside S2, S3, S4 and S5: anchor by anchor, size by size, and what the
+eye goes to first, second and third. Differences are listed, not waved
+through. The old interface stays the default until the reviewer accepts
+the new one.
 
 **The drawing layer needs three small additions**, each pure and tested on
 its own: breaking a paragraph into lines; text with an outline; a clipped
 area that scrolls. None changes what stage 2 froze.
+
+**Not in this stage, whatever else is approved:** reading the match,
+buying or selling, sending chat, moving the camera, selecting a unit, or any
+other command. Those are stage 4.
 
 ## 9. What is static first, and what becomes live
 
@@ -612,18 +781,17 @@ area that scrolls. None changes what stage 2 froze.
 | Ability bar | sample cooldowns | abilities, cooldowns, level, experience | yes |
 | Health and resource | sample | health, resource | yes |
 | Minimap | sample dots | visible units, camera | yes |
-| Objectives | S2's list | towers by lane, objective timers | towers yes; objectives no |
+| Objectives | sample states of our own structures and camps | towers, inhibitors, nexus, camp timers | yes |
 | Team frames | four sample allies | allies | no: one player |
 | Target panel | a sample structure | the selected unit | no selection yet |
 | Unit plates | sample positions | visible units | yes |
-| Inventory | S2's contents | items, gold | six slots, not eighteen |
+| Inventory | six squares, three filled | items, gold | yes: six slots |
 | Chat | sample lines | chat and events | no |
 | Kill feed | two samples | kill events | no |
 | Announcements | one sample | announcements | no |
 | Tooltip | S5's | what is under the cursor | no |
-| Shop | S5's layout | items, gold | six items, no categories |
+| Shop | S5's frame with our six items | items, gold | six items, one category |
 | Death screen | sample | killer, damage, respawn | respawn yes; damage record no |
-| Hero select | three champions | the lobby | no lobby |
 
 Most of the interface is ahead of the game. That is expected, and it is why
 the design marks a placeholder on screen in development builds: the static
@@ -635,38 +803,60 @@ Each is a change to the frozen `docs/INTERFACE.md` and needs review.
 
 1. **The reference** becomes the recording and the five screenshots, with
    the note that the screenshots are the recording enlarged.
-2. **The smallest window at which everything is shown in full** is 1600 by
-   900, not 1280 by 720; 1280 by 720 stays supported, with collapse.
-3. **Health and resource bars** are part of the ability bar, not a
-   component of their own.
-4. **The kill feed** is added as a component, and to the collapse order.
-5. **The chat narrowing** is added in front of the collapse order.
-6. **The tooltip** is a dark panel, not parchment, as S5 shows it.
-7. **The native size table** in the design is filled from section 5 once
-   each component is drawn.
+2. **The scale** is chosen by whether the whole interface fits, not by the
+   bottom row and tallest column fitting.
+3. **The size at which everything shows in full** is about 1554 by 874, not
+   1280 by 720; 1280 by 720 stays supported, with collapse.
+4. **The quarter** is defined: the area inside the rectangles of the fixed
+   components showing in the usual state, each pixel once.
+5. **The collapse order** is by what is wrong, with the chat narrowing and
+   the kill feed added, and (if approved) the ability bar sliding.
+6. **Health and resource bars** are part of the ability bar.
+7. **The kill feed** is a component.
+8. **The tooltip** is a dark panel, not parchment, as S5 shows it.
+9. **The scoreboard and hero selection** leave stage 3.
+10. **The native size table** in the design is filled from section 5 once
+    each component is drawn.
 
-## 11. Questions for the reviewer
+## 11. What is still the reviewer's to decide
 
-1. **Scale steps:** multiples of 1280 by 720, or of 1600 by 900 (section 6)?
-2. **Our own objectives.** The reference lists a dragon, TzKal-Zuk, a mole,
-   chickens, a star and wards. We have towers, inhibitors, a nexus and four
-   camps. Does stage 3 show the reference's list as sample text, or only
-   what our game has? The plan assumes the reference's list, marked as
-   sample.
-3. **Eighteen inventory cells.** The reference has ten equipment cells and
-   eight item cells; we have six slots. Stage 3 can draw eighteen; what they
-   mean is an item-system decision, not a layout one.
-4. **The stone frame.** The reference's stone is close to the cache's but I
-   cannot tell from the blur whether it is the same sprites. Step A chooses
-   by eye and shows the result; the reviewer should expect to say "closer"
-   or "that will do" there.
-5. **Hero select and the lobby.** S1 is a whole screen for a system we do
-   not have. It is last in the order; it could be left out of stage 3
-   altogether.
+1. **May the ability bar slide left in a narrow window** (section 7)? The
+   alternative is that 1280 by 720 has no inventory on screen.
+2. **Six slots as two rows of three** (section 5.7). It is the compact
+   arrangement beside the minimap; one row of six, as the old interface has
+   it, is about 276 wide and brings the trouble of the reference's wide panel
+   back.
+3. **The objectives' place at other heights** (section 5.4). 38% of the
+   height is a rule read from one window size.
+
+## 12. What changed from the first draft
+
+| Review point | What was done |
+|---|---|
+| The 740 minimum width was wrong | Corrected: 1021 centred with 8 clear, 745 if the bar may slide (section 2) |
+| Inventory clashes with the bar at 1280 | Confirmed by rectangles; answered by sliding the bar, for the reviewer to decide (section 7) |
+| Objectives and chat overlapped at 1600 by 900 | They did with a fixed top of 410; the top is now 38% of the height, and the rectangles are clear at every size tested (sections 5.4 and 6) |
+| Layout from rectangles, not sums | Done; script and output included (appendix B) |
+| Define the quarter | Done: unique area of the fixed components' rectangles in the usual state (section 2) |
+| Does the quarter force collapse at 1600 by 900 | No: 23.5% (section 2) |
+| A bigger screen must not show less | Scale is now chosen by fit; 1440p is scale 1, 1800p and 2160p are scale 2 (section 2) |
+| Our own objectives | Done (section 5.4) |
+| Do not imply eighteen inventory cells | Six slots drawn; the reference's panel kept only as a measurement (section 5.7) |
+| Hero selection optional | Put off (section 5.11) |
+| Scoreboard | Put off, and out of the file tree |
+| Pre-match screens apart from overlays | Done (section 5.11) |
+| Unit plates are placed by the world | Done, with visibility and depth (section 5.6) |
+| Shop, death and hero select as separate steps | Shop and death are separate steps; hero select is out |
+| The boundary of `crates/ui` | Stated (section 3) |
+| The minimap is not made from the walkable map | Done: the old interface's picture is reused (section 5.3) |
+| Theme sheet shows combinations | Done (section 8) |
+| Collapse reversible and deterministic | Stated, with why it holds and how it is tested (section 7) |
+| Strain several components at once | Added (section 8) |
+| Sample values visibly marked | Added (section 3) |
 
 ---
 
-## Appendix: measurements, screenshot by screenshot
+## Appendix A: measurements, screenshot by screenshot
 
 All on the 1920 by 1080 grid, left to right then top to bottom, good to
 about 4 pixels. Each screenshot has a dark border about 8 wide that is part
@@ -767,3 +957,50 @@ of the recording, not of the game.
 | Hero grid | 415 to 1502 | 222 to 522 | 1087 by 300 | twelve across, pitch about 89 by 100; 31 heroes |
 | Detail panel | 420 to 1500 | 545 to 890 | 1080 by 345 | parchment; portrait left, text right, scrollbar |
 | Spells row | 415 to 1500 | 910 to 1055 | 1085 by 145 | two chosen, seven choices, rating, Lock in at 1208 to 1482 |
+
+## Appendix B: the layout arithmetic
+
+Output of `docs/interface_stage3_layout.py`, which places every rectangle by
+its anchor and margins. "Usual" is every fixed piece but the target panel,
+with one kill-feed entry; "busy" adds the target panel and three more
+entries. A piece counts as clashing if it is within 8 of another. Sizes are
+the interface's own pixels times the scale.
+
+**The least window at scale 1 for the whole interface, bar centred:** 1364
+wide, 696 high, by clashes alone.
+
+**Where each scale first fits (16:9 windows):**
+
+| Budget | Scale 1 from | Scale 2 from | Scale 3 from |
+|---|---|---|---|
+| a quarter | 1554 by 874 | 3106 by 1747 | 4658 by 2620 |
+| 30% | 1418 by 797 | 2836 by 1595 | 4254 by 2392 |
+| none | 1364 by 767 | 2728 by 1534 | 4092 by 2301 |
+
+**At a quarter, by window.** "Sum" adds the rectangles' areas; "unique"
+counts each pixel once. They are equal wherever nothing overlaps, which is
+everywhere once collapse has run.
+
+| Window | Scale | Bar | Usual: what gives | Usual covers | Busy covers |
+|---|---|---|---|---|---|
+| 1280 by 720 | 1 | centred | chat to 398; inventory hidden; objectives to title; team frames to portraits | 23.3% | 31.8% |
+| 1280 by 720 | 1 | slides | chat to 376; objectives to title; team frames to portraits; chat to last line | 20.8% | 29.3% |
+| 1366 by 768 | 1 | either | objectives to title; team frames to portraits | 23.3% | 30.7% |
+| 1600 by 900 | 1 | either | nothing | 23.5% | 29.0% |
+| 1920 by 1080 | 1 | either | nothing | 16.3% | 20.1% |
+| 2560 by 1440 | 1 | either | nothing | 9.2% | 11.3% |
+| 3200 by 1800 | 2 | either | nothing | 23.5% | 29.0% |
+| 3840 by 2160 | 2 | either | nothing | 16.3% | 20.1% |
+
+No size was left with a clash after collapse, in either state.
+
+**For comparison, the same at 30%:** 1366 by 768 gives up only the
+objectives' list (25.4%); 1280 by 720 with the bar sliding gives up the
+chat's width and the objectives' list (28.0%). The plan keeps a quarter.
+
+**With the reference's own sizes** (inventory 232 by 224, objectives up to
+400 tall), from the first run of the same script: the centred bar clears
+the inventory only from 1481 wide; the usual state covers 26.7% at 1600 by
+900 and 18.5% at 1920 by 1080; the busy state 33.1% and 23.0%. Those are
+the figures that apply if the item system later takes the reference's
+eighteen cells.
