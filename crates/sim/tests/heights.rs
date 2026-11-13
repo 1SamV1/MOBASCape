@@ -271,6 +271,38 @@ fn a_steep_face_is_a_side_and_a_gentle_one_a_top() {
     );
 }
 
+/// One flat sheet with a single side, as leaves are modelled: `up` says which
+/// way it faces once drawn.
+fn sheet(height: f32, up: bool) -> Vec<Tri> {
+    let (a, b, c, d) = (
+        [-70.0, height, -70.0],
+        [-70.0, height + 12.0, 70.0],
+        [70.0, height + 12.0, 70.0],
+        [70.0, height, -70.0],
+    );
+    // the same winding as a box's lid faces up; reversed, it faces down
+    if up {
+        vec![[a, c, b], [a, d, c]]
+    } else {
+        vec![[a, b, c], [a, c, d]]
+    }
+}
+
+/// A palm as the game's are built: a trunk, leaves overhead, and single-sided
+/// fronds hanging low enough to brush the ground, seen from underneath.
+fn palm() -> Vec<Tri> {
+    let mut tree = solid_box(0.0, 0.0, 12.0, 12.0, 0.0, 400.0);
+    tree.extend(solid_box(0.0, 0.0, 180.0, 180.0, 300.0, 380.0));
+    for (x, z) in [(90.0f32, 0.0f32), (-90.0, 20.0), (0.0, 100.0)] {
+        let low: Vec<Tri> = sheet(20.0, false)
+            .into_iter()
+            .map(|t| t.map(|p| [p[0] * 0.5 + x, p[1], p[2] * 0.5 + z]))
+            .collect();
+        tree.extend(low);
+    }
+    tree
+}
+
 /// The promise of stage 1: read with today's step and head height, the height
 /// data blocks the same cells as the walkable map that exists.
 #[test]
@@ -310,6 +342,13 @@ fn it_blocks_what_the_walkable_map_blocks_for_every_kind_of_shape() {
             "ledge in the air",
             solid_box(0.0, 0.0, 80.0, 80.0, 90.0, 100.0),
         ),
+        ("palm with drooping fronds", palm()),
+        ("sheet seen from below, low", sheet(30.0, false)),
+        (
+            "sheet seen from below, at chest height",
+            sheet(100.0, false),
+        ),
+        ("sheet seen from above, low", sheet(30.0, true)),
     ];
     for (name, shape) in &shapes {
         for body in [0, 28] {
@@ -329,11 +368,16 @@ fn the_finishing_step_is_the_same_whichever_way_the_cells_were_found() {
     let mut whole = Grid::with_cell(32, 32, 32);
     whole.block_solid(&shape, (512.0, 512.0), 48.0, 160.0, 28);
     let mut bare = Grid::with_cell(32, 32, 32);
-    bare.block_solid(&shape, (512.0, 512.0), 48.0, 160.0, 0);
+    let counted = bare.block_solid(&shape, (512.0, 512.0), 48.0, 160.0, 0);
     let cells: Vec<(i32, i32)> = (0..32)
         .flat_map(|y| (0..32).map(move |x| (x, y)))
         .filter(|&(x, y)| bare.is_blocked(x, y))
         .collect();
+    assert_eq!(
+        counted,
+        cells.len(),
+        "the count it gives back is every cell the thing covers, its inside included"
+    );
     let mut again = Grid::with_cell(32, 32, 32);
     again.block_cells(&cells, 28);
     for y in 0..32 {

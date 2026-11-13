@@ -159,13 +159,12 @@ impl Grid {
     /// room a body needs round them. This is the second half of
     /// [`Grid::block_solid`], given the cells it found; it is its own
     /// function so that another way of finding the cells can be finished off
-    /// in exactly the same way and compared. Returns how many cells were
-    /// given.
+    /// in exactly the same way and compared. Returns how many cells the thing
+    /// covers, counting what it encloses and not the room for a body.
     pub fn block_cells(&mut self, cells: &[(i32, i32)], body: i32) -> usize {
         let mut covered: Vec<(i32, i32)> = cells.to_vec();
         covered.sort_unstable();
         covered.dedup();
-        let given = covered.len();
         if covered.is_empty() {
             return 0;
         }
@@ -223,7 +222,7 @@ impl Grid {
             self.set_disc(mx, my, reach, true);
             self.set_blocked(cx, cy, true);
         }
-        given
+        covered.len()
     }
 
     pub fn block_rect(&mut self, x: i32, y: i32, width: i32, height: i32) {

@@ -226,7 +226,6 @@ impl HeightMap {
             }
         }
 
-        let head = reading.head.map(|head| (head * Q as f32).floor() as i32);
         for (cell, mut parts) in seen {
             // a fixed order, so the result cannot depend on the order the
             // triangles came in
@@ -249,14 +248,15 @@ impl HeightMap {
                         column.surfaces.push(high);
                     }
                     Facing::Underside => {
-                        // the bottom of something. If its top was read, the
-                        // top's stretch covers it. If not (it is above head
-                        // height), it is solid from here up as far as was
-                        // read.
-                        let has_top = parts.iter().any(|p| p.0 == Facing::Top && p.1 >= high);
-                        if !has_top {
-                            column.solid.push((low, head.unwrap_or(high).max(high)));
-                        }
+                        // The bottom of something. If its top was read, the
+                        // top's stretch already reaches down to it. If not,
+                        // all that is known is the underside itself, and that
+                        // is all that is recorded: a leaf modelled as one
+                        // sheet seen from below is a sheet, not the foot of a
+                        // column. (An earlier version guessed that an
+                        // underside with no top went on up to head height,
+                        // and walled off the ground under every low frond.)
+                        column.solid.push((low, high));
                     }
                 }
             }
