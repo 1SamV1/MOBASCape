@@ -8,6 +8,9 @@ turn time, acceleration time, stopping time, the slow-while-turning rule, the
 distance. An attack now waits until the champion has turned to face its
 target.
 
+Also built: a hidden `weight` per champion that sets the timings, and a
+drawing-only spring in the step of light champions.
+
 Not built yet: attack wind-up, live reload of champion files, the `--lab`
 mode, recording and replay, and any of this for minions.
 
@@ -92,6 +95,45 @@ which plays the walk at its authored rate at top speed. Set it only where a
 champion's feet visibly slide.
 
 The point of three is contrast. If two of them feel alike, one is wrong.
+
+## Weight
+
+One number a player never sees: `weight`, from 0 (feather) to 100 (colossus).
+It sets turn, acceleration and stopping time wherever a champion's file leaves
+them out:
+
+| `weight` | Turn | Acceleration | Stop |
+|---|---|---|---|
+| 0 | 0.06 s | 0.04 s | 0.005 s |
+| 20 (monkey) | 0.15 s | 0.10 s | 0.05 s |
+| 42 (kree) | 0.25 s | 0.17 s | 0.25 s, set by hand |
+| 85 (jad) | 0.45 s | 0.30 s | 0.20 s |
+| 100 | 0.52 s | 0.35 s | 0.235 s |
+
+A new champion needs one value to feel right. Any of the three timings can
+still be written into the file to break the pattern, as Kree's long glide to a
+stop does. A file with neither a weight nor timings moves instantly, as every
+champion did before.
+
+Weight is also the number later systems should read: how far a knockback
+throws a champion, who gives way when two collide, how much dust a stop kicks
+up.
+
+## Two layers
+
+1. **The simulation decides how a champion moves.** Position, facing, speed.
+2. **Drawing gives it a personality.** Nothing in this layer can change where
+   a champion is, what it hits or what hits it.
+
+The second layer today is spring. A light champion hops on each footfall,
+takes a small dying bounce as it stops, and floats slowly at rest; a heavy one
+stays planted. The amount follows from weight (lightness squared), so the
+monkey rises about 8 world units in a step and Jad about a third of one. Its
+selection ring and bars stay on the ground, which is what makes the body read
+as lifted. `"bounce"` in the champion file scales it: 0 turns it off.
+
+The agile and the heavy should be opposites on both layers: the monkey quick
+to pivot and barely touching the ground, Jad deliberate and rooted.
 
 ## Rules for the implementation
 

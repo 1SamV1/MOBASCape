@@ -5,8 +5,13 @@
 //! ticks out of the frame time, draws between the last two ticks so motion is
 //! smooth at any frame rate, and converts between world floats and the
 //! simulation's units. See docs/MOVEMENT.md.
+//!
+//! It also gives the champion its spring: a hop in each step, a small bounce
+//! as it stops and a slow float at rest, all scaled by how light it is. That
+//! is drawing only. It is a height to draw the body at and nothing else: the
+//! simulation never sees it, so it cannot move a champion, a hitbox or a blow.
 
-use std::f32::consts::TAU;
+use std::f32::consts::{PI, TAU};
 
 use glam::Vec3;
 use rift_sim::motion::{FP, TICK_HZ, TILE, heading_of, turn_between};
@@ -19,6 +24,14 @@ const TICK_SECONDS: f32 = 1.0 / TICK_HZ as f32;
 /// Ticks of making no headway toward a point before asking for a new path.
 const STUCK_TICKS: u32 = 15;
 const FULL_TURN: f32 = 65536.0;
+/// The most a step lifts the lightest champion, in world units.
+const STEP_LIFT: f32 = 14.0;
+/// The first bounce of the lightest champion as it comes to rest.
+const SETTLE_LIFT: f32 = 10.0;
+/// How high the lightest champion floats while standing.
+const HOVER_LIFT: f32 = 7.0;
+/// Seconds for one rise and fall of that float.
+const HOVER_PERIOD: f32 = 2.6;
 
 /// What the player's champion should be doing this frame, in world terms.
 #[derive(Clone, Copy, Debug)]
@@ -48,6 +61,8 @@ pub struct Driven {
     pub stuck: bool,
     /// For `Face`: how far it still is from that yaw, in radians.
     pub facing_error: f32,
+    /// How far above the ground to draw the body. Drawing only.
+    pub lift: f32,
 }
 
 pub struct ChampionMotion {
@@ -61,6 +76,12 @@ pub struct ChampionMotion {
     accumulator: f32,
     last: (f32, f32),
     stuck_ticks: u32,
+    /// Lightness squared times the champion's bounce: 0 gives no spring.
+    spring: f32,
+    travelled: f32,
+    resting: f32,
+    was_moving: bool,
+    lift: f32,
 }
 
 fn to_units(world: f32, origin_tile: i32) -> i32 {
@@ -85,10 +106,11 @@ impl ChampionMotion {
     ) -> Self {
         let (ox, oy) = collision.origin_tile();
         let motion = Motion::at(to_units(pos.x, ox), to_units(pos.z, oy), 0);
+        let handling = champion.handling();
         Self {
-            turn_ms: (champion.turn_time * 1000.0).round() as i32,
-            accel_ms: (champion.accel_time * 1000.0).round() as i32,
-            stop_ms: (champion.stop_time * 1000.0).round() as i32,
+            turn_ms: (handling.turn_time * 1000.0).round() as i32,
+            accel_ms: (handling.accel_time * 1000.0).round() as i32,
+            stop_ms: (handling.stop_time * 1000.0).round() as i32,
             // with no stride given, one that plays the walk at its authored
             // rate at top speed, and slower in step with the champion
             stride: if champion.stride > 0.0 {
@@ -102,7 +124,49 @@ impl ChampionMotion {
             accumulator: 0.0,
             last: (pos.x, pos.z),
             stuck_ticks: 0,
+            spring: handling.lightness * handling.lightness * champion.bounce.max(0.0),
+            travelled: 0.0,
+            resting: 0.0,
+            was_moving: false,
+            lift: 0.0,
         }
+    }
+
+    /// The height to draw the body at this frame: a hop on each footfall
+    /// while moving, a dying bounce as it stops, then a slow float.
+    fn lift_for(&mut self, dt: f32, moved: f32, moving: bool) -> f32 {
+        if self.spring <= 0.0 {
+            return 0.0;
+        }
+        let want = if moving {
+            self.was_moving = true;
+            self.resting = 0.0;
+            self.travelled += moved;
+            // two footfalls to a stride
+            let phase = if self.stride > 0.0 {
+                self.travelled / self.stride * 2.0
+            } else {
+                0.0
+            };
+            STEP_LIFT * (phase * PI).sin().abs()
+        } else {
+            if self.was_moving {
+                self.was_moving = false;
+                self.resting = 0.0;
+                self.travelled = 0.0;
+            }
+            self.resting += dt;
+            let settle =
+                SETTLE_LIFT * (-self.resting / 0.12).exp() * (self.resting * PI / 0.11).sin().abs();
+            let eased = (self.resting / 0.6).min(1.0);
+            let hover =
+                HOVER_LIFT * eased * (0.5 - 0.5 * (self.resting * TAU / HOVER_PERIOD).cos());
+            settle + hover
+        };
+        // ease toward it, so changing between the three never pops
+        let blend = 1.0 - (-dt / 0.04).exp();
+        self.lift += (want * self.spring - self.lift) * blend;
+        self.lift.max(0.0)
     }
 
     /// How far to advance the walk animation for a distance covered. `None`
@@ -207,15 +271,17 @@ impl ChampionMotion {
             }
             _ => 0.0,
         };
+        let moving = self.motion.speed > 0 || moved > 0.05;
         Driven {
             x,
             z,
             yaw: facing / FULL_TURN * TAU,
             moved,
-            moving: self.motion.speed > 0 || moved > 0.05,
+            moving,
             arrived,
             stuck,
             facing_error,
+            lift: self.lift_for(dt, moved, moving),
         }
     }
 }

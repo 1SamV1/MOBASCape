@@ -16,7 +16,6 @@
   "e_heal": 60,
   "e_shield": 90,
   "w_distance": 896,
-  "turn_time": 0.25,
-  "accel_time": 0.20,
+  "weight": 42,
   "stop_time": 0.25
 }

@@ -83,6 +83,9 @@ pub struct AnimatedUnit {
     pub e_shield: f32,
     pub w_distance: f32,
     pub ability_power: f32,
+    /// How far above the ground the body is drawn. Drawing only: nothing in
+    /// the match reads it.
+    pub lift: f32,
 }
 
 #[derive(Clone, Copy)]
@@ -634,6 +637,7 @@ impl AnimatedScene {
         unit.pos = Vec3::new(out.x, height.height_at(out.x, out.z), out.z);
         unit.yaw = out.yaw;
         unit.moving = out.moving;
+        unit.lift = out.lift;
         if out.moving {
             // the walk cycle follows the ground covered, not the clock; the
             // unit loop adds the clock's share to every unit, so take it back
@@ -1536,6 +1540,7 @@ impl AnimatedScene {
                 e_shield: 0.0,
                 w_distance: 0.0,
                 ability_power: 0.0,
+                lift: 0.0,
             };
             self.units.push(unit);
         }
@@ -1773,17 +1778,21 @@ fn load_unit(
         e_shield: 0.0,
         w_distance: 0.0,
         ability_power: 0.0,
+        lift: 0.0,
     })
 }
 
 fn append_unit(scene: &mut AnimatedScene, unit: &AnimatedUnit, positions: &[[f32; 3]]) {
     let rot = Mat3::from_rotation_y(unit.yaw);
     let light = Vec3::new(0.35, 0.85, 0.4).normalize();
+    // the body is drawn lifted; its ring, bars and everything the match
+    // measures stay on the ground at `unit.pos`
+    let base = unit.pos + Vec3::Y * unit.lift;
 
     for (face_idx, &[a, b, c]) in unit.model.faces.iter().enumerate() {
-        let pa = model_vertex_animated(positions, a as usize, unit.pos, rot, unit.scale);
-        let pb = model_vertex_animated(positions, b as usize, unit.pos, rot, unit.scale);
-        let pc = model_vertex_animated(positions, c as usize, unit.pos, rot, unit.scale);
+        let pa = model_vertex_animated(positions, a as usize, base, rot, unit.scale);
+        let pb = model_vertex_animated(positions, b as usize, base, rot, unit.scale);
+        let pc = model_vertex_animated(positions, c as usize, base, rot, unit.scale);
 
         let normal = (pb - pa).cross(pc - pa).normalize_or_zero();
         let ndotl = normal.dot(light).clamp(0.0, 1.0);
