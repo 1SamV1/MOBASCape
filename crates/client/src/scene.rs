@@ -7,6 +7,7 @@ use rift_cache::{
     Cache, Locations, Model, ObjectDefinition, OverlayDefinition, Terrain, UnderlayDefinition,
     light::{blend, ground_lightness, light, shade, shade_rgb, tint},
 };
+use rift_sim::heights::{Agreement, Ground, HeightMap, Reading, agreement};
 use rift_sim::{Grid, find_path, simplify_path};
 use serde::Deserialize;
 
@@ -118,8 +119,27 @@ pub struct WorldCollision {
     open: Grid,
     /// The structures, which do: one that has fallen no longer blocks.
     structures: Vec<StructureGround>,
+    /// Where things can be stood on and how tall they are, and the height of
+    /// the ground (docs/MOVEMENT.md, rough ground, stage 1). Built and
+    /// checked, and read by nothing that moves yet.
+    heights: Option<std::sync::Arc<(HeightMap, Ground)>>,
     origin_tile_x: i32,
     origin_tile_y: i32,
+}
+
+/// The steepest a surface may be, in degrees from level, and still be stood
+/// on. Measured against the real tower: at 45 the monkey's step reaches the
+/// whole top of its mound and Jad's reaches only its loose stones.
+pub const STANDING_ANGLE: f32 = 45.0;
+
+/// The height data for a map as it is being put together, and how it
+/// compares, shape by shape, with the walkable map that decides movement.
+struct HeightBuild {
+    map: HeightMap,
+    shapes: usize,
+    found: Agreement,
+    /// The first few shapes on which the two disagreed, for the log.
+    differing: Vec<String>,
 }
 
 /// The ground one structure stands on.
@@ -145,11 +165,18 @@ impl WorldCollision {
             grid: open.clone(),
             open,
             structures,
+            heights: None,
             origin_tile_x,
             origin_tile_y,
         };
         collision.mark_structures();
         collision
+    }
+
+    /// The height data and the ground's heights, once the map is built.
+    #[allow(dead_code)]
+    pub fn heights(&self) -> Option<&(HeightMap, Ground)> {
+        self.heights.as_deref()
     }
 
     fn mark_structures(&mut self) {
@@ -269,8 +296,10 @@ pub const MODEL_FORWARD_TURN: f32 = std::f32::consts::PI;
 /// it (`model_vertex_scaled`), so the blocked ground lies under the drawn
 /// thing whichever way it is turned and wherever in its own space it was
 /// built. Returns how many cells of the map the thing itself covers.
+#[allow(clippy::too_many_arguments)]
 fn block_model(
     grid: &mut Grid,
+    heights: &mut HeightBuild,
     origin_tile_x: i32,
     origin_tile_y: i32,
     model: &Model,
@@ -286,12 +315,44 @@ fn block_model(
         .filter(|face| face.iter().all(|&i| (i as usize) < model.vertex_count))
         .map(|&[a, b, c]| [corner(a), corner(b), corner(c)])
         .collect();
+    let at = (
+        base.x - (origin_tile_x * 128) as f32,
+        base.z - (origin_tile_y * 128) as f32,
+    );
+
+    // Stage 1 of the rough-ground work: the same shape is also read into the
+    // height data, and the two readings are compared. This changes nothing
+    // about what blocks; the walkable map below is made exactly as before.
+    heights.map.add_shape(
+        &triangles,
+        at,
+        &Reading {
+            mirrored: true,
+            standing_angle: STANDING_ANGLE,
+            head: Some(SOLID_TO),
+        },
+    );
+    let found = agreement(
+        &triangles,
+        true,
+        STANDING_ANGLE,
+        SOLID_FROM,
+        SOLID_TO,
+        BODY_RADIUS.round() as i32,
+        NAV_CELL,
+    );
+    heights.shapes += 1;
+    heights.found.add(found);
+    if !found.agrees() && heights.differing.len() < 8 {
+        heights.differing.push(format!(
+            "model {} at {:.0},{:.0}: {} cells only in the walkable map, {} only in the height data",
+            model.id, base.x, base.z, found.only_map, found.only_heights
+        ));
+    }
+
     grid.block_solid(
         &triangles,
-        (
-            base.x - (origin_tile_x * 128) as f32,
-            base.z - (origin_tile_y * 128) as f32,
-        ),
+        at,
         SOLID_FROM,
         SOLID_TO,
         BODY_RADIUS.round() as i32,
@@ -301,8 +362,10 @@ fn block_model(
 /// The cells a model would block, without blocking them: for a structure,
 /// whose ground has to be given back if it falls. Returns the cells and how
 /// many of them the model itself covers.
+#[allow(clippy::too_many_arguments)]
 fn model_ground(
     like: &Grid,
+    heights: &mut HeightBuild,
     origin_tile_x: i32,
     origin_tile_y: i32,
     model: &Model,
@@ -313,6 +376,7 @@ fn model_ground(
     let mut alone = Grid::with_cell(like.width() as usize, like.height() as usize, like.cell());
     let covered = block_model(
         &mut alone,
+        heights,
         origin_tile_x,
         origin_tile_y,
         model,
@@ -847,6 +911,16 @@ pub fn build(
         tiles_y * NAV_PER_TILE as usize,
         NAV_CELL,
     );
+    let mut height_build = HeightBuild {
+        map: HeightMap::new(
+            tiles_x * NAV_PER_TILE as usize,
+            tiles_y * NAV_PER_TILE as usize,
+            NAV_CELL,
+        ),
+        shapes: 0,
+        found: Agreement::default(),
+        differing: Vec::new(),
+    };
     for ((rx, ry), terrain) in &terrains {
         for ty in 0..64 {
             for tx in 0..64 {
@@ -946,6 +1020,7 @@ pub fn build(
         if loc.z == 0 && is_blocking_object(&def) {
             block_model(
                 &mut collision_grid,
+                &mut height_build,
                 origin_tile_x,
                 origin_tile_y,
                 model,
@@ -970,6 +1045,7 @@ pub fn build(
             .map(|model| {
                 model_ground(
                     &collision_grid,
+                    &mut height_build,
                     origin_tile_x,
                     origin_tile_y,
                     &model,
@@ -1023,12 +1099,47 @@ pub fn build(
             standing: true,
         });
     }
-    let collision = WorldCollision::new(
+    let mut collision = WorldCollision::new(
         collision_grid,
         origin_tile_x,
         origin_tile_y,
         structure_ground,
     );
+
+    // Rough ground, stage 1: keep the height data and say how it compares
+    // with the walkable map. The ground's corner heights are handed over as
+    // whole numbers, in sixteenths of a unit.
+    let found = height_build.found;
+    if found.agrees() {
+        tracing::info!(
+            "height data: {} shapes over {} cells; it blocks the same {} cells as the walkable map",
+            height_build.shapes,
+            height_build.map.len(),
+            found.both
+        );
+    } else {
+        tracing::warn!(
+            "height data: {} shapes over {} cells; it DISAGREES with the walkable map: {} cells the same, {} only in the walkable map, {} only in the height data",
+            height_build.shapes,
+            height_build.map.len(),
+            found.both,
+            found.only_map,
+            found.only_heights
+        );
+        for line in &height_build.differing {
+            tracing::warn!("height data: {line}");
+        }
+    }
+    let ground = Ground::new(
+        size,
+        128,
+        height
+            .heights
+            .iter()
+            .map(|h| (h * rift_sim::heights::Q as f32).round() as i32)
+            .collect(),
+    );
+    collision.heights = Some(std::sync::Arc::new((height_build.map, ground)));
 
     let spawn_hint = map
         .lanes

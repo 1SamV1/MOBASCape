@@ -1,4 +1,5 @@
 pub mod grid;
+pub mod heights;
 pub mod motion;
 pub mod path;
 
