@@ -132,8 +132,7 @@ pub fn tint(rgb: [f32; 3], lightness: f32) -> [u8; 3] {
     rgb.map(|v| (v * k).round().clamp(0.0, 255.0) as u8)
 }
 
-/// Light on level ground. The game lights its ground a step brighter than its
-/// models, so a character stands out a little against the floor.
+/// The starting light for the ground, before the sun is counted.
 pub const GROUND_AMBIENT: f32 = 96.0;
 
 /// The lightness of one corner of the ground, from the heights of the four
@@ -141,9 +140,16 @@ pub const GROUND_AMBIENT: f32 = 96.0;
 /// `south`/`north` one tile either side along z, all in world units, as is
 /// `tile`, the width of a tile. A slope facing the sun brightens and one
 /// facing away darkens, by the same rule and the same sun as the models.
+///
+/// One thing differs from a model, and it is the game's own habit: the sun's
+/// height counts *against* the ground, not for it. Level ground therefore
+/// sits a little under its starting light (about 84), which is what keeps the
+/// game's grass a deep green and not a bright one.
 pub fn ground_lightness(west: f32, east: f32, south: f32, north: f32, tile: f32) -> f32 {
     let normal = unit([west - east, 2.0 * tile, south - north]);
-    GROUND_AMBIENT + SMOOTH_SWING * dot(unit(SUN), normal)
+    let sun = unit(SUN);
+    let across = sun[0] * normal[0] + sun[2] * normal[2];
+    GROUND_AMBIENT + SMOOTH_SWING * (across - sun[1] * normal[1])
 }
 
 /// A plain colour (0 to 255 a channel) under a given lightness, by the same
@@ -321,9 +327,12 @@ mod tests {
     }
 
     #[test]
-    fn level_ground_is_evenly_lit_and_a_step_brighter_than_a_model() {
+    fn level_ground_is_evenly_lit_at_the_games_own_level() {
         let level = ground_lightness(40.0, 40.0, 40.0, 40.0, 128.0);
-        assert!(level > GROUND_AMBIENT && level < GROUND_AMBIENT + 20.0);
+        assert!(
+            (level - 84.0).abs() < 1.0,
+            "the game lights level ground at about 84: {level}"
+        );
         assert_eq!(level, ground_lightness(900.0, 900.0, 900.0, 900.0, 128.0));
     }
 
@@ -354,9 +363,25 @@ mod tests {
         ];
         let faces = vec![[0, 1, 2], [0, 2, 3]];
         let model = light(&points, &faces).corners(0, faces[0], 0)[0];
+        // measured from each one's own level surface, so the game's different
+        // starting light for ground and model does not come into it; what is
+        // left over is the small part the sun's height plays
+        let level_ground = ground_lightness(0.0, 0.0, 0.0, 0.0, 128.0);
+        let flat = vec![
+            [0.0, 0.0, 0.0],
+            [1.0, 0.0, 0.0],
+            [1.0, 0.0, 1.0],
+            [0.0, 0.0, 1.0],
+        ];
+        let level_model = light(&flat, &faces).corners(0, faces[0], 0)[0];
+        let (ground, model) = (ground - level_ground, model - level_model);
         assert!(
-            ((ground - GROUND_AMBIENT) - (model - AMBIENT)).abs() < 0.01,
-            "the same slope moves both by the same amount: {ground} {model}"
+            ground > 20.0 && model > 20.0,
+            "both brighten: {ground} {model}"
+        );
+        assert!(
+            (ground - model).abs() < 6.0,
+            "and by nearly the same: {ground} {model}"
         );
     }
 
