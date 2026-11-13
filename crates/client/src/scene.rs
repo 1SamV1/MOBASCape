@@ -112,6 +112,10 @@ impl WorldCollision {
         self.grid.height()
     }
 
+    pub fn grid(&self) -> &Grid {
+        &self.grid
+    }
+
     pub fn origin_tile(&self) -> (i32, i32) {
         (self.origin_tile_x, self.origin_tile_y)
     }
@@ -151,26 +155,6 @@ impl WorldCollision {
             .skip(1)
             .map(|(tx, ty)| self.world_of_tile(tx, ty, height))
             .collect()
-    }
-
-    /// Move with axis-separated collision sliding. Used by hold-to-steer.
-    pub fn slide_move(&self, pos: Vec3, delta: Vec3, height: &HeightGrid) -> Vec3 {
-        let mut next = pos + delta;
-        if self.is_walkable_world(next.x, next.z) {
-            next.y = height.height_at(next.x, next.z);
-            return next;
-        }
-        next = pos + Vec3::new(delta.x, 0.0, 0.0);
-        if self.is_walkable_world(next.x, next.z) {
-            next.y = height.height_at(next.x, next.z);
-            return next;
-        }
-        next = pos + Vec3::new(0.0, 0.0, delta.z);
-        if self.is_walkable_world(next.x, next.z) {
-            next.y = height.height_at(next.x, next.z);
-            return next;
-        }
-        pos
     }
 }
 

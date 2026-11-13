@@ -20,6 +20,21 @@ pub struct ChampionConfig {
     pub e_heal: f32,
     pub e_shield: f32,
     pub w_distance: f32,
+    /// Seconds to turn half way round. See docs/MOVEMENT.md. Absent or zero
+    /// keeps the old instant behaviour, for each of the four below.
+    #[serde(default)]
+    pub turn_time: f32,
+    /// Seconds from standing to top speed.
+    #[serde(default)]
+    pub accel_time: f32,
+    /// Seconds from top speed to standing.
+    #[serde(default)]
+    pub stop_time: f32,
+    /// World units covered in one pass of the walk animation. Absent or zero
+    /// uses top speed times the walk cycle's length, which plays the walk at
+    /// its authored rate at top speed.
+    #[serde(default)]
+    pub stride: f32,
 }
 
 impl ChampionConfig {

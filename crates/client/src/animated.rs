@@ -4,6 +4,7 @@ use rift_cache::{AnimationClip, Cache, Model, model::hsl_to_rgb};
 
 use crate::champion::ChampionConfig;
 use crate::items::ItemConfig;
+use crate::movement::{ChampionMotion, Driven, Wish};
 use crate::scene::{
     CampBuff, HeightGrid, SceneData, StructureKind, Vertex, WorldCollision, model_vertex_animated,
 };
@@ -176,6 +177,11 @@ pub struct AnimatedScene {
     pub vision_origin: (i32, i32),
     pub team_buffs: [Option<TeamBuff>; 2],
     pub champion_name: String,
+    /// The player's champion, moved by the simulation (docs/MOVEMENT.md).
+    player_motion: ChampionMotion,
+    /// The direction held this frame, if any. `steer_player` sets it and the
+    /// player update spends it, so the champion is moved once a frame.
+    steer: Option<Vec3>,
     melee_template: MinionTemplate,
     ranged_template: MinionTemplate,
 }
@@ -386,6 +392,20 @@ impl AnimatedScene {
             tiles: vec![false; (scene.collision.width() * scene.collision.height()) as usize],
         };
 
+        let walk_loop_ms = units[player_index]
+            .walk
+            .as_ref()
+            .map(|clip| {
+                clip.sequence
+                    .frame_lengths
+                    .iter()
+                    .map(|&l| l.max(1) as u32)
+                    .sum::<u32>() as f32
+                    * 20.0
+            })
+            .unwrap_or(0.0);
+        let player_motion =
+            ChampionMotion::new(champion, walk_loop_ms, scene.player_spawn, &scene.collision);
         let mut animated = Self {
             units,
             player_index,
@@ -411,6 +431,8 @@ impl AnimatedScene {
             vision_origin: (vision_origin_x, vision_origin_y),
             team_buffs: [None, None],
             champion_name: champion.name.clone(),
+            player_motion,
+            steer: None,
             melee_template,
             ranged_template,
         };
@@ -581,27 +603,98 @@ impl AnimatedScene {
     pub fn steer_player(
         &mut self,
         direction: Vec3,
-        dt: f32,
-        height: &HeightGrid,
-        collision: &WorldCollision,
+        _dt: f32,
+        _height: &HeightGrid,
+        _collision: &WorldCollision,
     ) {
-        let speed_mult = self.team_speed_mult(self.units[self.player_index].team);
         let unit = &mut self.units[self.player_index];
         unit.path.clear();
         unit.path_index = 0;
         unit.target = None;
         unit.attack_target = None;
         let flat = Vec3::new(direction.x, 0.0, direction.z);
-        if flat.length_squared() < 1e-6 {
-            unit.moving = false;
-            return;
+        // the player update moves the champion, once, with this direction
+        self.steer = (flat.length_squared() >= 1e-6).then_some(flat);
+    }
+
+    /// Move the player's champion one frame toward `wish` and put the result
+    /// on its unit.
+    fn drive_player(
+        &mut self,
+        dt: f32,
+        wish: Wish,
+        speed_mult: f32,
+        height: &HeightGrid,
+        collision: &WorldCollision,
+    ) -> Driven {
+        let unit = &mut self.units[self.player_index];
+        let out = self.player_motion.drive(
+            dt, wish, unit.speed, speed_mult, unit.pos, unit.yaw, collision,
+        );
+        unit.pos = Vec3::new(out.x, height.height_at(out.x, out.z), out.z);
+        unit.yaw = out.yaw;
+        unit.moving = out.moving;
+        if out.moving {
+            // the walk cycle follows the ground covered, not the clock; the
+            // unit loop adds the clock's share to every unit, so take it back
+            if let Some(ms) = self.player_motion.walk_ms_for(out.moved) {
+                unit.anim_time_ms += ms - dt * 1000.0;
+            }
         }
-        let dir = flat.normalize();
-        let next = collision.slide_move(unit.pos, dir * unit.speed * speed_mult * dt, height);
-        let moved = next.distance(unit.pos) > 0.01;
-        unit.pos = next;
-        unit.yaw = dir.x.atan2(dir.z);
-        unit.moving = moved;
+        out
+    }
+
+    /// Follow the player's path: pass its middle waypoints at speed, stop on
+    /// its last, and ask for a new path if the way is lost.
+    fn drive_player_path(
+        &mut self,
+        dt: f32,
+        speed_mult: f32,
+        height: &HeightGrid,
+        collision: &WorldCollision,
+    ) {
+        const REACH: f32 = 56.0;
+        let pi = self.player_index;
+        let (next, last) = {
+            let unit = &mut self.units[pi];
+            while unit.path_index + 1 < unit.path.len() {
+                let waypoint = unit.path[unit.path_index];
+                let flat = Vec3::new(waypoint.x - unit.pos.x, 0.0, waypoint.z - unit.pos.z);
+                if flat.length() > REACH {
+                    break;
+                }
+                unit.path_index += 1;
+            }
+            (
+                unit.path.get(unit.path_index).copied(),
+                unit.path_index + 1 >= unit.path.len(),
+            )
+        };
+        let Some(target) = next else {
+            self.drive_player(dt, Wish::Rest, speed_mult, height, collision);
+            return;
+        };
+        let out = self.drive_player(
+            dt,
+            Wish::Seek {
+                target,
+                arrive: last,
+            },
+            speed_mult,
+            height,
+            collision,
+        );
+        let unit = &mut self.units[pi];
+        if out.arrived {
+            unit.path.clear();
+            unit.path_index = 0;
+            unit.target = None;
+        } else if out.stuck {
+            if let Some(goal) = unit.path.last().copied() {
+                unit.path = collision.path_world(unit.pos, goal, height);
+                unit.path_index = 0;
+            }
+        }
     }
 
     pub fn cast_q(&mut self, target: Vec3) -> bool {
@@ -891,6 +984,7 @@ impl AnimatedScene {
     fn update_player(&mut self, dt: f32, height: &HeightGrid, collision: &WorldCollision) {
         let pi = self.player_index;
         let speed_mult = self.team_speed_mult(0);
+        let steer = self.steer.take();
         if self.units[pi].health <= 0.0 {
             self.units[pi].dead_timer -= dt;
             if self.units[pi].dead_timer <= 0.0 {
@@ -904,6 +998,11 @@ impl AnimatedScene {
                 unit.path_index = 0;
                 unit.moving = false;
             }
+            return;
+        }
+
+        if let Some(direction) = steer {
+            self.drive_player(dt, Wish::Steer(direction), speed_mult, height, collision);
             return;
         }
 
@@ -927,17 +1026,21 @@ impl AnimatedScene {
                         unit.path = collision.path_world(player_pos, target_pos, height);
                         unit.path_index = 0;
                     }
-                    follow_path(unit, dt, height, speed_mult);
+                    self.drive_player_path(dt, speed_mult, height, collision);
                 } else {
+                    // stop and turn to face the target; the blow waits until
+                    // the champion has come round to it
+                    let dir = target_pos - player_pos;
+                    let wish = if dir.length_squared() > 1e-6 {
+                        Wish::Face(dir.x.atan2(dir.z))
+                    } else {
+                        Wish::Rest
+                    };
+                    let facing = self.drive_player(dt, wish, speed_mult, height, collision);
                     let unit = &mut self.units[pi];
                     unit.path.clear();
                     unit.path_index = 0;
-                    unit.moving = false;
-                    let dir = target_pos - player_pos;
-                    if dir.length_squared() > 1e-6 {
-                        unit.yaw = dir.x.atan2(dir.z);
-                    }
-                    if unit.attack_cooldown <= 0.0 {
+                    if facing.facing_error < 0.35 && unit.attack_cooldown <= 0.0 {
                         unit.attack_cooldown = unit.attack_interval;
                         let damage = unit.attack_damage;
                         let ranged = unit.ranged_auto;
@@ -967,10 +1070,10 @@ impl AnimatedScene {
             }
         }
 
-        let unit = &mut self.units[pi];
-        unit.moving = false;
-        if !unit.path.is_empty() {
-            follow_path(unit, dt, height, speed_mult);
+        if self.units[pi].path.is_empty() {
+            self.drive_player(dt, Wish::Rest, speed_mult, height, collision);
+        } else {
+            self.drive_player_path(dt, speed_mult, height, collision);
         }
     }
 
@@ -1671,36 +1774,6 @@ fn load_unit(
         w_distance: 0.0,
         ability_power: 0.0,
     })
-}
-
-fn follow_path(unit: &mut AnimatedUnit, dt: f32, height: &HeightGrid, speed_mult: f32) {
-    let mut budget = unit.speed * speed_mult * dt;
-    unit.moving = false;
-    while budget > 0.0 && unit.path_index < unit.path.len() {
-        let waypoint = unit.path[unit.path_index];
-        let delta = waypoint - unit.pos;
-        let distance = delta.length();
-        if distance <= budget.max(4.0) {
-            unit.pos = waypoint;
-            unit.path_index += 1;
-            budget = (budget - distance).max(0.0);
-            unit.moving = true;
-            if unit.path_index >= unit.path.len() {
-                unit.path.clear();
-                unit.path_index = 0;
-                unit.target = None;
-                unit.moving = false;
-                break;
-            }
-        } else {
-            let dir = delta / distance;
-            unit.pos += dir * budget;
-            unit.pos.y = height.height_at(unit.pos.x, unit.pos.z);
-            unit.yaw = dir.x.atan2(dir.z);
-            unit.moving = true;
-            budget = 0.0;
-        }
-    }
 }
 
 fn append_unit(scene: &mut AnimatedScene, unit: &AnimatedUnit, positions: &[[f32; 3]]) {

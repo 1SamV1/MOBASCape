@@ -1,6 +1,15 @@
 # Movement
 
-Status: **proposed design. Nothing in this document is implemented.**
+Status: **design proposed; locomotion implemented for the player's champion.**
+
+Built so far (`crates/sim/src/motion.rs`, `crates/client/src/movement.rs`):
+turn time, acceleration time, stopping time, the slow-while-turning rule, the
+30 Hz integer tick with drawing between ticks, and a walk cycle driven by
+distance. An attack now waits until the champion has turned to face its
+target.
+
+Not built yet: attack wind-up, live reload of champion files, the `--lab`
+mode, recording and replay, and any of this for minions.
 
 Moving a champion is what a player does every second of a match. If it does
 not feel good with nothing else on screen, no later system will fix it. This
@@ -76,7 +85,11 @@ tuning, not measurements, and they are meant to be changed by playing.
 | `accel_time` | 0.10 | 0.30 | 0.20 |
 | `stop_time` | 0.05 | 0.20 | 0.25 |
 | `attack_windup` | 0.25 | 0.50 | 0.30 |
-| `stride` | tune to model | tune to model | tune to model |
+| `stride` | default | default | default |
+
+Left out, `stride` defaults to top speed times the length of the walk cycle,
+which plays the walk at its authored rate at top speed. Set it only where a
+champion's feet visibly slide.
 
 The point of three is contrast. If two of them feel alike, one is wrong.
 
@@ -97,6 +110,31 @@ The point of three is contrast. If two of them feel alike, one is wrong.
    `speed`; they never write over a champion's own values.
 6. **No value is typed into code.** Every number above lives in the champion
    file and reloads while the game runs.
+
+## The tick rate is not baked in
+
+The simulation runs at 30 ticks a second today (ADR-009). That number is one
+constant, `TICK_HZ` in `crates/sim/src/motion.rs`. Every value a champion
+carries is in seconds or in units per second and is converted there, so the
+rate can be changed without touching the movement model or any champion file.
+
+Measured, the same heavy champion (speed 350, turn 0.45 s, acceleration
+0.30 s, stop 0.20 s) at four rates:
+
+| Rate | To top speed | Half turn | Covered in 2 s | Carried through a reversal |
+|---|---|---|---|---|
+| 20 Hz | 0.35 s | 0.50 s | 656 | 21.8 |
+| 30 Hz | 0.33 s | 0.47 s | 653 | 24.5 |
+| 60 Hz | 0.32 s | 0.47 s | 650 | 27.4 |
+| 120 Hz | 0.32 s | 0.46 s | 646 | 28.7 |
+
+Timings agree to within a tick and distances to within 2%. The arc of a
+reversal shifts by a few world units, because at a lower rate the champion
+comes round in bigger steps. So a change of rate needs a light retune of turn
+times, not a rewrite. `a_champion_moves_the_same_whatever_rate_the_simulation_runs_at`
+in `crates/sim/tests/motion.rs` holds these bounds.
+
+The rate itself is still an open decision. Thirty is the working value.
 
 ## The movement lab
 

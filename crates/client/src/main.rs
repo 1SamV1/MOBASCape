@@ -2,6 +2,7 @@ mod animated;
 mod champion;
 mod hud;
 mod items;
+mod movement;
 mod renderer;
 mod scene;
 
