@@ -1,11 +1,9 @@
 # Interface
 
-Status: **design approved with clarifications, and frozen. Stage 1 has
-passed. Stage 2 (the interface renderer) is authorised and written, and has
-not passed: its drawing is tested pixel by pixel without a graphics card,
-and the pass that puts it on screen is untested until its test screen has
-been run in the game and looked at. Nothing else is built.** Stage 3 is not
-authorised. Each
+Status: **design approved with clarifications, and frozen. Stages 1 and 2
+have passed and are frozen with it. Nothing else is built.** Stage 3 (the
+static interface) is not authorised: it waits on the reference screenshots
+being adopted and on its own plan being reviewed. `hud.rs` is untouched. Each
 later stage needs its own go-ahead after the stage before it has passed its
 check. A change to this document is a design change and is reviewed like one.
 
@@ -387,6 +385,39 @@ window resized through those sizes and dragged smaller than 640 by 360:
 - nothing shimmers, blurs or moves by a part of a pixel while resizing.
 
 The old interface in `hud.rs` is untouched and still drawn.
+
+**Passed.** Run on the user's machine (Intel HD 620, DirectX 12, a 1920 by
+1080 screen at 175% scaling), with the test screen over a live match:
+
+- The client compiled and the pass ran at the first attempt. The theme was
+  made from the real cache: one atlas of 256 by 256, four fonts, a panel
+  and a sprite. The game's scene and play were unchanged under it.
+- Full-size screenshots at scales 1, 2, 3 and 4. At 2, 3 and 4 the inside of
+  the largest panel was measured: every block of 2 by 2, 3 by 3 and 4 by 4
+  screen pixels (11,050, 11,220 and 11,050 blocks) is one colour, so each
+  pixel of the atlas is exactly one square of the scale's size. Scale 1 was
+  judged by eye, enlarged.
+- At every scale: the three panels have the same corners and unbroken
+  edges; every font's line stands on its baseline; the clipped panel and
+  its writing stop at the frame; the scene, including a tower, a crystal
+  and units, shows through the see-through rectangles, with red over blue.
+- The window was dragged through about 170 sizes at a forced scale of 2,
+  from 2240 by 1260 down to 593 by 368 and back, with pieces clipped away
+  and returning and nothing lost. The pinned pieces were at their corners
+  and edges in every screenshot, at seven window sizes.
+- Left to itself the scale followed the window: 3 at 2240 by 1260, 2 at 1811
+  by 1040, and, dragged smaller, 2 at 1531 by 729 and 1 at 1506 by 709, the
+  step falling exactly where the height goes under 720.
+
+Not done: scale 4 chosen by the window itself, which needs 2560 by 1440 and
+more screen than the machine has; it was seen forced. The see-through
+rectangles are a shade lighter on screen than in the reference rasteriser,
+as expected, since the graphics card mixes light.
+
+Known and left: the test screen's own layout crowds at scales 1 and 4 (the
+row of sprites is drawn at fixed sizes and runs into the font lines), and
+its first line is hard to read over the old health bars. Neither is the
+renderer, and the test screen is not kept by stage 3.
 
 ### Stage 3: static HUD
 
