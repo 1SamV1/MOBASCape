@@ -11,6 +11,11 @@ current code is a single-process viewer.
   The server and client run the same movement code for prediction.
 - **Fog is a server rule.** The server never sends an entity a team cannot see.
   Client-side fog is presentation, not security.
+- **Roles (proposed).** Every connection is a `Player` or a `Spectator`.
+  Spectators never send commands and receive full state through a relay,
+  behind a per-match delay. See [SPECTATING.md](SPECTATING.md).
+- **Recorded (proposed).** The match loop runs through a recorder; a match
+  that does not replay to the same state hashes is a bug.
 - **Bots are dev-only.** A production match requires 10 human clients.
 
 ## Tick rates
