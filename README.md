@@ -120,6 +120,7 @@ commands, and how to contribute without breaking determinism or leaking assets.
 - [docs/MAP_FORMAT.md](docs/MAP_FORMAT.md)
 - [docs/NETCODE.md](docs/NETCODE.md)
 - [docs/SPECTATING.md](docs/SPECTATING.md)
+- [docs/MOVEMENT.md](docs/MOVEMENT.md)
 - [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md)
 - [docs/DECISIONS.md](docs/DECISIONS.md)
 

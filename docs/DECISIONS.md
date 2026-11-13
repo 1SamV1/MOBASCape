@@ -242,3 +242,18 @@ point, on the render loop. Spectating, replays and multiplayer all need it in
 Consequences: the simulation tick, state hash and recorder come next, and
 match systems move across one at a time, each with a replay test. See the
 path in SPECTATING.md.
+
+## ADR-023 — Movement is finished first, per champion, before more is built on it
+
+**Status:** proposed.
+
+Champions currently move at a fixed speed and face their direction of travel
+instantly. Movement is what a player does every second, so it is built to feel
+right before attacks, abilities and items are layered on. The target is weight:
+turn time, acceleration, stopping, attack wind-up and distance-driven walk
+animation, each a value in the champion's data file.
+
+Consequences: movement becomes the first system in the simulation tick
+(ADR-022); a `--lab` mode exists for tuning; the checklist in
+[MOVEMENT.md](MOVEMENT.md) must be complete, including a sign-off by play,
+before combat is built on the new movement.
