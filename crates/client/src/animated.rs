@@ -1782,8 +1782,15 @@ fn load_unit(
     })
 }
 
+/// The game's models are built facing down their own -z axis: at the game's
+/// angle 0 a character looks south. `unit.yaw` is the heading the unit travels
+/// and attacks along, measured from +z, so the body needs this half turn to
+/// put its face, and not its back, on that heading. Drawing only: `unit.yaw`
+/// and everything the match measures are untouched.
+const MODEL_FORWARD_TURN: f32 = std::f32::consts::PI;
+
 fn append_unit(scene: &mut AnimatedScene, unit: &AnimatedUnit, positions: &[[f32; 3]]) {
-    let rot = Mat3::from_rotation_y(unit.yaw);
+    let rot = Mat3::from_rotation_y(unit.yaw + MODEL_FORWARD_TURN);
     let light = Vec3::new(0.35, 0.85, 0.4).normalize();
     // the body is drawn lifted; its ring, bars and everything the match
     // measures stay on the ground at `unit.pos`
