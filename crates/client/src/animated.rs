@@ -1,6 +1,9 @@
 use anyhow::Result;
 use glam::{Mat3, Vec3};
-use rift_cache::{AnimationClip, Cache, Model, model::hsl_to_rgb};
+use rift_cache::{
+    AnimationClip, Cache, Model,
+    light::{light, shade, tint},
+};
 
 use crate::champion::ChampionConfig;
 use crate::items::ItemConfig;
@@ -1791,19 +1794,28 @@ const MODEL_FORWARD_TURN: f32 = std::f32::consts::PI;
 
 fn append_unit(scene: &mut AnimatedScene, unit: &AnimatedUnit, positions: &[[f32; 3]]) {
     let rot = Mat3::from_rotation_y(unit.yaw + MODEL_FORWARD_TURN);
-    let light = Vec3::new(0.35, 0.85, 0.4).normalize();
     // the body is drawn lifted; its ring, bars and everything the match
     // measures stay on the ground at `unit.pos`
     let base = unit.pos + Vec3::Y * unit.lift;
 
-    for (face_idx, &[a, b, c]) in unit.model.faces.iter().enumerate() {
-        let pa = model_vertex_animated(positions, a as usize, base, rot, unit.scale);
-        let pb = model_vertex_animated(positions, b as usize, base, rot, unit.scale);
-        let pc = model_vertex_animated(positions, c as usize, base, rot, unit.scale);
+    // every corner once, turned and scaled but not yet moved to where the unit
+    // stands: light depends on which way a surface faces, not on where it is
+    let local: Vec<Vec3> = (0..positions.len())
+        .map(|i| model_vertex_animated(positions, i, Vec3::ZERO, rot, unit.scale))
+        .collect();
+    let points: Vec<[f32; 3]> = local.iter().map(|p| p.to_array()).collect();
+    let lit = light(&points, &unit.model.faces);
+    let corner = |i: u32| base + local.get(i as usize).copied().unwrap_or(Vec3::ZERO);
 
-        let normal = (pb - pa).cross(pc - pa).normalize_or_zero();
-        let ndotl = normal.dot(light).clamp(0.0, 1.0);
-        let brightness = 0.62 + 0.22 * (1.0 - ndotl);
+    for (face_idx, &face) in unit.model.faces.iter().enumerate() {
+        let [a, b, c] = face;
+        let render_type = unit
+            .model
+            .face_render_types
+            .get(face_idx)
+            .copied()
+            .unwrap_or(0);
+        let lightness = lit.corners(face_idx, face, render_type);
 
         let textured = unit
             .model
@@ -1811,37 +1823,40 @@ fn append_unit(scene: &mut AnimatedScene, unit: &AnimatedUnit, positions: &[[f32
             .as_ref()
             .and_then(|t| t.get(face_idx))
             .is_some_and(|&t| t >= 0);
-        let mut rgb = if unit.kind == UnitKind::Tower {
-            [
-                (125.0 * brightness) as u8,
-                (117.0 * brightness) as u8,
-                (102.0 * brightness) as u8,
-            ]
-        } else if textured || unit.model.face_colors[face_idx] == 127 {
-            [
-                (48.0 * brightness) as u8,
-                (95.0 * brightness) as u8,
-                (42.0 * brightness) as u8,
-            ]
-        } else {
-            hsl_to_rgb(unit.model.face_colors[face_idx], brightness)
+        let paint = |lightness: f32| -> [u8; 3] {
+            let mut rgb = if unit.kind == UnitKind::Tower {
+                tint([125.0, 117.0, 102.0], lightness)
+            } else if textured || unit.model.face_colors[face_idx] == 127 {
+                tint([48.0, 95.0, 42.0], lightness)
+            } else {
+                shade(unit.model.face_colors[face_idx], lightness)
+            };
+            if matches!(unit.kind, UnitKind::Nexus | UnitKind::Inhibitor) && unit.team == 1 {
+                rgb[0] = rgb[0].saturating_add(90);
+                rgb[1] = (rgb[1] as f32 * 0.5) as u8;
+                rgb[2] = (rgb[2] as f32 * 0.8) as u8;
+            }
+            if unit.hit_flash > 0.0 {
+                rgb[0] = 255;
+                rgb[1] = (rgb[1] as f32 * 0.55) as u8;
+                rgb[2] = (rgb[2] as f32 * 0.55) as u8;
+            }
+            rgb
         };
-        if matches!(unit.kind, UnitKind::Nexus | UnitKind::Inhibitor) && unit.team == 1 {
-            rgb[0] = rgb[0].saturating_add(90);
-            rgb[1] = (rgb[1] as f32 * 0.5) as u8;
-            rgb[2] = (rgb[2] as f32 * 0.8) as u8;
-        }
-        if unit.hit_flash > 0.0 {
-            rgb[0] = 255;
-            rgb[1] = (rgb[1] as f32 * 0.55) as u8;
-            rgb[2] = (rgb[2] as f32 * 0.55) as u8;
-        }
 
-        let base = scene.vertices.len() as u32;
-        scene.vertices.push(Vertex::new(pa, rgb));
-        scene.vertices.push(Vertex::new(pb, rgb));
-        scene.vertices.push(Vertex::new(pc, rgb));
-        scene.indices.extend_from_slice(&[base, base + 1, base + 2]);
+        let first = scene.vertices.len() as u32;
+        scene
+            .vertices
+            .push(Vertex::new(corner(a), paint(lightness[0])));
+        scene
+            .vertices
+            .push(Vertex::new(corner(b), paint(lightness[1])));
+        scene
+            .vertices
+            .push(Vertex::new(corner(c), paint(lightness[2])));
+        scene
+            .indices
+            .extend_from_slice(&[first, first + 1, first + 2]);
     }
 }
 

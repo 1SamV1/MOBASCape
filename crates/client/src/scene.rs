@@ -5,7 +5,7 @@ use anyhow::{Context, Result};
 use glam::{Mat3, Vec2, Vec3};
 use rift_cache::{
     Cache, Locations, Model, ObjectDefinition, OverlayDefinition, Terrain, UnderlayDefinition,
-    model::hsl_to_rgb,
+    light::{light, shade, tint},
 };
 use rift_sim::{Grid, find_path, simplify_path};
 use serde::Deserialize;
@@ -992,42 +992,39 @@ fn append_model(mesh: &mut MeshData, model: &Model, base: Vec3, angle: f32) {
 
 fn append_model_scaled(mesh: &mut MeshData, model: &Model, base: Vec3, angle: f32, scale: f32) {
     let rot = Mat3::from_rotation_y(angle);
-    let light = Vec3::new(0.35, 0.85, 0.4).normalize();
 
-    for (face_idx, &[a, b, c]) in model.faces.iter().enumerate() {
-        let pa = model_vertex_scaled(model, a as usize, base, rot, scale);
-        let pb = model_vertex_scaled(model, b as usize, base, rot, scale);
-        let pc = model_vertex_scaled(model, c as usize, base, rot, scale);
+    // every corner once, turned and scaled but not yet moved into place: light
+    // depends on which way a surface faces, not on where it is
+    let local: Vec<Vec3> = (0..model.vertex_count)
+        .map(|i| model_vertex_scaled(model, i, Vec3::ZERO, rot, scale))
+        .collect();
+    let points: Vec<[f32; 3]> = local.iter().map(|p| p.to_array()).collect();
+    let lit = light(&points, &model.faces);
+    let corner = |i: u32| base + local.get(i as usize).copied().unwrap_or(Vec3::ZERO);
 
-        let normal = (pb - pa).cross(pc - pa).normalize_or_zero();
-        let ndotl = normal.dot(light).clamp(0.0, 1.0);
-        let brightness = 0.62 + 0.22 * (1.0 - ndotl);
+    for (face_idx, &face) in model.faces.iter().enumerate() {
+        let [a, b, c] = face;
+        let render_type = model.face_render_types.get(face_idx).copied().unwrap_or(0);
+        let lightness = lit.corners(face_idx, face, render_type);
 
         let textured = model
             .face_textures
             .as_ref()
             .and_then(|t| t.get(face_idx))
             .is_some_and(|&t| t >= 0);
-        let rgb = if textured || model.face_colors[face_idx] == 127 {
-            let n = model
-                .face_normals
-                .get(face_idx)
-                .copied()
-                .unwrap_or([0.0, 1.0, 0.0]);
-            let leaf = [38.0 + n[1] * 16.0, 82.0 + n[1] * 22.0, 34.0];
-            [
-                (leaf[0] * brightness) as u8,
-                (leaf[1] * brightness) as u8,
-                (leaf[2] * brightness) as u8,
-            ]
-        } else {
-            hsl_to_rgb(model.face_colors[face_idx], brightness)
+        let paint = |lightness: f32| -> [u8; 3] {
+            if textured || model.face_colors[face_idx] == 127 {
+                // a stand-in leaf green until textures are drawn
+                tint([46.0, 93.0, 34.0], lightness)
+            } else {
+                shade(model.face_colors[face_idx], lightness)
+            }
         };
 
         mesh.push_triangle(
-            Vertex::new(pa, rgb),
-            Vertex::new(pb, rgb),
-            Vertex::new(pc, rgb),
+            Vertex::new(corner(a), paint(lightness[0])),
+            Vertex::new(corner(b), paint(lightness[1])),
+            Vertex::new(corner(c), paint(lightness[2])),
         );
     }
 }

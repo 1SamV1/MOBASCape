@@ -4,6 +4,7 @@ pub mod config;
 pub mod error;
 pub mod group;
 pub mod keys;
+pub mod light;
 pub mod locations;
 pub mod model;
 pub mod reference;
