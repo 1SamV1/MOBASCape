@@ -12,8 +12,11 @@ INV = (144, 160)      # our six slots (proposal, from parts); the reference's pa
 # names, a line of one word under each name, three lane lines, a rule, six objective lines and one second line,
 # at 24 a line. Ours has the same title, names, lane lines, rule and six lines, no word line and no second line
 # in its usual state: 350 less two lines.
-OBJ = 302
-OBJ_MAX = 398         # with a second line under each of the four camps: the largest stage 3 shows (the reference reaches about 400)
+OBJ_HEAD, OBJ_LINE = 158, 24            # title, team names, three lane lines, rule and edges; then 24 for every line
+def obj_height(lines, second_lines): return OBJ_HEAD + OBJ_LINE * (lines + second_lines)
+OBJ_LINES, OBJ_SECOND = 6, 4            # what the game has today: two nexus lines and four camps; a second line under each camp
+OBJ = obj_height(OBJ_LINES, 0)          # 302, the usual list
+OBJ_MAX = obj_height(OBJ_LINES, OBJ_SECOND)   # 398, the longest the game can show today. Not a permanent limit: it follows the two counts
 CHAT_MIN = 280
 CHAT_LINE_MIN = 200   # the chat's last line alone may be narrower still
 def layout(W, H, s, st, slide):
@@ -48,6 +51,10 @@ def clashes(r, W, H, s):
             # is b's first less a's last. Less than the clearance is a clash; exactly the clearance is not.
             if inter((a[0] - g, a[1] - g, a[2] + g, a[3] + g), b):
                 out.append((n[i], n[j]))
+    # The target panel's place is kept for it whether or not it is showing: a list of objectives taller than its
+    # title may not start above 8 below where the target panel ends. So the list can never grow into that place.
+    o = r.get('objectives')
+    if o and o[3] - o[1] > 24 * s and o[1] < (82 + 158 + GAP) * s and 'target' not in r: out.append(('objectives', 'target'))
     return out
 def unique(rects, W, H):
     xs = sorted({v for a in rects for v in (a[0], a[2])}); ys = sorted({v for a in rects for v in (a[1], a[3])}); area = 0
@@ -120,7 +127,8 @@ def collapse(W, H, s, want, budget, slide):
             if not bad(Rr): break
         if st['feed'] < want['feed']: steps.append(f"kill feed to {st['feed']} entr{'y' if st['feed'] == 1 else 'ies'}")
     return steps, st, clashes(lay(), W, H, s)
-if __name__ == '__main__':
+def main():
+    global OBJ, OBJ_MAX, USUAL, BUSY
     SIZES = [(1280, 720), (1366, 768), (1600, 900), (1920, 1080), (2560, 1440), (3200, 1800), (3840, 2160)]
     SHAPES = [(2560, 1080, 'wide, 21:9'), (3440, 1440, 'wide, 21:9'), (5120, 1440, 'very wide, 32:9'), (1920, 1200, '16:10'), (1600, 1200, '4:3'), (1280, 1024, '5:4'), (1024, 768, '4:3, under the smallest supported'), (1080, 1920, 'tall, 9:16'), (1440, 2560, 'tall, 9:16')]
     print('--- 1. rectangles at 1920x1080, scale 1, everything showing (compare with the measurements)')
@@ -203,3 +211,21 @@ if __name__ == '__main__':
     print(f"   chat starts at {r['chat'][1]}; the objectives, {OBJ_MAX * s} tall, must start no lower than {r['chat'][1] - g - OBJ_MAX * s}")
     print(f"   short by {r['target'][3] + g - (r['chat'][1] - g - OBJ_MAX * s)}; clashes at scale 2: {clashes(r, W, H, s)}")
     print(f"   least height for scale 2 by clashes alone, any width: {next(h for h in range(1000, 2400) if not clashes(layout(6000, h, 2, BUSY, False), 6000, h, 2))}")
+    print('--- 12. if the game gains objectives: each one more line, and (taking the worst) one more second line')
+    print('   the heights, fit and scale all follow the counts; nothing here is a fixed 398')
+    keep = (OBJ, OBJ_MAX, USUAL, BUSY)
+    for extra in range(0, 9):
+        OBJ, OBJ_MAX = obj_height(OBJ_LINES + extra, 0), obj_height(OBJ_LINES + extra, OBJ_SECOND + extra)
+        USUAL = dict(keep[2], obj_h=OBJ); BUSY = dict(keep[3], obj_h=OBJ_MAX)
+        least = next(H for H in range(400, 2400) if not clashes(layout(2400, H, 1, BUSY, False), 2400, H, 1))
+        W1 = next(W for W in range(1000, 8000, 2) if fits_full(W, W * 9 // 16, 1, 0.25))
+        row = []
+        for W, H in ((1920, 1080), (2560, 1440), (3840, 2160)):
+            sc = choose_scale(W, H, 0.25); steps, end, left = collapse(W, H, sc, BUSY, 0.25, True)
+            o = layout(W, H, sc, end, True)['objectives']
+            how = ('longest in full, top ' + str(o[1] // sc) if end['obj_h'] == OBJ_MAX else
+                   'usual in full, longest to its title' if end['obj_h'] == 24 and 'objectives, when long, to its title' in steps else 'title only')
+            row.append(f"{W}x{H} scale {sc} {how}, target panel {'shown' if end['target'] else 'NOT SHOWN'}{' CLASH' if left else ''}")
+        print(f"   +{extra}: usual {OBJ}, longest {OBJ_MAX}; least height by clashes {least}; all fits at scale 1 from {W1}x{W1 * 9 // 16}; " + '; '.join(row))
+    OBJ, OBJ_MAX, USUAL, BUSY = keep
+if __name__ == '__main__': main()

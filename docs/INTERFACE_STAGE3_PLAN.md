@@ -564,15 +564,53 @@ stage 4. Sizes are at scale 1.
   - *Second lines only under camps*, saying whose buff is running and for
     how long. The reference's dragon line always has one (a count of
     kills for each team); we have no objective that keeps such a count.
-- **If the game later gains objectives**, each is one more line, and the
-  panel grows by 24 for each. It is never scrolled and lines are never
-  dropped to keep a size. The room it has at 1920 by 1080 is from 410 to
-  922 (8 above the chat), 512: eight more lines than the usual list, four
-  more than the longest. Past that the top moves up towards the target
-  panel, as the anchor already says, and where even that is not enough the
-  list goes to its title, which is the existing rule. A list that needed
-  that at 1920 by 1080 would be a new design question and would come back
-  for review, not be solved by shrinking text.
+- **398 is the longest list the game can show today. It is not a permanent
+  limit, and nothing in the layout is to be written as if it were.** The
+  rule for a list that grows:
+  1. **Height follows the counts.** The panel is 158 (title, team names,
+     lane lines, rule and edges) plus 24 for every objective line and 24
+     for every second line. Today that is six lines and up to four second
+     lines: 302 and 398. The Rust code works the height out from the
+     counts; no 302 or 398 is written into it.
+  2. **Fit and scale use the real counts.** The "largest state" that the
+     choice of scale and every clash test use is the game's actual list of
+     objectives with every second line it can have showing. It comes from
+     the game's own list of objectives, which is fixed for a match, so the
+     scale cannot change in the middle of one. Add an objective and the
+     thresholds move by themselves.
+  3. **Lines are 24 and stay 24.** The panel is never scrolled, never
+     clipped, never drawn outside its rectangle, lines are never dropped,
+     and neither the pitch nor the font is changed to make a list fit.
+  4. **The target panel's place is kept for it**, showing or not: a list
+     taller than its title never starts higher than 8 below where the
+     target panel ends. A growing list cannot take that place.
+  5. **When it does not fit, in this order, each already a rule of this
+     plan:** its top moves up from 38% towards the target panel's place;
+     then a scale at which the longest list does not fit is not chosen
+     (section 2); then, at scale 1, a list too long for the room at that
+     moment is shown as its title and comes back in full the moment it
+     fits (section 7, pass 2); and if even the usual list does not fit,
+     it is the title in pass 1.
+  6. **A test that fails first.** Step B has a test, run on the game's real
+     counts, that at 1920 by 1080 and scale 1 the longest list shows in
+     full with the target panel open. Whoever adds the objective that
+     breaks it gets a failing test, and the panel's design comes back for
+     review; it is not left to the collapse rule to hide quietly.
+
+  What that gives, from the script, if objectives are added and each has a
+  second line (the worst case):
+
+  | Added | Usual | Longest | All fits at scale 1 from | At 1920 by 1080 | At 3840 by 2160 |
+  |---|---|---|---|---|---|
+  | none | 302 | 398 | 1562 by 878 | longest in full, top at 410 | scale 2, in full |
+  | 2 | 350 | 494 | 1600 by 900 | longest in full, top at 410 | scale 2, in full |
+  | 3 | 374 | 542 | 1686 by 948 | longest in full, top moved to 380 | scale 2, in full |
+  | 5 | 422 | 638 | 1856 by 1044 | longest in full, top moved to 284 | scale 2, in full |
+  | 6 | 446 | 686 | 1942 by 1092 | usual in full; longest to its title; **the test of point 6 fails** | scale 1, in full |
+
+  So there is room for five more objectives with second lines, or eleven
+  more plain lines, before the design has to be looked at again. The
+  target panel shows in every row.
 - The figures before this were 290 and 370, "from parts". They assumed a
   tighter head and second lines at a pitch of about 20, which the reference
   does not have: its second lines are at the full 24. Measured against the
@@ -929,7 +967,8 @@ rectangles for clashes once more.
 The layout from pass 1 is not moved. Each of these is then shown where it
 fits and not where it does not:
 
-- the objectives' longer list: if it would clash, the title only;
+- the objectives' longer list: if it would clash, or would start above the
+  place kept for the target panel (section 5.4), the title only;
 - the target panel: if it would clash, it is not shown;
 - further kill-feed entries: as many as fit above the team frames.
 
@@ -1039,7 +1078,14 @@ the real code:
 
 - every rectangle at the seven 16:9 sizes of section 2 and the nine other
   shapes of section 6;
-- every component at its largest: the objectives at 398, four allies, four
+- the objectives' height worked out from the counts of lines and second
+  lines, with the fit and the scale following when the counts are changed
+  in the test (six lines to twelve), and the longest list for the game's
+  real counts showing in full at 1920 by 1080 with the target panel open;
+- a list of objectives taller than its title never starting above the
+  place kept for the target panel, whether or not the panel is showing;
+- every component at its largest: the objectives at their longest for the
+  game's real counts (398 today), four allies, four
   kill-feed entries, the target panel open, the chat full;
 - width and height varied independently over every window from 960 by 384
   to 3840 by 2400, with no clash left at any, the usual state within a
@@ -1210,6 +1256,15 @@ draft:
 | 370 against the reference's 400 | 370 was not justified: it assumed second lines closer together than the reference has them. At the reference's pitch ours is 302 usually and 398 at its longest, and those are now the figures |
 | What that moves | The least height by clashes, 776 to 804. Everything first fitting at scale 1 from 1562 by 878 (was 1554 by 874), scale 2 from 3120 by 1755, scale 3 from 4682 by 2633. Coverage up by 0.1 to 0.5 of a point where the list shows (1600 by 900: 23.8% usual, 31.0% busy). 5120 by 1440 is 168 short at scale 2, not 112, and scale 2 needs 1608 of height. No window's scale changed, nothing new gives way at any listed size, and the sweep still leaves no clash |
 | What it does not move | 1280 by 720 and 1366 by 768, where the list is at its title; every bottom-row figure (1021, 1325, 1364, 1501, 953) |
+
+Added after the question about future objectives, still the fourth draft:
+
+| Review point | What was done |
+|---|---|
+| 398 is the longest current state, not a permanent maximum | Said so in section 5.4 |
+| Fit and scale must use the actual objective count | The height is 158 plus 24 a line, from the counts; the script's 302 and 398 are now worked out that way and nothing uses a fixed figure (section 5.4, point 2) |
+| A defined response when a longer list does not fit, never clipping or a changed pitch | Six points in section 5.4: the order of responses, each an existing rule, and a test on the real counts that fails before anything is hidden |
+| Found while writing it | A list growing upward could have taken the target panel's place and kept the panel from showing. The place is now kept for it whether it shows or not. No reported figure changed; the script's output section 12 shows the panel staying on screen as the list grows |
 
 Settling the bottom row in one go also changed two rows of the table in
 section 6: at 1080 by 1920 the chat keeps its full height (it lost it for
@@ -1400,6 +1455,9 @@ section 10 of the output.
 **Resizing leaves no trace:** 400 sizes reached by a wandering resize, each
 worked out again on its own in another order; none differs (section 9 of
 the output).
+
+**If the game gains objectives:** section 12 of the output, and the table
+in section 5.4. The heights are worked out from the counts of lines.
 
 **For comparison, the same at 30%:** 1366 by 768 gives up only the
 objectives' list; 1280 by 720 gives up the chat's width and the objectives'
