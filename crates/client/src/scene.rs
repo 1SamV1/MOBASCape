@@ -5,7 +5,7 @@ use anyhow::{Context, Result};
 use glam::{Mat3, Vec2, Vec3};
 use rift_cache::{
     Cache, Locations, Model, ObjectDefinition, OverlayDefinition, Terrain, UnderlayDefinition,
-    light::{light, shade, tint},
+    light::{blend, ground_lightness, light, shade, shade_rgb, tint},
 };
 use rift_sim::{Grid, find_path, simplify_path};
 use serde::Deserialize;
@@ -523,69 +523,104 @@ pub fn build(
     let origin_tile_y = min_y as i32 * 64;
     let size = ((max_x - min_x + 1) * 64 + 1) as usize;
 
+    // The ground is one sheet with a corner at every tile corner. A corner's
+    // height is the average of the tiles that meet there.
     let mut heights = vec![0.0f32; size * size];
-    let mut colors = vec![[60u8, 90, 50]; size * size];
-
     for gy in 0..size {
         for gx in 0..size {
             let mut sum = 0.0f32;
-            let mut color = [0u32; 3];
             let mut count = 0.0f32;
-
             for dy in -1..=0 {
                 for dx in -1..=0 {
                     let tx = origin_tile_x + gx as i32 + dx;
                     let ty = origin_tile_y + gy as i32 + dy;
-                    let rx = (tx >> 6) as u32;
-                    let ry = (ty >> 6) as u32;
-                    let lx = (tx & 63) as usize;
-                    let ly = (ty & 63) as usize;
-                    let Some(terrain) = terrains.get(&(rx, ry)) else {
+                    let Some(terrain) = terrains.get(&((tx >> 6) as u32, (ty >> 6) as u32)) else {
                         continue;
                     };
-                    let tile = terrain.tile(0, lx, ly);
+                    let tile = terrain.tile(0, (tx & 63) as usize, (ty & 63) as usize);
                     sum += tile.height as f32 * 8.0;
-                    let c = tile_color(terrain, &underlays, &overlays, lx, ly);
-                    color[0] += c[0] as u32;
-                    color[1] += c[1] as u32;
-                    color[2] += c[2] as u32;
                     count += 1.0;
                 }
             }
-
-            let idx = gy * size + gx;
-            heights[idx] = if count > 0.0 { sum / count } else { 0.0 };
-            colors[idx] = if count > 0.0 {
-                [
-                    (color[0] as f32 / count) as u8,
-                    (color[1] as f32 / count) as u8,
-                    (color[2] as f32 / count) as u8,
-                ]
-            } else {
-                [60, 90, 50]
-            };
+            heights[gy * size + gx] = if count > 0.0 { sum / count } else { 0.0 };
         }
     }
+
+    // Colour, tile by tile. The natural ground (grass, earth, sand) is
+    // softened over its neighbours as the game does, so it has no hard
+    // patches. What is laid over it (paths, floors, water) keeps its own
+    // colour, so a lane still reads as a lane.
+    let tiles = size - 1;
+    let mut natural: Vec<Option<[f32; 3]>> = vec![None; tiles * tiles];
+    let mut laid: Vec<Option<[f32; 3]>> = vec![None; tiles * tiles];
+    for ty in 0..tiles {
+        for tx in 0..tiles {
+            let wx = origin_tile_x + tx as i32;
+            let wy = origin_tile_y + ty as i32;
+            let Some(terrain) = terrains.get(&((wx >> 6) as u32, (wy >> 6) as u32)) else {
+                continue;
+            };
+            let (under, over) = tile_paint(
+                terrain,
+                &underlays,
+                &overlays,
+                (wx & 63) as usize,
+                (wy & 63) as usize,
+            );
+            natural[ty * tiles + tx] = under;
+            laid[ty * tiles + tx] = over;
+        }
+    }
+    let natural = blend(&natural, tiles, tiles, GROUND_BLEND_RADIUS);
 
     let mut terrain_mesh = MeshData::new();
     for gy in 0..size {
         for gx in 0..size {
-            let idx = gy * size + gx;
-            let h = heights[idx];
-            let shade = 0.58 + 0.24 * (h / 800.0).clamp(0.0, 1.0);
-            let c = colors[idx];
-            let color = [
-                (c[0] as f32 * shade * 0.82) as u8,
-                (c[1] as f32 * shade * 0.82) as u8,
-                (c[2] as f32 * shade * 0.82) as u8,
-            ];
+            // the colour at a corner: the average of the tiles that meet there
+            let mut sum = [0.0f32; 3];
+            let mut count = 0.0f32;
+            for (dx, dy) in [(0usize, 0usize), (1, 0), (0, 1), (1, 1)] {
+                let (Some(tx), Some(ty)) = (gx.checked_sub(dx), gy.checked_sub(dy)) else {
+                    continue;
+                };
+                if tx >= tiles || ty >= tiles {
+                    continue;
+                }
+                if let Some(c) = laid[ty * tiles + tx].or(natural[ty * tiles + tx]) {
+                    sum = [sum[0] + c[0], sum[1] + c[1], sum[2] + c[2]];
+                    count += 1.0;
+                }
+            }
+            let colour = if count > 0.0 {
+                sum.map(|v| v / count)
+            } else {
+                [60.0, 90.0, 50.0]
+            };
+
+            // the light at a corner: from the slope through its neighbours,
+            // under the same sun as the models
+            let at = |x: usize, y: usize| heights[y * size + x];
+            let (west, east) = (gx.saturating_sub(1), (gx + 1).min(size - 1));
+            let (south, north) = (gy.saturating_sub(1), (gy + 1).min(size - 1));
+            let run = |a: usize, b: usize| if b - a == 2 { 1.0 } else { 2.0 };
+            let h = at(gx, gy);
+            // at the rim of the map there is a neighbour on one side only;
+            // doubling that half-slope keeps the rim from looking flatter
+            let lightness = ground_lightness(
+                h + (at(west, gy) - h) * run(west, east),
+                h + (at(east, gy) - h) * run(west, east),
+                h + (at(gx, south) - h) * run(south, north),
+                h + (at(gx, north) - h) * run(south, north),
+                128.0,
+            );
+
             terrain_mesh.vertices.push(Vertex::new(
                 Vec3::new(
                     (origin_tile_x + gx as i32) as f32 * 128.0,
                     h,
                     (origin_tile_y + gy as i32) as f32 * 128.0,
                 ),
-                color,
+                shade_rgb(colour, lightness),
             ));
         }
     }
@@ -952,38 +987,50 @@ fn load_overlays(cache: &Cache) -> Result<HashMap<u32, OverlayDefinition>> {
     Ok(out)
 }
 
-fn tile_color(
+/// How far the natural ground's colour is softened, in tiles each way. The
+/// game's own figure.
+const GROUND_BLEND_RADIUS: usize = 5;
+
+/// The two colours of one tile: its natural ground, which is softened over
+/// its neighbours, and whatever is laid over that (a path, a floor, water),
+/// which is not. Either may be absent.
+fn tile_paint(
     terrain: &Terrain,
     underlays: &HashMap<u32, UnderlayDefinition>,
     overlays: &HashMap<u32, OverlayDefinition>,
     x: usize,
     y: usize,
-) -> [u8; 3] {
+) -> (Option<[f32; 3]>, Option<[f32; 3]>) {
     let tile = terrain.tile(0, x, y);
+    let float = |c: [u8; 3]| c.map(|v| v as f32);
 
-    if tile.overlay_id > 0 {
-        if let Some(overlay) = overlays.get(&(tile.overlay_id as u32)) {
-            let color = overlay.color();
-            // 0xff00ff is a sentinel for "texture-only" ground overlays. Until
-            // textures are sampled, fall through to the underlay colour.
-            if color != [255, 0, 255] {
-                return color;
-            }
-        }
-    }
-    if tile.underlay_id > 0 {
-        if let Some(underlay) = underlays.get(&(tile.underlay_id as u32)) {
-            return underlay.color();
-        }
+    let under = (tile.underlay_id > 0)
+        .then(|| underlays.get(&(tile.underlay_id as u32)))
+        .flatten()
+        .map(|underlay| float(underlay.color()));
+
+    // 0xff00ff is a sentinel for "texture-only" ground overlays. Until
+    // textures are sampled, such a tile shows its natural ground.
+    let over = (tile.overlay_id > 0)
+        .then(|| overlays.get(&(tile.overlay_id as u32)))
+        .flatten()
+        .map(|overlay| overlay.color())
+        .filter(|&c| c != [255, 0, 255])
+        .map(float);
+
+    if under.is_some() || over.is_some() {
+        return (under, over);
     }
 
-    if tile.height == 0 {
+    // nothing defined: water at the bottom, bare ground above it
+    let bare = if tile.height == 0 {
         [31, 70, 105]
     } else if tile.height < 8 {
         [72, 112, 55]
     } else {
         [90, 105, 62]
-    }
+    };
+    (None, Some(float(bare)))
 }
 
 fn append_model(mesh: &mut MeshData, model: &Model, base: Vec3, angle: f32) {
