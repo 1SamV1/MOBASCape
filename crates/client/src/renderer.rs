@@ -116,7 +116,11 @@ impl Renderer {
         let width = size.width.max(1);
         let height = size.height.max(1);
 
-        let instance = wgpu::Instance::default();
+        // WGPU_BACKEND (dx12, vulkan, gl, metal) picks the graphics backend. The
+        // default choice crashes on some integrated GPUs: an Intel HD 620 on
+        // Windows dies with STATUS_ACCESS_VIOLATION unless WGPU_BACKEND=dx12.
+        let instance =
+            wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle_from_env());
         let surface = instance
             .create_surface(window.clone())
             .context("creating wgpu surface")?;
@@ -129,6 +133,7 @@ impl Renderer {
             })
             .await
             .context("requesting adapter")?;
+        tracing::info!("adapter: {:?}", adapter.get_info());
 
         let (device, queue) = adapter
             .request_device(&wgpu::DeviceDescriptor {
