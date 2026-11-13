@@ -248,12 +248,13 @@ the walkable map at all.
 
 ## Proposed: getting about on rough ground
 
-Status: **design for review, second draft. Nothing in this section is
+Status: **design for review, third draft. Nothing in this section is
 built**, and none of it is to be built until the design as a whole has been
-approved. The direction (climbing by step height, hops, a committed leap,
-slopes by weight) was approved at the first review; the height data was sent
-back, and this draft replaces it. The collision system that exists is not
-changed by this document.
+approved and frozen. The direction was approved at the first review and the
+separated height data at the second. This draft settles the three points the
+second review left open: more than one surface or solid stretch in a cell,
+the arc of a leap over uneven ground, and the standing angle measured on the
+real tower. The collision system that exists is not changed by this document.
 
 Five things, in the order they depend on each other: what the map knows
 about height, climbing, hops, the leap, and slopes. The aim is that a
@@ -278,39 +279,74 @@ trunk, cannot hold a ledge with a roof over it, and says nothing about
 whether a body gets from one cell to the next.
 
 The map is still made from the triangles that are drawn, by the code that
-exists. What that code keeps for each cell becomes four separate things:
+exists. What that code keeps for each cell becomes separate things:
 
 | Kept per cell | What it is | Where it comes from |
 |---|---|---|
-| **Ground** | The height of the ground itself | The map's own tile heights: whole numbers, the same on every machine |
-| **Standing surface** | The height above the ground of a surface a champion could stand on here, if there is one | Triangles over the cell that face upward and are no steeper than a set angle |
-| **Solid span** | From what height to what height a body is in the way here, if at all | Every other triangle over the cell: sides, undersides, anything too steep to stand on |
-| **Level** | Ground plus standing surface: how high a champion stands in this cell | Worked out from the two above |
+| **Ground** | The height of the ground itself. One number. | The map's own tile heights: whole numbers, the same on every machine |
+| **Standing surfaces** | The heights above the ground of every surface a champion could stand on here. None, one, or several. | Triangles over the cell that face upward and are no steeper than the standing angle |
+| **Solid stretches** | Every stretch of height in which a body is in the way here. None, one, or several, each with a bottom and a top. | Everything else, as set out below |
 
-Whether a surface can be stood on is decided by its **slope**, not by its
-height. The top of a stone and the shoulder of a tower's mound face upward
-and can be stood on. The side of a trunk, the face of a spire and the flank
-of a steep rock cannot, however low they are; they go into the solid span.
+**A cell holds as many surfaces and solid stretches as the shape has there.**
+Most cells have none: open ground is a ground height and nothing more. A cell
+under a tree has one solid stretch for the trunk. A cell can have a ledge to
+stand on, clear air above it, and a branch above that: one surface and two
+solid stretches with a gap between, and the gap stays open. The real tower
+already needs this: in the cells round its spire there is the top of the
+mound to stand on at about 130 and, far above it, the sloped faces of the
+spire at over 400. Stretches that touch or nearly touch are joined; nothing
+else is.
 
-A cell may hold both: a ledge to stand on with rock rising beside it, or
-ground to stand on with a branch overhead. That is the case one number could
-not hold.
+**How a shape becomes solid stretches.** Each triangle over a cell is one of
+three kinds, by which way it faces:
 
-Leaves and anything else above head height stay out of the solid span for
-scenery, as now, so a champion walks under a tree. A structure's solid span
-has no upper limit, so nobody stands under a crystal's overhang.
+- *A top*: it faces upward. If it is no steeper than the standing angle it is
+  also a standing surface.
+- *An underside*: it faces downward.
+- *A side*: it is steeper than the standing angle either way.
 
-**Getting from one cell to the next** is a fourth thing and is not stored: it
-is a rule applied to two neighbouring cells. A champion may step from A to B
-only if all of these hold:
+Under a top it is solid down to the first underside beneath it in that cell,
+or to the ground if there is none: a rock is solid all the way down, a ledge
+only as thick as it is. A side is solid over the heights it spans. That is
+what gives a cell in the middle of a rock, which has no sides over it at all,
+a solid stretch from the ground to the rock's top.
 
-1. B has somewhere to stand (ground, or a standing surface).
-2. The difference between A's level and B's level is no more than the
+**Which way a triangle faces** is worked out from its own three corners and
+nothing else, by one rule for every model, so it cannot depend on the order
+a model is read in. The models are drawn mirrored (their own up is down), and
+the rule takes that into account once, in one place; the lighting already
+relies on the same rule, and being lit from the right side is the evidence
+that it is right. On the real tower it puts 15% of the surface facing
+downward (the undersides of the stones and the mound's base) and the rest
+upward or sideways, which is what a thing sitting on the ground should give;
+reversed, it would be the other way about. A test fixes it: a closed box must
+come out with its lid, and only its lid, as somewhere to stand.
+
+Leaves and anything else above head height are left out for scenery, as now,
+so a champion walks under a tree. For a structure nothing is left out, so
+nobody stands under a crystal's overhang.
+
+**Where a champion is** therefore has a third part. As well as its position
+on the flat it has a **level**: the height it is standing at, which is the
+ground or one of the standing surfaces of its cell. Two champions can be in
+the same cell at different levels, one under a ledge and one on it.
+
+**Getting from one cell to the next** is not stored: it is a rule applied to
+a champion at its level in cell A and a neighbouring cell B. Among B's places
+to stand (its ground, unless that is inside something solid, and each of its
+standing surfaces), the champion may step to one only if all of these hold:
+
+1. The difference between its present level and that one is no more than the
    champion's **step height**.
-3. The champion's body, standing at B's level, does not meet B's solid span,
-   nor the solid span of any cell within a body's half-width of B.
+2. The champion's body, standing there, from its feet to its head, meets none
+   of B's solid stretches, nor those of any cell within a body's half-width
+   of B.
 
-Rule 2 is what the first draft lacked: two surfaces each within reach of the
+If more than one place in B passes, it takes the one nearest its present
+level, and the higher of two equally near. If none passes, it cannot go
+there. The choice is the same on every machine.
+
+Rule 1 is what the first draft lacked: two surfaces each within reach of the
 ground are not thereby within reach of each other. A stone 40 high next to a
 ledge 130 high is a step of 90, not two steps of under 96.
 
@@ -327,12 +363,44 @@ there is a champion who needs it.
 A champion file gains `step`: the greatest difference in level it can take
 in one stride. Default 48, today's fixed value. Proposed: monkey 96, Jad 48.
 
-On the tower as measured (a mound 138 tall with a spire to 432 and loose
-stones 26 to 46 tall), the monkey would walk onto the stones and up the
-mound's shoulders wherever they are gentle enough to stand on, a cell at a
-time, each stride within 96. He would not get up the spire or a trunk, whose
-faces are too steep to stand on, nor onto a crystal. Jad would step over the
-lower stones and be stopped by the mound.
+**Measured on the real tower.** The rules above were run on the tower's
+model (1761, at its drawn scale) for three standing angles, with no solid
+stretches counted, so these are the most a champion could reach:
+
+| Standing angle | Step 48 (Jad) reaches | Step 96 (monkey) reaches |
+|---|---|---|
+| 30 degrees | The lowest stones only (26 high) | Most of the mound's top (128) |
+| **45 degrees** | **Every loose stone (46); none of the mound** | **The whole top of the mound (138); not the spire** |
+| 60 degrees | The whole top of the mound (138) | The same |
+
+What the model turned out to be changes what climbing means here. The mound
+is not a slope to get part-way up. It is a broad, nearly level top between
+100 and 138 high, with steep flanks, a rim at 90 to 100 on its south and west
+sides, and the spire standing in the middle. At 45 degrees:
+
+- The flanks on the east side are sides, not surfaces: nobody walks up them.
+- The top is one unbroken patch of standing surface, about nine cells
+  across, not a scatter of odd cells.
+- The monkey gets up where the rim is within 96 of the ground, or by way of a
+  stone (a stone's top at about 50, then the rim at about 100). Where the rim
+  is over 96 with no stone by it, he does not. So there are particular ways
+  up, which can be learned.
+- Jad gets onto the stones and no further.
+- The spire's own faces count as surfaces at over 400, in the same cells as
+  the mound's top at 130. Nobody reaches them: it is a step of nearly 300.
+
+At 60 degrees the east flank becomes a ramp and Jad walks to the top, which
+removes the difference the whole design is for. At 30 the monkey still gets
+up but the top breaks into pieces. **45 degrees is proposed on that
+evidence**, and is confirmed or changed when stage 2 puts the monkey on the
+real thing: whether he can get on and off from every side he should, and
+whether he is ever left on a cell he cannot leave.
+
+A step of 96 sits close to the rim's height, so a few units either way
+decides how many ways up there are. That is a number to tune by hand.
+
+He would not get up a trunk or the spire, whose faces are sides, nor onto a
+crystal.
 
 The work is in three separate parts, built and judged separately:
 
@@ -377,18 +445,36 @@ others must walk round.
 **The arc is part of the match, and it is the arc that is drawn.** The first
 draft gave the simulation a clearance of 150 and the drawing an arc up to 180
 high, which could show him passing through something the match said he
-cleared, or over something it said he did not. There is now one arc. His
-height along the line rises smoothly from the level he left to a peak and
-down to the level he lands at. The peak is a quarter of the distance above
-the straight line between those two levels, no less than 60 and no more than
-180. The simulation holds it in whole numbers; the client draws exactly it
-and may add a tumble, a squash and dust, which change nothing.
+cleared, or over something it said he did not. There is now one arc. The
+simulation holds it in whole numbers; the client draws exactly it and may add
+a tumble, a squash and dust, which change nothing.
+
+**The arc is in true height, not height above the ground under him.** It is
+fixed by two points and a peak:
+
+- Where his feet leave: the true height of the place he crouched (its ground
+  plus the level he stood at).
+- Where his feet land: the true height of the landing place, likewise.
+- Between them, a straight line in true height, with a smooth rise above it
+  that is greatest half-way: a quarter of the distance over the flat, no less
+  than 60 and no more than 180.
+
+So a leap uphill climbs to its landing and a leap downhill drops to it; a
+leap onto a rock ends at the rock's top; and the arc does not ripple with the
+ground it passes over. What the ground does in between matters only as
+something to clear.
 
 **What he clears** follows from the arc and his body, with no separate
-number. At each cell along the line, and each cell within a body's half-width
-of it, the space from his feet to his head at that point of the arc must not
-meet the cell's solid span, and his feet must not be below its standing
-surface. So:
+number. His body in the air is an upright shape as wide as a body and as tall
+as a body, with its foot on the arc. At every point of the arc, in every cell
+that shape stands over, in true height:
+
+- it must not meet any solid stretch of that cell, and
+- its foot must not be below that cell's ground.
+
+The second matters as much as the first: a rise in the ground between him
+and his aim is something to clear like any rock, and a leap from one side of
+a hill to the other lands short if the hill is taller than the arc. So:
 
 - Near the middle of a long leap he passes over a stone, a mound's shoulder,
   a ruin, a low wall.
@@ -527,8 +613,16 @@ In the simulation, by code:
   that exists, on the real tower and crystal.
 - A trunk has no standing surface however low it is sampled; a stone's top
   and a mound's shoulder have one.
-- A cell with a ledge and a roof over it lets a short body stand and stops a
-  tall one.
+- A closed box has its lid, and only its lid, as somewhere to stand, whatever
+  order its triangles are given in.
+- A cell with a ledge, clear air and a branch above keeps the air between
+  them open: a body that fits stands on the ledge, one that does not is
+  stopped, and a leap whose arc passes through the gap is clear.
+- A cell in the middle of a rock is solid from the ground to the rock's top;
+  a cell under a thin ledge is solid only for the ledge's thickness.
+- A leap uphill, downhill and onto a rock leaves from and arrives at the
+  right true heights; one aimed over a rise in the ground taller than its arc
+  lands short.
 - Two surfaces each within a step of the ground and more than a step from
   each other cannot be walked between.
 - Two champions with different steps disagree about the same rock, and each
@@ -570,16 +664,22 @@ By hand, which is what decides it:
 | A committed leap with a fixed, shown landing point | Keep |
 | Knockback waits until he lands | Keep |
 | He may land on a rock he could stand on | Keep, with the landing tests above |
-| One height number for every purpose | Replaced by this draft |
-| A leap clearance separate from the drawn arc | Replaced: one arc, tested against his body |
+| One height number for every purpose | Replaced: ground, standing surfaces and solid stretches, several to a cell where the shape needs them |
+| Stepping between neighbouring cells checked by difference in level | Keep |
+| Simulation, drawing and animation as separate parts | Keep |
+| A leap clearance separate from the drawn arc | Replaced: one arc in true height, tested against his whole body and the ground |
+| Fixed landing; death, stun, root and knockback rules in the air | Keep |
+| The seven stages of building | Keep |
+| The standing angle | 45 degrees proposed on the real tower's measurements; confirmed at stage 2 |
 | The other champions' W in the client | Temporary; moved into the simulation at step 5 |
 | The slope figures | To be tested and tuned, not approved |
 
 ### Still open
 
-- **The angle a surface may slope and still be stood on.** Proposed 45
-  degrees. It decides how much of the mound the monkey can use, and can only
-  be judged on the real models.
+- **The standing angle.** 45 degrees, on the measurements above; confirmed or
+  changed at stage 2 with the monkey on the real tower.
+- **The monkey's step.** 96 is close to the height of the mound's rim. Tuned
+  by hand at stage 2.
 - **Slopes and stopping.** Whether a heavy champion should also take longer
   to stop going downhill. Proposed: not in the first version.
 - **Leaping over units.** Units do not collide yet. When they do, proposed:
