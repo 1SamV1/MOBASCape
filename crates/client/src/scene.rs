@@ -112,17 +112,71 @@ const SOLID_TO: f32 = 160.0;
 
 #[derive(Clone)]
 pub struct WorldCollision {
+    /// Where units may stand right now.
     grid: Grid,
+    /// The ground and scenery alone, which never change during a match.
+    open: Grid,
+    /// The structures, which do: one that has fallen no longer blocks.
+    structures: Vec<StructureGround>,
     origin_tile_x: i32,
     origin_tile_y: i32,
 }
 
+/// The ground one structure stands on.
+#[derive(Clone)]
+pub struct StructureGround {
+    /// Where the structure is placed, to tell it from the others.
+    pub pos: Vec3,
+    /// The cells of the map it blocks while it stands.
+    pub cells: Vec<(i32, i32)>,
+    pub standing: bool,
+}
+
 impl WorldCollision {
-    pub fn new(grid: Grid, origin_tile_x: i32, origin_tile_y: i32) -> Self {
-        Self {
-            grid,
+    /// `open` is the map with no structures on it; they are marked from
+    /// `structures`.
+    pub fn new(
+        open: Grid,
+        origin_tile_x: i32,
+        origin_tile_y: i32,
+        structures: Vec<StructureGround>,
+    ) -> Self {
+        let mut collision = Self {
+            grid: open.clone(),
+            open,
+            structures,
             origin_tile_x,
             origin_tile_y,
+        };
+        collision.mark_structures();
+        collision
+    }
+
+    fn mark_structures(&mut self) {
+        self.grid = self.open.clone();
+        for structure in self.structures.iter().filter(|s| s.standing) {
+            for &(cx, cy) in &structure.cells {
+                self.grid.set_blocked(cx, cy, true);
+            }
+        }
+    }
+
+    /// Tell the map whether the structure placed at `pos` still stands. The
+    /// ground under a fallen tower is open: collision follows what is there
+    /// to be seen, and a fallen structure is not drawn. Cheap to call every
+    /// frame; the map is only redone when something has changed.
+    pub fn set_standing(&mut self, pos: Vec3, standing: bool) {
+        let mut changed = false;
+        for structure in &mut self.structures {
+            let near =
+                (structure.pos.x - pos.x).abs() < 1.0 && (structure.pos.z - pos.z).abs() < 1.0;
+            if near && structure.standing != standing {
+                structure.standing = standing;
+                changed = true;
+            }
+        }
+        if changed {
+            self.mark_structures();
         }
     }
 
@@ -242,6 +296,35 @@ fn block_model(
         SOLID_TO,
         BODY_RADIUS.round() as i32,
     )
+}
+
+/// The cells a model would block, without blocking them: for a structure,
+/// whose ground has to be given back if it falls. Returns the cells and how
+/// many of them the model itself covers.
+fn model_ground(
+    like: &Grid,
+    origin_tile_x: i32,
+    origin_tile_y: i32,
+    model: &Model,
+    base: Vec3,
+    rot: Mat3,
+    scale: f32,
+) -> (Vec<(i32, i32)>, usize) {
+    let mut alone = Grid::with_cell(like.width() as usize, like.height() as usize, like.cell());
+    let covered = block_model(
+        &mut alone,
+        origin_tile_x,
+        origin_tile_y,
+        model,
+        base,
+        rot,
+        scale,
+    );
+    let cells = (0..alone.height())
+        .flat_map(|cy| (0..alone.width()).map(move |cx| (cx, cy)))
+        .filter(|&(cx, cy)| alone.is_blocked(cx, cy))
+        .collect();
+    (cells, covered)
 }
 
 /// Block, or open, a disc of the walkable map around a point in the world.
@@ -874,16 +957,19 @@ pub fn build(
     }
 
     map.clear_collision(&mut collision_grid, origin_tile_x, origin_tile_y, 4.5);
-    // Each structure blocks the ground its own model stands on. It is drawn
-    // unturned but for the half turn every unit's model gets.
+    // Each structure blocks the ground its own model stands on, for as long
+    // as it stands. It is drawn unturned but for the half turn every unit's
+    // model gets. The cells are kept per structure, apart from the rest of
+    // the map, so they can be given back when it falls.
+    let mut structure_ground = Vec::new();
     for structure in &map.structures {
-        let covered = cache
+        let ground = cache
             .group(7, structure.model_id)
             .ok()
             .and_then(|group| Model::load(structure.model_id, &group.data).ok())
             .map(|model| {
-                block_model(
-                    &mut collision_grid,
+                model_ground(
+                    &collision_grid,
                     origin_tile_x,
                     origin_tile_y,
                     &model,
@@ -892,14 +978,17 @@ pub fn build(
                     structure.scale,
                 )
             });
-        match covered {
-            Some(cells) => tracing::info!(
-                "blocks: {:?} model {} stands on {} cells of the map ({:.1} tiles of ground)",
-                structure.kind,
-                structure.model_id,
-                cells,
-                cells as f32 / (NAV_PER_TILE * NAV_PER_TILE) as f32
-            ),
+        let cells = match ground {
+            Some((cells, covered)) => {
+                tracing::info!(
+                    "blocks: {:?} model {} stands on {} cells of the map ({:.1} tiles of ground)",
+                    structure.kind,
+                    structure.model_id,
+                    covered,
+                    covered as f32 / (NAV_PER_TILE * NAV_PER_TILE) as f32
+                );
+                cells
+            }
             None => {
                 // its model could not be read: block a plain disc so it is
                 // at least not walked through
@@ -908,8 +997,13 @@ pub fn build(
                     structure.kind,
                     structure.model_id
                 );
+                let mut alone = Grid::with_cell(
+                    collision_grid.width() as usize,
+                    collision_grid.height() as usize,
+                    collision_grid.cell(),
+                );
                 mark_disc(
-                    &mut collision_grid,
+                    &mut alone,
                     origin_tile_x,
                     origin_tile_y,
                     structure.pos.x,
@@ -917,10 +1011,24 @@ pub fn build(
                     90.0 + BODY_RADIUS,
                     true,
                 );
+                (0..alone.height())
+                    .flat_map(|cy| (0..alone.width()).map(move |cx| (cx, cy)))
+                    .filter(|&(cx, cy)| alone.is_blocked(cx, cy))
+                    .collect()
             }
-        }
+        };
+        structure_ground.push(StructureGround {
+            pos: structure.pos,
+            cells,
+            standing: true,
+        });
     }
-    let collision = WorldCollision::new(collision_grid, origin_tile_x, origin_tile_y);
+    let collision = WorldCollision::new(
+        collision_grid,
+        origin_tile_x,
+        origin_tile_y,
+        structure_ground,
+    );
 
     let spawn_hint = map
         .lanes

@@ -447,6 +447,18 @@ impl App {
         let camera_right = camera_forward.cross(Vec3::Y).normalize_or_zero();
         let camera_up = camera_right.cross(camera_forward).normalize_or_zero();
 
+        // A structure that has fallen no longer stands in the way.
+        if let (Some(animated), Some(collision)) = (self.animated.as_ref(), self.collision.as_mut())
+        {
+            for unit in animated
+                .units
+                .iter()
+                .filter(|unit| unit.kind.is_structure())
+            {
+                collision.set_standing(unit.pos, unit.health > 0.0);
+            }
+        }
+
         if let (Some(animated), Some(height), Some(collision)) = (
             self.animated.as_mut(),
             self.height.as_ref(),
