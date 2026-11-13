@@ -381,33 +381,45 @@ standing surfaces), the champion may step to one only if all of these hold:
 
 1. The difference between its present level and that one is no more than the
    champion's **step height**.
-2. The champion's body, standing there, from its feet to its head, meets none
-   of B's solid stretches, nor those of any cell within a body's half-width
-   of B.
+2. The champion's body, at that level, meets none of B's solid stretches,
+   nor those of any cell it has to keep clear of for the width of its body.
+   Those are the cells the walkable map already keeps a body from: any whose
+   middle is within the body's half-width plus half a cell (28 + 16) of B's
+   middle. With cells of 32 that is the four cells sharing a side with B,
+   32 away, and not the four at its corners, 45 away *(sixth review)*.
 
-**The kerb** *(fourth review)*. Anything solid that ends lower than the kerb
-(48, today's step-over height) is stepped onto by every champion, whatever
-its slope and whether or not it has a surface level enough to stand on: its
-top counts as a place to stand, and it is never in the way. This is what the
-walkable map does today with loose stones, and without it the height data
-could not block the same cells. A champion's own step height reaches higher
-than the kerb only by way of real standing surfaces.
+**The kerb** *(fourth review; corrected at the sixth, see "A correction
+found after stage 1")*. Anything solid that ends lower than the kerb (48,
+today's step-over height) is walked over by every champion, whatever its
+slope and whether or not it has a surface level enough to stand on. It is
+never in the way. This is what the walkable map does today with loose
+stones, and without it the height data could not block the same cells.
 
-The kerb is measured from the level the champion is walking at, the lower of
-where it stands and where it would stand, and not from wherever its feet
-happen to be put. Two kerbs are not one: a stone 34 high with another
-leaning over it to 75 is closed to a walker on the ground, although each is
-less than a kerb above the one before. And the walkable map stops a walker
-at 48 exactly and lets it over anything less, so a step that reproduces it
-reaches everything lower than 48 and nothing at 48.
+**A level** is the ground, always, or a real standing surface 48 or more
+above it. Nothing lower than a kerb is a level. A champion walking over a low
+stone is at the level beneath it; the stone's top is where its feet are
+drawn, and where the feet are drawn is not the height collision is worked
+out from. Something is in the way of a body if it reaches a kerb or more
+above the body's level. So low stones never add up, in one cell or across
+several: a stone 34 high with another leaning over it to 75 is closed to a
+walker on the ground, and so is a row of stones each 40 higher than the
+last. A champion's own step height reaches higher than the kerb only from
+one level to another.
+
+The walkable map stops a walker at 48 exactly and lets it over anything
+less. A surface at exactly 48 is therefore a level, and a step that
+reproduces today's map, a step under 48, does not reach it.
 
 If more than one place in B passes, it takes the one nearest its present
 level, and the higher of two equally near. If none passes, it cannot go
 there. The choice is the same on every machine.
 
 Rule 1 is what the first draft lacked: two surfaces each within reach of the
-ground are not thereby within reach of each other. A stone 40 high next to a
-ledge 130 high is a step of 90, not two steps of under 96.
+ground are not thereby within reach of each other. And a low stone is no
+help up: a stone 40 high next to a ledge 130 high leaves the ledge 130 above
+the champion, who is at the level of the ground while on the stone. A block
+80 high next to one 160 high is two steps of 80, because the first is a
+level.
 
 The walker and the pathfinder already ask "may I go from this cell to that
 one"; today the answer ignores height. They would ask this rule instead.
@@ -729,6 +741,74 @@ By hand, which is what decides it:
   figures, the angle a surface may slope and still be stood on) is tuned in
   play, and the tuned value written back into this document.
 
+### A correction found after stage 1
+
+Stage 1 passed and stays as it was recorded: what it had to show was that
+the height data blocks the cells the walkable map blocks, and it does. What
+follows was found afterwards, measuring what a climbing champion could reach
+on the real tower before any climbing was proposed. It was reviewed and
+authorised on its own, as a correction before stage 2, and changes nothing
+that moves: the walkable map is untouched and still the only thing that
+blocks.
+
+**The fault.** The rule for stepping between cells kept a body clear of
+cells whose middle was within the body's half-width (28) of the target's
+middle. The nearest other cell is 32 away, so it kept a body clear of
+nothing. Nothing used the rule yet. Left alone, a climbing champion would
+have stood on a ledge with its body inside whatever was beside it.
+
+**The correction.** Body room is the walkable map's own (rule 2 above). A
+stricter rule was measured, keeping a body clear of every cell its disc
+overlaps, the corner cells included: on the real tower it closes 11 cells
+more than the walkable map does, and on the crystal 14. It was not taken,
+because it would make climbing stricter than walking and give the game two
+rules for how near a thing a body may be. It may be looked at again if the
+walkable map itself is ever redesigned.
+
+**What it brought with it.** With the right body room the height data still
+did not leave open what the walkable map leaves open, because a low stone's
+top counted as a place to stand, and each stone stood on gave a fresh kerb's
+allowance to the next. Levels are now as set out under "The kerb" above.
+
+**How it is tested.** An obstacle in a cell at the side blocks and one two
+cells away does not; one at the corner does not; the edge of body room is
+pinned to the unit at the side and at the corner; stones in a row do not add
+up; a surface at exactly 48 is not reached by a step under 48. And a walk in
+from open ground, at a step under 48 with a body of 28, can be in exactly
+the cells the walkable map has open: for every test shape at five positions
+within a cell, and, from the exported model files, for the real tower and
+crystal at 64 positions each.
+
+**What is measured, and is not yet a rule.** With room for a body, a champion
+on the ground cannot be in the cell beside a block, and one on top of it can
+be at its very edge: the two are never in cells that share a side, so by the
+stepping rule as frozen nobody with a body gets onto anything. For the
+measurement only, a change of level is allowed to go two cells in a straight
+line, over one cell the champion could not stop in, if nothing in that cell
+is in its way at the upper level. How a champion really gets up, and
+whether this is the rule, is for the stage 2 proposal and its review. At
+start-up the game reports what a step of 96 reaches on the real map that a
+step of 48 does not, both with this allowance and without it.
+
+On the real tower model, with it: one to 22 cells of the mound's shoulder,
+depending on where within a cell the tower stands, in patches at its west
+and south sides. Without it: none. On the crystal: none either way. An
+earlier report in review, that the tower stayed closed to a climbing
+champion with room for a body, was the stepping rule's gap and not the
+tower.
+
+### Decided at the sixth review
+
+| | Decision |
+|---|---|
+| Body room in the stepping rule | The walkable map's: cells at the sides, not at the corners |
+| Keeping a body clear of every cell its disc overlaps | Not now; only with a redesign of the walkable map |
+| A level | The ground, or a standing surface 48 or more above it |
+| The top of anything lower than a kerb | Where the feet are drawn; not a level |
+| A surface at exactly 48 | A level; not reached by a step under 48 |
+| The measurement of what a step of 96 reaches on the real map | Authorised, as measurement |
+| Stage 2 | Not authorised; proposed after the measurement |
+
 ### Decided at the first review
 
 | | Decision |
@@ -771,6 +851,9 @@ By hand, which is what decides it:
 | Structures stay cut off at head height, as today | Approved as a limit of stage 1; reading them whole is a later change, tested on its own |
 | Stage 1 and this account of it | Frozen |
 | Stage 2 | Not authorised; to be proposed and reviewed on its own |
+
+(Stage 1's stepping rule was corrected after this, without touching what
+blocks: see "A correction found after stage 1".)
 
 ### Still open
 
