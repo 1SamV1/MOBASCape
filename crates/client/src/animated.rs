@@ -668,6 +668,8 @@ impl AnimatedScene {
         collision: &WorldCollision,
     ) {
         const REACH: f32 = 56.0;
+        // close enough to a waypoint to count as standing on it
+        const ON_WAYPOINT: f32 = 6.0;
         let pi = self.player_index;
         let (next, last) = {
             let unit = &mut self.units[pi];
@@ -675,6 +677,13 @@ impl AnimatedScene {
                 let waypoint = unit.path[unit.path_index];
                 let flat = Vec3::new(waypoint.x - unit.pos.x, 0.0, waypoint.z - unit.pos.z);
                 if flat.length() > REACH {
+                    break;
+                }
+                // Turn for the next waypoint early only if the way to it is
+                // clear from here. Cutting the corner blind sent a champion
+                // into the side of whatever the corner went round.
+                let next = unit.path[unit.path_index + 1];
+                if flat.length() > ON_WAYPOINT && !collision.clear_line(unit.pos, next) {
                     break;
                 }
                 unit.path_index += 1;

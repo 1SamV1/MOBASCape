@@ -158,6 +158,12 @@ impl WorldCollision {
         Vec3::new(x, height.height_at(x, z), z)
     }
 
+    /// Whether a straight walk between two points in the world is clear.
+    pub fn clear_line(&self, from: Vec3, to: Vec3) -> bool {
+        self.grid
+            .line_of_sight(self.cell_of(from.x, from.z), self.cell_of(to.x, to.z))
+    }
+
     pub fn is_walkable_world(&self, world_x: f32, world_z: f32) -> bool {
         let (cx, cy) = self.cell_of(world_x, world_z);
         self.grid.is_walkable(cx, cy)

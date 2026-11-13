@@ -300,6 +300,21 @@ impl Motion {
             let agree = (cos_q14((error & 0xffff) as u16) as i64).max(0);
             let factor = FLOOR_Q14 + (ONE_Q14 - FLOOR_Q14) * agree / ONE_Q14;
             want_speed = (want_speed * factor / ONE_Q14).max(1);
+
+            // A point close by and off to one side lies inside the circle it
+            // would turn at this speed, and it would run rings round the
+            // point and never reach it. Going slower tightens the circle: go
+            // no faster than the speed at which the circle just passes
+            // through the point (a little under, to be sure of it).
+            if let Some((dist, _, _)) = seek {
+                let off = (sin_q14((error & 0xffff) as u16) as i64).abs();
+                if off > 0 && turn_rate < 32768 {
+                    // pi * 2^14, for an angle in 65536ths of a turn
+                    const PI_Q14: i64 = 51472;
+                    let through = turn_rate * dist / 65536 * PI_Q14 / off;
+                    want_speed = want_speed.min((through * 4 / 5).max(1));
+                }
+            }
         }
 
         // speed up or slow down toward that
@@ -354,6 +369,22 @@ impl Motion {
         if let Some(heading) = want_heading {
             if heading != self.facing {
                 tries.push(along(heading));
+            }
+        }
+        // Blocked ahead: slide. Try headings turned a little further and
+        // further from the one wanted, the side it is already facing first,
+        // out to square-on. This is what carries a walker round the curve of
+        // a tower or a trunk instead of leaving it pressed against it.
+        let wanted = want_heading.unwrap_or(self.facing);
+        let side: i32 = if turn_between(wanted, self.facing) < 0 {
+            -1
+        } else {
+            1
+        };
+        for step in 1..=4 {
+            for sign in [side, -side] {
+                let turned = (wanted as i32 + sign * step * 4096).rem_euclid(65536) as u16;
+                tries.push(along(turned));
             }
         }
         tries.push((fx, 0));

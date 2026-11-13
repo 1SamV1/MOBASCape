@@ -128,8 +128,10 @@ impl Grid {
         None
     }
 
-    /// Bresenham line of sight; returns false if any intermediate tile is
-    /// blocked. Used to simplify A* paths and for hold-to-steer checks.
+    /// Whether a straight line between the middles of two cells is clear:
+    /// false if it crosses a blocked cell or squeezes past the corner of one.
+    /// Used to straighten paths and to decide when a walker may turn for its
+    /// next waypoint.
     pub fn line_of_sight(&self, a: (i32, i32), b: (i32, i32)) -> bool {
         let (mut x0, mut y0) = a;
         let (x1, y1) = b;
@@ -147,11 +149,19 @@ impl Grid {
                 return true;
             }
             let e2 = 2 * err;
-            if e2 >= dy {
+            let (step_x, step_y) = (e2 >= dy, e2 <= dx);
+            // a step that goes across and along at once passes the corner
+            // where four cells meet; the line is clear there only if the two
+            // cells beside it are, or a body following the line would clip one
+            if step_x && step_y && !(self.is_walkable(x0 + sx, y0) && self.is_walkable(x0, y0 + sy))
+            {
+                return false;
+            }
+            if step_x {
                 err += dy;
                 x0 += sx;
             }
-            if e2 <= dx {
+            if step_y {
                 err += dx;
                 y0 += sy;
             }
