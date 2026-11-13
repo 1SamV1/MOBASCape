@@ -1,8 +1,12 @@
 # Interface stage 3: plan for the static interface
 
-Status: **a plan for review, fourth draft. Every section of this file is
-the fourth draft. Nothing in it is built, and nothing in it is authorised to
-be built.** The earlier drafts moved the layout onto rectangles worked out
+Status: **frozen on 13 November 2026 as the fourth draft, after review of
+every section, the layout script and its output. It is frozen as a plan
+only. Nothing in it is built, and freezing it does not authorise stage 3 to
+be built: that needs its own go-ahead.** A change to this file is now a
+design change and needs review, as with the other frozen documents. The
+changes it asks of `docs/INTERFACE.md` (section 10) have not been made to
+that file and are a separate reviewed change. The earlier drafts moved the layout onto rectangles worked out
 from anchors, defined the screen budget, chose the scale by fit, narrowed
 the scope, and settled the layout in two passes. This draft answers the
 review of the third, part by part: the inventory now keeps the same 8 from
