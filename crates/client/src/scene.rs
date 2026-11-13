@@ -650,14 +650,12 @@ pub fn build(
         for ty in 0..64 {
             for tx in 0..64 {
                 let tile = terrain.tile(0, tx, ty);
-                // Ground blocks only where there is none to stand on: a tile
-                // with nothing on it at all, or open water at sea level. A
-                // hill, however steep, can be climbed. (Ground that is only
-                // laid over, with no natural ground beneath, used to count as
-                // water and walled off whole hillsides.)
-                let nothing = tile.underlay_id == 0 && tile.overlay_id == 0;
-                let sea = tile.underlay_id == 0 && tile.height == 0;
-                if nothing || sea {
+                // Ground blocks only where there is none: a tile with nothing
+                // on it at all. A hill, however steep, and the dips between
+                // hills can be walked. (Ground that is only laid over, with no
+                // natural ground beneath, used to count as water and walled
+                // off whole hillsides.)
+                if tile.underlay_id == 0 && tile.overlay_id == 0 {
                     let gx = (*rx as i32 * 64 + tx as i32) - origin_tile_x;
                     let gy = (*ry as i32 * 64 + ty as i32) - origin_tile_y;
                     collision_grid.set_blocked(gx, gy, true);
@@ -666,36 +664,7 @@ pub fn build(
         }
     }
 
-    let mut def_cache: HashMap<u32, ObjectDefinition> = HashMap::new();
-    for (rx, ry, locations) in &all_locations {
-        for loc in &locations.locations {
-            if let std::collections::hash_map::Entry::Vacant(entry) = def_cache.entry(loc.id) {
-                if let Some(data) = object_files.get(&loc.id) {
-                    if let Ok(def) = ObjectDefinition::parse(loc.id, data) {
-                        entry.insert(def);
-                    }
-                }
-            }
-            let Some(def) = def_cache.get(&loc.id) else {
-                continue;
-            };
-            if !is_blocking_object(def) {
-                continue;
-            }
-            let mut w = def.size_x.max(1) as i32;
-            let mut h = def.size_y.max(1) as i32;
-            if loc.rotation % 2 == 1 {
-                std::mem::swap(&mut w, &mut h);
-            }
-            let gx = (*rx as i32 * 64 + loc.x as i32) - origin_tile_x;
-            let gy = (*ry as i32 * 64 + loc.y as i32) - origin_tile_y;
-            collision_grid.block_rect(gx, gy, w, h);
-        }
-    }
     let map = MapLayout::load(map_path, &height)?;
-    map.clear_collision(&mut collision_grid, origin_tile_x, origin_tile_y, 4.5);
-    map.block_structures(&mut collision_grid, origin_tile_x, origin_tile_y);
-    let collision = WorldCollision::new(collision_grid, origin_tile_x, origin_tile_y);
 
     let center = Vec3::new(
         (center_x as f32 * 64.0 + 32.0) * 128.0,
@@ -764,7 +733,22 @@ pub fn build(
         let angle = loc.rotation as f32 * std::f32::consts::FRAC_PI_2;
         append_model(&mut model_mesh, model, base, angle);
         placements += 1;
+
+        // What stands in the way is what can be seen standing there, and
+        // nothing else: a piece of scenery blocks only if it was drawn, only
+        // on the ground floor, and only the one tile its trunk stands on.
+        // (Every object in the map used to block its whole footprint whether
+        // or not it was drawn, which left walls in open grass.)
+        if loc.z == 0 && is_blocking_object(&def) {
+            let gx = (rx as i32 * 64 + loc.x as i32) - origin_tile_x;
+            let gy = (ry as i32 * 64 + loc.y as i32) - origin_tile_y;
+            collision_grid.set_blocked(gx, gy, true);
+        }
     }
+
+    map.clear_collision(&mut collision_grid, origin_tile_x, origin_tile_y, 4.5);
+    map.block_structures(&mut collision_grid, origin_tile_x, origin_tile_y);
+    let collision = WorldCollision::new(collision_grid, origin_tile_x, origin_tile_y);
 
     map.build_mesh(&mut model_mesh, &height, 3.0 * 128.0);
 
