@@ -228,6 +228,11 @@ radius to guess.
 - Every obstacle is marked wider by a body's half-width (28), so a unit can be
   treated as a point.
 - What a thing's own walls close off counts as part of it. An arch stays open.
+- Marking a shape is two steps: finding the cells its surface covers
+  (`block_solid`), and finishing them, which closes what they enclose and
+  adds the room for a body (`block_cells`). The height data finds its cells
+  its own way and is finished by the same second step, so the two can be
+  compared cell for cell.
 - Each structure's ground is kept apart from the rest and given back when the
   structure falls.
 - The ground itself blocks only where there is none. Hills and dips of any
@@ -248,16 +253,23 @@ the walkable map at all.
 
 ## Proposed: getting about on rough ground
 
-Status: **approved and frozen. Nothing in this section is built.** Only
-stage 1 of the order of building below (height data) is authorised. Each
-later stage needs its own go-ahead after the one before it has passed its
-tests. A change to this section is a design change and is reviewed like one.
+Status: **approved and frozen. Stage 1 (height data) is built and has
+passed; nothing else in this section is built.** No later stage is
+authorised. Each needs its own go-ahead after the one before it has passed
+its tests. A change to this section is a design change and is reviewed like
+one.
 
 It went through three drafts. The direction was approved at the first
 review, the separated height data at the second, and at the third the three
 points then left open: more than one surface or solid stretch in a cell, the
 arc of a leap over uneven ground, and the standing angle measured on the real
-tower. The collision system that exists is not changed by this document.
+tower. At the fourth review, after stage 1 was built against the real map,
+five things that building it had shown were approved and written in: the
+kerb, levels measured above each cell's own ground, an underside read on its
+own, the crystal in place of the tower as the example of a cell with more
+than one surface, and the split of the function that marks the walkable map.
+They are marked *(fourth review)* where they appear. The collision system
+that exists is not changed by this document.
 
 What stage 1 may and may not do:
 
@@ -301,11 +313,13 @@ exists. What that code keeps for each cell becomes separate things:
 Most cells have none: open ground is a ground height and nothing more. A cell
 under a tree has one solid stretch for the trunk. A cell can have a ledge to
 stand on, clear air above it, and a branch above that: one surface and two
-solid stretches with a gap between, and the gap stays open. The real tower
-already needs this: in the cells round its spire there is the top of the
-mound to stand on at about 130 and, far above it, the sloped faces of the
-spire at over 400. Stretches that touch or nearly touch are joined; nothing
-else is.
+solid stretches with a gap between, and the gap stays open. The real crystal
+needs this *(fourth review)*: read whole, 2 of its cells have more than one
+standing surface and 48 have more than one solid stretch, the gem's shell
+above and the statue inside it below. The real tower, which an earlier
+draft gave as the example, has no cell with two standing surfaces: its spire
+is too steep to stand on anywhere. Stretches that touch or nearly touch are
+joined; nothing else is.
 
 **How a shape becomes solid stretches.** Each triangle over a cell is one of
 three kinds, by which way it faces:
@@ -321,6 +335,13 @@ only as thick as it is. A side is solid over the heights it spans. That is
 what gives a cell in the middle of a rock, which has no sides over it at all,
 a solid stretch from the ground to the rock's top.
 
+**An underside read on its own** *(fourth review)*, with no top above it in
+that cell, is solid only over the heights the underside itself spans. Nothing
+is guessed above it. A palm frond is modelled as a single sheet, and from
+below only its underside is there to read: it is a sheet in the air, not the
+foot of a column. The first build guessed that such an underside went on up
+to head height, and walled off the ground under every low frond on the map.
+
 **Which way a triangle faces** is worked out from its own three corners and
 nothing else, by one rule for every model, so it cannot depend on the order
 a model is read in. The models are drawn mirrored (their own up is down), and
@@ -334,7 +355,15 @@ come out with its lid, and only its lid, as somewhere to stand.
 
 Leaves and anything else above head height are left out for scenery, as now,
 so a champion walks under a tree. For a structure nothing is left out, so
-nobody stands under a crystal's overhang.
+nobody stands under a crystal's overhang. (Not yet so: stage 1 had to block
+exactly what is blocked today, and today a structure is cut off at head
+height like everything else. Reading structures whole changes what blocks,
+and is a change for a later stage to make and test.)
+
+**Levels are heights above each cell's own ground** *(fourth review)*, not
+heights in the world. The ground carries a champion up and down a hill
+freely, as it does today, and a hill is never a step however steep it is.
+Only what stands on the ground is stepped onto or stopped by.
 
 **Where a champion is** therefore has a third part. As well as its position
 on the flat it has a **level**: the height it is standing at, which is the
@@ -351,6 +380,22 @@ standing surfaces), the champion may step to one only if all of these hold:
 2. The champion's body, standing there, from its feet to its head, meets none
    of B's solid stretches, nor those of any cell within a body's half-width
    of B.
+
+**The kerb** *(fourth review)*. Anything solid that ends lower than the kerb
+(48, today's step-over height) is stepped onto by every champion, whatever
+its slope and whether or not it has a surface level enough to stand on: its
+top counts as a place to stand, and it is never in the way. This is what the
+walkable map does today with loose stones, and without it the height data
+could not block the same cells. A champion's own step height reaches higher
+than the kerb only by way of real standing surfaces.
+
+The kerb is measured from the level the champion is walking at, the lower of
+where it stands and where it would stand, and not from wherever its feet
+happen to be put. Two kerbs are not one: a stone 34 high with another
+leaning over it to 75 is closed to a walker on the ground, although each is
+less than a kerb above the one before. And the walkable map stops a walker
+at 48 exactly and lets it over anything less, so a step that reproduces it
+reaches everything lower than 48 and nothing at 48.
 
 If more than one place in B passes, it takes the one nearest its present
 level, and the higher of two equally near. If none passes, it cannot go
@@ -600,10 +645,12 @@ lines can be learned.
 One step at a time, each tested before the next is begun. Climbing, hops, the
 leap and slopes are not built together.
 
-1. **Height data.** Ground, standing surface and solid span per cell, and the
-   rule for stepping between cells, in the simulation. No champion behaves
-   differently yet: with every step height at 48 the map must block exactly
-   what it blocks today, and a test says so.
+1. **Height data. Built and passed.** Ground, standing surface and solid span
+   per cell, and the rule for stepping between cells, in the simulation. No
+   champion behaves differently yet: with every step height at the kerb the
+   map must block exactly what it blocks today, and a test says so. Nothing
+   that moves uses the height data yet; the walkable map is still what
+   blocks.
 2. **Climbing.** `step` read from the champion file. The monkey and Jad
    tried by hand on the real tower, stones, trees and crystal.
 3. **Drawn height and hops.** Checked for snapping, for floating, and for any
@@ -619,8 +666,13 @@ leap and slopes are not built together.
 
 In the simulation, by code:
 
-- With every step height at 48, the new map blocks the same cells as the map
-  that exists, on the real tower and crystal.
+- With every step height at the kerb, the new map blocks the same cells as
+  the map that exists. The cells themselves are compared, one by one, never
+  how many there are: the same number of cells in different places is a
+  failure, and a test says so. Each shape is compared lying across the cells
+  as it lies across the real map, and the test shapes are tried at several
+  positions within a cell. At start-up the game makes the same comparison
+  for every blocking shape on the map and says so in one line of the log.
 - A trunk has no standing surface however low it is sampled; a stone's top
   and a mound's shoulder have one.
 - A closed box has its lid, and only its lid, as somewhere to stand, whatever
@@ -683,6 +735,19 @@ By hand, which is what decides it:
 | The standing angle | 45 degrees proposed on the real tower's measurements; confirmed at stage 2 |
 | The other champions' W in the client | Temporary; moved into the simulation at step 5 |
 | The slope figures | To be tested and tuned, not approved |
+
+### Decided at the fourth review, after stage 1
+
+| | Decision |
+|---|---|
+| Stage 1, height data | Passed |
+| The kerb: anything solid lower than 48 is stepped onto by anyone | Added |
+| Levels measured above each cell's own ground | Added |
+| An underside with no top above it is only itself | Added |
+| The example of a cell with several surfaces | The crystal, not the tower |
+| Marking the walkable map split in two: finding a shape's cells, and finishing them | Keep |
+| The comparison with the walkable map | Of the cells themselves, at each shape's real position |
+| Stage 2 | Not authorised |
 
 ### Still open
 
