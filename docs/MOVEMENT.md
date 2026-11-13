@@ -253,8 +253,9 @@ the walkable map at all.
 
 ## Proposed: getting about on rough ground
 
-Status: **approved and frozen. Stage 1 (height data) is built and has
-passed; nothing else in this section is built.** No later stage is
+Status: **approved and frozen. Stage 1 (height data) is built, has passed
+and is frozen with it: what it blocks is not changed again unless a real
+fault is found. Nothing else in this section is built.** No later stage is
 authorised. Each needs its own go-ahead after the one before it has passed
 its tests. A change to this section is a design change and is reviewed like
 one.
@@ -268,7 +269,10 @@ five things that building it had shown were approved and written in: the
 kerb, levels measured above each cell's own ground, an underside read on its
 own, the crystal in place of the tower as the example of a cell with more
 than one surface, and the split of the function that marks the walkable map.
-They are marked *(fourth review)* where they appear. The collision system
+They are marked *(fourth review)* where they appear. A fifth review approved
+what the stronger comparison then showed: where the kerb is measured from,
+that 48 itself is not stepped over, and that structures stay cut off at head
+height for now. The collision system
 that exists is not changed by this document.
 
 What stage 1 may and may not do:
@@ -673,6 +677,15 @@ In the simulation, by code:
   as it lies across the real map, and the test shapes are tried at several
   positions within a cell. At start-up the game makes the same comparison
   for every blocking shape on the map and says so in one line of the log.
+
+  What each of these is evidence for is kept apart. The start-up line on the
+  real map (319 shapes, 7,691 cells the same, none different) covers every
+  shape where it really stands, but every structure on that map stands a
+  whole number of cells from the map's corner, so it does not try a shape
+  lying off the grid. That case is covered by the test shapes at six
+  positions within a cell, and by the real tower and crystal models read at
+  256 positions within a cell each, which is done from the exported model
+  files and is not part of the tests that run with the game.
 - A trunk has no standing surface however low it is sampled; a stone's top
   and a mound's shoulder have one.
 - A closed box has its lid, and only its lid, as somewhere to stand, whatever
@@ -748,6 +761,16 @@ By hand, which is what decides it:
 | Marking the walkable map split in two: finding a shape's cells, and finishing them | Keep |
 | The comparison with the walkable map | Of the cells themselves, at each shape's real position |
 | Stage 2 | Not authorised |
+
+### Decided at the fifth review
+
+| | Decision |
+|---|---|
+| The kerb is measured from the level walked at, the lower of where the champion stands and where it would stand | Approved |
+| What is lower than 48 is stepped over; what is 48 is not | Approved |
+| Structures stay cut off at head height, as today | Approved as a limit of stage 1; reading them whole is a later change, tested on its own |
+| Stage 1 and this account of it | Frozen |
+| Stage 2 | Not authorised; to be proposed and reviewed on its own |
 
 ### Still open
 
