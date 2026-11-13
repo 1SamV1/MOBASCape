@@ -6,7 +6,7 @@
 //! **over what stretches of height a body is in the way**. A cell holds as
 //! many of each as the shape has there.
 //!
-//! Stage 1 only builds and checks this data. Nothing that moves reads it yet:
+//! This only builds and checks the data. Nothing that moves reads it yet:
 //! what blocks a unit is still decided by [`Grid::block_solid`], unchanged.
 //! [`agreement`] compares the two readings of the same shape.
 //!
@@ -14,7 +14,7 @@
 //! the shape stands on.
 
 use crate::Grid;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet, VecDeque};
 
 /// Sixteenths of a world unit: the unit heights are kept in.
 pub const Q: i32 = 16;
@@ -42,49 +42,40 @@ impl Column {
         self.solid.last().map(|s| s.1).unwrap_or(0)
     }
 
-    /// Whether a body `tall` high with its feet at `level` meets anything
-    /// solid here. Solid that ends lower than `low` does not count: it is
-    /// low enough to be stepped over by anyone.
+    /// Whether a body `tall` high standing at `level` meets anything solid
+    /// here. Solid that ends lower than a `kerb` above that level does not
+    /// count: it is low enough to be walked over by anyone.
     ///
-    /// `low` is a height above this cell's ground, not above the feet. A
-    /// walker on the ground passes `kerb`; one on a surface passes that
-    /// surface's level plus `kerb`. It is not measured from wherever the feet
-    /// happen to be put, or one low stone would lift a walker past the next,
-    /// taller one in the same cell: two kerbs are not one.
-    pub fn in_the_way(&self, level: i32, tall: i32, low: i32) -> bool {
+    /// `level` is the level the champion is at (see [`Column::levels`]), not
+    /// the height its feet are drawn at. A champion walking over a low stone
+    /// is still at the level under the stone, and the next stone is measured
+    /// from there too: low stones do not add up, in one cell or across
+    /// several.
+    pub fn in_the_way(&self, level: i32, tall: i32, kerb: i32) -> bool {
         self.solid
             .iter()
-            .any(|&(bottom, top)| bottom < level + tall && top > level && top >= low)
+            .any(|&(bottom, top)| bottom < level + tall && top >= level + kerb)
     }
 
-    /// Every height at which feet could be put down here, lowest first:
+    /// The levels a champion can be at here, lowest first:
     ///
-    /// - the ground, unless something solid is standing on that very spot;
-    /// - each standing surface;
-    /// - the top of anything solid that is lower than a `kerb`, whatever its
-    ///   slope. A low stone is stood on, edge and all; nothing taller is
-    ///   stood on unless it has a surface level enough for it.
-    pub fn places(&self, kerb: i32) -> Vec<i32> {
-        let mut places = Vec::new();
-        if !self
-            .solid
-            .iter()
-            .any(|&(bottom, top)| bottom <= 0 && top > 0)
-        {
-            places.push(0);
-        }
-        places.extend(self.surfaces.iter().copied());
-        places.extend(self.solid.iter().map(|s| s.1).filter(|&top| top < kerb));
-        places.sort_unstable();
-        places.dedup();
-        places
+    /// - the ground, always;
+    /// - each standing surface a `kerb` or more above the ground.
+    ///
+    /// Nothing lower than a kerb is a level. A low stone is walked over at
+    /// the level beneath it; its top is where the feet are drawn, and that is
+    /// all it is. Whether a body fits at a level is [`Column::in_the_way`].
+    pub fn levels(&self, kerb: i32) -> Vec<i32> {
+        let mut levels = vec![0];
+        levels.extend(self.surfaces.iter().copied().filter(|&at| at >= kerb));
+        levels
     }
 
-    /// Whether a champion walking on the ground could be in this cell: some
-    /// place to put its feet within a `step` of the ground, with room above
-    /// it for a body `tall` high.
+    /// Whether a champion walking on the ground could be in this cell: a
+    /// level within a `step` of the ground with room above it for a body
+    /// `tall` high.
     pub fn open_from_the_ground(&self, step: i32, tall: i32, kerb: i32) -> bool {
-        self.places(kerb)
+        self.levels(kerb)
             .into_iter()
             .any(|at| at <= step && !self.in_the_way(at, tall, kerb))
     }
@@ -313,22 +304,20 @@ impl HeightMap {
 }
 
 impl HeightMap {
-    /// Where a champion standing at `level` (above the ground, in
-    /// sixteenths) would stand if it stepped into the cell `to`, or `None`
-    /// if it cannot go there.
+    /// Where a champion at `level` (above the ground, in sixteenths) would
+    /// be if it stepped into the cell `to`, or `None` if it cannot go there.
     ///
-    /// Of the places to put its feet in that cell ([`Column::places`]), one
-    /// is allowed if it is within `step` of the level stepped from and a
-    /// body `tall` high standing there meets nothing solid, in that cell or
-    /// in any cell whose middle is within `body` world units of its middle.
-    /// Of several, the nearest in level is taken, and the higher of two
-    /// equally near.
+    /// Of the levels in that cell ([`Column::levels`]), one is allowed if it
+    /// is within `step` of the level stepped from and a body `tall` high at
+    /// that level meets nothing solid, in that cell or in any cell with room
+    /// to be kept from ([`HeightMap::room`]). Of several, the nearest in
+    /// level is taken, and the higher of two equally near.
     ///
     /// Levels are heights above each cell's own ground. A hill is therefore
     /// never a step: the ground carries a champion up and down it freely, as
     /// it does today, and only what stands on the ground is stepped onto.
     ///
-    /// Stage 1 builds and tests this rule. Nothing that moves uses it yet.
+    /// Nothing that moves uses this rule yet.
     pub fn step_to(
         &self,
         level: i32,
@@ -338,33 +327,231 @@ impl HeightMap {
         body: i32,
         kerb: i32,
     ) -> Option<i32> {
-        let places = match self.columns.get(&to) {
-            Some(column) => column.places(kerb),
+        let levels = match self.columns.get(&to) {
+            Some(column) => column.levels(kerb),
             None => vec![0],
         };
-        let reach = body / self.cell + 1;
-        let clear = |at: i32| {
-            for dy in -reach..=reach {
-                for dx in -reach..=reach {
-                    let (wx, wy) = (dx * self.cell, dy * self.cell);
-                    if (dx, dy) != (0, 0) && wx * wx + wy * wy > body * body {
+        let room = self.room(body);
+        levels
+            .into_iter()
+            .filter(|&at| (at - level).abs() <= step && self.fits(to, at, tall, kerb, &room))
+            .min_by_key(|&at| ((at - level).abs(), -at))
+    }
+
+    /// The cells, as steps from a cell, that a body in that cell has to be
+    /// clear of: the cell itself, and for a body with any width every cell
+    /// whose middle is within the body's half-width plus half a cell of its
+    /// own middle.
+    ///
+    /// This is the walkable map's rule ([`Grid::block_cells`]) turned round,
+    /// so the two agree about how near a thing a body may be. With a body of
+    /// 28 and cells of 32 it is the four cells sharing a side, 32 away, and
+    /// not the four at the corners, 45 away. Measured from the middle alone,
+    /// with no half cell, a body narrower than a cell would be kept from
+    /// nothing at all, which is what this function did when it was first
+    /// written.
+    pub fn room(&self, body: i32) -> Vec<(i32, i32)> {
+        let mut room = vec![(0, 0)];
+        if body <= 0 {
+            return room;
+        }
+        let reach = body + self.cell / 2;
+        let cells = reach / self.cell + 1;
+        for dy in -cells..=cells {
+            for dx in -cells..=cells {
+                let (wx, wy) = (dx * self.cell, dy * self.cell);
+                if (dx, dy) != (0, 0) && wx * wx + wy * wy <= reach * reach {
+                    room.push((dx, dy));
+                }
+            }
+        }
+        room
+    }
+
+    /// Whether a body `tall` high fits at `level` in `cell`, clear of
+    /// everything in `room`.
+    fn fits(
+        &self,
+        cell: (i32, i32),
+        level: i32,
+        tall: i32,
+        kerb: i32,
+        room: &[(i32, i32)],
+    ) -> bool {
+        room.iter().all(|&(dx, dy)| {
+            self.columns
+                .get(&(cell.0 + dx, cell.1 + dy))
+                .is_none_or(|column| !column.in_the_way(level, tall, kerb))
+        })
+    }
+
+    /// Everywhere a champion with the given step could get to by walking in
+    /// from open ground, near anything that stands on the map.
+    ///
+    /// Open ground is every cell with nothing over it and nothing within two
+    /// cells of it. The walk goes in from there a cell at a time, to the
+    /// cells sharing a side, by the rule of [`HeightMap::step_to`], taking
+    /// every level it is allowed and not only the nearest.
+    ///
+    /// `across` is how many cells a change of level may pass over. With room
+    /// for a body, a champion on the ground cannot be in the cell next to a
+    /// block, and one on the block can be at its very edge, so the two are
+    /// never in cells that share a side: with `across` at 0 nothing with a
+    /// body ever gets onto anything. With `across` at 1 a change of level
+    /// may go two cells in a straight line, over one cell it could not stop
+    /// in, provided nothing in that cell stands higher than a kerb above the
+    /// upper of the two levels. Moves that keep to one level are always to
+    /// the next cell.
+    pub fn reach(&self, step: i32, tall: i32, body: i32, kerb: i32, across: i32) -> Reach {
+        const NEAR: i32 = 2;
+        let mut near: HashSet<(i32, i32)> = HashSet::new();
+        for &(cx, cy) in self.columns.keys() {
+            for dy in -NEAR..=NEAR {
+                for dx in -NEAR..=NEAR {
+                    near.insert((cx + dx, cy + dy));
+                }
+            }
+        }
+        let room = self.room(body);
+        let sides = [(1, 0), (-1, 0), (0, 1), (0, -1)];
+        let mut levels: HashMap<(i32, i32), Vec<i32>> = HashMap::new();
+        let mut queue: VecDeque<((i32, i32), i32)> = VecDeque::new();
+        // start on the rim: cells near something that touch open ground
+        let mut rim: Vec<(i32, i32)> = near
+            .iter()
+            .copied()
+            .filter(|&(cx, cy)| {
+                sides
+                    .iter()
+                    .any(|&(dx, dy)| !near.contains(&(cx + dx, cy + dy)))
+            })
+            .collect();
+        rim.sort_unstable();
+        for cell in rim {
+            if self.fits(cell, 0, tall, kerb, &room) {
+                levels.insert(cell, vec![0]);
+                queue.push_back((cell, 0));
+            }
+        }
+        while let Some(((cx, cy), level)) = queue.pop_front() {
+            for (dx, dy) in sides {
+                let to = (cx + dx, cy + dy);
+                if !near.contains(&to) {
+                    continue;
+                }
+                let there = match self.columns.get(&to) {
+                    Some(column) => column.levels(kerb),
+                    None => vec![0],
+                };
+                for at in there {
+                    if (at - level).abs() > step || !self.fits(to, at, tall, kerb, &room) {
                         continue;
                     }
-                    if let Some(column) = self.columns.get(&(to.0 + dx, to.1 + dy)) {
-                        // the kerb is measured from the lower of where it
-                        // stands and where it would stand
-                        if column.in_the_way(at, tall, level.min(at) + kerb) {
-                            return false;
+                    let known = levels.entry(to).or_default();
+                    if !known.contains(&at) {
+                        known.push(at);
+                        queue.push_back((to, at));
+                    }
+                }
+                // a change of level, over cells it could not stop in
+                for far in 2..=across + 1 {
+                    let to = (cx + dx * far, cy + dy * far);
+                    if !near.contains(&to) {
+                        break;
+                    }
+                    let Some(column) = self.columns.get(&to) else {
+                        continue;
+                    };
+                    for at in column.levels(kerb) {
+                        if at == level
+                            || (at - level).abs() > step
+                            || !self.fits(to, at, tall, kerb, &room)
+                        {
+                            continue;
+                        }
+                        let over = (1..far).all(|k| {
+                            self.columns
+                                .get(&(cx + dx * k, cy + dy * k))
+                                .is_none_or(|c| !c.in_the_way(level.max(at), tall, kerb))
+                        });
+                        if !over {
+                            continue;
+                        }
+                        let known = levels.entry(to).or_default();
+                        if !known.contains(&at) {
+                            known.push(at);
+                            queue.push_back((to, at));
                         }
                     }
                 }
             }
-            true
-        };
-        places
-            .into_iter()
-            .filter(|&at| (at - level).abs() <= step && clear(at))
-            .min_by_key(|&at| ((at - level).abs(), -at))
+        }
+        for known in levels.values_mut() {
+            known.sort_unstable();
+        }
+        Reach { near, levels }
+    }
+}
+
+/// Where a champion can get to: the answer of [`HeightMap::reach`].
+#[derive(Debug, Clone, Default)]
+pub struct Reach {
+    near: HashSet<(i32, i32)>,
+    levels: HashMap<(i32, i32), Vec<i32>>,
+}
+
+impl Reach {
+    /// Whether the champion can be in this cell at all. Open ground, away
+    /// from everything, always is.
+    pub fn open(&self, cell: (i32, i32)) -> bool {
+        !self.near.contains(&cell) || self.levels.contains_key(&cell)
+    }
+
+    /// The levels it can be at in this cell, lowest first; none if it cannot
+    /// be there, and the ground alone on open ground.
+    pub fn levels(&self, cell: (i32, i32)) -> &[i32] {
+        match self.levels.get(&cell) {
+            Some(levels) => levels,
+            None if self.near.contains(&cell) => &[],
+            None => &[0],
+        }
+    }
+
+    /// What this champion reaches that `other` does not: every cell where it
+    /// can be at a level the other cannot, gathered into patches of cells
+    /// that touch, biggest first. Each patch is its cells and the highest
+    /// level reached in it.
+    pub fn beyond(&self, other: &Reach) -> Vec<(Vec<(i32, i32)>, i32)> {
+        let mut gained: HashMap<(i32, i32), i32> = HashMap::new();
+        for (&cell, levels) in &self.levels {
+            let theirs = other.levels(cell);
+            if let Some(&top) = levels.iter().filter(|at| !theirs.contains(at)).max() {
+                gained.insert(cell, top);
+            }
+        }
+        let mut cells: Vec<(i32, i32)> = gained.keys().copied().collect();
+        cells.sort_unstable();
+        let mut seen: HashSet<(i32, i32)> = HashSet::new();
+        let mut patches = Vec::new();
+        for start in cells {
+            if !seen.insert(start) {
+                continue;
+            }
+            let (mut patch, mut top, mut queue) = (Vec::new(), 0, vec![start]);
+            while let Some((cx, cy)) = queue.pop() {
+                patch.push((cx, cy));
+                top = top.max(gained[&(cx, cy)]);
+                for next in [(cx + 1, cy), (cx - 1, cy), (cx, cy + 1), (cx, cy - 1)] {
+                    if gained.contains_key(&next) && seen.insert(next) {
+                        queue.push(next);
+                    }
+                }
+            }
+            patch.sort_unstable();
+            patches.push((patch, top));
+        }
+        patches.sort_by(|a, b| b.0.len().cmp(&a.0.len()).then(a.0.cmp(&b.0)));
+        patches
     }
 }
 

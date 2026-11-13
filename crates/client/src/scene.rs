@@ -110,6 +110,8 @@ pub const BODY_RADIUS: f32 = 28.0;
 /// stones); what is higher passes overhead (leaves, an overhang).
 const SOLID_FROM: f32 = 48.0;
 const SOLID_TO: f32 = 160.0;
+/// The step the start-up climbing measurement tries. No champion has it yet.
+const CLIMB_STEP: f32 = 96.0;
 
 #[derive(Clone)]
 pub struct WorldCollision {
@@ -1131,6 +1133,55 @@ pub fn build(
             tracing::warn!("height data: {line}");
         }
     }
+    // Measured only, before any climbing is built: what a champion with a
+    // step of 96 could get onto that one with today's step of 48 cannot,
+    // with room for a body. Nothing that moves reads this.
+    {
+        let q = |v: f32| (v * rift_sim::heights::Q as f32) as i32;
+        let (kerb, tall, body) = (q(SOLID_FROM), q(SOLID_TO), BODY_RADIUS.round() as i32);
+        let walker = height_build.map.reach(kerb - 1, tall, body, kerb, 1);
+        let next_cell_only: usize = height_build
+            .map
+            .reach(q(CLIMB_STEP), tall, body, kerb, 0)
+            .beyond(&walker)
+            .iter()
+            .map(|patch| patch.0.len())
+            .sum();
+        let patches = height_build
+            .map
+            .reach(q(CLIMB_STEP), tall, body, kerb, 1)
+            .beyond(&walker);
+        let cells: usize = patches.iter().map(|patch| patch.0.len()).sum();
+        let biggest: Vec<String> = patches
+            .iter()
+            .take(8)
+            .map(|(cells, top)| {
+                let (cx, cy) = cells[cells.len() / 2];
+                format!(
+                    "{} cells up to {} high at tile {},{}",
+                    cells.len(),
+                    top / rift_sim::heights::Q,
+                    origin_tile_x + cx.div_euclid(NAV_PER_TILE),
+                    origin_tile_y + cy.div_euclid(NAV_PER_TILE)
+                )
+            })
+            .collect();
+        tracing::info!(
+            "climbing, measured only: a step of {} reaches {} cells in {} patches that a step of {} does not, {} of the patches 4 cells or more ({} cells if a change of level may not cross a cell); the biggest: {}",
+            CLIMB_STEP,
+            cells,
+            patches.len(),
+            SOLID_FROM,
+            patches.iter().filter(|patch| patch.0.len() >= 4).count(),
+            next_cell_only,
+            if biggest.is_empty() {
+                "none".to_string()
+            } else {
+                biggest.join("; ")
+            }
+        );
+    }
+
     let ground = Ground::new(
         size,
         128,

@@ -164,11 +164,11 @@ fn a_ledge_clear_air_and_a_branch_above_keep_the_air_between_them() {
     );
     // a short body fits on the ledge under the branch; a tall one does not
     assert!(
-        !column.in_the_way(50 * Q, 60 * Q, 98 * Q),
+        !column.in_the_way(50 * Q, 60 * Q, 48 * Q),
         "60 tall fits in a gap of 70"
     );
     assert!(
-        column.in_the_way(50 * Q, 160 * Q, 98 * Q),
+        column.in_the_way(50 * Q, 160 * Q, 48 * Q),
         "160 tall does not"
     );
 }
@@ -305,8 +305,8 @@ fn palm() -> Vec<Tri> {
 
 /// The promise of stage 1: read with today's step and head height, the height
 /// data blocks the same cells as the walkable map that exists.
-#[test]
-fn it_blocks_what_the_walkable_map_blocks_for_every_kind_of_shape() {
+/// One of every kind of shape the two readings have to agree about.
+fn every_shape() -> Vec<(&'static str, Vec<Tri>)> {
     let mut tree = solid_box(0.0, 0.0, 12.0, 12.0, 0.0, 400.0);
     tree.extend(solid_box(0.0, 0.0, 200.0, 200.0, 300.0, 380.0));
     let mut tower = solid_box(0.0, 0.0, 150.0, 130.0, 0.0, 138.0);
@@ -323,7 +323,7 @@ fn it_blocks_what_the_walkable_map_blocks_for_every_kind_of_shape() {
     arch.extend(solid_box(0.0, 0.0, 180.0, 30.0, 300.0, 400.0));
     let mut overhang = solid_box(0.0, 0.0, 30.0, 30.0, 0.0, 300.0);
     overhang.extend(solid_box(100.0, 0.0, 100.0, 40.0, 100.0, 300.0));
-    let shapes: Vec<(&str, Vec<Tri>)> = vec![
+    vec![
         ("low stone", solid_box(0.0, 0.0, 40.0, 40.0, 0.0, 40.0)),
         ("tall stone", solid_box(0.0, 0.0, 40.0, 40.0, 0.0, 90.0)),
         (
@@ -365,7 +365,12 @@ fn it_blocks_what_the_walkable_map_blocks_for_every_kind_of_shape() {
             "stone a hair under step height",
             solid_box(0.0, 0.0, 50.0, 50.0, 0.0, 47.9),
         ),
-    ];
+    ]
+}
+
+#[test]
+fn it_blocks_what_the_walkable_map_blocks_for_every_kind_of_shape() {
+    let shapes = every_shape();
     for (name, shape) in &shapes {
         for body in [0, 28] {
             // wherever in a cell the shape happens to stand
@@ -414,38 +419,128 @@ fn the_finishing_step_is_the_same_whichever_way_the_cells_were_found() {
 }
 
 #[test]
-fn two_surfaces_each_within_a_step_of_the_ground_are_not_within_a_step_of_each_other() {
-    // a stone 40 high beside a ledge 130 high: 90 between them
+fn a_low_stone_is_not_a_level_and_gives_no_help_up() {
+    // a stone 40 high beside a ledge 130 high
     let mut shape = solid_box(-64.0, 0.0, 32.0, 48.0, 0.0, 40.0);
     shape.extend(solid_box(48.0, 0.0, 80.0, 48.0, 0.0, 130.0));
     let map = read(&shape, &WHOLE);
     let (stone, ledge) = (cell(-64, 0), cell(48, 0));
     let (tall, body) = (160 * Q, 0);
 
-    // a step of 48: onto the stone from the ground, and no further
+    // anyone walks over the stone, and is still at the level of the ground
+    for step in [48 * Q - 1, 96 * Q] {
+        assert_eq!(map.step_to(0, stone, step, tall, body, 48 * Q), Some(0));
+    }
     assert_eq!(
-        map.step_to(0, stone, 48 * Q, tall, body, 48 * Q),
-        Some(40 * Q)
+        map.column(stone.0, stone.1).unwrap().levels(48 * Q),
+        vec![0],
+        "the stone's top is not a level"
     );
-    assert_eq!(map.step_to(40 * Q, ledge, 48 * Q, tall, body, 48 * Q), None);
-    assert_eq!(map.step_to(0, ledge, 48 * Q, tall, body, 48 * Q), None);
-
-    // a step of 96: the ground to the stone, the stone to the ledge, but not
-    // the ground to the ledge in one
-    assert_eq!(
-        map.step_to(0, stone, 96 * Q, tall, body, 48 * Q),
-        Some(40 * Q)
-    );
-    assert_eq!(
-        map.step_to(40 * Q, ledge, 96 * Q, tall, body, 48 * Q),
-        Some(130 * Q)
-    );
+    // so the ledge is 130 up from the stone, not 90, and a step of 96 does
+    // not reach it from there any more than from the ground
     assert_eq!(map.step_to(0, ledge, 96 * Q, tall, body, 48 * Q), None);
-    // and down again the same way
+    // from the ledge, down to the stone's cell is down to the ground: 130
     assert_eq!(
         map.step_to(130 * Q, stone, 96 * Q, tall, body, 48 * Q),
-        Some(40 * Q)
+        None
     );
+}
+
+#[test]
+fn real_levels_are_climbed_one_from_the_next() {
+    // a block 80 high beside one 160 high: each a real standing surface
+    let mut shape = solid_box(-70.0, 0.0, 34.0, 48.0, 0.0, 80.0);
+    shape.extend(solid_box(48.0, 0.0, 80.0, 48.0, 0.0, 160.0));
+    let map = read(&shape, &WHOLE);
+    let (low, high) = (cell(-70, 0), cell(48, 0));
+    let (tall, body) = (160 * Q, 0);
+    // a step of 96: the ground to the low block, the low block to the high
+    // one, but not the ground to the high one in one
+    assert_eq!(
+        map.step_to(0, low, 96 * Q, tall, body, 48 * Q),
+        Some(80 * Q)
+    );
+    assert_eq!(
+        map.step_to(80 * Q, high, 96 * Q, tall, body, 48 * Q),
+        Some(160 * Q)
+    );
+    assert_eq!(map.step_to(0, high, 96 * Q, tall, body, 48 * Q), None);
+    // and down again the same way
+    assert_eq!(
+        map.step_to(160 * Q, low, 96 * Q, tall, body, 48 * Q),
+        Some(80 * Q)
+    );
+    // a step under 48 gets onto neither
+    assert_eq!(map.step_to(0, low, 48 * Q - 1, tall, body, 48 * Q), None);
+}
+
+#[test]
+fn a_surface_at_exactly_48_is_a_level_a_step_under_48_cannot_reach() {
+    let at = read(&solid_box(0.0, 0.0, 50.0, 50.0, 0.0, 48.0), &WHOLE);
+    let under = read(&solid_box(0.0, 0.0, 50.0, 50.0, 0.0, 47.9), &WHOLE);
+    let here = cell(0, 0);
+    let (tall, kerb) = (160 * Q, 48 * Q);
+    assert_eq!(
+        at.column(here.0, here.1).unwrap().levels(kerb),
+        vec![0, 48 * Q]
+    );
+    assert_eq!(at.step_to(0, here, kerb - 1, tall, 0, kerb), None);
+    assert_eq!(at.step_to(0, here, kerb, tall, 0, kerb), Some(48 * Q));
+    // a hair lower and it is walked over at the level of the ground
+    assert_eq!(under.column(here.0, here.1).unwrap().levels(kerb), vec![0]);
+    assert_eq!(under.step_to(0, here, kerb - 1, tall, 0, kerb), Some(0));
+}
+
+#[test]
+fn room_for_a_body_is_the_cells_at_its_sides_and_not_at_its_corners() {
+    // one thin post, wholly inside one cell
+    let map = read(&solid_box(16.0, 16.0, 6.0, 6.0, 0.0, 200.0), &WHOLE);
+    let post = cell(16, 16);
+    let (step, tall, kerb) = (48 * Q - 1, 160 * Q, 48 * Q);
+    let from_post = |dx: i32, dy: i32, body: i32| {
+        map.step_to(0, (post.0 + dx, post.1 + dy), step, tall, body, kerb)
+    };
+    // the room itself: a body of 28 on cells of 32 is kept from four cells
+    let mut room = map.room(28);
+    room.sort_unstable();
+    assert_eq!(room, vec![(-1, 0), (0, -1), (0, 0), (0, 1), (1, 0)]);
+    assert_eq!(map.room(0), vec![(0, 0)], "a point is kept from nothing");
+
+    assert_eq!(from_post(0, 0, 28), None, "not in the post's own cell");
+    for (dx, dy) in [(1, 0), (-1, 0), (0, 1), (0, -1)] {
+        assert_eq!(from_post(dx, dy, 28), None, "not beside it: {dx},{dy}");
+        assert_eq!(from_post(dx, dy, 0), Some(0), "a point is: {dx},{dy}");
+    }
+    for (dx, dy) in [(1, 1), (-1, 1), (1, -1), (-1, -1)] {
+        assert_eq!(from_post(dx, dy, 28), Some(0), "at its corner: {dx},{dy}");
+    }
+    for (dx, dy) in [(2, 0), (-2, 0), (0, 2), (0, -2)] {
+        assert_eq!(from_post(dx, dy, 28), Some(0), "two cells off: {dx},{dy}");
+    }
+    // the edge of it: the next cell's middle is 32 away, so a body whose
+    // half-width and half a cell come to 32 is just kept from it, and one a
+    // unit narrower is just not. At the corner, 45.25 away: 30 is kept
+    // from it (46), 29 is not (45).
+    assert_eq!(from_post(1, 0, 16), None, "16 + 16 reaches 32");
+    assert_eq!(from_post(1, 0, 15), Some(0), "15 + 16 does not");
+    assert_eq!(from_post(1, 1, 30), None, "30 + 16 reaches the corner cell");
+    assert_eq!(from_post(1, 1, 29), Some(0), "29 + 16 does not");
+}
+
+#[test]
+fn low_stones_in_a_row_do_not_add_up() {
+    // stones 40, 80 and 120 high in a row, each 40 above the last, too
+    // narrow to be read as anything but stones standing on the ground
+    let mut shape = solid_box(-64.0, 0.0, 30.0, 30.0, 0.0, 40.0);
+    shape.extend(solid_box(0.0, 0.0, 30.0, 30.0, 0.0, 80.0));
+    shape.extend(solid_box(64.0, 0.0, 30.0, 30.0, 0.0, 120.0));
+    let map = read(&shape, &WHOLE);
+    let (tall, kerb) = (160 * Q, 48 * Q);
+    let step = kerb - 1;
+    assert_eq!(map.step_to(0, cell(-64, 0), step, tall, 0, kerb), Some(0));
+    // from the first stone the walker is at the ground's level, and the
+    // second is 80 above that, not 40
+    assert_eq!(map.step_to(0, cell(0, 0), step, tall, 0, kerb), None);
 }
 
 #[test]
@@ -562,4 +657,85 @@ fn two_kerbs_are_not_one() {
         map.step_to(0, (cx, cy), 96 * Q, 160 * Q, 0, 48 * Q),
         Some(75 * Q)
     );
+}
+
+#[test]
+fn a_walk_in_from_open_ground_leaves_open_what_the_walkable_map_leaves_open() {
+    // every kind of shape, at several places within a cell: with a step just
+    // under 48 and a body of 28, the cells the walk can be in are the cells
+    // the walkable map has open, one for one
+    let (low, high, body, cell_size) = (48.0f32, 160.0f32, 28, 32);
+    let (kerb, tall) = (48 * Q, 160 * Q);
+    for (name, shape) in &every_shape() {
+        for within in [
+            (0.0f32, 0.0f32),
+            (16.0, 16.0),
+            (7.5, 29.0),
+            (31.9, 0.1),
+            (20.3, 11.7),
+        ] {
+            let at = (512.0 + within.0, 512.0 + within.1);
+            let mut grid = Grid::with_cell(32, 32, cell_size);
+            grid.block_solid(shape, at, low, high, body);
+            let mut map = HeightMap::new(32, 32, cell_size);
+            map.add_shape(shape, at, &GAME);
+            let reach = map.reach(kerb - 1, tall, body, kerb, 1);
+            for cy in 0..32 {
+                for cx in 0..32 {
+                    assert_eq!(
+                        reach.open((cx, cy)),
+                        !grid.is_blocked(cx, cy),
+                        "{name} at {within:?}, cell {cx},{cy}"
+                    );
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn what_a_bigger_step_reaches_is_counted_in_patches() {
+    // a broad block 80 high: a step of 96 gets onto it and a step under 48
+    // does not; a thin post beside it gains nobody anything
+    let mut shape = solid_box(0.0, 0.0, 120.0, 120.0, 0.0, 80.0);
+    shape.extend(solid_box(300.0, 0.0, 10.0, 10.0, 0.0, 300.0));
+    let map = read(&shape, &WHOLE);
+    let (kerb, tall) = (48 * Q, 160 * Q);
+    let walker = map.reach(kerb - 1, tall, 28, kerb, 1);
+    let climber = map.reach(96 * Q, tall, 28, kerb, 1);
+    let gained = climber.beyond(&walker);
+    assert_eq!(gained.len(), 1, "one patch: the block's top");
+    let (cells, top) = &gained[0];
+    assert_eq!(*top, 80 * Q);
+    // 240 across is seven or eight cells each way
+    assert!(cells.len() >= 36 && cells.len() <= 81, "{}", cells.len());
+    assert!(walker.beyond(&climber).is_empty());
+    assert!(!walker.open(cell(0, 0)) && climber.open(cell(0, 0)));
+
+    // A body on the ground cannot be in the cell beside the block, and the
+    // block's edge is the cell beyond that: getting up is a move of two
+    // cells. Allowed only moves to the next cell, a body gets onto nothing,
+    // though a point does.
+    let next_cell_only = map.reach(96 * Q, tall, 28, kerb, 0);
+    assert!(next_cell_only.beyond(&walker).is_empty());
+    let point = map.reach(96 * Q, tall, 0, kerb, 0);
+    assert!(
+        !point
+            .beyond(&map.reach(kerb - 1, tall, 0, kerb, 0))
+            .is_empty()
+    );
+}
+
+#[test]
+fn a_change_of_level_does_not_pass_through_a_wall() {
+    // a block 80 high with a thin wall 300 high along one side of it
+    let mut shape = solid_box(0.0, 0.0, 120.0, 120.0, 0.0, 80.0);
+    shape.extend(solid_box(-136.0, 0.0, 10.0, 400.0, 0.0, 300.0));
+    let map = read(&shape, &WHOLE);
+    let (kerb, tall) = (48 * Q, 160 * Q);
+    let climber = map.reach(96 * Q, tall, 28, kerb, 1);
+    // it gets up from the other sides, but stands nowhere beside the wall
+    assert!(climber.open(cell(60, 0)));
+    assert!(climber.levels(cell(-110, 0)).is_empty());
+    assert!(climber.levels(cell(-80, 0)).is_empty());
 }
