@@ -88,7 +88,6 @@ impl HeightGrid {
     }
 }
 
-#[derive(Clone)]
 /// Cells of the walkable map to a game tile, each way. At one cell to a tile
 /// a thin trunk closed a whole tile; at four, obstacles can be marked at the
 /// size they are seen.
@@ -102,6 +101,7 @@ pub const BODY_RADIUS: f32 = 28.0;
 /// Half the width of a tree's trunk. Leaves and fronds do not stop anyone.
 const TRUNK_RADIUS: f32 = 18.0;
 
+#[derive(Clone)]
 pub struct WorldCollision {
     grid: Grid,
     origin_tile_x: i32,
