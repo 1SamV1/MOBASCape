@@ -88,7 +88,8 @@ def choose_scale(W, H, budget):
 def holds(W, H, s, budget=0.25):
     """Can the window hold the layout at this scale at all: with everything given up that may be, is no clash left?
     Asked of the usual state, so it depends on the window alone; the pieces that come and go are only ever
-    shown where they are clear, and cannot add a clash."""
+    shown where they are clear, and cannot add a clash. Since the rules for clashes leave no clash by themselves,
+    the answer does not depend on the budget either (output section 15 tries it with the budget off)."""
     return not collapse(W, H, s, USUAL, budget, True)[2]
 def effective_scale(W, H, requested, budget=0.25, can_hold=holds):
     """The scale drawn. With nothing requested, the scale chosen by fit. With a scale requested, that scale if the
@@ -134,6 +135,12 @@ def collapse(W, H, s, want, budget, slide):
     if not fits(st['obj_h']): st['obj_h'] = 24; steps.append('objectives to its title')
     if not fits(st['obj_h']): st['obj_h'] = 0; steps.append('objectives hidden')
     if [p for p in bad(Rr) if set(p) == {'score', 'feed'}]: st['feed_y'] = 56; steps.append('kill feed moves under the score strip')
+    # A piece of the top row still within 8 of the minimap is not shown: the kill feed first, then the score strip.
+    # The minimap is never hidden, so in a window short enough for it to reach the top row it is the other that goes.
+    # With this the rules for clashes leave no clash by themselves; nothing waits for the budget to separate two pieces.
+    near_map = lambda name: [p for p in clashes(lay(), W, H, s) if set(p) == {name, 'minimap'}]
+    if st['feed'] and near_map('feed'): st['feed'] = 0; steps.append('kill feed not shown: the minimap reaches it')
+    if st['score'] and near_map('score'): st['score'] = False; steps.append('score strip not shown: the minimap reaches it')
     if bad(Rr): st['team_compact'] = True; steps.append('team frames to portraits')
     if bad(Rr): st['team'] = False; steps.append('team frames hidden')
     for name, do, can in [('objectives to its title', lambda: st.__setitem__('obj_h', 24), lambda: st['obj_h'] > 24),
@@ -317,4 +324,80 @@ def main():
     for W, H, req in ((1811, 1040, 2), (1905, 1040, 2), (1906, 1040, 2), (1920, 1080, 2), (1920, 559, 2), (1920, 560, 2), (2240, 1260, 3), (2859, 1260, 3), (3840, 2160, 4), (3840, 2160, 3), (3840, 2160, 1), (1920, 1080, 1)):
         e = effective_scale(W, H, req); a = choose_scale(W, H, 0.25)
         print(f"   {W}x{H}, {req} requested: drawn at {e}{'' if e == req else ' (cannot hold ' + str(req) + ': needs ' + str(953 * req) + ' by ' + str(280 * req) + ')'}; left to itself it would choose {a}")
+    print('--- 15. the rules for clashes leave no clash by themselves: the budget switched off, windows no earlier sweep covered, and the edges')
+    # Whether the minimap reaches the top row is written out here from the anchors, and not taken from layout() or
+    # clashes(), so that what the rule does is checked against separate arithmetic.
+    def near(a, b, g): return max(b[0] - a[2], a[0] - b[2]) < g and max(b[1] - a[3], a[1] - b[3]) < g   # two rectangles closer than g, across and down
+    def strip(W, s): return ((W - 534 * s) // 2, 10 * s, (W - 534 * s) // 2 + 534 * s, 48 * s)
+    def moved(W, s): return near(strip(W, s), (W - 298 * s, 18 * s, W - 12 * s, 46 * s), GAP * s)       # the feed goes under the score strip if the two meet
+    def reached(W, H, s):
+        mm = (W - 274 * s, H - 280 * s, W - 8 * s, H - 16 * s); y = 56 if moved(W, s) else 18
+        return near((W - 298 * s, y * s, W - 12 * s, (y + 28) * s), mm, GAP * s), near(strip(W, s), mm, GAP * s)   # (the kill feed, the score strip)
+    feed_rule, score_rule = 'kill feed not shown: the minimap reaches it', 'score strip not shown: the minimap reaches it'
+    # With the budget at 100% no budget step is ever taken, so whatever is left is what the rules for clashes leave.
+    wide = sorted(set(list(range(953, 1300, 9)) + list(range(1300, 3841, 96)) + [4480, 5120, 6400, 7680]))
+    high = sorted(set(list(range(280, 760, 8)) + list(range(760, 2401, 82))))
+    for s in (1, 2, 3, 4):
+        n = bad = gone_f = gone_s = causeless = kept = 0
+        for W in wide:
+            for H in high:
+                n += 1; goes = reached(W * s, H * s, s); clash = False
+                for st in (USUAL, BUSY):
+                    steps, end, left = collapse(W * s, H * s, s, st, 1.0, True); clash = clash or bool(left)
+                    gone = (end['feed'] == 0, not end['score'])        # with the budget off, only the rule can have taken them away
+                    gone_f += gone[0]; gone_s += gone[1]
+                    causeless += (gone[0] and not goes[0]) + (gone[1] and not goes[1])
+                    kept += (goes[0] and not gone[0]) + (goes[1] and not gone[1])
+                bad += clash
+        print(f'   scale {s}, budget off, both states: {n} windows from {wide[0] * s} by {high[0] * s} to {wide[-1] * s} by {high[-1] * s}; left with a clash: {bad}; '
+              f'kill feed not shown in {gone_f} cases, score strip in {gone_s}; not shown though not within 8 of the minimap: {causeless}; within 8 and still shown: {kept}')
+    for s in (1, 2, 3, 4):
+        n = bad_q = bad_off = misused = 0
+        for W in list(range(960, 3841, 32)) + [4480, 5120, 6400, 7680]:
+            for H in range(280, 384, 4):
+                n += 1; goes = reached(W * s, H * s, s); cq = co = False
+                for st in (USUAL, BUSY):
+                    steps, end, left = collapse(W * s, H * s, s, st, 0.25, True); cq = cq or bool(left)
+                    misused += (feed_rule in steps and not goes[0]) + (score_rule in steps and not goes[1])
+                    co = co or bool(collapse(W * s, H * s, s, st, 1.0, True)[2])
+                bad_q += cq; bad_off += co
+        print(f'   scale {s}, wide and short, both states: {n} windows, {960 * s} to {7680 * s} wide and {280 * s} to {380 * s} high; '
+              f'left with a clash, budget a quarter: {bad_q}; budget off: {bad_off}; the rule used on a piece not within 8 of the minimap: {misused}')
+    tried = wrong = 0
+    for s in (1, 2, 3, 4):
+        for W in (953, 1000, 1144, 1146, 1280, 1920, 2105, 2400, 3840, 7680):
+            edge = ((84 if moved(W * s, s) else 46) + GAP + 280) * s        # the least height at which the feed is 8 clear of the minimap: 334 or 372, times the scale
+            for b in (0.25, 1.0):
+                for st in (USUAL, BUSY):
+                    under = collapse(W * s, edge - 1, s, st, b, True); at = collapse(W * s, edge, s, st, b, True); r = layout(W * s, edge, s, at[1], True)
+                    tried += 2
+                    wrong += bool(under[2]) or under[1]['feed'] > 0                                                           # one pixel under: not shown, nothing clashing
+                    wrong += bool(at[2]) or (b == 1.0 and not ('feed' in r and r['minimap'][1] - r['feed'][3] == GAP * s))    # at it: nothing clashing; budget off, shown and exactly 8 clear
+    print(f"   the kill feed at its edge, scales 1 to 4, both states, budget a quarter and off: one pixel under 334 high (372 where it has moved under the "
+          f"score strip), times the scale, it is not shown; at that height, with the budget off, it is shown exactly 8 clear of the minimap; nothing clashes "
+          f"either side: {tried} checks; wrong: {wrong}")
+    tried = wrong = 0
+    for s in (1, 2, 3, 4):
+        for W in (953, 1000, 1096, 1098, 1280, 3840):
+            beside = reached(W * s, 336 * s - 1, s)[1]                     # is the strip beside the minimap at this width: true under about 1098 times the scale
+            for st in (USUAL, BUSY):
+                under = collapse(W * s, 336 * s - 1, s, st, 1.0, True); at = collapse(W * s, 336 * s, s, st, 1.0, True)
+                tried += 2; wrong += bool(under[2]) or (under[1]['score'] == beside); wrong += bool(at[2]) or not at[1]['score']
+    print(f"   the score strip at its edge, scales 1 to 4, both states, budget off: one pixel under 336 high, times the scale, it is not shown where it is "
+          f"beside the minimap (953, 1000 and 1096 wide) and is shown where it is not (1098, 1280 and 3840 wide); at 336 it is shown at every width: {tried} checks; wrong: {wrong}")
+    tried = wrong = 0
+    for s in (1, 2, 3, 4):
+        for b in (0.25, 1.0):
+            for H in high: tried += 2; wrong += holds(953 * s - 1, H * s, s, b) + (not holds(953 * s, H * s, s, b))
+            for W in wide: tried += 2; wrong += holds(W * s, 280 * s - 1, s, b) + (not holds(W * s, 280 * s, s, b))
+            for k in (2, 5, 50, 200):
+                for H in (280, 334, 720, 2400): tried += 1; wrong += holds(953 * s - k, H * s, s, b)
+                for W in (953, 1280, 3840, 7680): tried += 1; wrong += holds(W * s, 280 * s - k, s, b)
+    print(f"   'can hold' at its edge, scales 1 to 4, budget a quarter and off: exactly 953 wide holds and one pixel under does not, at each of {len(high)} heights; "
+          f"exactly 280 high holds and one pixel under does not, at each of {len(wide)} widths; 2, 5, 50 and 200 under either do not hold (all times the scale): {tried} checks; wrong: {wrong}")
+    print('   windows that were left with a clash before the rule, the height where that stops, and two that only the budget was saving (scale 1, usual state, a quarter):')
+    for W, H in ((2105, 333), (2112, 332), (3840, 300), (7680, 280), (2400, 333), (2400, 334), (1000, 300), (1097, 335)):
+        steps, end, left = collapse(W, H, 1, USUAL, 0.25, True); r = layout(W, H, 1, end, True)
+        print(f"   {W}x{H}: kill feed {'shown ' + str(r['feed'][1]) + ' to ' + str(r['feed'][3]) if 'feed' in r else 'not shown'}; "
+              f"score strip {'shown' if 'score' in r else 'not shown'}; minimap from {r['minimap'][1]}; clash left: {left or 'none'}")
 if __name__ == '__main__': main()

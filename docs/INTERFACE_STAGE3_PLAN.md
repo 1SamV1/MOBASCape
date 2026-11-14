@@ -28,6 +28,10 @@ reopened. They are set out at the end of section 12.
 2. A scale set by the player is a request. Where the window cannot hold the
    layout at that scale, the largest lower scale it can hold is drawn, and
    pieces are never left overlapping to honour it (sections 2 and 8).
+3. A piece of the top row that the minimap reaches is not shown: the kill
+   feed first, then the score strip. With that the rules for clashes leave
+   no clash by themselves, and nothing waits for the budget to keep two
+   pieces apart (sections 7 and 8).
 
 Stage 3, as the design has it: every component in its place with made-up
 values, drawn through the stage 2 drawing layer from a theme. No component
@@ -187,11 +191,26 @@ independently, the scale never fell as a window grew.
 - **Scale 1 is the floor.** A window that cannot hold scale 1 is below the
   limits under "The least window", and what is said there applies.
 
-By the script, in every window of its sweep, a scale can be held exactly
-where the window is at least 953 wide and 280 high, times the scale: 1906
-by 560 for scale 2, 2859 by 840 for scale 3, 3812 by 1120 for scale 4. So,
-with 2 requested, a window 1811 by 1040 is drawn at scale 1, because scale
-2 needs 1906 of width, and one 1906 by 1040 is drawn at 2. With 3
+A scale can be held exactly where the window is at least 953 wide and 280
+high, times the scale: 1906 by 560 for scale 2, 2859 by 840 for scale 3,
+3812 by 1120 for scale 4.
+
+**That figure is exact only with the rule of amendment 3** (section 7: a
+piece of the top row that the minimap reaches is not shown). Without that
+rule it was true of the 5,824 windows of the first sweep and false in very
+wide, short ones: more than about six times as wide as they are high and
+under 334 high, times the scale. There the kill feed was left within 8 of
+the minimap, so the window could not hold the scale, and a request was
+lowered although the window was larger than the figure. With the rule, the
+script finds the figure exact wherever it has tried: no clash is left in
+any window at least that large, with the budget at a quarter or switched
+off, and at the edge one pixel under either figure does not hold and
+exactly the figure does, at 81 heights and 70 widths for each scale. This
+is the script's arithmetic and not a test of the game; the step B tests
+have to show the same of the Rust code.
+
+So, with 2 requested, a window 1811 by 1040 is drawn at scale 1, because
+scale 2 needs 1906 of width, and one 1906 by 1040 is drawn at 2. With 3
 requested, 2240 by 1260 is drawn at 2. The scale drawn never exceeds the
 request, never falls as the window grows, and leaves no clash in any of
 the 5,824 windows, for requests of 2, 3 and 4.
@@ -260,7 +279,9 @@ These are two different limits and should not be read as one:
   either, the layout cannot fit: pieces would overlap whatever is given up.
   Between there and 1280 by 720 nothing clashes, by the script, but nobody
   has judged how it looks and it is not a supported size. The figures only
-  say that nothing breaks on the way down.
+  say that nothing breaks on the way down. Since amendment 3 the same is
+  true of every window at least that large that the script has tried, wide
+  ones under 384 high included (section 7).
 
 What the game window itself does below 1280 by 720 is not decided by this
 plan. Today it can be dragged smaller (the stage 2 screen was run at 889
@@ -1038,8 +1059,25 @@ target panel's place to make them fit, in any state.
 **If the score strip and the kill feed meet along the top:** the kill feed
 moves down, under the score strip.
 
+**If the minimap reaches a piece of the top row** (a window so short that
+the minimap comes within 8 of the kill feed or of the score strip): that
+piece is not shown, the kill feed first and then the score strip. The
+minimap is never hidden, so it is the other piece that goes. A piece is
+taken away by this rule only where it is within 8 of the minimap; one that
+is clear of it stays. The kill feed is clear from 334 high (372 where it
+has moved under the score strip) and the score strip from 336 high, times
+the scale, or wherever it is not beside the minimap, which is from about
+1,098 wide, times the scale.
+
 **If pieces clash down the right:** the team frames shrink to portraits and
 health bars; then, in a window too short even for that, they are hidden.
+
+**After these rules, and before the budget is looked at, no two pieces are
+within 8 of each other**, in any window at least 953 wide and 280 high,
+times the scale. The budget then only shrinks or removes pieces to save
+area. Nothing waits for it to keep two pieces apart, so the layout is free
+of clashes whatever the budget is set to, and whether or not a particular
+window happens to be over it.
 
 **Then, if the usual state covers more than a quarter**, in the design's
 order, each only until the budget is met: the objectives to their title;
@@ -1226,6 +1264,29 @@ the real code:
   the log line that reports the scale gives both the scale requested and
   the scale drawn whenever they differ, so that a lowered scale is never
   taken for a fault;
+- **the rules for clashes alone leave no clash:** with the budget switched
+  off in the test, so that no budget step is ever taken, no two pieces are
+  within 8 in any window at least 953 wide and 280 high, times the scale,
+  at scales 1 to 4, in the usual and the busy state;
+- **the top row and the minimap, at the edge:** one pixel under 334 high
+  (372 where the kill feed has moved under the score strip), times the
+  scale, the kill feed is not shown; at that height, with the budget off,
+  it is shown exactly 8 clear of the minimap. One pixel under 336 high,
+  times the scale, the score strip is not shown where it is beside the
+  minimap and is shown where it is not; at 336 it is shown;
+- **a piece is taken away by that rule only when it is within 8 of the
+  minimap**, checked against arithmetic written separately from the
+  placing code, in every window of the sweeps, with the budget off and
+  with it at a quarter;
+- **"can hold" at its edge:** true exactly from 953 wide and 280 high,
+  times the scale, and false one pixel under either, with the budget at a
+  quarter and with it off;
+- **the sweeps to cover wide windows under 384 high**, which the first
+  sweeps did not: widths to 7,680 and heights from 280, times the scale,
+  at scales 1 to 4; and by name, at scale 1 with the budget at a quarter:
+  at 2105 by 333, 2112 by 332, 3840 by 300 and 7680 by 280 the kill feed
+  is not shown and nothing is within 8 of the minimap; at 2400 by 334 the
+  kill feed is shown, 8 clear of it;
 - the same rectangles with the components listed in any order;
 - the objectives' top at window heights where 38% falls on a half (75,
   175, 275 and so on), against the whole-number rule;
@@ -1498,6 +1559,82 @@ not the order in which pieces give way, not any rectangle. Every line of
 the earlier output, sections 1 to 13, is unchanged. The new section 14 has
 the sweep for requests of 2, 3 and 4 over the 5,824 windows.
 
+That sweep covers the same windows as the earlier ones. Going beyond them,
+to say exactly where a scale can be held, is what found amendment 3, and
+the passage in section 2 about 953 by 280 is worded to say what was found.
+
+### Amendment 3, after the freeze: the top row and the minimap
+
+To say exactly where a requested scale can be held, the script was run
+over windows no earlier sweep had covered: wider than 1280 and under 384
+high. It found a clash that the frozen rules left standing.
+
+In a window under 334 high the minimap reaches up to the kill feed. No
+rule for clashes dealt with that pair. The feed went only when the budget
+happened to hide it. In a small window the budget always does. In a very
+wide one it does not: from 2,105 wide at 333 high, to 2,398 wide at 280
+high, the usual state is within a quarter with the feed still showing, and
+the feed was left within 8 of the minimap or over it. That was 767 of the
+2,470 windows tried there. Every one is more than six times as wide as it
+is high and under half the supported 720 of height, which is why no listed
+size and no earlier sweep met it. It was still an overlap in a window the
+layout can fit, which is what the rules for clashes exist to prevent.
+
+To find anything else of the kind, the budget was switched off in the
+script, so that only the rules for clashes act. Two pairs were left, and
+only two:
+
+- the kill feed and the minimap, under 334 high (under 372 where the feed
+  has moved under the score strip);
+- the score strip and the minimap, under 336 high and under about 1,098
+  wide. This one could not be seen, because a window that small is always
+  over the budget, but it leaned on the budget in the same way.
+
+| What | Before | Now |
+|---|---|---|
+| The kill feed within 8 of the minimap | hidden only if the budget reached it | not shown |
+| The score strip within 8 of the minimap | hidden only because such a window is always over the budget | not shown |
+| The rules for clashes, with the budget off | left those two pairs | leave nothing, at scales 1 to 4 |
+| "Can hold" (amendment 2) | exact in the windows of the first sweep, not in very wide, short ones | at least 953 wide and 280 high, times the scale, to the pixel, whatever the budget |
+| Sweeps | from 384 high, but for the narrow corner | wide windows down to 280 high, widths to 7,680, times the scale, and with the budget off |
+
+What the script shows with the rule (output section 15), at each of scales
+1 to 4, in the usual and the busy state:
+
+- With the budget off, 5,670 windows from 953 by 280 to 7,680 by 2,400,
+  times the scale: none left with a clash. The kill feed is not shown in
+  1,200 cases and the score strip in 224 (238 at scales 2 to 4, where the
+  strip sits half a pixel nearer the minimap at one width), and in every
+  one the piece is within 8 of the minimap by arithmetic written
+  separately from the placing code; no piece within 8 is still shown.
+- In the 2,470 wide windows under 384 high, times the scale: none left with
+  a clash, with the budget at a quarter or off, and the rule is never used
+  on a piece that is not within 8 of the minimap.
+- At the edge: one pixel under 334 high (372 where the feed has moved),
+  times the scale, the kill feed is not shown, and at that height it is
+  shown exactly 8 clear; one pixel under 336 the score strip is not shown
+  where it is beside the minimap and is shown where it is not;
+  416 checks, none wrong.
+- "Can hold" is true exactly from 953 wide and 280 high, times the scale,
+  and false one pixel under either: 2,672 checks, none wrong.
+
+The amendment changes what is on screen only where there was a clash.
+Compared window by window with the script as it was before the rule, in
+both states, over the sweep's windows at each scale they can hold, the
+corner from 953 by 280 to 1280 by 720, and the wide windows under 384 high
+at scales 1 and 2: where the rule is not used, the rectangles are
+identical in every case compared, 45,496 of them. Where it is used, they
+are identical in 7,580 cases, because the budget was already hiding the
+piece, and different in 3,068, every one a case that had been left with a
+clash: the wide windows under 334 high, times the scale. In each of those the
+kill feed is not shown. In a few of them the budget then has less to do
+and rules that were already there give a different result: the chat keeps
+its full height, and with that the objectives' title comes or goes and the
+target panel is not shown where the full-height chat reaches it. No clash
+is added anywhere. Every line of the earlier output, sections 1 to 14, is
+unchanged. The score strip's half of the rule changes nothing that can be
+seen today.
+
 ---
 
 ## Appendix A: measurements, screenshot by screenshot
@@ -1689,6 +1826,23 @@ request of 2, 3 and 4 over the 5,824 windows: drawn at the request in
 request; no clash left in any; never falling as the window grew; and
 "can hold" the same as "at least 953 wide and 280 high, times the scale"
 in every one.
+
+**The top row and the minimap (amendment 3):** section 15 of the output.
+At each of scales 1 to 4, both states. With the budget switched off,
+5,670 windows from 953 by 280 to 7,680 by 2,400, times the scale: none
+left with a clash; the kill feed not shown in 1,200 cases and the score
+strip in 224 (238 at scales 2 to 4, where the strip sits half a pixel
+nearer the minimap at one width), each time within 8 of the minimap, and
+never otherwise. The 2,470 wide windows under 384 high, times the scale,
+which no earlier sweep covered: none left with a clash, at a quarter or
+with the budget off; at scale 1, 767 of them were left with one before the
+rule. The edges of the rule: 416 checks, none wrong. "Can hold" at its
+edge: 2,672 checks, none wrong.
+
+**How long the script takes.** About ten minutes in all on a small machine,
+nearly all of it in sections 6, 13, 14 and 15. It prints one line after
+thousands of windows, so it is silent for minutes at a time; that is not
+a stall.
 
 **If the game gains objectives:** section 12 of the output, and the table
 in section 5.4. The heights are worked out from the counts of lines.
