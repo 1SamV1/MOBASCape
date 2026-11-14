@@ -35,15 +35,26 @@ def layout(W, H, s, st, slide):
     tw = 60 if st['team_compact'] else 180
     if st.get('team', True): r['team'] = R(W - (12 + tw) * s, 168 * s, tw * s, 188 * s)
     if st['target']: r['target'] = R(8 * s, 82 * s, 332 * s, 158 * s)
-    # 38% of the height in whole numbers, a half going up: the same in any language, with no fractions involved
-    oh = st['obj_h']; top = min((38 * H + 50) // 100, r['chat'][1] - (GAP + oh) * s)
-    # The room a list has is worked out first: from 8 below where the target panel ends (its place is kept whether
-    # or not it is showing) to 8 above the chat. A list taller than its title is placed inside that room: at 38%,
-    # moved up only as far as the room's top. If the room is too short the list is held at the room's top, runs
-    # into the chat, and the ordinary clash test sends it to its title. It never goes above the room.
-    if oh > 24: top = max(top, (82 + 158 + GAP) * s)
-    r['objectives'] = R(8 * s, top, 272 * s, oh * s)
+    # The objectives. The target panel's place is kept for it always: whether the panel is showing or not, and
+    # whether the objectives are a full list, their title alone, or not shown. The room the objectives have is
+    # worked out first, from their neighbours (obj_room): from 8 below where the target panel ends, to 8 above
+    # whatever is under them. Whatever is shown is placed inside it: at 38% of the height (in whole numbers, a
+    # half going up), moved up if that is too low, and never above the room's top. Whether a thing fits the
+    # room is asked before it is placed (collapse does the asking). Where something that does not fit is placed
+    # anyway (the scale test does this, to see if it fits), it is held at the room's top and overruns downward,
+    # where the clash test sees it.
+    oh = st['obj_h']
+    if oh:
+        room_top, room_bottom = obj_room(r, s)
+        top = max(room_top, min((38 * H + 50) // 100, room_bottom - oh * s))
+        r['objectives'] = R(8 * s, top, 272 * s, oh * s)
     return r
+def obj_room(r, s):
+    """Top and bottom of the room the objectives may use, from the pieces already placed. The top is 8 below the
+    target panel's place. The bottom is 8 above the chat, or above the ability bar if the bar has slid far
+    enough left to come under the panel (within 8 of its right edge), whichever is higher."""
+    under = [r['chat'][1]] + ([r['ability'][1]] if r['ability'][0] < (8 + 272 + GAP) * s else [])
+    return (82 + 158 + GAP) * s, min(under) - GAP * s
 def inter(a, b): return max(min(a[2], b[2]) - max(a[0], b[0]), 0) * max(min(a[3], b[3]) - max(a[1], b[1]), 0)
 def clashes(r, W, H, s):
     n = list(r); out = []
@@ -103,7 +114,11 @@ def collapse(W, H, s, want, budget, slide):
         if st['chat_w'] < 440: steps.append(f"chat narrows to {st['chat_w']}")
         if st['chat_h'] == 24: steps.append('chat to its last line')
         if not st['inv']: steps.append('inventory hidden')
-    if bad(L): st['obj_h'] = 24; steps.append('objectives to its title')
+    # The objectives are asked for only what their room can hold: the list, else the title, else nothing.
+    def room(): top, bottom = obj_room(layout(W, H, s, dict(st, obj_h=0), slide), s); return bottom - top
+    fits = lambda h: h * s <= room()
+    if not fits(st['obj_h']): st['obj_h'] = 24; steps.append('objectives to its title')
+    if not fits(st['obj_h']): st['obj_h'] = 0; steps.append('objectives hidden')
     if [p for p in bad(Rr) if set(p) == {'score', 'feed'}]: st['feed_y'] = 56; steps.append('kill feed moves under the score strip')
     if bad(Rr): st['team_compact'] = True; steps.append('team frames to portraits')
     if bad(Rr): st['team'] = False; steps.append('team frames hidden')
@@ -115,17 +130,25 @@ def collapse(W, H, s, want, budget, slide):
                           ('inventory hidden', lambda: st.__setitem__('inv', False), lambda: st['inv'])]:
         if cover() <= budget: break
         if can(): do(); steps.append(name + ' (budget)')
+    # A budget step may have shortened the chat and made room. If the objectives were hidden for want of room,
+    # their title comes back where it now fits and the budget allows, so nothing stays smaller than it must.
+    if st['obj_h'] == 0:
+        st['obj_h'] = 24
+        if not fits(24) or cover() > budget: st['obj_h'] = 0
+        else: steps[steps.index('objectives hidden')] = 'objectives hidden, then back to its title once the chat had shrunk'
     # --- pass 2: what comes and goes with play, each only where it fits
+    # A conditional piece is shown only if it is clear of every other piece, whichever row or column that piece is in.
+    touching = lambda name: [p for p in clashes(lay(), W, H, s) if name in p]
     if st['obj_h'] > 24 and want['obj_h'] > st['obj_h']:
         st['obj_h'] = want['obj_h']
-        if bad(L): st['obj_h'] = 24; steps.append('objectives, when long, to its title')
+        if not fits(st['obj_h']): st['obj_h'] = 24; steps.append('objectives, when long, to its title')
     if want['target']:
         st['target'] = True
-        if bad(L): st['target'] = False; steps.append('target panel not shown')
+        if touching('target'): st['target'] = False; steps.append('target panel not shown')
     if st['feed'] and want['feed'] > 1:
         for n in range(want['feed'], 0, -1):
             st['feed'] = n
-            if not bad(Rr): break
+            if not touching('feed'): break
         if st['feed'] < want['feed']: steps.append(f"kill feed to {st['feed']} entr{'y' if st['feed'] == 1 else 'ies'}")
     return steps, st, clashes(lay(), W, H, s)
 def main():
@@ -162,7 +185,7 @@ def main():
         s = choose_scale(W, H, 0.25); print(f'   {W}x{H} ({kind}) scale {s}')
         for label, st in (('usual', USUAL), ('busy', BUSY)):
             steps, end, left = collapse(W, H, s, st, 0.25, True)
-            r = layout(W, H, s, end, True); o = r['objectives']
+            r = layout(W, H, s, end, True); o = r.get('objectives', (0, 0, 0, 0))
             print(f"      {label}: {'; '.join(steps) or 'nothing gives'} | covers {100*unique(list(r.values()), W, H):.1f}% | objectives {o[1]} to {o[3]}, chat from {r['chat'][1]}{' | STILL CLASHING ' + str(left) if left else ''}")
     print('--- 6. every window from 960x384 to 3840x2400, width and height varied independently: any clash left after collapse?')
     left = [(W, H) for W in range(960, 3841, 32) for H in range(384, 2401, 32)
@@ -223,10 +246,37 @@ def main():
         row = []
         for W, H in ((1920, 1080), (2560, 1440), (3840, 2160)):
             sc = choose_scale(W, H, 0.25); steps, end, left = collapse(W, H, sc, BUSY, 0.25, True)
-            o = layout(W, H, sc, end, True)['objectives']
+            o = layout(W, H, sc, end, True).get('objectives', (0, 0, 0, 0))
             how = ('longest in full, top ' + str(o[1] // sc) if end['obj_h'] == OBJ_MAX else
                    'usual in full, longest to its title' if end['obj_h'] == 24 and 'objectives, when long, to its title' in steps else 'title only')
             row.append(f"{W}x{H} scale {sc} {how}, target panel {'shown' if end['target'] else 'NOT SHOWN'}{' CLASH' if left else ''}")
         print(f"   +{extra}: usual {OBJ}, longest {OBJ_MAX}; least height by clashes {least}; all fits at scale 1 from {W1}x{W1 * 9 // 16}; " + '; '.join(row))
     OBJ, OBJ_MAX, USUAL, BUSY = keep
+    print('--- 13. the target panel\'s place is never taken by the objectives: scale chosen, and scale forced')
+    place = lambda s: (82 + 158 + GAP) * s
+    def look(W, H, s):
+        out = []
+        for st in (USUAL, BUSY):
+            steps, end, left = collapse(W, H, s, st, 0.25, True); r = layout(W, H, s, end, True); o = r.get('objectives')
+            out.append((bool(o) and o[1] < place(s), bool(left), st['target'] and not end['target'], end['obj_h']))
+        return out
+    rows = {}
+    for mode in ('chosen', 1, 2, 3, 4):
+        n = took = clash = lost = 0; lost_at = []
+        for W in range(960, 3841, 32):
+            for H in range(384, 2401, 32):
+                s = choose_scale(W, H, 0.25) if mode == 'chosen' else mode
+                if mode != 'chosen' and (W < 953 * s or H < 280 * s): continue      # a forced scale the window cannot hold at all
+                n += 1
+                for a, b, c, d in look(W, H, s):
+                    took += a; clash += b
+                    if c: lost += 1; lost_at.append(H)
+        print(f"   scale {mode if mode == 'chosen' else 'forced to ' + str(mode)}: {n} windows; objectives inside the target panel's place: {took}; "
+              f"left with a clash: {clash}; target panel wanted and not shown: {lost}" + (f", all at heights of {min(lost_at)} to {max(lost_at)}" if lost_at else ''))
+    print('   the cases that were wrong before this rule, and some like them:')
+    for W, H, s in ((1920, 1080, 2), (2240, 1260, 2), (2560, 1440, 2), (3200, 1300, 2), (3840, 2160, 3), (3840, 2160, 4), (1280, 600, 1), (1280, 500, 1), (1280, 400, 1), (960, 384, 1)):
+        steps, end, left = collapse(W, H, s, BUSY, 0.25, True); r = layout(W, H, s, end, True); o = r.get('objectives')
+        what = 'not shown' if not o else ('title' if end['obj_h'] == 24 else 'list') + f' from {o[1]}'
+        print(f"   {W}x{H} at scale {s}{' (forced)' if s != choose_scale(W, H, 0.25) else ''}: the place ends at {place(s)}; objectives {what}; "
+              f"target panel {'shown ' + str(r['target'][1]) + ' to ' + str(r['target'][3]) if end['target'] else 'NOT SHOWN'}; chat from {r['chat'][1]}{'; CLASH ' + str(left) if left else ''}")
 if __name__ == '__main__': main()

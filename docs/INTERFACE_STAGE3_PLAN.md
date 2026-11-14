@@ -19,6 +19,13 @@ What changed is listed in section 12. It was asked for after stages 1 and 2 of
 the change is listed under "Changes this plan asks for" and waits for review.
 `crates/client/src/hud.rs` is untouched until a later go-ahead.
 
+**Amended after the freeze.** Each amendment was made for one stated
+reason and reviewed on its own, and nothing else in the frozen text was
+reopened. They are set out at the end of section 12.
+
+1. The target panel's place is kept against the objectives in every state,
+   the title line included (sections 5.4, 7 and 8).
+
 Stage 3, as the design has it: every component in its place with made-up
 values, drawn through the stage 2 drawing layer from a theme. No component
 reads the match yet. That is stage 4.
@@ -211,8 +218,7 @@ Each was found with the other side large, so together they are not a
 tested corner by themselves. The corner was therefore tried as well: 953
 by 280 leaves no clash, and neither does any window between it and 1280 by
 720 (every width, heights in steps of 8). What is left on screen at 953 by
-280 is the minimap, the ability bar, the chat's last line and the
-objectives' title.
+280 is the minimap, the ability bar and the chat's last line.
 
 These are two different limits and should not be read as one:
 
@@ -623,23 +629,25 @@ stage 4. Sizes are at scale 1.
   3. **Lines are 24 and stay 24.** The panel is never scrolled, never
      clipped, never drawn outside its rectangle, lines are never dropped,
      and neither the pitch nor the font is changed to make a list fit.
-  4. **The target panel's place is kept for it**, showing or not, and it
-     is part of working out the room, not a check made afterwards. The
-     room a list has runs from 8 below where the target panel ends to 8
-     above the chat; that is worked out first, from the two neighbours.
-     A list taller than its title is then placed inside the room: at 38%
-     of the height if that is inside it, moved up only as far as the
-     room's top, and never above it. If the room is shorter than the list,
-     the list does not fit, and point 5 applies. At 1920 by 1080 the room
-     is from 248 to 922, 674 tall.
-  5. **When it does not fit, in this order, each already a rule of this
-     plan:** its top moves up from 38%, as far as the room's top and no
-     further;
-     then a scale at which the longest list does not fit is not chosen
-     (section 2); then, at scale 1, a list too long for the room at that
-     moment is shown as its title and comes back in full the moment it
-     fits (section 7, pass 2); and if even the usual list does not fit,
-     it is the title in pass 1.
+  4. **The objectives never use the target panel's place.** Not as a full
+     list, not as their title alone, not in any state, and whether the
+     target panel is showing or not. This is part of working out the room,
+     not a check made afterwards. The room the objectives have is worked
+     out first, from the pieces around them: its top is 8 below where the
+     target panel ends; its bottom is 8 above the chat, or 8 above the
+     ability bar if the bar has slid far enough left to come under the
+     panel, whichever is higher. Whatever is shown is placed inside the
+     room: at 38% of the height if that is inside it, moved up if that is
+     too low, and never above the room's top. At 1920 by 1080 the room is
+     from 248 to 922, 674 tall.
+  5. **What is shown is what the room can hold, asked before anything is
+     placed:** the list if it fits; if not, the title; if not even the
+     title, nothing, and the objectives are not shown until there is room
+     again. On the way there: the top moves up from 38% as far as the
+     room's top and no further; a scale at which the longest list does not
+     fit is not chosen (section 2); at scale 1 a list too long for the room
+     at that moment is shown as its title and comes back in full the
+     moment it fits (section 7).
   6. **A test that fails first.** Step B has a test, run on the game's real
      counts, that at 1920 by 1080 and scale 1 the longest list shows in
      full with the target panel open. Whoever adds the objective that
@@ -988,8 +996,12 @@ What that gives at scale 1, 720 high, before the budget is looked at:
 
 In every row the chat ends exactly 8 short of the bar.
 
-**If pieces clash down the left, or the objectives would leave the
-window:** the objectives shrink to their title line.
+**Down the left, the objectives are given what their room holds**
+(section 5.4): the room is worked out from the target panel's place above
+and the chat, or the ability bar where it reaches under them, below. If
+the usual list does not fit the room, the title; if the title does not
+fit, the objectives are not shown. They are never moved up into the
+target panel's place to make them fit, in any state.
 
 **If the score strip and the kill feed meet along the top:** the kill feed
 moves down, under the score strip.
@@ -1001,6 +1013,10 @@ health bars; then, in a window too short even for that, they are hidden.
 order, each only until the budget is met: the objectives to their title;
 the team frames to portraits; the chat to its last line; the kill feed
 hidden; the score strip hidden; the inventory hidden.
+
+If a budget step shortens the chat and the objectives had been left out for
+want of room, their title comes back where it now fits and the budget
+allows, so that nothing stays smaller than the window needs.
 
 **The budget is measured after the clashes are dealt with, on the
 rectangles as they then are**, and again after each of its own steps: the
@@ -1017,10 +1033,17 @@ rectangles for clashes once more.
 The layout from pass 1 is not moved. Each of these is then shown where it
 fits and not where it does not:
 
-- the objectives' longer list: if it would clash, or would start above the
-  place kept for the target panel (section 5.4), the title only;
-- the target panel: if it would clash, it is not shown;
-- further kill-feed entries: as many as fit above the team frames.
+- the objectives' longer list: if it does not fit their room (section
+  5.4), the title only;
+- the target panel: shown wherever it is clear of every other piece. Since
+  the objectives never use its place, what can keep it off the screen is
+  only the chat or the ability bar reaching up to it, which needs a window
+  under about 400 high at scale 1 (and that many times the scale at a
+  forced scale);
+- further kill-feed entries: as many as are clear of every other piece.
+
+A piece of pass 2 is tested against every other piece, whichever row or
+column that piece belongs to, not only against its own.
 
 The second draft took these in one pass, and at 1366 by 768 that hid the
 target panel to make room for an objectives list the budget then shrank
@@ -1132,8 +1155,18 @@ the real code:
   lines, with the fit and the scale following when the counts are changed
   in the test (six lines to twelve), and the longest list for the game's
   real counts showing in full at 1920 by 1080 with the target panel open;
-- a list of objectives taller than its title never starting above the
-  place kept for the target panel, whether or not the panel is showing;
+- **the objectives never inside the target panel's place**: at every
+  window of the sweep, with the scale chosen and with it forced to each of
+  1 to 4 wherever the window can hold that scale at all, in the usual and
+  the busy state, and with the objectives as a list, as their title and
+  not shown, the objectives' rectangle (when there is one) starts no higher
+  than 8 below where the target panel ends; and by name, 1920 by 1080 with
+  the scale forced to 2: the title starts at 496 and the target panel
+  shows from 164 to 480;
+- the room worked out from the ability bar as well as the chat where the
+  bar has slid under the panel;
+- a conditional piece (target panel, extra feed entries) shown only when
+  clear of every other piece, not only of its own row or column;
 - every component at its largest: the objectives at their longest for the
   game's real counts (398 today), four allies, four
   kill-feed entries, the target panel open, the chat full;
@@ -1369,6 +1402,37 @@ window can be too short for the team frames above the minimap; and taking
 the conditional pieces in the same pass as the layout hid the target panel
 needlessly at 1366 by 768.
 
+### Amendment 1, after the freeze: the target panel's place
+
+Checking the frozen rule under a forced scale found that it kept the
+target panel's place only against a list taller than its title. The title
+alone could sit in that place, and the target panel was then not shown.
+With the scale chosen automatically that needed a window under 652 high,
+which is not supported. With the scale forced it needed a window under 652
+times the scale: under 1304 high at scale 2, so at 1920 by 1080 with scale
+2 forced the target panel never showed, though there was room for it.
+
+| What | Before | Now |
+|---|---|---|
+| The place is kept against | a list taller than its title | the objectives in every state |
+| When the title does not fit below the place | it sat in the place | the objectives are not shown until it fits |
+| The room's lower edge | the chat | the chat, or the ability bar where it has slid under the panel |
+| How "does not fit" is found | by running into something | asked of the room before anything is placed |
+| A piece of pass 2 is tested against | its own row or column | every other piece |
+| Sweep | scale chosen | scale chosen, and forced to each of 1 to 4 |
+
+The last two rows came from the fix itself. With the target panel now
+showing in windows where the title used to keep it off, it could meet the
+ability bar in very short, narrow windows, and the ability bar is not in
+its column; and a title held below the place could meet a slid ability
+bar. A first attempt that only held the title lower left 1,329 small
+windows with a clash. With the rule as now written none is left.
+
+Every line of the earlier output, sections 1 to 12, is unchanged by the
+amendment. The new section 13 has the sweep: in every window, at every
+scale chosen or forced that the window can hold, the objectives are never
+inside the place and no clash is left.
+
 ---
 
 ## Appendix A: measurements, screenshot by screenshot
@@ -1545,6 +1609,14 @@ section 10 of the output.
 **Resizing leaves no trace:** 400 sizes reached by a wandering resize, each
 worked out again on its own in another order; none differs (section 9 of
 the output).
+
+**The target panel's place (amendment 1):** section 13 of the output. The
+scale chosen, and forced to 1, 2, 3 and 4 over every window of the sweep
+that can hold that scale (at least 953 wide and 280 high, times the
+scale): 5,824, 5,824, 3,538, 1,519 and 41 windows. Objectives inside the
+place: none. Clashes left: none. The target panel wanted and not shown:
+only in windows under about 400 high times the scale, where the chat or
+the ability bar reaches up to it.
 
 **If the game gains objectives:** section 12 of the output, and the table
 in section 5.4. The heights are worked out from the counts of lines.
