@@ -33,6 +33,14 @@ reopened. They are set out at the end of section 12.
    no clash by themselves, and nothing waits for the budget to keep two
    pieces apart (sections 7 and 8).
 
+**Frozen again on 13 November 2026 with these three amendments, and the
+planning of stage 3 closed.** It is still a plan only. Building stage 3 is
+not authorised by this, in Rust or otherwise, and needs its own go-ahead.
+The arithmetic behind the plan was done in a Python script. It is evidence
+for the layout and not a test of the game; the Rust code is to be verified
+on its own at step B. The changes this plan asks of `docs/INTERFACE.md`
+are parked: they have not been made and are no part of these amendments.
+
 Stage 3, as the design has it: every component in its place with made-up
 values, drawn through the stage 2 drawing layer from a theme. No component
 reads the match yet. That is stage 4.
