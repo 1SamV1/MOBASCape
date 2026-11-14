@@ -43,6 +43,9 @@ pub struct ChampionConfig {
     pub health: f32,
     pub mana: f32,
     pub damage: f32,
+    /// Starting armor. Physical damage is scaled by 100 / (100 + armor).
+    #[serde(default)]
+    pub armor: f32,
     pub attack_range: f32,
     pub attack_interval: f32,
     pub speed: f32,

@@ -85,6 +85,12 @@ struct Cli {
     /// attack animations with a close camera.
     #[arg(long)]
     demo_anim: bool,
+    /// Demo: spawn a sparring enemy champion beside the hero for Trial by Combat.
+    #[arg(long)]
+    demo_duel: bool,
+    /// Demo: spawn a rival champion and automatically cast Trial by Combat.
+    #[arg(long)]
+    demo_trial: bool,
     /// Demo: teleport to a jungle camp, attack it, and verify the buff.
     #[arg(long)]
     demo_camp: bool,
@@ -197,6 +203,23 @@ fn main() -> Result<()> {
         animated.teleport_player(point);
         tracing::info!("animation demo: spawned hero at tile 2748,3010");
     }
+    if cli.demo_duel || cli.demo_trial {
+        let spawn = animated.player_pos() + Vec3::new(3.0 * 128.0, 0.0, 0.0);
+        let spawn = Vec3::new(spawn.x, height.height_at(spawn.x, spawn.z), spawn.z);
+        match animated.spawn_enemy_champion(&cache, &champion, spawn) {
+            Ok(index) => {
+                if cli.demo_trial {
+                    // Leave the rival wounded so the automated demo can
+                    // actually resolve the duel and prove the win bonus.
+                    let unit = &mut animated.units[index];
+                    unit.health = (unit.max_health * 0.25).max(1.0);
+                    tracing::info!("demo trial: rival starts at {:.0} HP", unit.health);
+                }
+                tracing::info!("demo duel: enemy champion {index} at {spawn:?}");
+            }
+            Err(err) => tracing::warn!("demo duel: failed to spawn enemy champion: {err:#}"),
+        }
+    }
     tracing::info!(
         "scene ready: {} placements, {} animated units",
         scene.placements,
@@ -256,6 +279,9 @@ fn main() -> Result<()> {
         demo_anim_timer: 0.0,
         demo_anim_stage: 0,
         demo_anim_targeted: false,
+        demo_trial: cli.demo_trial,
+        demo_trial_timer: 0.0,
+        demo_trial_stage: 0,
         demo_camp: cli.demo_camp,
         demo_watchtower: cli.demo_watchtower,
         demo_watchtower_timer: 0.0,
@@ -339,6 +365,9 @@ struct App {
     demo_anim_timer: f32,
     demo_anim_stage: u8,
     demo_anim_targeted: bool,
+    demo_trial: bool,
+    demo_trial_timer: f32,
+    demo_trial_stage: u8,
     demo_camp: bool,
     demo_watchtower: bool,
     demo_watchtower_timer: f32,
@@ -1085,10 +1114,9 @@ impl App {
                 }
                 if self.demo_kit_stage == 2 && self.demo_kit_timer >= 3.0 {
                     if let Some(index) = animated.nearest_enemy(animated.player_pos()) {
-                        if let Some(pos) = animated.unit_pos(index) {
-                            let ok = animated.cast_r(pos);
-                            tracing::info!("demo kit: R cast={ok}");
-                        }
+                        let pos = animated.unit_pos(index).unwrap_or(animated.player_pos());
+                        let ok = animated.cast_r(pos, Some(index), height);
+                        tracing::info!("demo kit: R cast={ok}");
                     }
                     self.demo_kit_stage = 3;
                 }
@@ -1105,6 +1133,53 @@ impl App {
                         s.cooldowns
                     );
                     self.demo_kit = false;
+                }
+            }
+
+            if self.demo_trial {
+                self.demo_trial_timer += dt;
+                if self.demo_trial_stage == 0 && self.demo_trial_timer >= 1.0 {
+                    if let Some(index) = animated
+                        .units
+                        .iter()
+                        .position(|unit| unit.is_champion && unit.team == 1 && unit.health > 0.0)
+                    {
+                        let pos = animated.unit_pos(index).unwrap_or(animated.player_pos());
+                        let ok = animated.cast_r(pos, Some(index), height);
+                        tracing::info!("demo trial: cast={ok} target={index}");
+                    } else {
+                        tracing::warn!("demo trial: no enemy champion");
+                    }
+                    self.demo_trial_stage = 1;
+                }
+                if self.demo_trial_stage == 1 && self.demo_trial_timer >= 3.0 {
+                    let target = animated
+                        .units
+                        .iter()
+                        .position(|unit| unit.is_champion && unit.team == 1 && unit.health > 0.0)
+                        .and_then(|index| animated.unit_pos(index));
+                    let pos = target.unwrap_or(animated.player_pos());
+                    let ok = animated.cast_q(pos);
+                    tracing::info!("demo trial: bananarang cast={ok}");
+                    self.demo_trial_stage = 2;
+                }
+                if self.demo_trial_stage >= 1 && self.demo_trial_timer >= 13.0 {
+                    let stats = animated.player_stats();
+                    let bonus = animated.units[animated.player_index].min_base_damage_bonus;
+                    let target = animated
+                        .units
+                        .iter()
+                        .find(|unit| unit.is_champion && unit.team == 1)
+                        .map(|unit| (unit.health, unit.max_health));
+                    tracing::info!(
+                        "demo trial: wins={} bonus={:.0} attack={:.0} hp={:.0}/{:.0} target={target:?}",
+                        animated.duel_wins,
+                        bonus,
+                        stats.attack_damage,
+                        stats.health,
+                        stats.max_health
+                    );
+                    self.demo_trial = false;
                 }
             }
 
@@ -1306,6 +1381,9 @@ impl App {
                 xp: stats.xp,
                 xp_next: stats.xp_next,
                 cooldowns: stats.cooldowns,
+                cooldown_maxima: stats.cooldown_maxima,
+                armor: stats.armor,
+                attack_damage: stats.attack_damage,
                 shield: stats.shield,
                 shield_timer: stats.shield_timer,
                 buff,
@@ -1692,10 +1770,12 @@ impl App {
         ) else {
             return;
         };
-        if let Some(point) = renderer.pick_ground(self.mouse_pos.0, self.mouse_pos.1, height) {
-            let cast = animated.cast_q(point);
-            println!("Q cast={cast}");
-        }
+        let fallback = animated.player_pos();
+        let point = renderer
+            .pick_ground(self.mouse_pos.0, self.mouse_pos.1, height)
+            .unwrap_or(fallback);
+        let cast = animated.cast_q(point);
+        println!("Q cast={cast}");
     }
 
     fn cast_w(&mut self) {
@@ -1729,8 +1809,13 @@ impl App {
         ) else {
             return;
         };
-        if let Some(point) = renderer.pick_ground(self.mouse_pos.0, self.mouse_pos.1, height) {
-            let cast = animated.cast_r(point);
+        if let Some((origin, dir)) = renderer.screen_ray(self.mouse_pos.0, self.mouse_pos.1) {
+            let target = animated.pick_enemy_champion(origin, dir);
+            let fallback = animated.player_pos();
+            let point = renderer
+                .pick_ground(self.mouse_pos.0, self.mouse_pos.1, height)
+                .unwrap_or(fallback);
+            let cast = animated.cast_r(point, target, height);
             println!("R cast={cast}");
         }
     }
@@ -1861,6 +1946,8 @@ fn has_demo_flags(cli: &Cli) -> bool {
         || cli.spawn.is_some()
         || cli.demo_combat
         || cli.demo_anim
+        || cli.demo_duel
+        || cli.demo_trial
         || cli.demo_camp
         || cli.demo_watchtower
         || cli.demo_delivery

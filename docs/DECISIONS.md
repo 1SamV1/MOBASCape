@@ -525,3 +525,31 @@ they could be walked through and never reacted. They are now weak neutral
 camps (220 HP, 14 damage, 420 aggro, 760 leash, no buff) using model 10413, so
 approaching one pulls it exactly like the fixed jungle camps. They also show
 up on the minimap through the camp proximity reveal.
+
+
+## ADR-040 — King Awowogei's Bananarang and Trial by Combat
+
+**Status:** accepted for the Monkey King kit.
+
+King Awowogei's Q and R are now champion-specific, gated by the champion file
+stem so Jad and Kree keep the shared Q bolt and R meteor.
+
+- **Bananarang (Q, 8 s / 40 mana):** a fixed oval arc in front of the king,
+  starting at his left hand and returning to his right. It does 60% physical /
+  40% pure damage, hits each enemy once, and has a rank-scaling mini-crit that
+  briefly stuns. The arc is simulated with a segment-distance test so a fast
+  banana cannot tunnel through targets at low frame rates. Current reach is
+  5,200 world units (about 41 tiles), ten times the original 520-unit arc.
+- **Trial by Combat (R, 90 s / 100 mana):** a champion-only unit-target ult
+  with a 75-tile cast range (five times the original 15 tiles). The barrier
+  forms around the two fighters where they stand, clamps both inside, pushes
+  other units out, excludes both from tower and watchtower fire, and ends
+  after 10 s or when either fighter dies. Eight monkey subjects ring the
+  barrier and throw banana peels that stack -2 armor (max -16) for 4 s.
+  Killing the target grants +4 permanent base melee damage per win; the
+  bonus is applied to actual basic attacks, not just the HUD.
+- **Armor:** champions now carry an `armor` stat. Physical damage uses
+  `100 / (100 + armor)` for positive armor and an amplified curve below zero;
+  pure damage bypasses armor. The HUD team panel shows ARM and DMG.
+- **Demos:** `--demo-duel` spawns a rival champion for manual testing;
+  `--demo-trial` spawns a wounded rival, casts R then Q, and logs the result.

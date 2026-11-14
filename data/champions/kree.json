@@ -24,5 +24,6 @@
   "w_distance": 896,
   "weight": 45,
   "stop_time": 0.25,
-  "attack_windup": 0.3
+  "attack_windup": 0.3,
+  "armor": 18.0
 }

@@ -55,6 +55,10 @@ pub struct PlayerHud {
     pub xp: f32,
     pub xp_next: f32,
     pub cooldowns: [f32; 4],
+    /// Maximum cooldown per slot, so the HUD fill bar matches the kit.
+    pub cooldown_maxima: [f32; 4],
+    pub armor: f32,
+    pub attack_damage: f32,
     pub shield: f32,
     pub shield_timer: f32,
     pub buff: Option<(f32, f32, [u8; 3])>,
@@ -455,7 +459,10 @@ impl Hud {
                 UnitKind::DeliveryGuard => {
                     self.quad(width, height, ux - 2.0, uy - 2.0, 4.0, 4.0, [250, 240, 180]);
                 }
-                UnitKind::Ambient => {}
+                UnitKind::Ambient | UnitKind::Spectator => {}
+                UnitKind::EnemyChampion => {
+                    self.quad(width, height, ux - 3.0, uy - 3.0, 6.0, 6.0, [235, 90, 80]);
+                }
             }
         }
     }
@@ -929,7 +936,7 @@ impl Hud {
             [90, 255, 140],
             [255, 90, 60],
         ];
-        let maxima = [5.0f32, 8.0, 12.0, 45.0];
+        let maxima = player.cooldown_maxima;
         for (i, color) in colors.iter().enumerate() {
             let bx = x0 + i as f32 * (box_size + gap);
             self.quad(
@@ -992,7 +999,7 @@ impl Hud {
 
         // Team panel, top-right.
         let tx = width - 238.0;
-        self.hud_panel(width, height, tx, 4.0, 220.0, 80.0);
+        self.hud_panel(width, height, tx, 4.0, 220.0, 92.0);
         self.text(width, height, tx + 8.0, 10.0, 1.0, "YOUR TEAM", OSRS_YELLOW);
         self.text(
             width,
@@ -1029,6 +1036,15 @@ impl Hud {
             0.9,
             &format!("GOLD {}", player.gold),
             [245, 205, 70],
+        );
+        self.text(
+            width,
+            height,
+            tx + 8.0,
+            78.0,
+            0.9,
+            &format!("ARM {:.0}   DMG {:.0}", player.armor, player.attack_damage),
+            [195, 205, 220],
         );
 
         // Current biome pocket label.

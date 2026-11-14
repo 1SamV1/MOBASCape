@@ -11,7 +11,21 @@ use crate::scene::{
 };
 
 const Q_COOLDOWN: f32 = 5.0;
+/// King Awowogei's Bananarang replaces the shared Q bolt.
+const BANANARANG_COOLDOWN: f32 = 8.0;
+/// King Awowogei's Trial by Combat replaces the shared R meteor.
+const TRIAL_COOLDOWN: f32 = 90.0;
 const PLAYER_RESPAWN: f32 = 5.0;
+/// Half-width of the Bananarang's oval in front of King Awowogei.
+const BANANARANG_HAND: f32 = 28.0;
+/// Extra sideways bulge as the banana sweeps from the left hand to the right.
+/// Kept at the original 0.523 lateral/forward ratio.
+const BANANARANG_BULGE: f32 = 2_720.0;
+/// How far the banana reaches forward at the apex of its arc. Was 520 units;
+/// this is a 10x range increase (~41 tiles).
+const BANANARANG_REACH: f32 = 5_200.0;
+/// Trial by Combat unit-target range: 5x the original 15-tile range.
+const TRIAL_RANGE: f32 = 75.0 * 128.0;
 const MINION_AGGRO: f32 = 520.0;
 const MAX_MINIONS_PER_TEAM: usize = 36;
 const DEATH_SINK_TIME: f32 = 0.45;
@@ -30,6 +44,10 @@ pub enum UnitKind {
     Nexus,
     Camp,
     Watchtower,
+    /// Enemy champion controlled by the duel/demo AI.
+    EnemyChampion,
+    /// Non-combat monkey watching a Trial by Combat.
+    Spectator,
     /// Chest near the team spawn that holds remotely purchased items.
     StorageChest,
     /// Flying Armadylean courier that delivers stored purchases.
@@ -43,6 +61,10 @@ impl UnitKind {
 
     pub fn is_structure(self) -> bool {
         matches!(self, Self::Tower | Self::Inhibitor | Self::Nexus)
+    }
+
+    pub fn is_champion(self) -> bool {
+        matches!(self, Self::Player | Self::EnemyChampion)
     }
 }
 
@@ -86,8 +108,17 @@ pub struct AnimatedUnit {
     pub attack_pending: bool,
     pub attack_range: f32,
     pub attack_damage: f32,
+    /// Permanent Trial by Combat bonus to basic melee damage.
+    pub min_base_damage_bonus: f32,
     pub attack_interval: f32,
     pub speed: f32,
+    /// Real armor: physical damage multiplier is 100 / (100 + armor).
+    pub armor: f32,
+    /// Positive stacks of armor reduction (banana peels during a duel).
+    pub armor_reduction: f32,
+    pub armor_reduction_timer: f32,
+    pub stun_timer: f32,
+    pub is_champion: bool,
     /// Seconds before this unit becomes visible and starts acting. Used to
     /// stagger the members of a minion wave without changing the sim tick.
     pub spawn_delay: f32,
@@ -157,6 +188,9 @@ pub struct PlayerStats {
     pub shield: f32,
     pub shield_timer: f32,
     pub attack_damage: f32,
+    pub armor: f32,
+    /// Maximum cooldown per ability slot, used by the HUD fill bars.
+    pub cooldown_maxima: [f32; 4],
     pub speed: f32,
     pub ability_power: f32,
 }
@@ -202,6 +236,37 @@ pub struct TeamBuff {
     pub kind: CampBuff,
 }
 
+pub struct Bananarang {
+    pub start: Vec3,
+    pub forward: Vec3,
+    pub right: Vec3,
+    pub t: f32,
+    pub duration: f32,
+    pub physical: f32,
+    pub pure: f32,
+    pub crit_chance: f32,
+    pub stun: f32,
+    pub hit: Vec<usize>,
+}
+
+pub struct DuelState {
+    pub target: usize,
+    pub center: Vec3,
+    pub radius: f32,
+    pub remaining: f32,
+    pub duration: f32,
+    pub peel_timer: f32,
+    pub peel_stacks: u32,
+    pub spectator_cursor: usize,
+}
+
+pub struct DuelPeel {
+    pub from: Vec3,
+    pub target: usize,
+    pub t: f32,
+    pub duration: f32,
+}
+
 pub struct Projectile {
     pub pos: Vec3,
     pub dir: Vec3,
@@ -212,6 +277,8 @@ pub struct Projectile {
     /// The unit that fired the projectile, so kills and camp aggro can be
     /// attributed correctly.
     pub attacker: Option<usize>,
+    /// Tower and watchtower bolts cannot reach Trial by Combat participants.
+    pub tower_shot: bool,
 }
 
 struct MinionTemplate {
@@ -237,6 +304,12 @@ pub struct AnimatedScene {
     pub shadow_indices: Vec<u32>,
     pub marker: Option<(Vec3, f32)>,
     pub projectiles: Vec<Projectile>,
+    pub bananarangs: Vec<Bananarang>,
+    pub duel: Option<DuelState>,
+    pub duel_peels: Vec<DuelPeel>,
+    pub duel_wins: u32,
+    spectator_indices: Vec<usize>,
+    rng_state: u32,
     pub effects: Vec<Effect>,
     pub wave_timer: f32,
     /// Monotonic wave counter used to stagger formation jitter deterministically.
@@ -267,6 +340,8 @@ pub struct AnimatedScene {
     pub vision_origin: (i32, i32),
     pub team_buffs: [Option<TeamBuff>; 2],
     pub champion_name: String,
+    /// File stem from `data/champions`; gates champion-specific kit pieces.
+    champion_id: String,
     /// Direction requested by hold-to-steer this frame. Consumed by
     /// `update_player` so both movement modes share the same weighted model.
     steer_wish: Option<Vec3>,
@@ -390,6 +465,7 @@ impl AnimatedScene {
             player.level = 1;
             player.ranged_auto = champion.ranged_auto;
             player.model_yaw_offset = champion.model_yaw;
+            player.armor = champion.armor;
             player.walk_arm = champion.walk_arm;
             player.attack_windup = champion.attack_windup;
             player.q_damage = champion.q_damage;
@@ -573,6 +649,33 @@ impl AnimatedScene {
             Vec::new(),
         )?);
 
+        let mut spectator_indices = Vec::new();
+        for _ in 0..8 {
+            if let Ok(mut spectator) = load_unit(
+                cache,
+                4818,
+                Some(1386),
+                None,
+                Vec3::ZERO,
+                2.0,
+                UnitKind::Spectator,
+                2,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                Vec::new(),
+            ) {
+                spectator.health = 0.0;
+                spectator.visible = false;
+                units.push(spectator);
+                spectator_indices.push(units.len() - 1);
+            }
+        }
+
         let nexus_positions = [
             find_nexus(&units, 0).unwrap_or(scene.player_spawn),
             find_nexus(&units, 1).unwrap_or(scene.player_spawn),
@@ -638,6 +741,12 @@ impl AnimatedScene {
             shadow_indices: Vec::new(),
             marker: None,
             projectiles: Vec::new(),
+            bananarangs: Vec::new(),
+            duel: None,
+            duel_peels: Vec::new(),
+            duel_wins: 0,
+            spectator_indices,
+            rng_state: 0x9E37_79B9,
             effects: Vec::new(),
             wave_timer: 0.0,
             wave_serial: 0,
@@ -669,6 +778,7 @@ impl AnimatedScene {
             vision_origin: (vision_origin_x, vision_origin_y),
             team_buffs: [None, None],
             champion_name: champion.name.clone(),
+            champion_id: champion.id.clone(),
             steer_wish: None,
             melee_template,
             ranged_template,
@@ -718,7 +828,13 @@ impl AnimatedScene {
             cooldowns: p.cooldowns,
             shield: p.shield,
             shield_timer: p.shield_timer,
-            attack_damage: p.attack_damage,
+            attack_damage: p.attack_damage + p.min_base_damage_bonus,
+            armor: p.armor,
+            cooldown_maxima: if self.champion_id == "monkey" {
+                [BANANARANG_COOLDOWN, 8.0, 12.0, TRIAL_COOLDOWN]
+            } else {
+                [Q_COOLDOWN, 8.0, 12.0, 45.0]
+            },
             speed: p.speed,
             ability_power: p.ability_power,
         }
@@ -1140,7 +1256,7 @@ impl AnimatedScene {
         let pi = self.player_index;
         let unit = &mut self.units[pi];
         unit.attack_cooldown = unit.attack_interval;
-        let damage = unit.attack_damage;
+        let damage = unit.attack_damage + unit.min_base_damage_bonus;
         let ranged = unit.ranged_auto;
         let from = unit.pos + Vec3::Y * (unit.scale * 80.0);
         let team = unit.team;
@@ -1155,6 +1271,7 @@ impl AnimatedScene {
                 damage,
                 team,
                 attacker: None,
+                tower_shot: false,
             });
         } else {
             self.damage_unit(target, damage, 0);
@@ -1164,10 +1281,75 @@ impl AnimatedScene {
         }
     }
 
+    fn next_random(&mut self) -> f32 {
+        let mut x = self.rng_state;
+        x ^= x << 13;
+        x ^= x >> 17;
+        x ^= x << 5;
+        self.rng_state = x;
+        (x >> 8) as f32 / 16_777_216.0
+    }
+
+    /// Cast the Q slot. King Awowogei throws his Bananarang; other champions
+    /// keep the shared arcane bolt aimed at the cursor.
     pub fn cast_q(&mut self, target: Vec3) -> bool {
+        if self.champion_id == "monkey" {
+            self.cast_bananarang()
+        } else {
+            self.cast_arcane_bolt(target)
+        }
+    }
+
+    fn cast_bananarang(&mut self) -> bool {
         let pi = self.player_index;
         let player = &mut self.units[pi];
-        if player.health <= 0.0 || player.cooldowns[0] > 0.0 || player.mana < 25.0 {
+        if player.health <= 0.0
+            || player.stun_timer > 0.0
+            || player.cooldowns[0] > 0.0
+            || player.mana < 40.0
+        {
+            return false;
+        }
+        let rank = player.q_rank();
+        let rank_scale = 1.0 + 0.35 * (rank.saturating_sub(1)) as f32;
+        let base = player.q_damage * (1.0 + player.ability_power / 100.0) * rank_scale;
+        let forward = Vec3::new(player.yaw.sin(), 0.0, player.yaw.cos());
+        let right = Vec3::Y.cross(forward);
+        // The arc itself starts at the left hand and returns to the right
+        // hand; `start` is the champion's chest origin.
+        let start = player.pos + Vec3::Y * (player.scale * 55.0);
+        player.mana -= 40.0;
+        player.cooldowns[0] = BANANARANG_COOLDOWN;
+        self.bananarangs.push(Bananarang {
+            start,
+            forward,
+            right,
+            t: 0.0,
+            duration: 1.0,
+            physical: base * 0.6,
+            pure: base * 0.4,
+            crit_chance: 0.10 + 0.04 * (rank.saturating_sub(1)) as f32,
+            stun: 0.10 + 0.05 * (rank.saturating_sub(1)) as f32,
+            hit: Vec::new(),
+        });
+        self.effects.push(Effect {
+            pos: start,
+            radius: 90.0,
+            remaining: 0.18,
+            duration: 0.18,
+            color: [255, 220, 60],
+        });
+        true
+    }
+
+    fn cast_arcane_bolt(&mut self, target: Vec3) -> bool {
+        let pi = self.player_index;
+        let player = &mut self.units[pi];
+        if player.health <= 0.0
+            || player.stun_timer > 0.0
+            || player.cooldowns[0] > 0.0
+            || player.mana < 25.0
+        {
             return false;
         }
         let flat = Vec3::new(target.x - player.pos.x, 0.0, target.z - player.pos.z);
@@ -1188,6 +1370,7 @@ impl AnimatedScene {
             damage,
             team,
             attacker: None,
+            tower_shot: false,
         });
         self.effects.push(Effect {
             pos,
@@ -1207,7 +1390,11 @@ impl AnimatedScene {
     ) -> bool {
         let pi = self.player_index;
         let player = &mut self.units[pi];
-        if player.health <= 0.0 || player.cooldowns[1] > 0.0 || player.mana < 30.0 {
+        if player.health <= 0.0
+            || player.stun_timer > 0.0
+            || player.cooldowns[1] > 0.0
+            || player.mana < 30.0
+        {
             return false;
         }
         let flat = Vec3::new(target.x - player.pos.x, 0.0, target.z - player.pos.z);
@@ -1246,7 +1433,11 @@ impl AnimatedScene {
     pub fn cast_e(&mut self) -> bool {
         let pi = self.player_index;
         let player = &mut self.units[pi];
-        if player.health <= 0.0 || player.cooldowns[2] > 0.0 || player.mana < 40.0 {
+        if player.health <= 0.0
+            || player.stun_timer > 0.0
+            || player.cooldowns[2] > 0.0
+            || player.mana < 40.0
+        {
             return false;
         }
         player.mana -= 40.0;
@@ -1266,10 +1457,113 @@ impl AnimatedScene {
         true
     }
 
-    pub fn cast_r(&mut self, target: Vec3) -> bool {
+    /// Cast the R slot. King Awowogei challenges an enemy champion to Trial
+    /// by Combat; other champions keep the shared ground-targeted meteor.
+    pub fn cast_r(
+        &mut self,
+        target: Vec3,
+        target_index: Option<usize>,
+        height: &HeightGrid,
+    ) -> bool {
+        if self.champion_id == "monkey" {
+            self.cast_trial(target_index, height)
+        } else {
+            self.cast_meteor(target)
+        }
+    }
+
+    fn cast_trial(&mut self, target_index: Option<usize>, height: &HeightGrid) -> bool {
+        let Some(target_index) = target_index else {
+            return false;
+        };
+        let pi = self.player_index;
+        if self.duel.is_some() || target_index == pi || target_index >= self.units.len() {
+            return false;
+        }
+        let player = &self.units[pi];
+        let target = &self.units[target_index];
+        if player.health <= 0.0
+            || player.stun_timer > 0.0
+            || player.cooldowns[3] > 0.0
+            || player.mana < 100.0
+            || target.health <= 0.0
+            || !target.is_champion
+            || target.team == player.team
+            || !target.visible
+            || player.pos.distance(target.pos) > TRIAL_RANGE
+        {
+            return false;
+        }
+        let center = (player.pos + target.pos) * 0.5;
+        let distance = player.pos.distance(target.pos);
+        // The barrier forms where the fighters stand, so at maximum cast
+        // range it has to be wide enough to contain both of them.
+        let radius = (distance * 0.5 + 200.0).clamp(320.0, TRIAL_RANGE * 0.5 + 200.0);
+        {
+            let player = &mut self.units[pi];
+            player.mana -= 100.0;
+            player.cooldowns[3] = TRIAL_COOLDOWN;
+            player.path.clear();
+            player.path_index = 0;
+            player.target = None;
+            player.attack_pending = false;
+            player.attack_windup_timer = 0.0;
+            player.attack_target = Some(target_index);
+        }
+        {
+            let target = &mut self.units[target_index];
+            target.path.clear();
+            target.path_index = 0;
+            target.attack_target = Some(pi);
+        }
+        self.duel_peels.clear();
+        let spectator_count = self.spectator_indices.len();
+        for (index, &spectator_index) in self.spectator_indices.iter().enumerate() {
+            let angle = index as f32 / spectator_count.max(1) as f32 * std::f32::consts::TAU;
+            let mut pos = center + Vec3::new(angle.cos(), 0.0, angle.sin()) * (radius + 110.0);
+            pos.y = height.height_at(pos.x, pos.z);
+            let spectator = &mut self.units[spectator_index];
+            spectator.pos = pos;
+            spectator.health = 1.0;
+            spectator.max_health = 1.0;
+            spectator.visible = true;
+            spectator.death_anim = 0.0;
+            spectator.moving = false;
+            spectator.yaw = (center.x - pos.x).atan2(center.z - pos.z);
+            spectator.anim_time_ms = (index as f32 * 311.0) % 1400.0;
+        }
+        self.duel = Some(DuelState {
+            target: target_index,
+            center,
+            radius,
+            remaining: 10.0,
+            duration: 10.0,
+            peel_timer: 0.8,
+            peel_stacks: 0,
+            spectator_cursor: 0,
+        });
+        self.effects.push(Effect {
+            pos: center,
+            radius,
+            remaining: 0.6,
+            duration: 0.6,
+            color: [80, 220, 255],
+        });
+        tracing::info!(
+            "trial by combat: target {} arena radius {radius:.0}",
+            target_index
+        );
+        true
+    }
+
+    fn cast_meteor(&mut self, target: Vec3) -> bool {
         let pi = self.player_index;
         let player = &mut self.units[pi];
-        if player.health <= 0.0 || player.cooldowns[3] > 0.0 || player.mana < 80.0 {
+        if player.health <= 0.0
+            || player.stun_timer > 0.0
+            || player.cooldowns[3] > 0.0
+            || player.mana < 80.0
+        {
             return false;
         }
         player.mana -= 80.0;
@@ -1293,6 +1587,183 @@ impl AnimatedScene {
             }
         }
         true
+    }
+
+    fn end_duel(&mut self, won: bool) {
+        let Some(target) = self.duel.take().map(|duel| duel.target) else {
+            return;
+        };
+        self.duel_peels.clear();
+        for &index in &self.spectator_indices {
+            let spectator = &mut self.units[index];
+            spectator.health = 0.0;
+            spectator.visible = false;
+        }
+        if let Some(unit) = self.units.get_mut(target) {
+            unit.attack_target = None;
+            unit.path.clear();
+            unit.path_index = 0;
+        }
+        let pi = self.player_index;
+        if won {
+            let player = &mut self.units[pi];
+            player.min_base_damage_bonus += 4.0;
+            self.duel_wins += 1;
+            tracing::info!(
+                "trial by combat won: {} wins, +{:.0} base melee damage",
+                self.duel_wins,
+                player.min_base_damage_bonus
+            );
+        }
+    }
+
+    fn apply_duel_bounds(&mut self, height: &HeightGrid) {
+        let Some(duel) = self.duel.as_ref() else {
+            return;
+        };
+        let center = duel.center;
+        let radius = duel.radius;
+        let target = duel.target;
+        let player = self.player_index;
+        for (index, unit) in self.units.iter_mut().enumerate() {
+            if unit.health <= 0.0 || unit.kind.is_structure() || unit.kind == UnitKind::Spectator {
+                continue;
+            }
+            let dx = unit.pos.x - center.x;
+            let dz = unit.pos.z - center.z;
+            let distance = (dx * dx + dz * dz).sqrt();
+            let participant = index == player || index == target;
+            if participant {
+                if distance > radius - 24.0 {
+                    let scale = (radius - 24.0) / distance.max(0.001);
+                    unit.pos.x = center.x + dx * scale;
+                    unit.pos.z = center.z + dz * scale;
+                    unit.pos.y = height.height_at(unit.pos.x, unit.pos.z);
+                    unit.path.clear();
+                    unit.path_index = 0;
+                }
+            } else {
+                if distance < radius + 24.0 {
+                    let scale = (radius + 24.0) / distance.max(0.001);
+                    unit.pos.x = center.x + dx * scale;
+                    unit.pos.z = center.z + dz * scale;
+                    unit.pos.y = height.height_at(unit.pos.x, unit.pos.z);
+                    unit.path.clear();
+                    unit.path_index = 0;
+                }
+            }
+        }
+    }
+
+    fn update_duel(&mut self, dt: f32) {
+        let Some(duel) = self.duel.as_ref() else {
+            return;
+        };
+        let target_index = duel.target;
+        let player_alive = self.units[self.player_index].health > 0.0;
+        let target_alive = self
+            .units
+            .get(target_index)
+            .is_some_and(|unit| unit.health > 0.0);
+        if !player_alive {
+            self.end_duel(false);
+            return;
+        }
+        if !target_alive {
+            self.end_duel(true);
+            return;
+        }
+        let remaining = duel.remaining - dt;
+        if remaining <= 0.0 {
+            let player_fraction =
+                self.units[self.player_index].health / self.units[self.player_index].max_health;
+            let target_fraction =
+                self.units[target_index].health / self.units[target_index].max_health.max(1.0);
+            self.end_duel(player_fraction > target_fraction);
+            return;
+        }
+        let peel_due = {
+            let duel = self.duel.as_mut().expect("duel exists");
+            duel.remaining = remaining;
+            duel.peel_timer -= dt;
+            if duel.peel_timer <= 0.0 {
+                duel.peel_timer = 0.9;
+                true
+            } else {
+                false
+            }
+        };
+        if peel_due {
+            let (from, cursor) = {
+                let duel = self.duel.as_ref().expect("duel exists");
+                let cursor = duel.spectator_cursor;
+                let from = self
+                    .spectator_indices
+                    .get(cursor % self.spectator_indices.len().max(1))
+                    .and_then(|&index| self.units.get(index))
+                    .map_or(duel.center + Vec3::Y * 140.0, |unit| {
+                        unit.pos + Vec3::Y * 120.0
+                    });
+                (from, cursor + 1)
+            };
+            if let Some(duel) = self.duel.as_mut() {
+                duel.spectator_cursor = cursor;
+            }
+            self.duel_peels.push(DuelPeel {
+                from,
+                target: target_index,
+                t: 0.0,
+                duration: 0.45,
+            });
+        }
+        let mut peels = std::mem::take(&mut self.duel_peels);
+        peels.retain_mut(|peel| {
+            peel.t += dt / peel.duration.max(0.01);
+            if peel.t < 1.0 {
+                return true;
+            }
+            if let Some(unit) = self.units.get_mut(peel.target) {
+                unit.armor_reduction = (unit.armor_reduction + 2.0).min(16.0);
+                unit.armor_reduction_timer = 4.0;
+            }
+            if let Some(duel) = self.duel.as_mut() {
+                duel.peel_stacks = duel.peel_stacks.saturating_add(1);
+            }
+            self.effects.push(Effect {
+                pos: self.units[peel.target].pos,
+                radius: 90.0,
+                remaining: 0.3,
+                duration: 0.3,
+                color: [220, 180, 40],
+            });
+            false
+        });
+        self.duel_peels = peels;
+    }
+
+    pub fn pick_enemy_champion(&self, origin: Vec3, dir: Vec3) -> Option<usize> {
+        let mut best: Option<(usize, f32)> = None;
+        for (i, unit) in self.units.iter().enumerate() {
+            if !unit.is_champion
+                || unit.team == self.units[self.player_index].team
+                || unit.health <= 0.0
+                || !unit.visible
+            {
+                continue;
+            }
+            let center = unit.pos + Vec3::Y * (unit.bar_height * 0.45);
+            let radius = unit.hit_radius.max(80.0);
+            let oc = center - origin;
+            let t = oc.dot(dir);
+            if t < 0.0 {
+                continue;
+            }
+            let closest = origin + dir * t;
+            if closest.distance(center) <= radius && best.is_none_or(|(_, best_t)| t < best_t) {
+                best = Some((i, t));
+            }
+        }
+        best.map(|(i, _)| i)
     }
 
     pub fn pick_unit(&self, origin: Vec3, dir: Vec3) -> Option<usize> {
@@ -1367,6 +1838,56 @@ impl AnimatedScene {
             }
         }
         best.map(|(i, _)| i)
+    }
+
+    /// Spawn a sparring enemy champion, used by `--demo-duel` until bots own
+    /// the enemy team slot.
+    pub fn spawn_enemy_champion(
+        &mut self,
+        cache: &Cache,
+        champion: &ChampionConfig,
+        pos: Vec3,
+    ) -> Result<usize> {
+        let mut unit = load_unit(
+            cache,
+            champion.model,
+            Some(champion.idle),
+            Some(champion.walk),
+            pos,
+            champion.scale,
+            UnitKind::EnemyChampion,
+            1,
+            champion.health,
+            champion.attack_range,
+            champion.damage,
+            champion.attack_interval,
+            champion.speed,
+            240.0,
+            380.0,
+            Vec::new(),
+        )?;
+        if !champion.attachments.is_empty() {
+            let mut parts = Vec::with_capacity(1 + champion.attachments.len());
+            parts.push(load_model(cache, champion.model)?);
+            for &model_id in &champion.attachments {
+                parts.push(load_model(cache, model_id)?);
+            }
+            unit.model = Model::merge(&parts);
+        }
+        unit.armor = champion.armor;
+        unit.is_champion = true;
+        unit.home = pos;
+        unit.level = 1;
+        unit.model_yaw_offset = champion.model_yaw;
+        unit.walk_arm = champion.walk_arm;
+        unit.attack_windup = champion.attack_windup;
+        if champion.walk_sway < 1.0 {
+            if let Some(walk) = unit.walk.as_mut() {
+                walk.damp_side_rotation(champion.walk_sway);
+            }
+        }
+        self.units.push(unit);
+        Ok(self.units.len() - 1)
     }
 
     pub fn teleport_player(&mut self, pos: Vec3) {
@@ -1452,11 +1973,13 @@ impl AnimatedScene {
                     "RED WATCHTOWER".to_string()
                 }
             }
+            UnitKind::EnemyChampion => "RIVAL CHAMPION".to_string(),
+            UnitKind::Spectator => "MONKEY SUBJECT".to_string(),
             UnitKind::StorageChest => "ITEM STORAGE".to_string(),
             UnitKind::DeliveryGuard => "ARMADYLEAN GUARD".to_string(),
         };
         let level = match unit.kind {
-            UnitKind::Player => unit.level,
+            UnitKind::Player | UnitKind::EnemyChampion => unit.level,
             UnitKind::Camp => 2,
             _ => 1,
         };
@@ -1474,6 +1997,8 @@ impl AnimatedScene {
             UnitKind::Watchtower => {
                 "FIRES A SLOW BOLT AT THE FIRST ENEMY IN RANGE AND KEEPS FIRING UNTIL IT LEAVES."
             }
+            UnitKind::EnemyChampion => "AN ENEMY CHAMPION. TRIAL BY COMBAT CAN TARGET IT.",
+            UnitKind::Spectator => "A LOYAL SUBJECT WATCHING THE KING'S TRIAL.",
             UnitKind::StorageChest => "REMOTE PURCHASES WAIT HERE. CALL THE GUARD TO DELIVER THEM.",
             UnitKind::DeliveryGuard => {
                 "FLIES YOUR STORED ITEMS OUT TO YOU, THEN RETURNS TO THE CHEST."
@@ -1572,6 +2097,13 @@ impl AnimatedScene {
             unit.death_anim = (unit.death_anim - dt).max(0.0);
             unit.attack_cooldown = (unit.attack_cooldown - dt).max(0.0);
             unit.attack_windup_timer = (unit.attack_windup_timer - dt).max(0.0);
+            unit.stun_timer = (unit.stun_timer - dt).max(0.0);
+            if unit.armor_reduction_timer > 0.0 {
+                unit.armor_reduction_timer -= dt;
+                if unit.armor_reduction_timer <= 0.0 {
+                    unit.armor_reduction = 0.0;
+                }
+            }
             unit.anim_time_ms += dt * 1000.0;
             if unit.kind == UnitKind::Player {
                 let target = if unit.moving { 1.0 } else { 0.0 };
@@ -1582,7 +2114,10 @@ impl AnimatedScene {
             if unit.health <= 0.0
                 && matches!(
                     unit.kind,
-                    UnitKind::Dummy | UnitKind::Camp | UnitKind::Inhibitor
+                    UnitKind::Dummy
+                        | UnitKind::Camp
+                        | UnitKind::Inhibitor
+                        | UnitKind::EnemyChampion
                 )
                 && unit.dead_timer > 0.0
             {
@@ -1594,7 +2129,7 @@ impl AnimatedScene {
                     unit.attack_target = None;
                     unit.path.clear();
                     unit.path_index = 0;
-                    if unit.kind == UnitKind::Camp {
+                    if matches!(unit.kind, UnitKind::Camp | UnitKind::EnemyChampion) {
                         unit.pos = unit.home;
                         unit.camp_aggro = false;
                         unit.target = None;
@@ -1618,6 +2153,10 @@ impl AnimatedScene {
                 self.units[i].spawn_delay = (self.units[i].spawn_delay - dt).max(0.0);
                 continue;
             }
+            if self.units[i].stun_timer > 0.0 {
+                self.units[i].moving = false;
+                continue;
+            }
             if kind.is_minion() {
                 self.update_minion(i, dt, height);
             } else if kind == UnitKind::Tower {
@@ -1628,9 +2167,14 @@ impl AnimatedScene {
                 self.update_ambient(i, dt, height);
             } else if kind == UnitKind::Watchtower {
                 self.update_watchtower(i);
+            } else if kind == UnitKind::EnemyChampion {
+                self.update_enemy_champion(i, dt, height, collision);
             }
         }
 
+        self.apply_duel_bounds(height);
+        self.update_duel(dt);
+        self.update_bananarangs(dt, height);
         self.update_projectiles(dt, height);
 
         // Replace the clock's share of every moving unit's animation time
@@ -1649,6 +2193,10 @@ impl AnimatedScene {
         let pi = self.player_index;
         let speed_mult = self.team_speed_mult(0);
         let steer = self.steer_wish.take();
+        if self.units[pi].stun_timer > 0.0 {
+            self.units[pi].moving = false;
+            return;
+        }
         if self.units[pi].health <= 0.0 {
             self.units[pi].dead_timer -= dt;
             if self.units[pi].dead_timer <= 0.0 {
@@ -1823,6 +2371,7 @@ impl AnimatedScene {
                             damage,
                             team: unit.team,
                             attacker: None,
+                            tower_shot: false,
                         });
                     } else {
                         self.damage_unit(target, damage, team);
@@ -1835,6 +2384,56 @@ impl AnimatedScene {
         } else {
             self.units[index].attack_target = None;
             self.follow_lane(index, dt, height, speed_mult);
+        }
+    }
+
+    fn update_enemy_champion(
+        &mut self,
+        index: usize,
+        dt: f32,
+        height: &HeightGrid,
+        _collision: &WorldCollision,
+    ) {
+        let duel_target = self
+            .duel
+            .as_ref()
+            .filter(|duel| duel.target == index)
+            .map(|_| self.player_index);
+        let team = self.units[index].team;
+        let target =
+            duel_target.filter(|&ti| self.units.get(ti).is_some_and(|unit| unit.health > 0.0));
+        let target = target.or_else(|| self.find_target(index, team, 600.0));
+        let Some(target) = target else {
+            self.units[index].moving = false;
+            self.units[index].attack_target = None;
+            return;
+        };
+        let target_pos = self.units[target].pos;
+        let (distance, attack_range, cooldown_ready, damage, interval) = {
+            let unit = &self.units[index];
+            (
+                unit.pos.distance(target_pos),
+                unit.attack_range,
+                unit.attack_cooldown <= 0.0,
+                unit.attack_damage,
+                unit.attack_interval,
+            )
+        };
+        if distance <= attack_range {
+            let unit = &mut self.units[index];
+            unit.moving = false;
+            unit.attack_target = Some(target);
+            let dir = target_pos - unit.pos;
+            if dir.length_squared() > 1e-6 {
+                turn_toward(unit, dir.x.atan2(dir.z), dt);
+            }
+            if cooldown_ready {
+                unit.attack_cooldown = interval;
+                self.damage_unit_by(target, damage, team, Some(index));
+            }
+        } else {
+            self.units[index].attack_target = Some(target);
+            self.move_unit_toward(index, target_pos, dt, height, 1.0);
         }
     }
 
@@ -1889,6 +2488,7 @@ impl AnimatedScene {
                             damage,
                             team: 2,
                             attacker: None,
+                            tower_shot: false,
                         });
                     } else {
                         self.damage_unit(ti, damage, 2);
@@ -1970,7 +2570,13 @@ impl AnimatedScene {
 
         let mut target = self.units[index].attack_target.filter(|&ti| {
             let unit = &self.units[ti];
-            unit.health > 0.0 && unit.team != team && unit.pos.distance(tower_pos) <= lock_range
+            unit.health > 0.0
+                && unit.team != team
+                && unit.pos.distance(tower_pos) <= lock_range
+                && !self
+                    .duel
+                    .as_ref()
+                    .is_some_and(|duel| ti == self.player_index || ti == duel.target)
         });
         if target.is_none() {
             target = self.find_watchtower_target(index, aggro_range);
@@ -2001,6 +2607,7 @@ impl AnimatedScene {
             damage,
             team,
             attacker: Some(index),
+            tower_shot: true,
         });
     }
 
@@ -2009,7 +2616,14 @@ impl AnimatedScene {
         let tower = &self.units[index];
         let mut best: Option<(usize, u8, f32)> = None;
         for (i, unit) in self.units.iter().enumerate() {
-            if i == index || unit.health <= 0.0 || unit.team == tower.team {
+            if i == index
+                || unit.health <= 0.0
+                || unit.team == tower.team
+                || self
+                    .duel
+                    .as_ref()
+                    .is_some_and(|duel| i == self.player_index || i == duel.target)
+            {
                 continue;
             }
             if unit.kind == UnitKind::Nexus || unit.kind == UnitKind::Inhibitor {
@@ -2056,6 +2670,7 @@ impl AnimatedScene {
                     damage,
                     team,
                     attacker: None,
+                    tower_shot: true,
                 });
             }
         }
@@ -2069,6 +2684,10 @@ impl AnimatedScene {
                 || unit.team == team
                 || unit.team == 2
                 || unit.health <= 0.0
+                || self
+                    .duel
+                    .as_ref()
+                    .is_some_and(|duel| i == self.player_index || i == duel.target)
                 || matches!(unit.kind, UnitKind::DeliveryGuard | UnitKind::StorageChest)
             {
                 continue;
@@ -2141,7 +2760,7 @@ impl AnimatedScene {
     }
 
     fn damage_unit(&mut self, index: usize, amount: f32, attacker_team: u8) {
-        self.damage_unit_by(index, amount, attacker_team, None);
+        self.damage_unit_mixed(index, amount, 0.0, attacker_team, None);
     }
 
     /// Apply damage and attribute it to a specific attacker. The aggressor
@@ -2151,6 +2770,18 @@ impl AnimatedScene {
         &mut self,
         index: usize,
         amount: f32,
+        attacker_team: u8,
+        aggressor: Option<usize>,
+    ) {
+        self.damage_unit_mixed(index, amount, 0.0, attacker_team, aggressor);
+    }
+
+    /// Physical damage is reduced by armor; pure damage bypasses it.
+    fn damage_unit_mixed(
+        &mut self,
+        index: usize,
+        physical: f32,
+        pure: f32,
         attacker_team: u8,
         aggressor: Option<usize>,
     ) {
@@ -2168,14 +2799,23 @@ impl AnimatedScene {
         {
             return;
         }
-        let amount = amount * self.team_damage_mult(attacker_team);
+        let mut team_mult = self.team_damage_mult(attacker_team);
+        if self.duel.as_ref().is_some_and(|duel| {
+            duel.target == index || duel.target == aggressor.unwrap_or(usize::MAX)
+        }) {
+            // A Trial is a fight to the finish: both combatants take
+            // amplified damage, so it cannot stall for the whole timer.
+            team_mult *= 3.0;
+        }
         let (target_kind, camp_buff, respawn_time, killed) = {
             let unit = &mut self.units[index];
             if unit.health <= 0.0 {
                 return;
             }
-            let mut amount = amount;
-            if unit.kind == UnitKind::Player && unit.shield > 0.0 {
+            let armor = (unit.armor - unit.armor_reduction).clamp(-80.0, 500.0);
+            let multiplier = armor_damage_multiplier(armor);
+            let mut amount = (physical * multiplier + pure) * team_mult;
+            if unit.shield > 0.0 {
                 let absorbed = unit.shield.min(amount);
                 unit.shield -= absorbed;
                 amount -= absorbed;
@@ -2237,6 +2877,13 @@ impl AnimatedScene {
             }
             UnitKind::Dummy => {
                 self.units[index].dead_timer = 4.0;
+            }
+            UnitKind::EnemyChampion => {
+                let unit = &mut self.units[index];
+                unit.dead_timer = 8.0;
+                unit.attack_target = None;
+                unit.path.clear();
+                unit.path_index = 0;
             }
             UnitKind::Camp => {
                 let unit = &mut self.units[index];
@@ -2386,6 +3033,11 @@ impl AnimatedScene {
                 unit.visible = true;
             }
         }
+        for unit in &mut self.units {
+            if unit.kind == UnitKind::Spectator && self.duel.is_some() {
+                unit.visible = true;
+            }
+        }
         // Structures are permanent map features: the player always knows
         // where the towers, inhibitors, nexus and watchtowers stand, even
         // when they sit outside the current line of sight.
@@ -2432,6 +3084,7 @@ impl AnimatedScene {
                     && !u.kind.is_structure()
                     && u.kind != UnitKind::Watchtower
                     && u.kind != UnitKind::Ambient
+                    && u.kind != UnitKind::Spectator
             })
             .count()
     }
@@ -2459,6 +3112,61 @@ impl AnimatedScene {
             .map(|b| (b.remaining, b.duration, b.kind))
     }
 
+    fn update_bananarangs(&mut self, dt: f32, height: &HeightGrid) {
+        let mut active = std::mem::take(&mut self.bananarangs);
+        let pi = self.player_index;
+        active.retain_mut(|banana| {
+            let previous = bananarang_position(banana, height);
+            banana.t += dt / banana.duration.max(0.01);
+            let pos = bananarang_position(banana, height);
+            for index in 0..self.units.len() {
+                if banana.hit.contains(&index) {
+                    continue;
+                }
+                let unit = &self.units[index];
+                if unit.health <= 0.0
+                    || unit.team == 0
+                    || unit.kind.is_structure()
+                    || matches!(
+                        unit.kind,
+                        UnitKind::DeliveryGuard
+                            | UnitKind::StorageChest
+                            | UnitKind::Spectator
+                            | UnitKind::Ambient
+                    )
+                {
+                    continue;
+                }
+                if segment_distance_xz(unit.pos, previous, pos) > 80.0 + unit.hit_radius {
+                    continue;
+                }
+                banana.hit.push(index);
+                let crit = self.next_random() < banana.crit_chance;
+                let multiplier = if crit { 1.5 } else { 1.0 };
+                let stun = if crit { banana.stun } else { 0.0 };
+                self.damage_unit_mixed(
+                    index,
+                    banana.physical * multiplier,
+                    banana.pure * multiplier,
+                    0,
+                    Some(pi),
+                );
+                if stun > 0.0 {
+                    self.units[index].stun_timer = self.units[index].stun_timer.max(stun);
+                }
+                self.effects.push(Effect {
+                    pos,
+                    radius: if crit { 150.0 } else { 90.0 },
+                    remaining: 0.25,
+                    duration: 0.25,
+                    color: if crit { [255, 90, 40] } else { [255, 220, 60] },
+                });
+            }
+            banana.t < 1.0
+        });
+        self.bananarangs = active;
+    }
+
     fn update_projectiles(&mut self, dt: f32, height: &HeightGrid) {
         let projectiles = std::mem::take(&mut self.projectiles);
         let mut survivors = Vec::with_capacity(projectiles.len());
@@ -2478,6 +3186,11 @@ impl AnimatedScene {
                 if unit.team == projectile.team
                     || unit.health <= 0.0
                     || (unit.team == 2 && unit.kind != UnitKind::Camp)
+                    || (projectile.tower_shot
+                        && self
+                            .duel
+                            .as_ref()
+                            .is_some_and(|duel| i == self.player_index || i == duel.target))
                 {
                     continue;
                 }
@@ -2622,8 +3335,14 @@ impl AnimatedScene {
                 attack_pending: false,
                 attack_range: template.range,
                 attack_damage: damage,
+                min_base_damage_bonus: 0.0,
                 attack_interval: template.interval,
                 speed,
+                armor: 0.0,
+                armor_reduction: 0.0,
+                armor_reduction_timer: 0.0,
+                stun_timer: 0.0,
+                is_champion: false,
                 spawn_delay,
                 hit_radius: if super_minion {
                     140.0
@@ -2835,7 +3554,7 @@ impl AnimatedScene {
                 let (width, height) = match unit.kind {
                     UnitKind::Nexus => (190.0 * (unit.scale / 2.8).clamp(0.7, 1.5), 14.0),
                     UnitKind::Tower => (150.0 * (unit.scale / 2.8).clamp(0.7, 1.5), 14.0),
-                    UnitKind::Player => (160.0, 16.0),
+                    UnitKind::Player | UnitKind::EnemyChampion => (160.0, 16.0),
                     UnitKind::Camp => (145.0 * (unit.scale / 1.4).clamp(0.9, 1.3), 20.0),
                     _ => (55.0, 12.0),
                 };
@@ -2878,6 +3597,56 @@ impl AnimatedScene {
             .collect::<Vec<_>>();
         for pos in projectile_positions {
             append_billboard(self, pos, 22.0, [255, 150, 40], camera_right, camera_up);
+        }
+
+        let bananas = self
+            .bananarangs
+            .iter()
+            .map(|banana| bananarang_position(banana, height))
+            .collect::<Vec<_>>();
+        for pos in bananas {
+            append_banana(self, pos, camera_right, camera_up);
+        }
+
+        if let Some(duel) = self.duel.as_ref() {
+            let center = duel.center;
+            let radius = duel.radius;
+            let progress = 1.0 - (duel.remaining / duel.duration.max(0.01)).clamp(0.0, 1.0);
+            let pulse = (duel.remaining * 5.0).sin().abs() * 0.25 + 0.75 + progress * 0.1;
+            let color = [
+                (70.0 * pulse) as u8,
+                (210.0 * pulse) as u8,
+                (255.0 * pulse) as u8,
+            ];
+            append_ring(self, height, center, radius, color);
+            append_ring(self, height, center, radius * 0.97, [40, 120, 170]);
+            let segments = 48usize;
+            for i in 0..segments {
+                let angle = i as f32 / segments as f32 * std::f32::consts::TAU;
+                let x = center.x + angle.cos() * radius;
+                let z = center.z + angle.sin() * radius;
+                let y = height.height_at(x, z);
+                let tangent = Vec3::new(-angle.sin(), 0.0, angle.cos());
+                append_quad(
+                    self,
+                    Vec3::new(x, y + 145.0, z),
+                    tangent * 8.0,
+                    Vec3::Y * 145.0,
+                    color,
+                );
+            }
+        }
+        let peels = self
+            .duel_peels
+            .iter()
+            .filter_map(|peel| {
+                let target = self.units.get(peel.target)?;
+                let pos = peel.from + (target.pos - peel.from) * peel.t.clamp(0.0, 1.0);
+                Some(pos + Vec3::Y * 90.0)
+            })
+            .collect::<Vec<_>>();
+        for pos in peels {
+            append_billboard(self, pos, 28.0, [255, 210, 60], camera_right, camera_up);
         }
 
         let player = &self.units[self.player_index];
@@ -2986,6 +3755,10 @@ impl AnimatedScene {
 }
 
 impl AnimatedUnit {
+    fn q_rank(&self) -> u8 {
+        (1 + self.level.saturating_sub(1) / 2).min(5) as u8
+    }
+
     fn is_minion_of(&self, team: u8) -> bool {
         self.kind.is_minion() && self.team == team
     }
@@ -3103,8 +3876,14 @@ fn load_unit(
         attack_pending: false,
         attack_range,
         attack_damage,
+        min_base_damage_bonus: 0.0,
         attack_interval,
         speed,
+        armor: 0.0,
+        armor_reduction: 0.0,
+        armor_reduction_timer: 0.0,
+        stun_timer: 0.0,
+        is_champion: kind.is_champion(),
         spawn_delay: 0.0,
         hit_radius,
         bar_height,
@@ -3206,6 +3985,47 @@ fn offset_lane(lane: &[Vec3], offset: f32) -> Vec<Vec3> {
 /// oscillating in place.
 fn planar_delta(from: Vec3, to: Vec3) -> Vec3 {
     Vec3::new(to.x - from.x, 0.0, to.z - from.z)
+}
+
+/// Shortest horizontal distance from a point to a line segment. Used by fast
+/// skillshots so a low frame rate or a high timescale cannot tunnel through a
+/// target between two sampled positions.
+fn segment_distance_xz(point: Vec3, from: Vec3, to: Vec3) -> f32 {
+    let ab = planar_delta(from, to);
+    let ap = planar_delta(from, point);
+    let denom = ab.length_squared();
+    let t = if denom > 1e-6 {
+        (ap.dot(ab) / denom).clamp(0.0, 1.0)
+    } else {
+        0.0
+    };
+    (ap - ab * t).length()
+}
+
+fn armor_damage_multiplier(armor: f32) -> f32 {
+    if armor >= 0.0 {
+        100.0 / (100.0 + armor)
+    } else {
+        2.0 - 100.0 / (100.0 - armor)
+    }
+}
+
+/// Planar position along the Bananarang's oval. It leaves the king's left
+/// hand, sweeps forward and outward, then returns to his right hand.
+fn bananarang_arc(start: Vec3, forward: Vec3, right: Vec3, t: f32) -> Vec3 {
+    let t = t.clamp(0.0, 1.0);
+    let s = (t * std::f32::consts::PI).sin();
+    let c = (t * std::f32::consts::PI).cos();
+    let lateral = -c * (BANANARANG_HAND + BANANARANG_BULGE * s);
+    start + forward * (s * BANANARANG_REACH) + right * lateral
+}
+
+/// World position of the banana, lifted above the terrain. Keeping the arc in
+/// one helper makes the simulation and the render pass agree.
+fn bananarang_position(banana: &Bananarang, height: &HeightGrid) -> Vec3 {
+    let mut pos = bananarang_arc(banana.start, banana.forward, banana.right, banana.t);
+    pos.y = height.height_at(pos.x, pos.z) + 70.0;
+    pos
 }
 
 /// Turn a unit toward a heading at a species-appropriate rate instead of
@@ -3402,6 +4222,32 @@ fn append_bar(
     );
 }
 
+fn append_banana(scene: &mut AnimatedScene, center: Vec3, right: Vec3, up: Vec3) {
+    // Comically oversized banana: overlapping yellow billboards forming a
+    // crescent, with small brown tips.
+    for i in 0..6 {
+        let u = i as f32 / 5.0 * 2.0 - 1.0;
+        let offset = right * (u * 44.0) + up * ((1.0 - u * u) * 20.0 - 4.0);
+        append_billboard(scene, center + offset, 30.0, [255, 214, 45], right, up);
+    }
+    append_billboard(
+        scene,
+        center - right * 48.0 + up * 2.0,
+        14.0,
+        [120, 80, 30],
+        right,
+        up,
+    );
+    append_billboard(
+        scene,
+        center + right * 48.0 + up * 2.0,
+        14.0,
+        [120, 80, 30],
+        right,
+        up,
+    );
+}
+
 fn append_billboard(
     scene: &mut AnimatedScene,
     center: Vec3,
@@ -3521,6 +4367,40 @@ mod tests {
             .expect("super minion")
             .0;
         assert!(super_pos.z > nexus.z + 128.0);
+    }
+
+    #[test]
+    fn armor_reduces_and_amplifies_physical_damage() {
+        assert!((armor_damage_multiplier(0.0) - 1.0).abs() < 1e-6);
+        assert!((armor_damage_multiplier(100.0) - 0.5).abs() < 1e-6);
+        assert!(armor_damage_multiplier(-100.0) > 1.0);
+    }
+
+    #[test]
+    fn segment_distance_catches_fast_projectiles() {
+        let from = Vec3::ZERO;
+        let to = Vec3::new(100.0, 0.0, 0.0);
+        assert!(segment_distance_xz(Vec3::new(50.0, 0.0, 0.0), from, to) < 0.01);
+        let offset = segment_distance_xz(Vec3::new(50.0, 0.0, 30.0), from, to);
+        assert!((offset - 30.0).abs() < 0.01);
+        let behind = segment_distance_xz(Vec3::new(-25.0, 0.0, 0.0), from, to);
+        assert!((behind - 25.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn bananarang_arc_starts_left_and_returns_right() {
+        let start = Vec3::new(1000.0, 0.0, 2000.0);
+        let left = bananarang_arc(start, Vec3::Z, Vec3::X, 0.0);
+        assert!((left.x - (1000.0 - BANANARANG_HAND)).abs() < 0.01);
+        assert!((left.z - 2000.0).abs() < 0.01);
+
+        let apex = bananarang_arc(start, Vec3::Z, Vec3::X, 0.5);
+        assert!((apex.x - 1000.0).abs() < 0.01);
+        assert!((apex.z - (2000.0 + BANANARANG_REACH)).abs() < 0.01);
+
+        let right = bananarang_arc(start, Vec3::Z, Vec3::X, 1.0);
+        assert!((right.x - (1000.0 + BANANARANG_HAND)).abs() < 0.01);
+        assert!((right.z - 2000.0).abs() < 0.01);
     }
 
     #[test]

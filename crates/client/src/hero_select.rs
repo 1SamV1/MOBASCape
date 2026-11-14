@@ -96,6 +96,7 @@ mod tests {
             health: 1.0,
             mana: 1.0,
             damage: 1.0,
+            armor: 0.0,
             attack_range: 1.0,
             attack_interval: 1.0,
             speed: 1.0,

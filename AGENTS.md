@@ -202,8 +202,10 @@ Cache location: `.cache/osrs-235/cache` by default. Pass `--cache` and
   procedural icons. See `docs/UI_ASSETS.md`; never commit `assets/`.
 - Three data-driven champions (`monkey`, `jad`, `kree`) with distinct models,
   stats, and ability numbers. A hero-select screen chooses among them and
-  bakes cache-model portraits. They share the Q/W/E/R shape; Kree has ranged
-  auto-attacks. No passives yet. Champion files also carry movement weight:
+  bakes cache-model portraits. King Awowogei uses Bananarang (Q) and Trial by
+  Combat (R); Jad and Kree keep the shared Q bolt and R meteor. Kree has ranged
+  auto-attacks. No passives yet. Champion files also carry a real `armor` stat
+  and movement weight:
   `weight`, optional `turn_time` / `accel_time` / `stop_time`, `stride`, and
   `bounce`. The player turns and accelerates with weight, coasts to a stop,
   and drives its walk cycle from distance covered. `walk_sway` scales torso

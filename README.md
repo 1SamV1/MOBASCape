@@ -92,6 +92,12 @@ cargo run -p rift-client -- --demo-anim --walk-arm 0.25 --walk-sway 0.1
 # Deterministic combat check: target a dummy and fire Q
 cargo run -p rift-client -- --demo-combat
 
+# Spawn a rival champion for manual Bananarang / Trial by Combat testing
+cargo run -p rift-client -- --champion monkey --demo-duel
+
+# Automated Trial by Combat check: R -> Q -> duel result and permanent bonus
+cargo run -p rift-client -- --champion monkey --demo-trial --timescale 4
+
 # Fast-forward the lane for tower/minion/nexus verification
 cargo run -p rift-client -- --timescale 20
 
@@ -153,10 +159,10 @@ Put `keys.json` next to `main_file_cache.dat2`, or pass `--keys`.
 - **LMB ground tap**: pathfind to the point
 - **LMB hold**: steer directly toward the cursor with collision sliding
 - **LMB on an enemy**: auto-attack it
-- **Q**: fire blast projectile (5 s)
+- **Q**: fire blast projectile (5 s); King Awowogei throws **Bananarang** (8 s)
 - **W**: blink/dash toward the cursor (8 s)
 - **E**: heal + shield (12 s)
-- **R**: meteor AoE at the cursor (45 s)
+- **R**: meteor AoE at the cursor (45 s); King Awowogei starts **Trial by Combat** on an enemy champion (90 s)
 - **B**: toggle the Fountain Shop
 - **Click a category**: filter shop items
 - **Click an item card**: select it; use **Buy** or **Sell** in the detail pane

@@ -25,5 +25,6 @@
   "walk_sway": 0.0,
   "weight": 82,
   "walk_arm": 0.0,
-  "attack_windup": 0.3
+  "attack_windup": 0.3,
+  "armor": 30.0
 }
