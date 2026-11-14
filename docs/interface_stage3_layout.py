@@ -85,6 +85,20 @@ def choose_scale(W, H, budget):
     for s in (4, 3, 2):
         if fits_full(W, H, s, budget): return s
     return 1
+def holds(W, H, s, budget=0.25):
+    """Can the window hold the layout at this scale at all: with everything given up that may be, is no clash left?
+    Asked of the usual state, so it depends on the window alone; the pieces that come and go are only ever
+    shown where they are clear, and cannot add a clash."""
+    return not collapse(W, H, s, USUAL, budget, True)[2]
+def effective_scale(W, H, requested, budget=0.25, can_hold=holds):
+    """The scale drawn. With nothing requested, the scale chosen by fit. With a scale requested, that scale if the
+    window can hold it, else the largest lower scale it can hold. Nothing is remembered: the answer comes from the
+    window and the request alone, so the requested scale is drawn again as soon as the window can hold it.
+    Scale 1 is the floor. (can_hold is holds(); the sweep passes the same function with its answers remembered.)"""
+    if requested is None: return choose_scale(W, H, budget)
+    for s in range(requested, 1, -1):
+        if can_hold(W, H, s, budget): return s
+    return 1
 def collapse(W, H, s, want, budget, slide):
     """Two passes. First the layout is settled for the usual state, from the window alone. Then what comes and
     goes with play (the target panel, more feed entries, a longer objectives list) is added where it fits."""
@@ -279,4 +293,28 @@ def main():
         what = 'not shown' if not o else ('title' if end['obj_h'] == 24 else 'list') + f' from {o[1]}'
         print(f"   {W}x{H} at scale {s}{' (forced)' if s != choose_scale(W, H, 0.25) else ''}: the place ends at {place(s)}; objectives {what}; "
               f"target panel {'shown ' + str(r['target'][1]) + ' to ' + str(r['target'][3]) if end['target'] else 'NOT SHOWN'}; chat from {r['chat'][1]}{'; CLASH ' + str(left) if left else ''}")
+    print('--- 14. a requested scale the window cannot hold: the largest lower scale it can hold is drawn')
+    seen, left = {}, {}
+    def held(W, H, s, budget=0.25):     # holds(), with its answers remembered: the sweep asks about the same window for several requests
+        if (W, H, s) not in seen: seen[(W, H, s)] = holds(W, H, s, budget)
+        return seen[(W, H, s)]
+    def clash_at(W, H, s):              # is a clash left at this scale, in the usual or the busy state; remembered likewise
+        if (W, H, s) not in left: left[(W, H, s)] = any(collapse(W, H, s, st, 0.25, True)[2] for st in (USUAL, BUSY))
+        return left[(W, H, s)]
+    for req in (2, 3, 4):
+        drawn = {(W, H): effective_scale(W, H, req, can_hold=held) for W in range(960, 3841 + 32, 32) for H in range(384, 2401 + 32, 32)}
+        n = lowered = clash = above = fell = notrect = 0
+        for W in range(960, 3841, 32):
+            for H in range(384, 2401, 32):
+                e = drawn[(W, H)]; n += 1
+                lowered += e < req; above += e > req
+                clash += clash_at(W, H, e)
+                fell += drawn[(W + 32, H)] < e or drawn[(W, H + 32)] < e
+                notrect += (e == req) != (W >= 953 * req and H >= 280 * req)
+        print(f"   requested {req}: {n} windows; drawn at the request in {n - lowered}, lowered in {lowered}; ever above the request: {above}; "
+              f"left with a clash: {clash}; times it fell as the window grew: {fell}; "
+              f"windows where 'held' differs from 'at least {953 * req} wide and {280 * req} high': {notrect}")
+    for W, H, req in ((1811, 1040, 2), (1905, 1040, 2), (1906, 1040, 2), (1920, 1080, 2), (1920, 559, 2), (1920, 560, 2), (2240, 1260, 3), (2859, 1260, 3), (3840, 2160, 4), (3840, 2160, 3), (3840, 2160, 1), (1920, 1080, 1)):
+        e = effective_scale(W, H, req); a = choose_scale(W, H, 0.25)
+        print(f"   {W}x{H}, {req} requested: drawn at {e}{'' if e == req else ' (cannot hold ' + str(req) + ': needs ' + str(953 * req) + ' by ' + str(280 * req) + ')'}; left to itself it would choose {a}")
 if __name__ == '__main__': main()

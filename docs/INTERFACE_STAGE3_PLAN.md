@@ -25,6 +25,9 @@ reopened. They are set out at the end of section 12.
 
 1. The target panel's place is kept against the objectives in every state,
    the title line included (sections 5.4, 7 and 8).
+2. A scale set by the player is a request. Where the window cannot hold the
+   layout at that scale, the largest lower scale it can hold is drawn, and
+   pieces are never left overlapping to honour it (sections 2 and 8).
 
 Stage 3, as the design has it: every component in its place with made-up
 values, drawn through the stage 2 drawing layer from a theme. No component
@@ -160,9 +163,38 @@ and height are tested each on its own; nothing assumes a 16:9 window.
 For 16:9 windows the whole interface first fits at scale 1 from 1562 by 878,
 at scale 2 from 3120 by 1755 and at scale 3 from 4682 by 2633. In a sweep of
 5,824 windows from 960 by 384 to 3840 by 2400, with width and height varied
-independently, the scale never fell as a window grew. The player may force
-a scale in settings; a forced scale too big for the window gets the
-collapse order, as the stage 2 test screen showed it can.
+independently, the scale never fell as a window grew.
+
+**A scale set by the player is a request, and it is kept as set.**
+
+- **Where the window can hold the layout at the requested scale, that scale
+  is drawn**, with pieces giving way as section 7 says if it is more than
+  the window fits in full. When a scale is requested, the automatic choice
+  plays no part.
+- **Where the window cannot hold it at all, the largest lower scale it can
+  hold is drawn.** Pieces are never left overlapping to honour a request.
+- **The request is not changed by that.** The scale drawn is worked out
+  afresh from the window and the request, with nothing remembered. So the
+  requested scale is drawn again the moment the window can hold it, and a
+  window dragged back and forth across the limit gives the same answer
+  every time.
+- **"Can hold" has one meaning:** at that scale, with everything given up
+  that section 7 allows, no two pieces are left within 8 of each other and
+  none leaves the window. It is asked of the usual state, so it depends on
+  the window alone; the pieces that come and go with play are only ever
+  shown where they are clear, and cannot change the answer. It is not the
+  same as fitting in full, which is what the automatic choice asks.
+- **Scale 1 is the floor.** A window that cannot hold scale 1 is below the
+  limits under "The least window", and what is said there applies.
+
+By the script, in every window of its sweep, a scale can be held exactly
+where the window is at least 953 wide and 280 high, times the scale: 1906
+by 560 for scale 2, 2859 by 840 for scale 3, 3812 by 1120 for scale 4. So,
+with 2 requested, a window 1811 by 1040 is drawn at scale 1, because scale
+2 needs 1906 of width, and one 1906 by 1040 is drawn at 2. With 3
+requested, 2240 by 1260 is drawn at 2. The scale drawn never exceeds the
+request, never falls as the window grows, and leaves no clash in any of
+the 5,824 windows, for requests of 2, 3 and 4.
 
 So the design's hope that everything shows in full at 1280 by 720 does not
 hold, and the corrected figure is about 1562 by 878, with 1600 by 900 the
@@ -1179,11 +1211,21 @@ the real code:
 - **the clearance at its edge, on the real clash test:** two rectangles 7
   apart clash; exactly 8 apart are clear; 9 apart are clear; across and
   down, and at scales 1 and 2 (where the figures are 15, 16 and 17);
-- **the scale in both modes:** chosen automatically, and forced by the
-  player, including a forced scale too large for the window so that
-  collapse is in force. In each mode the same window and the same pieces
-  wanted give identical rectangles; a forced scale is the scale used, and
-  the automatic choice never replaces it;
+- **the scale in both modes:** chosen automatically, and requested by the
+  player. A requested scale the window can hold is the scale drawn,
+  including one larger than the window fits in full, so that collapse is in
+  force, and the automatic choice never replaces it. A requested scale the
+  window cannot hold is drawn at the largest lower scale it can hold, with
+  no two pieces within 8. The request is unchanged by that: growing the
+  window across the limit draws the requested scale again, shrinking it
+  lowers it again, the same in both directions and however often. By name:
+  with 2 requested, 1811 by 1040 is drawn at 1, 1905 by 1040 at 1, 1906 by
+  1040 at 2, 1920 by 559 at 1 and 1920 by 560 at 2; with 3 requested, 2240
+  by 1260 is drawn at 2. In each mode the same window, the same request and
+  the same pieces wanted give identical rectangles. In development builds
+  the log line that reports the scale gives both the scale requested and
+  the scale drawn whenever they differ, so that a lowered scale is never
+  taken for a fault;
 - the same rectangles with the components listed in any order;
 - the objectives' top at window heights where 38% falls on a half (75,
   175, 275 and so on), against the whole-number rule;
@@ -1433,6 +1475,29 @@ amendment. The new section 13 has the sweep: in every window, at every
 scale chosen or forced that the window can hold, the objectives are never
 inside the place and no clash is left.
 
+### Amendment 2, after the freeze: a requested scale the window cannot hold
+
+The sweep for amendment 1 forced each scale in every window. It showed
+that a forced scale can be too large for the layout to exist: below 953
+wide or 280 high, times the scale, pieces overlap whatever is given up.
+The frozen text said a forced scale "is the scale used" and did not say
+what happens past that limit. A window 1811 by 1040, the maximised window
+on the machine the game is tested on, with scale 2 forced, was such a
+case: the chat and the ability bar overlapped.
+
+| What | Before | Now |
+|---|---|---|
+| A scale set by the player | the scale used, always | a request, kept as set |
+| Where the window can hold it | drawn, with collapse if needed | the same |
+| Where the window cannot hold it | drawn anyway, pieces overlapping | the largest lower scale the window can hold |
+| When the window grows enough | | the requested scale is drawn again, with nothing to be remembered or restored |
+| Overlap to honour a request | possible | never |
+
+Nothing else changed: not how the scale is chosen when none is requested,
+not the order in which pieces give way, not any rectangle. Every line of
+the earlier output, sections 1 to 13, is unchanged. The new section 14 has
+the sweep for requests of 2, 3 and 4 over the 5,824 windows.
+
 ---
 
 ## Appendix A: measurements, screenshot by screenshot
@@ -1617,6 +1682,13 @@ scale): 5,824, 5,824, 3,538, 1,519 and 41 windows. Objectives inside the
 place: none. Clashes left: none. The target panel wanted and not shown:
 only in windows under about 400 high times the scale, where the chat or
 the ability bar reaches up to it.
+
+**A requested scale (amendment 2):** section 14 of the output. For a
+request of 2, 3 and 4 over the 5,824 windows: drawn at the request in
+3,538, 1,519 and 41 of them and lowered in the rest; never above the
+request; no clash left in any; never falling as the window grew; and
+"can hold" the same as "at least 953 wide and 280 high, times the scale"
+in every one.
 
 **If the game gains objectives:** section 12 of the output, and the table
 in section 5.4. The heights are worked out from the counts of lines.
