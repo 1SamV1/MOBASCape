@@ -16,15 +16,15 @@ const BANANARANG_COOLDOWN: f32 = 8.0;
 /// King Awowogei's Trial by Combat replaces the shared R meteor.
 const TRIAL_COOLDOWN: f32 = 90.0;
 const PLAYER_RESPAWN: f32 = 5.0;
-/// Half-width of the Bananarang's oval in front of King Awowogei.
+/// Half-width of the Bananarang's start/end hands.
 const BANANARANG_HAND: f32 = 28.0;
-/// Extra sideways bulge as the banana sweeps from the left hand to the right.
-/// Kept proportional to the forward reach (the original ratio was 0.523).
-const BANANARANG_BULGE: f32 = 906.67;
-/// How far the banana reaches forward at the apex of its arc. The original
-/// 520-unit arc was raised to 5,200 and then reduced by two-thirds, leaving
-/// about 1,733 world units (13.5 tiles).
-const BANANARANG_REACH: f32 = 1_733.33;
+/// Forward depth of the trapezoid's long top face. The previous 1,733-unit
+/// oval reach is pulled in a little; the furthest top corner is ~1,516 units.
+const BANANARANG_DEPTH: f32 = 1_300.0;
+/// The launch leg leaves the facing direction 30 degrees to the left.
+const BANANARANG_SPLAY: f32 = std::f32::consts::PI / 6.0;
+/// Radius of the two rounded top corners.
+const BANANARANG_CORNER: f32 = 200.0;
 /// Flight time. The original 1.0 s arc is slowed to 30% speed, so it takes
 /// about 3.33x longer to complete.
 const BANANARANG_DURATION: f32 = 1.0 / 0.3;
@@ -244,9 +244,12 @@ pub struct TeamBuff {
 }
 
 pub struct Bananarang {
-    pub start: Vec3,
-    pub forward: Vec3,
-    pub right: Vec3,
+    /// World-space XZ samples of the rounded trapezoid. Y is filled from the
+    /// terrain every frame.
+    pub path: Vec<Vec3>,
+    /// Cumulative arc length at each path sample.
+    pub path_lengths: Vec<f32>,
+    pub path_length: f32,
     pub t: f32,
     pub duration: f32,
     pub physical: f32,
@@ -1333,15 +1336,22 @@ impl AnimatedScene {
         let base = player.q_damage * (1.0 + player.ability_power / 100.0) * rank_scale;
         let forward = Vec3::new(player.yaw.sin(), 0.0, player.yaw.cos());
         let right = Vec3::Y.cross(forward);
-        // The arc itself starts at the left hand and returns to the right
-        // hand; `start` is the champion's chest origin.
+        // The path is authored in local XZ space: +X right, +Z forward. It
+        // starts at the left hand, leaves 30 degrees left of facing, runs a
+        // long rounded top face, and closes back into the right hand.
+        let origin = Vec3::new(player.pos.x, 0.0, player.pos.z);
+        let path = bananarang_local_path()
+            .into_iter()
+            .map(|p| origin + right * p.x + forward * p.z)
+            .collect::<Vec<_>>();
+        let (path_lengths, path_length) = path_length_table(&path);
         let start = player.pos + Vec3::Y * (player.scale * 55.0);
         player.mana -= 40.0;
         player.cooldowns[0] = BANANARANG_COOLDOWN;
         self.bananarangs.push(Bananarang {
-            start,
-            forward,
-            right,
+            path,
+            path_lengths,
+            path_length,
             t: 0.0,
             duration: BANANARANG_DURATION,
             physical: base * 0.6,
@@ -4039,20 +4049,94 @@ fn armor_damage_multiplier(armor: f32) -> f32 {
     }
 }
 
-/// Planar position along the Bananarang's oval. It leaves the king's left
-/// hand, sweeps forward and outward, then returns to his right hand.
-fn bananarang_arc(start: Vec3, forward: Vec3, right: Vec3, t: f32) -> Vec3 {
-    let t = t.clamp(0.0, 1.0);
-    let s = (t * std::f32::consts::PI).sin();
-    let c = (t * std::f32::consts::PI).cos();
-    let lateral = -c * (BANANARANG_HAND + BANANARANG_BULGE * s);
-    start + forward * (s * BANANARANG_REACH) + right * lateral
+/// Local-space path for the Bananarang. It starts at the left hand, travels
+/// forward-left at 30 degrees, runs across a long rounded top face, then closes
+/// back down into the right hand.
+fn bananarang_local_path() -> Vec<Vec3> {
+    let hand = BANANARANG_HAND;
+    let depth = BANANARANG_DEPTH;
+    // The 30-degree launch leg sets how far the top face splays outward.
+    let top_half = hand + depth * BANANARANG_SPLAY.tan();
+    rounded_trapezoid(
+        Vec3::new(-hand, 0.0, 0.0),
+        Vec3::new(-top_half, 0.0, depth),
+        Vec3::new(top_half, 0.0, depth),
+        Vec3::new(hand, 0.0, 0.0),
+        BANANARANG_CORNER,
+    )
 }
 
-/// World position of the banana, lifted above the terrain. Keeping the arc in
-/// one helper makes the simulation and the render pass agree.
+/// Build a polyline through a trapezoid with the two far corners rounded by
+/// quadratic Bezier arcs. The bottom edge is deliberately omitted: the banana
+/// starts at the left hand and finishes at the right hand.
+fn rounded_trapezoid(p0: Vec3, p1: Vec3, p2: Vec3, p3: Vec3, radius: f32) -> Vec<Vec3> {
+    let mut points = vec![p0];
+    let left = (p1 - p0).normalize_or_zero();
+    let top = (p2 - p1).normalize_or_zero();
+    let right = (p3 - p2).normalize_or_zero();
+
+    let r1 = radius
+        .min((p1 - p0).length() * 0.4)
+        .min((p2 - p1).length() * 0.4);
+    let a = p1 - left * r1;
+    let b = p1 + top * r1;
+    points.push(a);
+    push_quadratic(&mut points, a, p1, b, 12);
+
+    let r2 = radius
+        .min((p2 - p1).length() * 0.4)
+        .min((p3 - p2).length() * 0.4);
+    let c = p2 - top * r2;
+    if points.last().is_none_or(|last| last.distance(c) > 0.01) {
+        points.push(c);
+    }
+    let d = p2 + right * r2;
+    push_quadratic(&mut points, c, p2, d, 12);
+    points.push(p3);
+    points.dedup_by(|a, b| a.distance(*b) < 0.01);
+    points
+}
+
+fn push_quadratic(points: &mut Vec<Vec3>, a: Vec3, control: Vec3, b: Vec3, steps: usize) {
+    for i in 1..=steps {
+        let t = i as f32 / steps as f32;
+        let u = 1.0 - t;
+        points.push(a * (u * u) + control * (2.0 * u * t) + b * (t * t));
+    }
+}
+
+fn path_length_table(path: &[Vec3]) -> (Vec<f32>, f32) {
+    let mut lengths = Vec::with_capacity(path.len());
+    lengths.push(0.0);
+    let mut total = 0.0;
+    for pair in path.windows(2) {
+        total += pair[0].distance(pair[1]);
+        lengths.push(total);
+    }
+    (lengths, total)
+}
+
+/// World position of the banana, sampled by arc length and lifted above the
+/// terrain. Keeping the path in one helper makes the simulation and render
+/// pass agree.
 fn bananarang_position(banana: &Bananarang, height: &HeightGrid) -> Vec3 {
-    let mut pos = bananarang_arc(banana.start, banana.forward, banana.right, banana.t);
+    let last = banana.path.len().saturating_sub(1);
+    let target = banana.t.clamp(0.0, 1.0) * banana.path_length;
+    let mut pos = banana.path.get(last).copied().unwrap_or(Vec3::ZERO);
+    if banana.path.len() > 1 {
+        let index = banana
+            .path_lengths
+            .partition_point(|&length| length < target)
+            .min(last);
+        if index == 0 {
+            pos = banana.path[0];
+        } else {
+            let previous = index - 1;
+            let segment = (banana.path_lengths[index] - banana.path_lengths[previous]).max(0.001);
+            let fraction = ((target - banana.path_lengths[previous]) / segment).clamp(0.0, 1.0);
+            pos = banana.path[previous].lerp(banana.path[index], fraction);
+        }
+    }
     pos.y = height.height_at(pos.x, pos.z) + 70.0;
     pos
 }
@@ -4463,19 +4547,36 @@ mod tests {
     }
 
     #[test]
-    fn bananarang_arc_starts_left_and_returns_right() {
-        let start = Vec3::new(1000.0, 0.0, 2000.0);
-        let left = bananarang_arc(start, Vec3::Z, Vec3::X, 0.0);
-        assert!((left.x - (1000.0 - BANANARANG_HAND)).abs() < 0.01);
-        assert!((left.z - 2000.0).abs() < 0.01);
+    fn bananarang_path_is_rounded_trapezoid() {
+        let path = bananarang_local_path();
+        let first = path[0];
+        let last = *path.last().expect("path");
+        assert!((first.x + BANANARANG_HAND).abs() < 0.01);
+        assert!(first.z.abs() < 0.01);
+        assert!((last.x - BANANARANG_HAND).abs() < 0.01);
+        assert!(last.z.abs() < 0.01);
 
-        let apex = bananarang_arc(start, Vec3::Z, Vec3::X, 0.5);
-        assert!((apex.x - 1000.0).abs() < 0.01);
-        assert!((apex.z - (2000.0 + BANANARANG_REACH)).abs() < 0.01);
+        let launch = (path[1] - first).normalize();
+        let expected = Vec3::new(-BANANARANG_SPLAY.sin(), 0.0, BANANARANG_SPLAY.cos());
+        assert!(
+            launch.dot(expected) > 0.999,
+            "launch leg should leave 30 degrees to the left, got {launch:?}"
+        );
 
-        let right = bananarang_arc(start, Vec3::Z, Vec3::X, 1.0);
-        assert!((right.x - (1000.0 + BANANARANG_HAND)).abs() < 0.01);
-        assert!((right.z - 2000.0).abs() < 0.01);
+        let top = path
+            .iter()
+            .filter(|p| (p.z - BANANARANG_DEPTH).abs() < 0.5)
+            .collect::<Vec<_>>();
+        assert!(top.len() >= 2);
+        let min_x = top.iter().map(|p| p.x).fold(f32::MAX, f32::min);
+        let max_x = top.iter().map(|p| p.x).fold(f32::MIN, f32::max);
+        assert!(
+            max_x - min_x > BANANARANG_HAND * 4.0,
+            "top face should be much longer than the hand gap"
+        );
+
+        let max_range = path.iter().map(|p| p.length()).fold(0.0_f32, f32::max);
+        assert!((1_300.0..1_600.0).contains(&max_range));
     }
 
     #[test]

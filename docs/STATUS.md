@@ -108,20 +108,21 @@ Last updated: M5.24 weighty movement, ambient creatures + cache group fix, 2026-
   inhibitors, with team tinting.
 - Kit: Q projectile, W blink, E heal+shield, R meteor; mana, cooldowns, shield
   absorption, expanding rings; ability power from items scales Q/R/E.
-  King Awowogei overrides Q and R: **Bananarang** is a fixed-arc skillshot that
-  leaves his left hand, sweeps forward in an oval, and returns to his right
-  hand; each enemy is hit once, with 60% physical / 40% pure damage, a rank
-  scaling mini-crit chance, and a short crit stun. **Trial by Combat** is a
-  champion-only unit-target ult that forms a barrier where both fighters stand,
-  locks both inside, blocks tower fire against them, and spawns eight monkey
-  subjects who throw banana peels every 0.9 s. Peels stack -2 armor (max -16)
-  for 4 s. Killing the target within the 10 s trial grants +4 permanent base
-  melee damage per win; the barrier ends early if either fighter dies.
-  Bananarang reach is tuned to 1,733 world units (about 13.5 tiles) and Trial's
-  cast range to 75 tiles. The banana is cache model 2387 at 6.25x scale
-  (roughly three times the old billboard fruit) and flies at 30% of the old
-  speed, so its arc takes about 3.33 s. Jad and Kree keep the shared Q bolt and
-  R meteor.
+  King Awowogei overrides Q and R:
+  - **Bananarang (Q)**: a fixed rounded-trapezoid skillshot that leaves his
+    left hand 30 degrees left of facing, runs across a long top face, and
+    closes back into his right hand. Each enemy is hit once, with 60% physical
+    / 40% pure damage, a rank scaling mini-crit chance, and a short crit stun.
+    Forward depth is 1,300 world units (furthest top corner ~1,516, about 11.8
+    tiles). Cache model 2387 at 6.25x scale flies the path in about 3.33 s
+    (30% of the original speed).
+  - **Trial by Combat (R)**: a champion-only unit-target ult that forms a
+    barrier where both fighters stand, locks both inside, blocks tower fire
+    against them, and spawns eight monkey subjects who throw banana peels every
+    0.9 s. Peels stack -2 armor (max -16) for 4 s. Killing the target within the
+    10 s trial grants +4 permanent base melee damage per win; the barrier ends
+    early if either fighter dies. Cast range is 75 tiles.
+  Jad and Kree keep the shared Q bolt and R meteor.
 - Armor: every champion has a real armor stat (Monkey 30, Jad 40, Kree 18).
   Physical damage is scaled by `100 / (100 + armor)`; negative armor amplifies
   damage. Pure damage bypasses armor. The HUD team panel shows ARM and DMG.
