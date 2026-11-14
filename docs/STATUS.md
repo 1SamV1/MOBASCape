@@ -111,11 +111,13 @@ Last updated: M5.24 weighty movement, ambient creatures + cache group fix, 2026-
   King Awowogei overrides Q and R:
   - **Bananarang (Q)**: a fixed rounded-trapezoid skillshot that leaves his
     left hand 30 degrees left of facing, runs across a long top face, and
-    closes back into his right hand. Each enemy is hit once, with 60% physical
-    / 40% pure damage, a rank scaling mini-crit chance, and a short crit stun.
-    Forward depth is 1,300 world units (furthest top corner ~1,516, about 11.8
-    tiles). Cache model 2387 at 6.25x scale flies the path in about 3.33 s
-    (30% of the original speed).
+    closes back into his right hand. A centripetal Catmull-Rom spline keeps the
+    heading changing in gentle arcs, and the return leg eases toward the king's
+    current right hand if he moves after throwing it. Each enemy is hit once,
+    with 60% physical / 40% pure damage, a rank scaling mini-crit chance, and a
+    short crit stun. Forward depth is 1,300 world units (furthest top corner
+    ~1,516, about 11.8 tiles). Cache model 2387 at 6.25x scale flies the path in
+    about 3.33 s (30% of the original speed).
   - **Trial by Combat (R)**: a champion-only unit-target ult that forms a
     barrier where both fighters stand, locks both inside, blocks tower fire
     against them, and spawns eight monkey subjects who throw banana peels every

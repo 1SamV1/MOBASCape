@@ -23,8 +23,6 @@ const BANANARANG_HAND: f32 = 28.0;
 const BANANARANG_DEPTH: f32 = 1_300.0;
 /// The launch leg leaves the facing direction 30 degrees to the left.
 const BANANARANG_SPLAY: f32 = std::f32::consts::PI / 6.0;
-/// Radius of the two rounded top corners.
-const BANANARANG_CORNER: f32 = 200.0;
 /// Flight time. The original 1.0 s arc is slowed to 30% speed, so it takes
 /// about 3.33x longer to complete.
 const BANANARANG_DURATION: f32 = 1.0 / 0.3;
@@ -3143,10 +3141,17 @@ impl AnimatedScene {
     fn update_bananarangs(&mut self, dt: f32, height: &HeightGrid) {
         let mut active = std::mem::take(&mut self.bananarangs);
         let pi = self.player_index;
+        let player_pos = self.units[pi].pos;
+        let player_right = Vec3::Y.cross(Vec3::new(
+            self.units[pi].yaw.sin(),
+            0.0,
+            self.units[pi].yaw.cos(),
+        ));
+        let return_target = player_pos + player_right * BANANARANG_HAND;
         active.retain_mut(|banana| {
-            let previous = bananarang_position(banana, height);
+            let previous = bananarang_position(banana, height, return_target);
             banana.t += dt / banana.duration.max(0.01);
-            let pos = bananarang_position(banana, height);
+            let pos = bananarang_position(banana, height, return_target);
             for index in 0..self.units.len() {
                 if banana.hit.contains(&index) {
                     continue;
@@ -3627,12 +3632,19 @@ impl AnimatedScene {
             append_billboard(self, pos, 22.0, [255, 150, 40], camera_right, camera_up);
         }
 
+        let player_pos = self.units[self.player_index].pos;
+        let player_right = Vec3::Y.cross(Vec3::new(
+            self.units[self.player_index].yaw.sin(),
+            0.0,
+            self.units[self.player_index].yaw.cos(),
+        ));
+        let return_target = player_pos + player_right * BANANARANG_HAND;
         let bananas = self
             .bananarangs
             .iter()
             .map(|banana| {
                 (
-                    bananarang_position(banana, height),
+                    bananarang_position(banana, height, return_target),
                     banana.t * std::f32::consts::TAU * 2.0,
                 )
             })
@@ -4050,59 +4062,74 @@ fn armor_damage_multiplier(armor: f32) -> f32 {
 }
 
 /// Local-space path for the Bananarang. It starts at the left hand, travels
-/// forward-left at 30 degrees, runs across a long rounded top face, then closes
-/// back down into the right hand.
+/// forward-left at 30 degrees, runs across a long top face, then closes back
+/// down into the right hand. The control points are interpolated with a
+/// centripetal Catmull-Rom spline so the heading changes in gentle arcs rather
+/// than at hard corners.
 fn bananarang_local_path() -> Vec<Vec3> {
     let hand = BANANARANG_HAND;
     let depth = BANANARANG_DEPTH;
     // The 30-degree launch leg sets how far the top face splays outward.
     let top_half = hand + depth * BANANARANG_SPLAY.tan();
-    rounded_trapezoid(
-        Vec3::new(-hand, 0.0, 0.0),
-        Vec3::new(-top_half, 0.0, depth),
-        Vec3::new(top_half, 0.0, depth),
-        Vec3::new(hand, 0.0, 0.0),
-        BANANARANG_CORNER,
-    )
+    let left_hand = Vec3::new(-hand, 0.0, 0.0);
+    let right_hand = Vec3::new(hand, 0.0, 0.0);
+    let top_left = Vec3::new(-top_half, 0.0, depth);
+    let top_right = Vec3::new(top_half, 0.0, depth);
+    let left_leg = top_left - left_hand;
+    let right_leg = right_hand - top_right;
+    let controls = [
+        left_hand,
+        left_hand + left_leg * 0.55,
+        top_left,
+        Vec3::new(-top_half * 0.45, 0.0, depth),
+        Vec3::new(top_half * 0.45, 0.0, depth),
+        top_right,
+        top_right + right_leg * 0.45,
+        right_hand,
+    ];
+    catmull_rom(&controls, 18)
 }
 
-/// Build a polyline through a trapezoid with the two far corners rounded by
-/// quadratic Bezier arcs. The bottom edge is deliberately omitted: the banana
-/// starts at the left hand and finishes at the right hand.
-fn rounded_trapezoid(p0: Vec3, p1: Vec3, p2: Vec3, p3: Vec3, radius: f32) -> Vec<Vec3> {
-    let mut points = vec![p0];
-    let left = (p1 - p0).normalize_or_zero();
-    let top = (p2 - p1).normalize_or_zero();
-    let right = (p3 - p2).normalize_or_zero();
-
-    let r1 = radius
-        .min((p1 - p0).length() * 0.4)
-        .min((p2 - p1).length() * 0.4);
-    let a = p1 - left * r1;
-    let b = p1 + top * r1;
-    points.push(a);
-    push_quadratic(&mut points, a, p1, b, 12);
-
-    let r2 = radius
-        .min((p2 - p1).length() * 0.4)
-        .min((p3 - p2).length() * 0.4);
-    let c = p2 - top * r2;
-    if points.last().is_none_or(|last| last.distance(c) > 0.01) {
-        points.push(c);
+/// Centripetal Catmull-Rom interpolation. The virtual points beyond the first
+/// and last controls make the input and output tangents follow the launch and
+/// closing legs exactly while the interior stays smooth and overshoot-free.
+fn catmull_rom(points: &[Vec3], samples: usize) -> Vec<Vec3> {
+    if points.len() < 2 {
+        return points.to_vec();
     }
-    let d = p2 + right * r2;
-    push_quadratic(&mut points, c, p2, d, 12);
-    points.push(p3);
-    points.dedup_by(|a, b| a.distance(*b) < 0.01);
-    points
-}
-
-fn push_quadratic(points: &mut Vec<Vec3>, a: Vec3, control: Vec3, b: Vec3, steps: usize) {
-    for i in 1..=steps {
-        let t = i as f32 / steps as f32;
-        let u = 1.0 - t;
-        points.push(a * (u * u) + control * (2.0 * u * t) + b * (t * t));
+    let n = points.len();
+    let mut out = Vec::with_capacity((n - 1) * samples + 1);
+    out.push(points[0]);
+    for i in 0..n - 1 {
+        let p0 = if i == 0 {
+            points[0] * 2.0 - points[1]
+        } else {
+            points[i - 1]
+        };
+        let p1 = points[i];
+        let p2 = points[i + 1];
+        let p3 = if i + 2 >= n {
+            points[n - 1] * 2.0 - points[n - 2]
+        } else {
+            points[i + 2]
+        };
+        let t0 = 0.0;
+        let t1 = t0 + (p1 - p0).length().sqrt().max(1e-4);
+        let t2 = t1 + (p2 - p1).length().sqrt().max(1e-4);
+        let t3 = t2 + (p3 - p2).length().sqrt().max(1e-4);
+        for sample in 1..=samples {
+            let t = t1 + (t2 - t1) * (sample as f32 / samples as f32);
+            let a1 = (t1 - t) / (t1 - t0) * p0 + (t - t0) / (t1 - t0) * p1;
+            let a2 = (t2 - t) / (t2 - t1) * p1 + (t - t1) / (t2 - t1) * p2;
+            let a3 = (t3 - t) / (t3 - t2) * p2 + (t - t2) / (t3 - t2) * p3;
+            let b1 = (t2 - t) / (t2 - t0) * a1 + (t - t0) / (t2 - t0) * a2;
+            let b2 = (t3 - t) / (t3 - t1) * a2 + (t - t1) / (t3 - t1) * a3;
+            let c = (t2 - t) / (t2 - t1) * b1 + (t - t1) / (t2 - t1) * b2;
+            out.push(c);
+        }
     }
+    out.dedup_by(|a, b| a.distance(*b) < 0.01);
+    out
 }
 
 fn path_length_table(path: &[Vec3]) -> (Vec<f32>, f32) {
@@ -4117,11 +4144,12 @@ fn path_length_table(path: &[Vec3]) -> (Vec<f32>, f32) {
 }
 
 /// World position of the banana, sampled by arc length and lifted above the
-/// terrain. Keeping the path in one helper makes the simulation and render
-/// pass agree.
-fn bananarang_position(banana: &Bananarang, height: &HeightGrid) -> Vec3 {
+/// terrain. From the return leg onward, the path blends toward the king's
+/// current right hand so a moving Awowogei still catches his banana.
+fn bananarang_position(banana: &Bananarang, height: &HeightGrid, return_target: Vec3) -> Vec3 {
     let last = banana.path.len().saturating_sub(1);
-    let target = banana.t.clamp(0.0, 1.0) * banana.path_length;
+    let t = banana.t.clamp(0.0, 1.0);
+    let target = t * banana.path_length;
     let mut pos = banana.path.get(last).copied().unwrap_or(Vec3::ZERO);
     if banana.path.len() > 1 {
         let index = banana
@@ -4137,8 +4165,22 @@ fn bananarang_position(banana: &Bananarang, height: &HeightGrid) -> Vec3 {
             pos = banana.path[previous].lerp(banana.path[index], fraction);
         }
     }
+    let return_blend = bananarang_return_blend(t);
+    if return_blend > 0.0 {
+        pos = pos.lerp(
+            Vec3::new(return_target.x, 0.0, return_target.z),
+            return_blend,
+        );
+    }
     pos.y = height.height_at(pos.x, pos.z) + 70.0;
     pos
+}
+
+/// Smoothstep weight for the moving return target. Zero through the outbound
+/// leg and top face, then easing into the king's current right hand.
+fn bananarang_return_blend(t: f32) -> f32 {
+    let u = ((t - 0.62) / 0.38).clamp(0.0, 1.0);
+    u * u * (3.0 - 2.0 * u)
 }
 
 /// Turn a unit toward a heading at a species-appropriate rate instead of
@@ -4577,6 +4619,26 @@ mod tests {
 
         let max_range = path.iter().map(|p| p.length()).fold(0.0_f32, f32::max);
         assert!((1_300.0..1_600.0).contains(&max_range));
+
+        let mut sharpest = 0.0_f32;
+        for window in path.windows(3) {
+            let before = (window[1] - window[0]).normalize();
+            let after = (window[2] - window[1]).normalize();
+            sharpest = sharpest.max(before.dot(after).clamp(-1.0, 1.0).acos());
+        }
+        assert!(
+            sharpest < 0.5,
+            "path should change heading gradually, sharpest turn was {sharpest:.2} rad"
+        );
+    }
+
+    #[test]
+    fn bananarang_return_blend_eases_in_and_out() {
+        assert_eq!(bananarang_return_blend(0.0), 0.0);
+        assert_eq!(bananarang_return_blend(0.62), 0.0);
+        assert!(bananarang_return_blend(0.8) > 0.0);
+        assert!(bananarang_return_blend(0.8) < 1.0);
+        assert_eq!(bananarang_return_blend(1.0), 1.0);
     }
 
     #[test]

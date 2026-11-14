@@ -537,13 +537,16 @@ stem so Jad and Kree keep the shared Q bolt and R meteor.
 - **Bananarang (Q, 8 s / 40 mana):** a fixed rounded-trapezoid path in front
   of the king. It starts at his left hand, leaves 30 degrees left of facing,
   runs across a long rounded top face, then closes down into his right hand.
-  It does 60% physical / 40% pure damage, hits each enemy once, and has a
-  rank-scaling mini-crit that briefly stuns. The path is simulated by arc
-  length with a segment-distance hit test so a fast banana cannot tunnel
-  through targets at low frame rates. Forward depth is 1,300 world units (the
-  furthest top corner is ~1,516 units, about 11.8 tiles). The projectile uses
-  the cache-native banana mesh (model 2387) at 6.25x scale and flies at 30% of
-  the original speed (3.33 s instead of 1 s).
+  A centripetal Catmull-Rom spline keeps the heading changing in gentle arcs
+  instead of corner-by-corner turns; the return leg smoothly blends toward the
+  king's current right hand if he moves after the throw. It does 60% physical /
+  40% pure damage, hits each enemy once, and has a rank-scaling mini-crit that
+  briefly stuns. The path is simulated by arc length with a segment-distance
+  hit test so a fast banana cannot tunnel through targets at low frame rates.
+  Forward depth is 1,300 world units (the furthest top corner is ~1,516 units,
+  about 11.8 tiles). The projectile uses the cache-native banana mesh (model
+  2387) at 6.25x scale and flies at 30% of the original speed (3.33 s instead
+  of 1 s).
 - **Trial by Combat (R, 90 s / 100 mana):** a champion-only unit-target ult
   with a 75-tile cast range (five times the original 15 tiles). The barrier
   forms around the two fighters where they stand, clamps both inside, pushes
