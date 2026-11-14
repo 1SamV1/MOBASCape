@@ -19,11 +19,18 @@ const PLAYER_RESPAWN: f32 = 5.0;
 /// Half-width of the Bananarang's oval in front of King Awowogei.
 const BANANARANG_HAND: f32 = 28.0;
 /// Extra sideways bulge as the banana sweeps from the left hand to the right.
-/// Kept at the original 0.523 lateral/forward ratio.
-const BANANARANG_BULGE: f32 = 2_720.0;
-/// How far the banana reaches forward at the apex of its arc. Was 520 units;
-/// this is a 10x range increase (~41 tiles).
-const BANANARANG_REACH: f32 = 5_200.0;
+/// Kept proportional to the forward reach (the original ratio was 0.523).
+const BANANARANG_BULGE: f32 = 906.67;
+/// How far the banana reaches forward at the apex of its arc. The original
+/// 520-unit arc was raised to 5,200 and then reduced by two-thirds, leaving
+/// about 1,733 world units (13.5 tiles).
+const BANANARANG_REACH: f32 = 1_733.33;
+/// Flight time. The original 1.0 s arc is slowed to 30% speed, so it takes
+/// about 3.33x longer to complete.
+const BANANARANG_DURATION: f32 = 1.0 / 0.3;
+/// Cache model 2387 is the banana NPC/item mesh. Scaling it 6.25x makes the
+/// 3D banana roughly three times the length of the old billboard fruit.
+const BANANARANG_MODEL_SCALE: f32 = 6.25;
 /// Trial by Combat unit-target range: 5x the original 15-tile range.
 const TRIAL_RANGE: f32 = 75.0 * 128.0;
 const MINION_AGGRO: f32 = 520.0;
@@ -305,6 +312,9 @@ pub struct AnimatedScene {
     pub marker: Option<(Vec3, f32)>,
     pub projectiles: Vec<Projectile>,
     pub bananarangs: Vec<Bananarang>,
+    /// Cache-native banana mesh used by the Bananarang; billboard fallback if
+    /// the cache revision lacks model 2387.
+    banana_model: Option<Model>,
     pub duel: Option<DuelState>,
     pub duel_peels: Vec<DuelPeel>,
     pub duel_wins: u32,
@@ -729,6 +739,13 @@ impl AnimatedScene {
             height: scene.collision.height() as usize,
             tiles: vec![false; (scene.collision.width() * scene.collision.height()) as usize],
         };
+        let banana_model = match load_model(cache, 2387) {
+            Ok(model) => Some(model),
+            Err(err) => {
+                tracing::warn!("bananarang model 2387 unavailable; using billboard: {err:#}");
+                None
+            }
+        };
 
         let mut animated = Self {
             units,
@@ -742,6 +759,7 @@ impl AnimatedScene {
             marker: None,
             projectiles: Vec::new(),
             bananarangs: Vec::new(),
+            banana_model,
             duel: None,
             duel_peels: Vec::new(),
             duel_wins: 0,
@@ -1325,7 +1343,7 @@ impl AnimatedScene {
             forward,
             right,
             t: 0.0,
-            duration: 1.0,
+            duration: BANANARANG_DURATION,
             physical: base * 0.6,
             pure: base * 0.4,
             crit_chance: 0.10 + 0.04 * (rank.saturating_sub(1)) as f32,
@@ -3602,11 +3620,22 @@ impl AnimatedScene {
         let bananas = self
             .bananarangs
             .iter()
-            .map(|banana| bananarang_position(banana, height))
+            .map(|banana| {
+                (
+                    bananarang_position(banana, height),
+                    banana.t * std::f32::consts::TAU * 2.0,
+                )
+            })
             .collect::<Vec<_>>();
-        for pos in bananas {
-            append_banana(self, pos, camera_right, camera_up);
+        let banana_model = self.banana_model.take();
+        for (pos, yaw) in bananas {
+            if let Some(model) = banana_model.as_ref() {
+                append_banana_model(self, model, pos, yaw, BANANARANG_MODEL_SCALE);
+            } else {
+                append_banana(self, pos, camera_right, camera_up);
+            }
         }
+        self.banana_model = banana_model;
 
         if let Some(duel) = self.duel.as_ref() {
             let center = duel.center;
@@ -4220,6 +4249,52 @@ fn append_bar(
         up * (height * 0.45),
         color,
     );
+}
+
+fn append_banana_model(
+    scene: &mut AnimatedScene,
+    model: &Model,
+    center: Vec3,
+    yaw: f32,
+    scale: f32,
+) {
+    let rot = Mat3::from_rotation_y(yaw);
+    let vertex = |index: usize| -> Vec3 {
+        let x = model.vertex_x.get(index).copied().unwrap_or(0) as f32;
+        let y = model.vertex_y.get(index).copied().unwrap_or(0) as f32;
+        let z = model.vertex_z.get(index).copied().unwrap_or(0) as f32;
+        center + rot * (Vec3::new(x, -y, z) * scale)
+    };
+
+    for (face_idx, &[a, b, c]) in model.faces.iter().enumerate() {
+        let pa = vertex(a as usize);
+        let pb = vertex(b as usize);
+        let pc = vertex(c as usize);
+        let mut normal = (pb - pa).cross(pc - pa).normalize_or_zero();
+        if normal.length_squared() < 1e-8 {
+            normal = rot
+                * Vec3::from_array(
+                    model
+                        .face_normals
+                        .get(face_idx)
+                        .copied()
+                        .unwrap_or([0.0, 1.0, 0.0]),
+                );
+        }
+        let palette = model.face_colors.get(face_idx).copied().unwrap_or(0);
+        let rgb = hsl_to_rgb(palette, 1.0);
+        let mut va = SceneVertex::new(pa, normal, rgb);
+        let mut vb = SceneVertex::new(pb, normal, rgb);
+        let mut vc = SceneVertex::new(pc, normal, rgb);
+        va.material = 3;
+        vb.material = 3;
+        vc.material = 3;
+        let base = scene.vertices.len() as u32;
+        scene.vertices.push(va);
+        scene.vertices.push(vb);
+        scene.vertices.push(vc);
+        scene.indices.extend_from_slice(&[base, base + 1, base + 2]);
+    }
 }
 
 fn append_banana(scene: &mut AnimatedScene, center: Vec3, right: Vec3, up: Vec3) {

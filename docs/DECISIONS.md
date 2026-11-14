@@ -539,7 +539,9 @@ stem so Jad and Kree keep the shared Q bolt and R meteor.
   40% pure damage, hits each enemy once, and has a rank-scaling mini-crit that
   briefly stuns. The arc is simulated with a segment-distance test so a fast
   banana cannot tunnel through targets at low frame rates. Current reach is
-  5,200 world units (about 41 tiles), ten times the original 520-unit arc.
+  1,733 world units (about 13.5 tiles), the 5,200-unit test range reduced by
+  two-thirds. The projectile uses the cache-native banana mesh (model 2387) at
+  6.25x scale and flies at 30% of the original speed (3.33 s instead of 1 s).
 - **Trial by Combat (R, 90 s / 100 mana):** a champion-only unit-target ult
   with a 75-tile cast range (five times the original 15 tiles). The barrier
   forms around the two fighters where they stand, clamps both inside, pushes
