@@ -14,6 +14,7 @@ const Q_COOLDOWN: f32 = 5.0;
 const PLAYER_RESPAWN: f32 = 5.0;
 const MINION_AGGRO: f32 = 520.0;
 const MAX_MINIONS_PER_TEAM: usize = 36;
+const DEATH_SINK_TIME: f32 = 0.45;
 /// Model vertex groups used by King Awowogei's arms and hands.
 const MONKEY_ARM_GROUPS: &[u8] = &[11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 37];
 
@@ -71,6 +72,8 @@ pub struct AnimatedUnit {
     pub health: f32,
     pub max_health: f32,
     pub hit_flash: f32,
+    /// Counts down while a fresh corpse sinks and shrinks away.
+    pub death_anim: f32,
     pub dead_timer: f32,
     pub target: Option<Vec3>,
     pub path: Vec<Vec3>,
@@ -1566,6 +1569,7 @@ impl AnimatedScene {
 
         for unit in &mut self.units {
             unit.hit_flash = (unit.hit_flash - dt).max(0.0);
+            unit.death_anim = (unit.death_anim - dt).max(0.0);
             unit.attack_cooldown = (unit.attack_cooldown - dt).max(0.0);
             unit.attack_windup_timer = (unit.attack_windup_timer - dt).max(0.0);
             unit.anim_time_ms += dt * 1000.0;
@@ -1586,6 +1590,7 @@ impl AnimatedScene {
                 if unit.dead_timer <= 0.0 {
                     unit.health = unit.max_health;
                     unit.dead_timer = 0.0;
+                    unit.death_anim = 0.0;
                     unit.attack_target = None;
                     unit.path.clear();
                     unit.path_index = 0;
@@ -1652,6 +1657,7 @@ impl AnimatedScene {
                 unit.pos = spawn;
                 unit.health = unit.max_health;
                 unit.dead_timer = 0.0;
+                unit.death_anim = 0.0;
                 unit.attack_target = None;
                 unit.attack_pending = false;
                 unit.attack_windup_timer = 0.0;
@@ -2176,6 +2182,10 @@ impl AnimatedScene {
             }
             unit.health = (unit.health - amount).max(0.0);
             unit.hit_flash = 0.2;
+            if unit.health <= 0.0 && !unit.kind.is_structure() {
+                unit.death_anim = DEATH_SINK_TIME;
+                unit.visible = true;
+            }
             (
                 unit.kind,
                 unit.camp_buff,
@@ -2600,6 +2610,7 @@ impl AnimatedScene {
                 health,
                 max_health: health,
                 hit_flash: 0.0,
+                death_anim: 0.0,
                 dead_timer: 0.0,
                 target: None,
                 path: Vec::new(),
@@ -2741,8 +2752,14 @@ impl AnimatedScene {
 
         let units = std::mem::take(&mut self.units);
         for unit in &units {
-            if unit.health > 0.0 && unit.visible && unit.spawn_delay <= 0.0 {
-                let positions = if let Some(walk) = unit.walk.as_ref() {
+            let alive = unit.health > 0.0;
+            if (alive || unit.death_anim > 0.0)
+                && (unit.visible || unit.death_anim > 0.0)
+                && unit.spawn_delay <= 0.0
+            {
+                let positions = if !alive {
+                    unit.model.animated_positions(&unit.idle, unit.anim_time_ms)
+                } else if let Some(walk) = unit.walk.as_ref() {
                     if unit.kind == UnitKind::Player && unit.walk_arm < 0.999 {
                         let idle = unit.model.animated_positions(&unit.idle, unit.anim_time_ms);
                         let normal = unit.model.animated_positions(walk, unit.anim_time_ms);
@@ -3074,6 +3091,7 @@ fn load_unit(
         health,
         max_health: health,
         hit_flash: 0.0,
+        death_anim: 0.0,
         dead_timer: 0.0,
         target: None,
         path: Vec::new(),
@@ -3217,13 +3235,20 @@ fn append_unit_model(
     let rot = Mat3::from_rotation_y(unit.yaw + unit.model_yaw_offset);
     let dominant_texture = model_dominant_texture(model);
     // The step spring is drawing only: bars and selection rings remain on
-    // the ground while the body lifts.
-    let origin = unit.pos + Vec3::Y * unit.motion.as_ref().map_or(0.0, |motion| motion.lift);
+    // the ground while the body lifts. Corpses shrink and sink briefly.
+    let death = if unit.health <= 0.0 && unit.death_anim > 0.0 {
+        1.0 - (unit.death_anim / DEATH_SINK_TIME).clamp(0.0, 1.0)
+    } else {
+        0.0
+    };
+    let scale = unit.scale * (1.0 - 0.30 * death);
+    let origin = unit.pos
+        + Vec3::Y * (unit.motion.as_ref().map_or(0.0, |motion| motion.lift) - 72.0 * death);
 
     for (face_idx, &[a, b, c]) in model.faces.iter().enumerate() {
-        let pa = model_vertex_animated(positions, a as usize, origin, rot, unit.scale);
-        let pb = model_vertex_animated(positions, b as usize, origin, rot, unit.scale);
-        let pc = model_vertex_animated(positions, c as usize, origin, rot, unit.scale);
+        let pa = model_vertex_animated(positions, a as usize, origin, rot, scale);
+        let pb = model_vertex_animated(positions, b as usize, origin, rot, scale);
+        let pc = model_vertex_animated(positions, c as usize, origin, rot, scale);
 
         let mut normal = (pb - pa).cross(pc - pa).normalize_or_zero();
         if normal.length_squared() < 1e-8 {
@@ -3284,7 +3309,7 @@ fn append_unit_model(
         }
 
         let ao_at = |p: Vec3| {
-            (0.74 + 0.26 * ((p.y - origin.y).max(0.0) / (unit.scale * 220.0)).clamp(0.0, 1.0))
+            (0.74 + 0.26 * ((p.y - origin.y).max(0.0) / (scale * 220.0)).clamp(0.0, 1.0))
                 .clamp(0.66, 1.0)
         };
         let mut va = SceneVertex::new(pa, normal, rgb);

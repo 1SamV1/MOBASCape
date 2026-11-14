@@ -121,6 +121,9 @@ struct Cli {
     /// Scene MSAA: 1 (off) or 4 (default).
     #[arg(long, default_value_t = 4)]
     msaa: u32,
+    /// Static-mesh culling chunk size in tiles.
+    #[arg(long, default_value_t = 24)]
+    chunk_tiles: u32,
     /// Run a fixed-duration frame-time benchmark, then exit (seconds).
     #[arg(long)]
     benchmark: Option<f32>,
@@ -298,6 +301,7 @@ fn main() -> Result<()> {
         shadow_mode: cli.shadows.clone(),
         present_mode: cli.present_mode.clone(),
         msaa: cli.msaa,
+        chunk_tiles: cli.chunk_tiles,
         benchmark_remaining: cli.benchmark,
         benchmark_samples: Vec::new(),
         benchmark_done: false,
@@ -376,6 +380,7 @@ struct App {
     shadow_mode: String,
     present_mode: String,
     msaa: u32,
+    chunk_tiles: u32,
     benchmark_remaining: Option<f32>,
     benchmark_samples: Vec<f32>,
     benchmark_done: bool,
@@ -421,6 +426,7 @@ impl ApplicationHandler for App {
             camera,
             parse_present_mode(&self.present_mode),
             self.msaa,
+            self.chunk_tiles,
             model_textures,
             self.hud.atlas.clone(),
         )) {

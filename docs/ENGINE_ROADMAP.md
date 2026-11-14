@@ -50,6 +50,11 @@ that span multiple chunks (the distant backdrop) go into an always-visible
 overlay bucket. Each frame the renderer extracts six frustum planes from the
 camera view-projection and submits only intersecting chunks.
 
+The default chunk size is now **24 tiles**. Benchmarked at the same camera:
+196 terrain + 112 model + 27 water chunks, p50 **11.98 ms** / p95 **13.62 ms**,
+versus 400/228/49 chunks at 16 tiles, p50 12.49 ms / p95 14.17 ms. Use
+`--chunk-tiles` to retune the culling/draw-call balance.
+
 Current chunks/triangles:
 
 | Mesh | Chunks | Triangles |
@@ -150,6 +155,10 @@ Acceptance: terrain pass drops below 5 ms at 1080p and stays visually
 indistinguishable in A/B captures.
 
 ### P3 — Geometry, LOD and streaming
+
+- ✅ Chunk size retuned to 24 tiles after benchmarking 16/20/24/28/32; water,
+  terrain and model draw counts dropped by roughly half without a visual
+  regression at the default camera.
 
 - Add distance LODs for trees, ruins and ground decor (low-poly proxy meshes).
 - Stream chunks around the camera instead of keeping the 5×5 block resident.

@@ -183,10 +183,11 @@ Last updated: M5.24 weighty movement, ambient creatures + cache group fix, 2026-
   camera to stop depth flicker while moving.
 - Lane road: dirt-dominant, noise-warped 310-unit UVs remove the repeating
   cobble border while keeping the cache path sprite as a low-weight accent.
-- Chunk culling: 400 terrain + 212 model + 49 water chunks. Release 1280×720
-  immediate benchmark: p50 13.24 ms / p95 14.89 ms with shadows + 4× MSAA,
-  p50 12.93 ms / p95 14.20 ms with shadows off, p50 12.17 ms / p95 13.88 ms
-  with 1× MSAA. The `--benchmark <seconds>` harness prints these percentiles.
+- Chunk culling now defaults to 24-tile chunks: 196 terrain + 112 model + 27
+  water chunks (down from 400/228/49 at 16 tiles). Release 1280×720 immediate
+  benchmark measured p50 11.98 ms / p95 13.62 ms with shadows + 4× MSAA at
+  24 tiles, versus p50 12.49 ms / p95 14.17 ms at 16. The `--chunk-tiles`
+  flag makes the trade-off directly measurable.
 - Fog run: visible enemies 7–13; dark fog mesh over unseen tiles.
 - Three-lane 20× run: victory states, towers/inhibitors/nexus live.
 - Weighty champion movement: champion files carry `weight` (plus optional
@@ -212,6 +213,9 @@ Last updated: M5.24 weighty movement, ambient creatures + cache group fix, 2026-
   crabs and the champion all keep their feet planted while speeding up,
   turning and stopping. Minions, camps and delivery guards also turn toward
   their heading at a finite rate instead of snapping on waypoint corners.
+- Death feedback: non-structure units shrink and sink over 0.45 s when killed
+  instead of popping out of existence, so last hits and camp clears read
+  cleanly. Bars and selection rings disappear immediately.
 - Attack commitment: champion files carry `attack_windup` (0.3 s Monkey/Kree,
   0.5 s Jad). The player turns to face before starting the swing, holds the
   pose for the wind-up, then lands the hit or fires the projectile. An orange
@@ -322,10 +326,11 @@ Last updated: M5.24 weighty movement, ambient creatures + cache group fix, 2026-
   camera to stop depth flicker while moving.
 - Lane road: dirt-dominant, noise-warped 310-unit UVs remove the repeating
   cobble border while keeping the cache path sprite as a low-weight accent.
-- Chunk culling: 400 terrain + 212 model + 49 water chunks. Release 1280×720
-  immediate benchmark: p50 13.24 ms / p95 14.89 ms with shadows + 4× MSAA,
-  p50 12.93 ms / p95 14.20 ms with shadows off, p50 12.17 ms / p95 13.88 ms
-  with 1× MSAA. The `--benchmark <seconds>` harness prints these percentiles.
+- Chunk culling now defaults to 24-tile chunks: 196 terrain + 112 model + 27
+  water chunks (down from 400/228/49 at 16 tiles). Release 1280×720 immediate
+  benchmark measured p50 11.98 ms / p95 13.62 ms with shadows + 4× MSAA at
+  24 tiles, versus p50 12.49 ms / p95 14.17 ms at 16. The `--chunk-tiles`
+  flag makes the trade-off directly measurable.
 - Fog run: visible enemies 7–13; dark fog mesh over unseen tiles.
 - Three-lane 20× run: victory states, towers/inhibitors/nexus live.
 - Weighty champion movement: champion files carry `weight` (plus optional

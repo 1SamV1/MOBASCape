@@ -380,12 +380,14 @@ pub struct Renderer {
 }
 
 impl Renderer {
+    #[allow(clippy::too_many_arguments)]
     pub async fn new(
         window: Arc<Window>,
         scene: &SceneData,
         initial_camera: Camera,
         present_mode: wgpu::PresentMode,
         msaa_samples: u32,
+        chunk_tiles: u32,
         model_textures: ModelTextures,
         ui_atlas: Arc<UiAtlas>,
     ) -> Result<Self> {
@@ -1285,7 +1287,7 @@ impl Renderer {
         );
 
         let depth_view = create_depth_view(&device, width, height, msaa_samples);
-        let chunk_size = 16.0 * 128.0;
+        let chunk_size = chunk_tiles.max(4) as f32 * 128.0;
         let terrain = ChunkedMesh::upload(&device, &scene.terrain, chunk_size, "terrain");
         let models = ChunkedMesh::upload(&device, &scene.models, chunk_size, "models");
         let water = ChunkedMesh::upload(&device, &scene.water, chunk_size, "water");
