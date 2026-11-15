@@ -16,7 +16,7 @@ mod ui_assets;
 use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result};
 use clap::Parser;
@@ -266,7 +266,7 @@ fn main() -> Result<()> {
         collision: Some(collision),
         hero_select: HeroSelect::new(champions, selected_champion, hero_select_open),
         lobby_open: false,
-        lobby_timer: 0.0,
+        lobby_deadline: None,
         window: None,
         renderer: None,
         held: HashSet::new(),
@@ -356,7 +356,9 @@ struct App {
     hero_select: HeroSelect,
     /// The 5v5 lobby shown between the hero pick and the match.
     lobby_open: bool,
-    lobby_timer: f32,
+    /// Wall-clock deadline for the lobby auto-start, so the countdown keeps
+    /// real time even when the frame rate drops.
+    lobby_deadline: Option<Instant>,
     window: Option<Arc<Window>>,
     renderer: Option<Renderer>,
     held: HashSet<KeyCode>,
@@ -1691,7 +1693,7 @@ impl App {
         tracing::info!("hero select: locked in {} ({})", champion.name, champion.id);
         self.hero_select.open = false;
         self.lobby_open = true;
-        self.lobby_timer = 0.0;
+        self.lobby_deadline = Some(Instant::now() + Duration::from_secs(8));
         if let Some(window) = self.window.as_ref() {
             window.set_title("Rift - Lobby");
         }
@@ -1699,7 +1701,6 @@ impl App {
 
     /// Render the paused world behind the 5v5 lobby.
     fn tick_lobby(&mut self, dt: f32) {
-        self.lobby_timer += dt;
         let (w, h) = self
             .renderer
             .as_ref()
@@ -1734,14 +1735,17 @@ impl App {
         }
         // The lobby auto-starts like the reference client, but the player can
         // click the button or press Enter to drop in immediately.
-        if self.lobby_timer > 8.0 {
-            self.start_match();
+        if let Some(deadline) = self.lobby_deadline {
+            if Instant::now() >= deadline {
+                self.start_match();
+            }
         }
     }
 
     /// Lock in the highlighted champion and start a clean match.
     fn start_match(&mut self) {
         self.lobby_open = false;
+        self.lobby_deadline = None;
         let index = self.hero_select.selected;
         let Some(champion) = self.hero_select.champions.get(index).cloned() else {
             return;
