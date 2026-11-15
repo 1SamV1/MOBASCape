@@ -19,13 +19,28 @@ data/maps/karamja_rift/
 the cache and are **not committed**. `map.json` is committed because it is our
 design data; it references cache IDs, not assets.
 
-## Current `map.json` (v1.6)
+## Current `map.json` (v1.7)
 
 The playable map is `data/maps/karamja_rift/map.json`:
 
-- `nexus`: one structure per team (model 1747, 1500 HP).
+- `spawn`: player spawn tile `[x, y]`; defaults to the first lane's second
+  waypoint when omitted.
+- `nexus`: one structure per team (model 36053, 1500 HP). The two nexuses sit
+  in 28-tile castle courtyards in the bottom-left and top-right corners.
 - `lanes`: top, mid, bottom. Each lane has a `waypoints` polyline, four
-  `towers` (two per team), and two `inhibitors` (one per team).
+  `towers` (two per team), two `inhibitors`, and two `watchtowers`. The lanes
+  run diagonally between the corner bases.
+- `castle`: perimeter and base-castle data:
+  - `bounds`: `[x0, z0, x1, z1]` map tiles enclosed by the white perimeter
+    wall.
+  - `wall_model`, `wall_scale`, `tower_model`, `tower_scale`, `gate_model`,
+    `gate_scale`, `platform_model`, `statue_model`: cache IDs/flags for the
+    castle pass. The runtime currently draws the walls, towers, gatehouses,
+    platform and statues procedurally in white stone; the IDs are kept so the
+    layout stays data-driven and cache models can be swapped back in.
+  - `tower_spacing`: fraction of each perimeter edge between wall towers.
+  - `bases`: `team`, `center`, `size`, and `corner` (`bottom_left` or
+    `top_right`). Inner walls and gate gaps are generated from these.
 - `wave_interval`: 25 s. Each lane spawns two melee skeletons and one skeleton
   mage per team per wave.
 - `camps`: eight neutral jungle camps. Each camp has a tile, model, optional
@@ -53,10 +68,10 @@ The playable map is `data/maps/karamja_rift/map.json`:
   enemy inside `aggro`, then keeps firing slow bolts at that target until it
   dies or leaves `range`. Its bolts hit heroes, lane minions and jungle camps.
 - `river`: the waterway that splits the rift. `points` is a polyline in map
-  tiles running from the upper left third through the centre to the lower
-  right third, `width` is the half width in tiles, `depth` how far the bed is
-  cut, `bridges` lists the tiles that stay walkable (the centre crossing) and
-  `levels` sets the water height at the first and last point.
+  tiles running diagonally across the map, `width` is the half width in tiles,
+  `depth` how far the bed is cut, `bridges` lists the three lane crossings
+  that stay walkable, and `levels` sets the water height at the first and last
+  point.
 - `brush`: rectangles `[x0, y0, x1, y1]` in world tiles. Units inside brush are
   hidden from the enemy unless the player is within 500 units.
 - `atmosphere`: optional lighting/atmosphere block:
@@ -65,9 +80,11 @@ The playable map is `data/maps/karamja_rift/map.json`:
   Values are sRGB colours and world-space units; the renderer converts them to
   linear light.
 - Towers: model 1761, 450 HP, range 640, 18 damage / 1.2 s.
-- Inhibitors: model 1747, 700 HP, no attack. At least one enemy inhibitor must
-  fall before the nexus can be damaged.
-- Nexus: model 1747, 1500 HP. Destroying it ends the match.
+- Inhibitors: radiant model 12953, dire model 9721, 700 HP, no attack. At
+  least one enemy inhibitor must fall before the nexus can be damaged.
+- Nexus: model 36053, 1500 HP. Destroying it ends the match.
+- Castle wall: procedural white stone, with cache IDs retained in `castle`
+  for future swaps. Walls block movement and sight; gate pieces do not block.
 
 The scene clears collision in a ~4.5-tile corridor around every lane (after
 biome pockets are placed, so a pocket never seals a lane), blocks footprints

@@ -387,6 +387,9 @@ struct MapJson {
     #[serde(default)]
     name: String,
     wave_interval: f32,
+    /// Player spawn tile. Defaults to the first lane's second waypoint.
+    #[serde(default)]
+    spawn: Option<[f32; 2]>,
     nexus: Vec<StructureJson>,
     lanes: Vec<LaneJson>,
     #[serde(default)]
@@ -398,7 +401,104 @@ struct MapJson {
     #[serde(default)]
     river: Option<RiverJson>,
     #[serde(default)]
+    castle: Option<CastleJson>,
+    #[serde(default)]
     atmosphere: Atmosphere,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct CastleJson {
+    /// Map bounds in tiles: x0, z0, x1, z1.
+    bounds: [f32; 4],
+    wall_model: u32,
+    #[serde(default = "one")]
+    wall_scale: f32,
+    tower_model: u32,
+    #[serde(default = "one")]
+    tower_scale: f32,
+    #[serde(default)]
+    gate_model: u32,
+    #[serde(default = "one")]
+    gate_scale: f32,
+    #[serde(default)]
+    platform_model: Option<u32>,
+    #[serde(default)]
+    statue_model: Option<u32>,
+    /// Fraction of each perimeter edge between towers. 0.25 = four spans.
+    #[serde(default = "default_tower_spacing")]
+    tower_spacing: f32,
+    #[serde(default)]
+    bases: Vec<CastleBaseJson>,
+}
+
+fn default_tower_spacing() -> f32 {
+    0.25
+}
+
+fn one() -> f32 {
+    1.0
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct CastleBaseJson {
+    team: u8,
+    center: [f32; 2],
+    size: f32,
+    /// "bottom_left" or "top_right".
+    corner: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CastlePieceKind {
+    Wall,
+    Tower,
+    Gate,
+    Platform,
+    Statue,
+}
+
+/// Generated castle wall/tower geometry shared by collision and rendering.
+#[derive(Debug, Clone)]
+struct CastlePiece {
+    kind: CastlePieceKind,
+    model: u32,
+    tile: [f32; 2],
+    yaw: f32,
+    scale: f32,
+    /// Forced stone texture for cache-model statues.
+    texture: u32,
+    /// Footprint in tiles centred on `tile` (1 = 1x1, 2 = 2x2).
+    footprint: f32,
+    block: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct CastleSpec {
+    pub bounds: (f32, f32, f32, f32),
+    pub wall_model: u32,
+    pub wall_scale: f32,
+    pub tower_model: u32,
+    pub tower_scale: f32,
+    pub gate_model: u32,
+    pub gate_scale: f32,
+    pub platform_model: Option<u32>,
+    pub statue_model: Option<u32>,
+    pub tower_spacing: f32,
+    pub bases: Vec<CastleBase>,
+}
+
+#[derive(Debug, Clone)]
+pub struct CastleBase {
+    pub team: u8,
+    pub center: (f32, f32),
+    pub size: f32,
+    pub corner: CastleCorner,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CastleCorner {
+    BottomLeft,
+    TopRight,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -487,8 +587,227 @@ pub struct MapLayout {
     pub brush: Vec<(f32, f32, f32, f32)>,
     pub biomes: Vec<BiomePocket>,
     pub river: Option<RiverSpec>,
+    pub castle: Option<CastleSpec>,
+    /// Authored player spawn tile, if any.
+    pub spawn: Option<(f32, f32)>,
     pub wave_interval: f32,
     pub atmosphere: Atmosphere,
+}
+
+impl CastleSpec {
+    fn base_rect(&self, base: &CastleBase) -> (f32, f32, f32, f32) {
+        let half = base.size * 0.5;
+        (
+            base.center.0 - half,
+            base.center.1 - half,
+            base.center.0 + half,
+            base.center.1 + half,
+        )
+    }
+
+    /// Scenery-free rectangles: the wall bands and the two base courtyards.
+    pub fn keep_clear(&self) -> Vec<(f32, f32, f32, f32)> {
+        let (x0, z0, x1, z1) = self.bounds;
+        let band = 3.0;
+        let mut rects = vec![
+            (x0 - band, z0 - band, x1 + band, z0 + band),
+            (x0 - band, z1 - band, x1 + band, z1 + band),
+            (x0 - band, z0 - band, x0 + band, z1 + band),
+            (x1 - band, z0 - band, x1 + band, z1 + band),
+        ];
+        for base in &self.bases {
+            let (bx0, bz0, bx1, bz1) = self.base_rect(base);
+            rects.push((bx0 - band, bz0 - band, bx1 + band, bz1 + band));
+        }
+        rects
+    }
+
+    /// Generate the full castle geometry. This one list feeds both collision
+    /// and the static mesh builder, so they can never disagree.
+    fn layout(&self) -> Vec<CastlePiece> {
+        let (x0, z0, x1, z1) = self.bounds;
+        let mut walls: Vec<(f32, f32, f32)> = Vec::new();
+        let mut towers: Vec<(f32, f32)> = Vec::new();
+        let mut gates: Vec<(f32, f32, f32)> = Vec::new();
+        let mut statues: Vec<(f32, f32, f32)> = Vec::new();
+
+        for x in x0.round() as i32..=x1.round() as i32 {
+            let x = x as f32;
+            walls.push((x, z0, 0.0));
+            walls.push((x, z1, std::f32::consts::PI));
+        }
+        for z in z0.round() as i32 + 1..z1.round() as i32 {
+            let z = z as f32;
+            walls.push((x0, z, std::f32::consts::FRAC_PI_2));
+            walls.push((x1, z, -std::f32::consts::FRAC_PI_2));
+        }
+
+        let step = self.tower_spacing.clamp(0.05, 0.5);
+        let mut f = step;
+        while f < 0.999 {
+            let x = x0 + (x1 - x0) * f;
+            let z = z0 + (z1 - z0) * f;
+            towers.push((x, z0));
+            towers.push((x, z1));
+            towers.push((x0, z));
+            towers.push((x1, z));
+            f += step;
+        }
+        towers.extend([(x0, z0), (x1, z0), (x0, z1), (x1, z1)]);
+
+        let gate_half = 4.0;
+        for base in &self.bases {
+            let (bx0, bz0, bx1, bz1) = self.base_rect(base);
+            let (cx, cz) = base.center;
+            tracing::trace!(
+                "castle base team {} at {:.1},{:.1} corner {:?}",
+                base.team,
+                cx,
+                cz,
+                base.corner
+            );
+            let dir = match base.corner {
+                CastleCorner::BottomLeft => 1.0,
+                CastleCorner::TopRight => -1.0,
+            };
+
+            // Inner walls face the map centre; the two outer sides use the
+            // perimeter wall. Each inner side gets a gate gap centred on the
+            // nexus so lanes can leave the courtyard.
+            let inner_x = if dir > 0.0 { bx1 } else { bx0 };
+            let inner_z = if dir > 0.0 { bz0 } else { bz1 };
+            for z in bz0.round() as i32..=bz1.round() as i32 {
+                let z = z as f32;
+                if (z - cz).abs() < gate_half {
+                    continue;
+                }
+                walls.push((inner_x, z, std::f32::consts::FRAC_PI_2));
+            }
+            for x in bx0.round() as i32..=bx1.round() as i32 {
+                let x = x as f32;
+                if (x - cx).abs() < gate_half {
+                    continue;
+                }
+                walls.push((x, inner_z, 0.0));
+            }
+
+            let gate_yaw_x = if dir > 0.0 {
+                -std::f32::consts::FRAC_PI_2
+            } else {
+                std::f32::consts::FRAC_PI_2
+            };
+            let gate_yaw_z = if dir > 0.0 { 0.0 } else { std::f32::consts::PI };
+            gates.push((inner_x, cz, gate_yaw_x));
+            gates.push((cx, inner_z, gate_yaw_z));
+
+            // Corner towers inset from the perimeter so their 2x2 footprints
+            // do not hang outside the map.
+            let inset = 2.5;
+            for (tx, tz) in [
+                (bx0 + inset, bz0 + inset),
+                (bx1 - inset, bz0 + inset),
+                (bx0 + inset, bz1 - inset),
+                (bx1 - inset, bz1 - inset),
+            ] {
+                towers.push((tx, tz));
+            }
+
+            if self.statue_model.is_some() {
+                statues.push((cx - 4.0, cz, std::f32::consts::FRAC_PI_2));
+                statues.push((cx + 4.0, cz, -std::f32::consts::FRAC_PI_2));
+                statues.push((cx, cz - 4.0, std::f32::consts::PI));
+                statues.push((cx, cz + 4.0, 0.0));
+            }
+        }
+
+        towers.sort_by(|a, b| {
+            a.0.partial_cmp(&b.0)
+                .unwrap_or(std::cmp::Ordering::Equal)
+                .then(a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal))
+        });
+        towers.dedup_by(|a, b| (a.0 - b.0).abs() < 3.0 && (a.1 - b.1).abs() < 3.0);
+
+        walls.retain(|wall| {
+            !towers
+                .iter()
+                .any(|t| (wall.0 - t.0).abs() < 2.0 && (wall.1 - t.1).abs() < 2.0)
+        });
+
+        let mut pieces = Vec::new();
+        for (x, z, yaw) in walls {
+            pieces.push(CastlePiece {
+                kind: CastlePieceKind::Wall,
+                model: self.wall_model,
+                tile: [x, z],
+                yaw,
+                scale: self.wall_scale,
+                texture: 46,
+                footprint: 1.0,
+                block: true,
+            });
+        }
+        for (x, z) in towers {
+            pieces.push(CastlePiece {
+                kind: CastlePieceKind::Tower,
+                model: self.tower_model,
+                tile: [x, z],
+                yaw: 0.0,
+                scale: self.tower_scale,
+                texture: 46,
+                footprint: 2.0,
+                block: true,
+            });
+        }
+        if self.gate_model != 0 {
+            for (x, z, yaw) in gates {
+                pieces.push(CastlePiece {
+                    kind: CastlePieceKind::Gate,
+                    model: self.gate_model,
+                    tile: [x, z],
+                    yaw,
+                    scale: self.gate_scale,
+                    texture: 47,
+                    footprint: 2.0,
+                    block: false,
+                });
+            }
+        }
+        if let Some(model) = self.platform_model {
+            for base in &self.bases {
+                pieces.push(CastlePiece {
+                    kind: CastlePieceKind::Platform,
+                    model,
+                    tile: [base.center.0, base.center.1],
+                    yaw: 0.0,
+                    scale: 1.0,
+                    texture: 44,
+                    footprint: 1.0,
+                    block: false,
+                });
+            }
+        }
+        if let Some(model) = self.statue_model {
+            for (x, z, yaw) in statues {
+                pieces.push(CastlePiece {
+                    kind: CastlePieceKind::Statue,
+                    model,
+                    tile: [x, z],
+                    yaw,
+                    scale: 1.0,
+                    texture: 46,
+                    footprint: 1.0,
+                    block: false,
+                });
+            }
+        }
+        pieces
+    }
+}
+
+fn point_in_tile_rects(rects: &[(f32, f32, f32, f32)], x: f32, z: f32) -> bool {
+    rects
+        .iter()
+        .any(|&(x0, z0, x1, z1)| x >= x0 && x <= x1 && z >= z0 && z <= z1)
 }
 
 impl MapLayout {
@@ -618,6 +937,38 @@ impl MapLayout {
             levels: river.levels.map(|l| (l[0], l[1])),
         });
 
+        let castle = map.castle.as_ref().map(|castle| CastleSpec {
+            bounds: (
+                castle.bounds[0],
+                castle.bounds[1],
+                castle.bounds[2],
+                castle.bounds[3],
+            ),
+            wall_model: castle.wall_model,
+            wall_scale: castle.wall_scale,
+            tower_model: castle.tower_model,
+            tower_scale: castle.tower_scale,
+            gate_model: castle.gate_model,
+            gate_scale: castle.gate_scale,
+            platform_model: castle.platform_model,
+            statue_model: castle.statue_model,
+            tower_spacing: castle.tower_spacing.clamp(0.05, 0.5),
+            bases: castle
+                .bases
+                .iter()
+                .map(|base| CastleBase {
+                    team: base.team,
+                    center: (base.center[0], base.center[1]),
+                    size: base.size.max(8.0),
+                    corner: if base.corner.eq_ignore_ascii_case("top_right") {
+                        CastleCorner::TopRight
+                    } else {
+                        CastleCorner::BottomLeft
+                    },
+                })
+                .collect(),
+        });
+
         // Keep authored structures out of the lane driving surface. Towers,
         // inhibitors, watchtowers and nexuses are all allowed to sit beside a
         // lane, but a 3x3 collision footprint on the centre line traps waves
@@ -625,6 +976,10 @@ impl MapLayout {
         let clearance = 5.0 * 128.0;
         let mut occupied: Vec<Vec3> = Vec::with_capacity(structures.len());
         for structure in &mut structures {
+            if structure.kind == StructureKind::Nexus {
+                occupied.push(structure.pos);
+                continue;
+            }
             if distance_to_lanes(&lanes, structure.pos.x, structure.pos.z) >= clearance {
                 occupied.push(structure.pos);
                 continue;
@@ -673,6 +1028,8 @@ impl MapLayout {
             brush,
             biomes,
             river,
+            castle,
+            spawn: map.spawn.map(|s| (s[0], s[1])),
             wave_interval: map.wave_interval,
             atmosphere: map.atmosphere,
         })
@@ -946,6 +1303,16 @@ pub fn build(
         heights: heights.clone(),
     };
     let mut map = MapLayout::load(map_path, &provisional_height)?;
+    let castle_keep = map
+        .castle
+        .as_ref()
+        .map(|castle| castle.keep_clear())
+        .unwrap_or_default();
+    let castle_pieces = map
+        .castle
+        .as_ref()
+        .map(|castle| castle.layout())
+        .unwrap_or_default();
 
     // ------------------------------------------------------------------
     // Biome pockets: rectangles of real OSRS regions transplanted into the
@@ -1393,6 +1760,7 @@ pub fn build(
                         *rx as i32 * 64 + loc.x as i32,
                         *ry as i32 * 64 + loc.y as i32,
                     )
+                    && !point_in_tile_rects(&castle_keep, wx / 128.0, wz / 128.0)
                     && base_keep_clear
                         .iter()
                         .all(|p| p.distance(Vec3::new(wx, p.y, wz)) >= DECOR_STRUCTURE_CLEAR)
@@ -1414,6 +1782,9 @@ pub fn build(
             }
 
             if lane_distance < 6.5 * 128.0 {
+                continue;
+            }
+            if point_in_tile_rects(&castle_keep, wx / 128.0, wz / 128.0) {
                 continue;
             }
             if base_keep_clear
@@ -1705,6 +2076,33 @@ pub fn build(
     map.clear_collision(&mut collision_grid, origin_tile_x, origin_tile_y, 4.5);
     map.block_structures(&mut collision_grid, origin_tile_x, origin_tile_y);
     map.block_structures(&mut sight_grid, origin_tile_x, origin_tile_y);
+
+    // Castle walls, towers and gatehouses. Collision is applied after the
+    // lane clearing pass so the walls always win, while gate pieces stay
+    // walkable and the lanes can pass through them.
+    for piece in &castle_pieces {
+        if !piece.block {
+            continue;
+        }
+        let gx = piece.tile[0].round() as i32 - origin_tile_x;
+        let gy = piece.tile[1].round() as i32 - origin_tile_y;
+        let footprint = piece.footprint.round().max(1.0) as i32;
+        let half = footprint / 2;
+        collision_grid.block_rect(gx - half, gy - half, footprint, footprint);
+        sight_grid.block_rect(gx - half, gy - half, footprint, footprint);
+    }
+    let castle_count = append_castle_mesh(
+        &castle_pieces,
+        &height,
+        &mut model_mesh,
+        &mut shadow_caster_mesh,
+    );
+    placements += castle_count;
+    tracing::info!(
+        "castle: {} wall/tower/platform pieces ({} blocked footprints)",
+        castle_count,
+        castle_pieces.iter().filter(|piece| piece.block).count()
+    );
     tracing::info!(
         "river tiles blocked: {}, pocket tiles: {}",
         river_blocked.len(),
@@ -1862,10 +2260,14 @@ pub fn build(
     let collision = WorldCollision::new(collision_grid, sight_grid, origin_tile_x, origin_tile_y);
 
     let spawn_hint = map
-        .lanes
-        .first()
-        .and_then(|lane| lane.waypoints.get(1))
-        .copied()
+        .spawn
+        .map(|(x, z)| Vec3::new((x + 0.5) * 128.0, 0.0, (z + 0.5) * 128.0))
+        .or_else(|| {
+            map.lanes
+                .first()
+                .and_then(|lane| lane.waypoints.get(1))
+                .copied()
+        })
         .unwrap_or(center);
     let player_spawn = find_walkable_spawn(&height, &collision, spawn_hint, &terrains)?;
     let npc_spawns = build_npc_spawns(&height, &collision, center, player_spawn, &terrains);
@@ -3023,6 +3425,13 @@ enum ModelStyle {
         kind: GroundDecor,
         seed: u32,
     },
+    /// Castle pieces force one bright stone texture across every face so the
+    /// cache wall mesh reads as the white fortress in the reference.
+    #[allow(dead_code)]
+    Castle {
+        tint: [f32; 3],
+        texture: u32,
+    },
 }
 
 /// A small palette of real cache texture IDs used when a model has no texture
@@ -3102,6 +3511,352 @@ pub fn model_dominant_texture(model: &Model) -> Option<u32> {
         .max_by_key(|(_, count)| **count)
         .filter(|(_, count)| **count > 0)
         .map(|(id, _)| id as u32)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn append_castle_mesh(
+    pieces: &[CastlePiece],
+    height: &HeightGrid,
+    model_mesh: &mut MeshData,
+    shadow_caster_mesh: &mut MeshData,
+) -> usize {
+    let mut placed = 0usize;
+    for piece in pieces {
+        let wx = (piece.tile[0] + 0.5) * 128.0;
+        let wz = (piece.tile[1] + 0.5) * 128.0;
+        let base = Vec3::new(wx, height.height_at(wx, wz), wz);
+        let rot = Mat3::from_rotation_y(piece.yaw);
+        tracing::trace!(
+            "castle {:?} model {} texture {}",
+            piece.kind,
+            piece.model,
+            piece.texture
+        );
+        match piece.kind {
+            CastlePieceKind::Wall => {
+                append_castle_wall(model_mesh, base, rot, piece.scale);
+                append_box(
+                    shadow_caster_mesh,
+                    rot,
+                    base,
+                    Vec3::new(-64.0, 0.0, -42.0) * piece.scale,
+                    Vec3::new(64.0, 270.0, 42.0) * piece.scale,
+                );
+            }
+            CastlePieceKind::Tower => {
+                append_castle_tower(model_mesh, base, rot, piece.scale);
+                append_box(
+                    shadow_caster_mesh,
+                    rot,
+                    base,
+                    Vec3::new(-96.0, 0.0, -96.0) * piece.scale,
+                    Vec3::new(96.0, 480.0, 96.0) * piece.scale,
+                );
+            }
+            CastlePieceKind::Gate => {
+                append_castle_gate(model_mesh, base, rot, piece.scale);
+                append_box(
+                    shadow_caster_mesh,
+                    rot,
+                    base,
+                    Vec3::new(-560.0, 0.0, -50.0) * piece.scale,
+                    Vec3::new(560.0, 420.0, 50.0) * piece.scale,
+                );
+            }
+            CastlePieceKind::Platform => {
+                append_castle_platform(model_mesh, base, piece.scale);
+            }
+            CastlePieceKind::Statue => {
+                append_castle_statue(model_mesh, base, rot, piece.scale);
+            }
+        }
+        placed += 1;
+    }
+    placed
+}
+
+const CASTLE_TOP: [u8; 3] = [244, 242, 230];
+const CASTLE_SIDE: [u8; 3] = [218, 216, 205];
+const CASTLE_DARK: [u8; 3] = [174, 172, 162];
+const CASTLE_BLUE: [u8; 3] = [92, 146, 214];
+
+fn push_unlit_quad(mesh: &mut MeshData, a: Vec3, b: Vec3, c: Vec3, d: Vec3, color: [u8; 3]) {
+    let base = mesh.vertices.len() as u32;
+    for p in [a, b, c, d] {
+        mesh.vertices.push(SceneVertex::unlit(p, color));
+    }
+    mesh.indices
+        .extend_from_slice(&[base, base + 1, base + 2, base + 2, base + 1, base + 3]);
+}
+
+fn push_unlit_tri(mesh: &mut MeshData, a: Vec3, b: Vec3, c: Vec3, color: [u8; 3]) {
+    let base = mesh.vertices.len() as u32;
+    for p in [a, b, c] {
+        mesh.vertices.push(SceneVertex::unlit(p, color));
+    }
+    mesh.indices.extend_from_slice(&[base, base + 1, base + 2]);
+}
+
+#[allow(clippy::too_many_arguments)]
+fn append_castle_box(
+    mesh: &mut MeshData,
+    base: Vec3,
+    rot: Mat3,
+    center: Vec3,
+    half: Vec3,
+    top: [u8; 3],
+    side: [u8; 3],
+    bottom: [u8; 3],
+) {
+    let p = |x: f32, y: f32, z: f32| {
+        base + rot * (center + Vec3::new(x * half.x, y * half.y, z * half.z))
+    };
+    // Top and bottom.
+    push_unlit_quad(
+        mesh,
+        p(-1.0, 1.0, -1.0),
+        p(1.0, 1.0, -1.0),
+        p(1.0, 1.0, 1.0),
+        p(-1.0, 1.0, 1.0),
+        top,
+    );
+    push_unlit_quad(
+        mesh,
+        p(-1.0, -1.0, -1.0),
+        p(1.0, -1.0, -1.0),
+        p(1.0, -1.0, 1.0),
+        p(-1.0, -1.0, 1.0),
+        bottom,
+    );
+    // Four sides.
+    push_unlit_quad(
+        mesh,
+        p(-1.0, -1.0, -1.0),
+        p(1.0, -1.0, -1.0),
+        p(1.0, 1.0, -1.0),
+        p(-1.0, 1.0, -1.0),
+        side,
+    );
+    push_unlit_quad(
+        mesh,
+        p(-1.0, -1.0, 1.0),
+        p(1.0, -1.0, 1.0),
+        p(1.0, 1.0, 1.0),
+        p(-1.0, 1.0, 1.0),
+        side,
+    );
+    push_unlit_quad(
+        mesh,
+        p(-1.0, -1.0, -1.0),
+        p(-1.0, -1.0, 1.0),
+        p(-1.0, 1.0, 1.0),
+        p(-1.0, 1.0, -1.0),
+        side,
+    );
+    push_unlit_quad(
+        mesh,
+        p(1.0, -1.0, -1.0),
+        p(1.0, -1.0, 1.0),
+        p(1.0, 1.0, 1.0),
+        p(1.0, 1.0, -1.0),
+        side,
+    );
+}
+
+fn append_castle_wall(mesh: &mut MeshData, base: Vec3, rot: Mat3, scale: f32) {
+    let s = scale;
+    let half_w = 64.0 * s;
+    let half_d = 42.0 * s;
+    let height = 270.0 * s;
+    // Plinth.
+    append_castle_box(
+        mesh,
+        base,
+        rot,
+        Vec3::new(0.0, 18.0 * s, 0.0),
+        Vec3::new(half_w + 4.0 * s, 18.0 * s, half_d + 6.0 * s),
+        CASTLE_SIDE,
+        CASTLE_SIDE,
+        CASTLE_DARK,
+    );
+    // Body.
+    append_castle_box(
+        mesh,
+        base,
+        rot,
+        Vec3::new(0.0, height * 0.5, 0.0),
+        Vec3::new(half_w, height * 0.5, half_d),
+        CASTLE_TOP,
+        CASTLE_SIDE,
+        CASTLE_DARK,
+    );
+    // Walkway cap.
+    append_castle_box(
+        mesh,
+        base,
+        rot,
+        Vec3::new(0.0, height + 5.0 * s, 0.0),
+        Vec3::new(half_w + 5.0 * s, 5.0 * s, half_d + 5.0 * s),
+        CASTLE_TOP,
+        CASTLE_SIDE,
+        CASTLE_DARK,
+    );
+    // Merlon.
+    append_castle_box(
+        mesh,
+        base,
+        rot,
+        Vec3::new(0.0, height + 10.0 * s + 26.0 * s, 0.0),
+        Vec3::new(22.0 * s, 26.0 * s, half_d * 0.78),
+        CASTLE_TOP,
+        CASTLE_SIDE,
+        CASTLE_DARK,
+    );
+}
+
+fn append_castle_tower(mesh: &mut MeshData, base: Vec3, rot: Mat3, scale: f32) {
+    let s = scale;
+    let height = 480.0 * s;
+    append_castle_box(
+        mesh,
+        base,
+        rot,
+        Vec3::new(0.0, 18.0 * s, 0.0),
+        Vec3::new(110.0 * s, 18.0 * s, 110.0 * s),
+        CASTLE_SIDE,
+        CASTLE_SIDE,
+        CASTLE_DARK,
+    );
+    append_castle_box(
+        mesh,
+        base,
+        rot,
+        Vec3::new(0.0, height * 0.5, 0.0),
+        Vec3::new(96.0 * s, height * 0.5, 96.0 * s),
+        CASTLE_TOP,
+        CASTLE_SIDE,
+        CASTLE_DARK,
+    );
+    append_castle_box(
+        mesh,
+        base,
+        rot,
+        Vec3::new(0.0, height + 8.0 * s, 0.0),
+        Vec3::new(116.0 * s, 8.0 * s, 116.0 * s),
+        CASTLE_TOP,
+        CASTLE_SIDE,
+        CASTLE_DARK,
+    );
+    for (x, z) in [(-82.0, -82.0), (82.0, -82.0), (-82.0, 82.0), (82.0, 82.0)] {
+        append_castle_box(
+            mesh,
+            base,
+            rot,
+            Vec3::new(x * s, height + 16.0 * s + 28.0 * s, z * s),
+            Vec3::new(26.0 * s, 28.0 * s, 26.0 * s),
+            CASTLE_TOP,
+            CASTLE_SIDE,
+            CASTLE_DARK,
+        );
+    }
+}
+
+fn append_castle_gate(mesh: &mut MeshData, base: Vec3, rot: Mat3, scale: f32) {
+    let s = scale;
+    let span = 512.0 * s;
+    let pillar_h = 380.0 * s;
+    for side in [-1.0, 1.0] {
+        append_castle_box(
+            mesh,
+            base,
+            rot,
+            Vec3::new(side * (span + 30.0 * s), pillar_h * 0.5, 0.0),
+            Vec3::new(34.0 * s, pillar_h * 0.5, 48.0 * s),
+            CASTLE_TOP,
+            CASTLE_SIDE,
+            CASTLE_DARK,
+        );
+    }
+    append_castle_box(
+        mesh,
+        base,
+        rot,
+        Vec3::new(0.0, pillar_h + 30.0 * s, 0.0),
+        Vec3::new(span + 64.0 * s, 30.0 * s, 48.0 * s),
+        CASTLE_TOP,
+        CASTLE_SIDE,
+        CASTLE_DARK,
+    );
+    for x in [-span * 0.6, 0.0, span * 0.6] {
+        append_castle_box(
+            mesh,
+            base,
+            rot,
+            Vec3::new(x, pillar_h + 60.0 * s + 26.0 * s, 0.0),
+            Vec3::new(30.0 * s, 26.0 * s, 40.0 * s),
+            CASTLE_TOP,
+            CASTLE_SIDE,
+            CASTLE_DARK,
+        );
+    }
+}
+
+fn append_castle_platform(mesh: &mut MeshData, base: Vec3, scale: f32) {
+    let s = scale;
+    let outer = 680.0 * s;
+    let inner = 540.0 * s;
+    let height = 10.0 * s;
+    let segments = 24u32;
+    let center = base + Vec3::Y * height;
+    let inner_center = base + Vec3::Y * (height + 4.0 * s);
+    for i in 0..segments {
+        let a = i as f32 / segments as f32 * std::f32::consts::TAU;
+        let b = (i + 1) as f32 / segments as f32 * std::f32::consts::TAU;
+        let outer_a = center + Vec3::new(a.cos() * outer, 0.0, a.sin() * outer);
+        let outer_b = center + Vec3::new(b.cos() * outer, 0.0, b.sin() * outer);
+        let inner_a = inner_center + Vec3::new(a.cos() * inner, 0.0, a.sin() * inner);
+        let inner_b = inner_center + Vec3::new(b.cos() * inner, 0.0, b.sin() * inner);
+        push_unlit_tri(mesh, center, outer_a, outer_b, CASTLE_TOP);
+        push_unlit_tri(mesh, inner_center, inner_a, inner_b, CASTLE_BLUE);
+        // Side skirt.
+        let foot_a = base + Vec3::new(a.cos() * outer, 0.0, a.sin() * outer);
+        let foot_b = base + Vec3::new(b.cos() * outer, 0.0, b.sin() * outer);
+        push_unlit_quad(mesh, foot_a, outer_a, outer_b, foot_b, CASTLE_SIDE);
+    }
+}
+
+fn append_castle_statue(mesh: &mut MeshData, base: Vec3, rot: Mat3, scale: f32) {
+    let s = scale;
+    append_castle_box(
+        mesh,
+        base,
+        rot,
+        Vec3::new(0.0, 20.0 * s, 0.0),
+        Vec3::new(44.0 * s, 20.0 * s, 44.0 * s),
+        CASTLE_TOP,
+        CASTLE_SIDE,
+        CASTLE_DARK,
+    );
+    append_castle_box(
+        mesh,
+        base,
+        rot,
+        Vec3::new(0.0, 105.0 * s, 0.0),
+        Vec3::new(24.0 * s, 85.0 * s, 24.0 * s),
+        CASTLE_TOP,
+        CASTLE_SIDE,
+        CASTLE_DARK,
+    );
+    append_castle_box(
+        mesh,
+        base,
+        rot,
+        Vec3::new(0.0, 205.0 * s, 0.0),
+        Vec3::new(38.0 * s, 18.0 * s, 38.0 * s),
+        CASTLE_TOP,
+        CASTLE_SIDE,
+        CASTLE_DARK,
+    );
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -3286,10 +4041,10 @@ fn append_model_styled(
                 );
         }
 
-        let mut texture_id = if wood_only {
-            wood_hint
-        } else {
-            model
+        let mut texture_id = match style {
+            ModelStyle::Castle { texture, .. } => texture,
+            _ if wood_only => wood_hint,
+            _ => model
                 .face_textures
                 .as_ref()
                 .and_then(|t| t.get(face_idx))
@@ -3300,9 +4055,11 @@ fn append_model_styled(
                 .unwrap_or_else(|| match style {
                     ModelStyle::Scenery { texture_hint, .. } => texture_hint,
                     ModelStyle::Decor { kind, seed } => decor_texture_hint(kind, seed),
-                })
+                    ModelStyle::Castle { texture, .. } => texture,
+                }),
         };
         let leaf_based = !wood_only
+            && !matches!(style, ModelStyle::Castle { .. })
             && (dominant.is_some_and(|id| TEX_LEAVES.contains(&id))
                 || matches!(style, ModelStyle::Scenery { texture_hint, .. } if TEX_LEAVES.contains(&texture_hint)));
         if leaf_based {
@@ -3327,6 +4084,11 @@ fn append_model_styled(
                 (tint[2] * 255.0).clamp(0.0, 255.0) as u8,
             ],
             ModelStyle::Decor { .. } => [255, 255, 255],
+            ModelStyle::Castle { tint, .. } => [
+                (tint[0] * 255.0).clamp(0.0, 255.0) as u8,
+                (tint[1] * 255.0).clamp(0.0, 255.0) as u8,
+                (tint[2] * 255.0).clamp(0.0, 255.0) as u8,
+            ],
         };
 
         // One planar projection per face, chosen from the face normal. This
@@ -3431,5 +4193,84 @@ mod tests {
         assert!(atmosphere.fog_height > 0.0);
         assert!(atmosphere.sun_dir[1] > 0.0);
         assert!(atmosphere.sun_color.iter().all(|c| (0.0..=1.0).contains(c)));
+    }
+
+    #[test]
+    fn castle_layout_has_gates_towers_and_blocked_walls() {
+        let castle = CastleSpec {
+            bounds: (0.0, 0.0, 120.0, 120.0),
+            wall_model: 16918,
+            wall_scale: 1.0,
+            tower_model: 1412,
+            tower_scale: 1.0,
+            gate_model: 3996,
+            gate_scale: 1.0,
+            platform_model: Some(15082),
+            statue_model: Some(1527),
+            tower_spacing: 0.25,
+            bases: vec![
+                CastleBase {
+                    team: 0,
+                    center: (18.0, 102.0),
+                    size: 28.0,
+                    corner: CastleCorner::BottomLeft,
+                },
+                CastleBase {
+                    team: 1,
+                    center: (102.0, 18.0),
+                    size: 28.0,
+                    corner: CastleCorner::TopRight,
+                },
+            ],
+        };
+        let pieces = castle.layout();
+        assert!(
+            pieces
+                .iter()
+                .filter(|p| p.kind == CastlePieceKind::Wall)
+                .count()
+                > 300
+        );
+        assert!(
+            pieces
+                .iter()
+                .filter(|p| p.kind == CastlePieceKind::Tower)
+                .count()
+                >= 12
+        );
+        assert_eq!(
+            pieces
+                .iter()
+                .filter(|p| p.kind == CastlePieceKind::Gate)
+                .count(),
+            4
+        );
+        assert_eq!(
+            pieces
+                .iter()
+                .filter(|p| p.kind == CastlePieceKind::Platform)
+                .count(),
+            2
+        );
+        assert_eq!(
+            pieces
+                .iter()
+                .filter(|p| p.kind == CastlePieceKind::Statue)
+                .count(),
+            8
+        );
+        assert!(pieces.iter().any(|p| p.block));
+
+        // The bottom-left courtyard's north and east gates must be open.
+        for (x, z) in [(32.0, 102.0), (18.0, 88.0)] {
+            assert!(
+                !pieces.iter().any(|p| {
+                    p.kind == CastlePieceKind::Wall
+                        && (p.tile[0] - x).abs() < 0.1
+                        && (p.tile[1] - z).abs() < 0.1
+                }),
+                "wall blocks gate at {x},{z}"
+            );
+        }
     }
 }

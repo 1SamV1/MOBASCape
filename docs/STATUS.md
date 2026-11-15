@@ -92,6 +92,13 @@ Last updated: M5.24 weighty movement, ambient creatures + cache group fix, 2026-
 - Inhibitors: destroyed inhibitors respawn after 120 s. While an enemy
   inhibitor is down, that lane's waves include a super minion (2.5x health,
   2x damage, 1.6x scale, gold minimap marker). Respawn re-shields the nexus.
+- **Castle-boxed corner map**: the playable area is a 282×282 tile square
+  enclosed by a white crenellated castle wall with towers and gatehouses.
+  Team 0's base sits in the bottom-left corner and team 1's in the top-right;
+  both are 28-tile courtyards with gates, corner towers, a blue nexus dais,
+  and white statues. Three lanes run diagonally between the corners and cross
+  the diagonal river at three bridge points. The player spawns inside the
+  bottom-left courtyard.
 - Champion roster: three data-driven configs in `data/champions/`:
   - **Monkey** — balanced, 500 HP / 200 mana.
   - **JalRek-Jad** — tank/mage, 700 HP / 260 mana, higher damage.

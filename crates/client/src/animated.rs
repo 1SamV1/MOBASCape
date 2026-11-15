@@ -817,6 +817,16 @@ impl AnimatedScene {
             duration: 1.0e9,
             color: [120, 255, 170],
         });
+        // Blue rings around each castle dais, matching the reference base.
+        for pos in animated.nexus_positions {
+            animated.effects.push(Effect {
+                pos,
+                radius: 760.0,
+                remaining: 1.0e9,
+                duration: 1.0e9,
+                color: [80, 165, 255],
+            });
+        }
         for lane_index in 0..animated.lanes.len() {
             animated.spawn_wave(0, lane_index, &scene.height);
             animated.spawn_wave(1, lane_index, &scene.height);

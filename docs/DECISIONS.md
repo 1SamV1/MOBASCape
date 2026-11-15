@@ -560,3 +560,26 @@ stem so Jad and Kree keep the shared Q bolt and R meteor.
   pure damage bypasses armor. The HUD team panel shows ARM and DMG.
 - **Demos:** `--demo-duel` spawns a rival champion for manual testing;
   `--demo-trial` spawns a wounded rival, casts R then Q, and logs the result.
+
+## ADR-041 — Castle-boxed map with corner bases
+
+**Status:** accepted for the castle pass.
+
+The map is now a square arena boxed in by a 282×282 white castle wall instead
+of an open jungle edge. The wall uses procedural unlit white stone geometry
+rather than the dark cache wall mesh: a plinth, solid body, walkway cap and
+merlons per tile, with square crenellated towers at intervals. Cache models
+were tried first but their vertical faces read as black spikes under the
+Karamja sun; the procedural wall keeps the reference's bright fortress look.
+
+The two bases moved from the old left/right lane axis to opposite corners:
+team 0 in the bottom-left, team 1 in the top-right. Each is a 28-tile courtyard
+whose two outer sides are the perimeter wall, with inner walls and gate arches
+facing the map centre, corner towers, a blue nexus dais and four white statues.
+The three lanes now run diagonally between the corners and cross the diagonal
+river at three bridges. Player spawn sits inside the bottom-left courtyard.
+
+`MapFormat` additions: `spawn`, `castle.bounds`, wall/tower/gate/platform/
+statue model flags, tower spacing, and per-base corner/centre/size data. The
+castle layout feeds both collision and the static mesh builder from one piece
+list, so walls and blocking geometry cannot drift apart.

@@ -28,9 +28,10 @@ designed for fast-paced low-team-count matches.
 > array. **M5.6** rebuilds the map as a two-sided rift: eight regional biome
 > pockets inspired from OSRS regions (dark magic, vampires, ogres, goblins on
 > the dire side; human cities, elven lands, gnome stronghold on the radiant
-> side), a diagonal river with a centre bridge, tree lines down every lane, a
-> shadow (not tinted) fog of war, and a Dota style scoreboard, unit tooltip,
-> minimap viewport and biome label. See [docs/STATUS.md](docs/STATUS.md) and
+> side), a diagonal river with three bridge crossings, a 282x282 white castle
+> perimeter wall with corner bases in the bottom-left and top-right, three
+> diagonal lanes, tree lines down every lane, a shadow (not tinted) fog of war,
+> and a Dota style scoreboard, unit tooltip, minimap viewport and biome label. See [docs/STATUS.md](docs/STATUS.md) and
 > [docs/UI_ASSETS.md](docs/UI_ASSETS.md).
 
 ## What exists
