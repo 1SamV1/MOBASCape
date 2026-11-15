@@ -1,3 +1,6 @@
+use std::collections::HashMap;
+use std::sync::Arc;
+
 use anyhow::Result;
 use glam::{Mat3, Vec3};
 use rift_cache::{AnimationClip, Cache, Model, model::hsl_to_rgb};
@@ -93,9 +96,9 @@ impl UnitKind {
 }
 
 pub struct AnimatedUnit {
-    pub model: Model,
-    pub idle: AnimationClip,
-    pub walk: Option<AnimationClip>,
+    pub model: Arc<Model>,
+    pub idle: Arc<AnimationClip>,
+    pub walk: Option<Arc<AnimationClip>>,
     pub pos: Vec3,
     pub yaw: f32,
     /// Model-space forward correction (usually 0 or PI).
@@ -348,9 +351,9 @@ pub struct Projectile {
 }
 
 struct MinionTemplate {
-    model: Model,
-    idle: AnimationClip,
-    walk: AnimationClip,
+    model: Arc<Model>,
+    idle: Arc<AnimationClip>,
+    walk: Arc<AnimationClip>,
     health: f32,
     range: f32,
     damage: f32,
@@ -373,7 +376,7 @@ pub struct AnimatedScene {
     pub bananarangs: Vec<Bananarang>,
     /// Cache-native banana mesh used by the Bananarang; billboard fallback if
     /// the cache revision lacks model 2387.
-    banana_model: Option<Model>,
+    banana_model: Option<Arc<Model>>,
     pub duel: Option<DuelState>,
     pub duel_peels: Vec<DuelPeel>,
     pub duel_wins: u32,
@@ -430,6 +433,7 @@ pub struct AnimatedScene {
 
 impl AnimatedScene {
     pub fn new(cache: &Cache, scene: &SceneData, champion: &ChampionConfig) -> Result<Self> {
+        let mut assets = UnitAssets::new(cache);
         let mut units = Vec::new();
 
         // The scattered critters are weak neutral jungle camps: they aggro
@@ -437,7 +441,7 @@ impl AnimatedScene {
         // decoration.
         for spawn in &scene.npc_spawns {
             let mut unit = load_unit(
-                cache,
+                &mut assets,
                 spawn.model_id,
                 Some(spawn.idle_sequence),
                 spawn.walk_sequence,
@@ -473,7 +477,7 @@ impl AnimatedScene {
                 AmbientKind::Crab => 26.0,
             };
             let mut unit = load_unit(
-                cache,
+                &mut assets,
                 spawn.model_id,
                 Some(spawn.idle_sequence),
                 Some(spawn.walk_sequence),
@@ -491,15 +495,11 @@ impl AnimatedScene {
                 Vec::new(),
             )?;
             if !spawn.attachments.is_empty() {
-                let mut parts = Vec::with_capacity(1 + spawn.attachments.len());
-                parts.push(load_model(cache, spawn.model_id)?);
-                for &model_id in &spawn.attachments {
-                    parts.push(load_model(cache, model_id)?);
-                }
-                unit.model = Model::merge(&parts);
+                let parts = assets.merged_parts(spawn.model_id, &spawn.attachments)?;
+                unit.model = Arc::new(Model::merge(&parts));
             }
             for &(find, replace) in &spawn.recolors {
-                unit.model.recolor(&[find], &[replace]);
+                Arc::make_mut(&mut unit.model).recolor(&[find], &[replace]);
             }
             unit.home = spawn.pos;
             unit.ambient_kind = Some(spawn.kind);
@@ -512,7 +512,7 @@ impl AnimatedScene {
 
         let player_index = units.len();
         units.push(load_unit(
-            cache,
+            &mut assets,
             champion.model,
             Some(champion.idle),
             Some(champion.walk),
@@ -531,12 +531,8 @@ impl AnimatedScene {
         )?);
         {
             if !champion.attachments.is_empty() {
-                let mut parts = Vec::with_capacity(1 + champion.attachments.len());
-                parts.push(load_model(cache, champion.model)?);
-                for &model_id in &champion.attachments {
-                    parts.push(load_model(cache, model_id)?);
-                }
-                units[player_index].model = Model::merge(&parts);
+                let parts = assets.merged_parts(champion.model, &champion.attachments)?;
+                units[player_index].model = Arc::new(Model::merge(&parts));
             }
             let player = &mut units[player_index];
             player.mana = champion.mana;
@@ -556,7 +552,7 @@ impl AnimatedScene {
         }
         if champion.walk_sway < 1.0 {
             if let Some(walk) = units[player_index].walk.as_mut() {
-                walk.damp_side_rotation(champion.walk_sway);
+                Arc::make_mut(walk).damp_side_rotation(champion.walk_sway);
             }
         }
         let walk_loop_ms = units[player_index]
@@ -581,7 +577,7 @@ impl AnimatedScene {
         {
             let dummy_pos = scene.collision.world_of_tile(tx, ty, &scene.height);
             units.push(load_unit(
-                cache,
+                &mut assets,
                 7744,
                 Some(222),
                 Some(219),
@@ -622,7 +618,7 @@ impl AnimatedScene {
                 _ => (150.0, 200.0),
             };
             let mut unit = load_unit(
-                cache,
+                &mut assets,
                 structure.model_id,
                 None,
                 None,
@@ -656,7 +652,7 @@ impl AnimatedScene {
                 camp.pos
             );
             let mut unit = load_unit(
-                cache,
+                &mut assets,
                 camp.model_id,
                 camp.idle_sequence,
                 camp.walk_sequence,
@@ -690,7 +686,7 @@ impl AnimatedScene {
         );
         let chest_index = units.len();
         units.push(load_unit(
-            cache,
+            &mut assets,
             1249,
             None,
             None,
@@ -711,7 +707,7 @@ impl AnimatedScene {
         let guard_home = chest_pos + Vec3::new(2.6 * 128.0, 0.0, 0.0);
         let guard_index = units.len();
         units.push(load_unit(
-            cache,
+            &mut assets,
             28019,
             Some(7166),
             Some(7167),
@@ -732,7 +728,7 @@ impl AnimatedScene {
         let mut spectator_indices = Vec::new();
         for _ in 0..8 {
             if let Ok(mut spectator) = load_unit(
-                cache,
+                &mut assets,
                 4818,
                 Some(1386),
                 None,
@@ -764,9 +760,9 @@ impl AnimatedScene {
         // OSRS imp (melee) and fairy (ranged). The smaller imp models need a
         // larger scale to read at MOBA camera distance; fairies are taller.
         let melee_template = MinionTemplate {
-            model: load_model(cache, 19982)?,
-            idle: AnimationClip::load(cache, 171)?,
-            walk: AnimationClip::load(cache, 168)?,
+            model: assets.model(19982)?,
+            idle: assets.clip(171)?,
+            walk: assets.clip(168)?,
             health: 90.0,
             range: 100.0,
             damage: 7.0,
@@ -775,9 +771,9 @@ impl AnimatedScene {
             scale: 3.6,
         };
         let ranged_template = MinionTemplate {
-            model: load_model(cache, 2857)?,
-            idle: AnimationClip::load(cache, 112)?,
-            walk: AnimationClip::load(cache, 106)?,
+            model: assets.model(2857)?,
+            idle: assets.clip(112)?,
+            walk: assets.clip(106)?,
             health: 65.0,
             range: 380.0,
             damage: 9.0,
@@ -809,7 +805,7 @@ impl AnimatedScene {
             height: scene.collision.height() as usize,
             tiles: vec![false; (scene.collision.width() * scene.collision.height()) as usize],
         };
-        let banana_model = match load_model(cache, 2387) {
+        let banana_model = match assets.model(2387) {
             Ok(model) => Some(model),
             Err(err) => {
                 tracing::warn!("bananarang model 2387 unavailable; using billboard: {err:#}");
@@ -2188,8 +2184,9 @@ impl AnimatedScene {
         champion: &ChampionConfig,
         pos: Vec3,
     ) -> Result<usize> {
+        let mut assets = UnitAssets::new(cache);
         let mut unit = load_unit(
-            cache,
+            &mut assets,
             champion.model,
             Some(champion.idle),
             Some(champion.walk),
@@ -2207,12 +2204,8 @@ impl AnimatedScene {
             Vec::new(),
         )?;
         if !champion.attachments.is_empty() {
-            let mut parts = Vec::with_capacity(1 + champion.attachments.len());
-            parts.push(load_model(cache, champion.model)?);
-            for &model_id in &champion.attachments {
-                parts.push(load_model(cache, model_id)?);
-            }
-            unit.model = Model::merge(&parts);
+            let parts = assets.merged_parts(champion.model, &champion.attachments)?;
+            unit.model = Arc::new(Model::merge(&parts));
         }
         unit.armor = champion.armor;
         unit.is_champion = true;
@@ -2223,7 +2216,7 @@ impl AnimatedScene {
         unit.attack_windup = champion.attack_windup;
         if champion.walk_sway < 1.0 {
             if let Some(walk) = unit.walk.as_mut() {
-                walk.damp_side_rotation(champion.walk_sway);
+                Arc::make_mut(walk).damp_side_rotation(champion.walk_sway);
             }
         }
         self.units.push(unit);
@@ -4327,9 +4320,60 @@ fn load_model(cache: &Cache, model_id: u32) -> Result<Model> {
     Ok(Model::load(model_id, &group.data)?)
 }
 
+/// Decoded models and animation clips, memoised by id.
+///
+/// A scene builds hundreds of units out of a handful of distinct assets:
+/// every butterfly, crab, cow, imp and fairy re-decoded the same model and
+/// the same animation frames. Decoding one clip costs about 100 ms, so the
+/// repeats dominated the ~25 s stall when a match started. The maps are
+/// shared behind an `Arc` because nothing mutates them once loaded.
+struct UnitAssets<'a> {
+    cache: &'a Cache,
+    models: HashMap<u32, Arc<Model>>,
+    clips: HashMap<u32, Arc<AnimationClip>>,
+}
+
+impl<'a> UnitAssets<'a> {
+    fn new(cache: &'a Cache) -> Self {
+        Self {
+            cache,
+            models: HashMap::new(),
+            clips: HashMap::new(),
+        }
+    }
+
+    fn model(&mut self, model_id: u32) -> Result<Arc<Model>> {
+        if let Some(model) = self.models.get(&model_id) {
+            return Ok(Arc::clone(model));
+        }
+        let model = Arc::new(load_model(self.cache, model_id)?);
+        self.models.insert(model_id, Arc::clone(&model));
+        Ok(model)
+    }
+
+    fn clip(&mut self, sequence: u32) -> Result<Arc<AnimationClip>> {
+        if let Some(clip) = self.clips.get(&sequence) {
+            return Ok(Arc::clone(clip));
+        }
+        let clip = Arc::new(AnimationClip::load(self.cache, sequence)?);
+        self.clips.insert(sequence, Arc::clone(&clip));
+        Ok(clip)
+    }
+
+    /// Owned copies of a model and its attachments, ready for `Model::merge`.
+    fn merged_parts(&mut self, model_id: u32, attachments: &[u32]) -> Result<Vec<Model>> {
+        let mut parts = Vec::with_capacity(1 + attachments.len());
+        parts.push((*self.model(model_id)?).clone());
+        for &attachment in attachments {
+            parts.push((*self.model(attachment)?).clone());
+        }
+        Ok(parts)
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 fn load_unit(
-    cache: &Cache,
+    assets: &mut UnitAssets<'_>,
     model_id: u32,
     idle_sequence: Option<u32>,
     walk_sequence: Option<u32>,
@@ -4346,16 +4390,16 @@ fn load_unit(
     bar_height: f32,
     lane: Vec<Vec3>,
 ) -> Result<AnimatedUnit> {
-    let model = load_model(cache, model_id)?;
+    let model = assets.model(model_id)?;
     let idle = match idle_sequence {
-        Some(seq) => AnimationClip::load(cache, seq)?,
-        None => AnimationClip::default(),
+        Some(seq) => assets.clip(seq)?,
+        None => Arc::new(AnimationClip::default()),
     };
     let walk = match walk_sequence {
-        Some(seq) => Some(AnimationClip::load(cache, seq)?),
+        Some(seq) => Some(assets.clip(seq)?),
         None => None,
     };
-    let walk_loop_ms = walk.as_ref().map_or(0.0, AnimationClip::loop_ms);
+    let walk_loop_ms = walk.as_ref().map_or(0.0, |clip| clip.loop_ms());
     let walk_stride = speed * walk_loop_ms / 1000.0;
     Ok(AnimatedUnit {
         model,

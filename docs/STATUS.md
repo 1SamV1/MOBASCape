@@ -139,6 +139,11 @@ Last updated: reference 5v5 lobby + hero select parity, 2026-11-14.
     10 s trial grants +4 permanent base melee damage per win; the barrier ends
     early if either fighter dies. Cast range is 75 tiles.
   Jad and Kree keep the shared Q bolt and R meteor.
+- **Match start**: decoded models and animation clips are memoised per id
+  (`UnitAssets`) and shared behind an `Arc`. A scene builds ~160 units out of
+  a handful of distinct assets, and re-decoding one clip costs about 100 ms,
+  so the repeats used to stall a match start for ~30 s. The same scene now
+  loads in about 2.5 s.
 - **Combat feedback**: floating damage numbers over the unit that was hit, a
   yellow centre-screen kill shout ("YOU HAVE SLAIN A MINION!"), a kill feed
   under the roster panel, a red attack-range ring and a yellow target ring on
