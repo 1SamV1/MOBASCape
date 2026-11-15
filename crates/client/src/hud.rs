@@ -59,6 +59,14 @@ pub struct PlayerHud {
     pub cooldown_maxima: [f32; 4],
     pub armor: f32,
     pub attack_damage: f32,
+    /// Ranged level for the OSRS-style stats panel.
+    pub ranged: f32,
+    /// Attack interval, shown as Run-Attack.
+    pub attack_interval: f32,
+    /// Ability power, shown as Ranged-Bonus.
+    pub ability_power: f32,
+    /// Both teams' champions with live health for the roster panel.
+    pub roster: Vec<HeroMarker>,
     pub shield: f32,
     pub shield_timer: f32,
     pub buff: Option<(f32, f32, [u8; 3])>,
@@ -997,9 +1005,10 @@ impl Hud {
             }
         }
 
-        // Team panel, top-right.
+        // Team roster, top-right: both teams with live health bars, like the
+        // Legends of Bielnor client.
         let tx = width - 238.0;
-        self.hud_panel(width, height, tx, 4.0, 220.0, 92.0);
+        self.hud_panel(width, height, tx, 4.0, 220.0, 176.0);
         self.text(width, height, tx + 8.0, 10.0, 1.0, "YOUR TEAM", OSRS_YELLOW);
         self.text(
             width,
@@ -1014,42 +1023,105 @@ impl Hud {
             width,
             height,
             tx + 8.0,
-            42.0,
+            40.0,
             0.9,
-            &format!("LV {}   {}/6 ITEMS", player.level, player.items_owned),
+            &format!(
+                "LV {}   {}/6 ITEMS   GOLD {}",
+                player.level, player.items_owned, player.gold
+            ),
             [200, 200, 200],
         );
-        self.text(
-            width,
-            height,
-            tx + 8.0,
-            54.0,
-            0.9,
-            &format!("HP {:.0}/{:.0}", player.health, player.max_health),
-            [120, 230, 150],
-        );
-        self.text(
-            width,
-            height,
-            tx + 8.0,
-            66.0,
-            0.9,
-            &format!("GOLD {}", player.gold),
-            [245, 205, 70],
-        );
-        self.text(
-            width,
-            height,
-            tx + 8.0,
-            78.0,
-            0.9,
-            &format!("ARM {:.0}   DMG {:.0}", player.armor, player.attack_damage),
-            [195, 205, 220],
-        );
+        for (team, label, color) in [
+            (0u8, "BLUE TEAM", [110, 175, 255]),
+            (1u8, "RED TEAM", [255, 120, 110]),
+        ] {
+            let header = 54.0 + team as f32 * 62.0;
+            self.text(width, height, tx + 8.0, header, 0.9, label, color);
+            for (row, hero) in player
+                .roster
+                .iter()
+                .filter(|hero| hero.team == team)
+                .take(4)
+                .enumerate()
+            {
+                let y = header + 14.0 + row as f32 * 12.0;
+                let name: String = hero.name.chars().take(11).collect();
+                self.text(width, height, tx + 8.0, y, 0.8, &name, color);
+                self.quad(width, height, tx + 92.0, y + 1.0, 108.0, 6.0, [38, 38, 44]);
+                let fraction = (hero.health / hero.max_health.max(1.0)).clamp(0.0, 1.0);
+                self.quad(
+                    width,
+                    height,
+                    tx + 92.0,
+                    y + 1.0,
+                    108.0 * fraction,
+                    6.0,
+                    if hero.alive {
+                        [90, 210, 110]
+                    } else {
+                        [130, 60, 60]
+                    },
+                );
+            }
+        }
 
         // Current biome pocket label.
         if let Some(label) = player.biome.as_deref() {
             self.text_centered(width, height, width * 0.5, 96.0, 1.3, label, OSRS_YELLOW);
+        }
+
+        // OSRS-style stat panel, left, under the objectives.
+        let sx = 22.0;
+        let sy = 232.0;
+        self.hud_panel(width, height, sx, sy, 230.0, 142.0);
+        self.text(width, height, sx + 8.0, sy + 6.0, 1.0, "STATS", OSRS_YELLOW);
+        let stat_rows = [
+            ("ATTACK", player.attack_damage),
+            ("STRENGTH", player.attack_damage),
+            ("RANGED", player.ranged),
+            ("PRAYER", player.mana),
+            ("HITPOINTS", player.health),
+        ];
+        for (index, (label, value)) in stat_rows.iter().enumerate() {
+            let y = sy + 20.0 + index as f32 * 13.0;
+            self.text(width, height, sx + 8.0, y, 0.85, label, [205, 205, 205]);
+            self.text(
+                width,
+                height,
+                sx + 150.0,
+                y,
+                0.85,
+                &format!("{value:.0}"),
+                [235, 235, 235],
+            );
+        }
+        self.text(
+            width,
+            height,
+            sx + 8.0,
+            sy + 88.0,
+            0.85,
+            "BONUSES",
+            OSRS_YELLOW,
+        );
+        let bonus_rows = [
+            ("RUN-ATTACK", player.attack_interval),
+            ("RANGED-BONUS", player.ability_power),
+            ("MELEE-DEF", player.armor),
+            ("RANGED-DEF", player.armor),
+        ];
+        for (index, (label, value)) in bonus_rows.iter().enumerate() {
+            let y = sy + 102.0 + index as f32 * 12.0;
+            self.text(width, height, sx + 8.0, y, 0.85, label, [205, 205, 205]);
+            self.text(
+                width,
+                height,
+                sx + 150.0,
+                y,
+                0.85,
+                &format!("{value:.0}"),
+                [235, 235, 235],
+            );
         }
 
         // Objectives panel, left.
@@ -1140,7 +1212,7 @@ impl Hud {
             lx + 8.0,
             ly + 6.0,
             1.0,
-            "EVENT LOG",
+            "CHAT",
             [220, 200, 150],
         );
         if player.events.is_empty() {
@@ -1156,6 +1228,19 @@ impl Hud {
         } else {
             for (i, event) in player.events.iter().take(5).enumerate() {
                 let line: String = event.chars().take(46).collect();
+                // OSRS chat colouring: combat in red, waves in orange, hints in
+                // yellow and everything else in plain white.
+                let color = if event.starts_with("ENEMY") {
+                    [235, 90, 80]
+                } else if event.starts_with("WAVE") {
+                    [255, 180, 80]
+                } else if event.starts_with("PRESS") {
+                    [245, 220, 120]
+                } else if event.starts_with("FOUNTAIN") {
+                    [120, 230, 150]
+                } else {
+                    [205, 210, 220]
+                };
                 self.text(
                     width,
                     height,
@@ -1163,13 +1248,29 @@ impl Hud {
                     ly + 22.0 + i as f32 * 15.0,
                     0.85,
                     &line,
-                    [210, 215, 225],
+                    color,
                 );
             }
         }
 
-        // Health/mana bars above the ability row.
+        // Health/mana bars above the ability row, with an OSRS-style orb.
         let cx = width * 0.5 - 130.0;
+        self.orb(
+            width,
+            height,
+            width * 0.5 - 168.0,
+            height - 96.0,
+            15.0,
+            [70, 120, 235],
+        );
+        self.orb(
+            width,
+            height,
+            width * 0.5 - 168.0,
+            height - 96.0,
+            11.0,
+            [180, 210, 255],
+        );
         self.panel(
             width,
             height,
@@ -2559,6 +2660,38 @@ impl Hud {
     #[allow(clippy::too_many_arguments)]
     fn quad(&mut self, width: f32, height: f32, x: f32, y: f32, w: f32, h: f32, color: [u8; 3]) {
         self.quad_alpha(width, height, x, y, w, h, color, 1.0);
+    }
+
+    /// A filled circle, used for the OSRS-style prayer orb.
+    fn orb(&mut self, width: f32, height: f32, cx: f32, cy: f32, radius: f32, color: [u8; 3]) {
+        let segments = 18usize;
+        let uv = self.atlas.white_uv;
+        let rgba = [
+            srgb_to_linear(color[0] as f32 / 255.0),
+            srgb_to_linear(color[1] as f32 / 255.0),
+            srgb_to_linear(color[2] as f32 / 255.0),
+            1.0,
+        ];
+        let base = self.vertices.len() as u32;
+        self.vertices.push(UiVertex {
+            position: [2.0 * cx / width - 1.0, 1.0 - 2.0 * cy / height, 0.0],
+            uv: [uv[0], uv[1]],
+            color: rgba,
+        });
+        for step in 0..=segments {
+            let angle = step as f32 / segments as f32 * std::f32::consts::TAU;
+            let x = cx + angle.cos() * radius;
+            let y = cy + angle.sin() * radius;
+            self.vertices.push(UiVertex {
+                position: [2.0 * x / width - 1.0, 1.0 - 2.0 * y / height, 0.0],
+                uv: [uv[0], uv[1]],
+                color: rgba,
+            });
+        }
+        for step in 0..segments {
+            self.indices
+                .extend_from_slice(&[base, base + 1 + step as u32, base + 2 + step as u32]);
+        }
     }
 
     #[allow(clippy::too_many_arguments)]

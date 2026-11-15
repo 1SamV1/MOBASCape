@@ -203,10 +203,11 @@ Cache location: `.cache/osrs-235/cache` by default. Pass `--cache` and
   shop-button panels. `crates/client/src/ui_assets.rs` builds a 1024×1024 atlas;
   `ui.wgsl` samples it with nearest filtering. Missing assets fall back to
   procedural icons. See `docs/UI_ASSETS.md`; never commit `assets/`.
-- Three data-driven champions (`monkey`, `jad`, `kree`) with distinct models,
-  stats, and ability numbers. A hero-select screen chooses among them and
-  bakes cache-model portraits. King Awowogei uses Bananarang (Q) and Trial by
-  Combat (R); Jad and Kree keep the shared Q bolt and R meteor. Kree has ranged
+- Four data-driven champions (`monkey`, `jad`, `kree`, `ranger`) with distinct
+  models, stats, and ability numbers. A hero-select screen chooses among them
+  and bakes cache-model portraits. King Awowogei uses Bananarang (Q) and Trial
+  by Combat (R); the Blowpipe Ranger uses Toxic Dart, Dart Volley, Footwork and
+  Deadshot; Jad and Kree keep the shared Q bolt and R meteor. Kree has ranged
   auto-attacks. No passives yet. Champion files also carry a real `armor` stat
   and movement weight:
   `weight`, optional `turn_time` / `accel_time` / `stop_time`, `stride`, and

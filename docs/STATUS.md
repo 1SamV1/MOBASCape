@@ -99,7 +99,14 @@ Last updated: M5.24 weighty movement, ambient creatures + cache group fix, 2026-
   and white statues. Three lanes run diagonally between the corners and cross
   the diagonal river at three bridge points. The player spawns inside the
   bottom-left courtyard.
-- Champion roster: three data-driven configs in `data/champions/`:
+- Champion roster: four data-driven configs in `data/champions/`:
+  - **Blowpipe Ranger** — ranged marksman, 420 HP / 200 mana, 99 ranged, OSRS
+    torso (314) with the hood (221), arms (26619), legs (258), feet (185)
+    and a blowpipe (176) merged in. Q **Toxic Dart** (30
+    mana, 5 s) fires a fast dart that poisons; W **Dart Volley** (50 mana, 12 s)
+    fans five poisoned darts; E **Ranger's Footwork** (25 mana, 14 s) hops
+    backwards and grants +40% attack speed for 5 s; R **Deadshot** (80 mana,
+    75 s) is a piercing shot that deals +35% against targets under 25% HP.
   - **Monkey** — balanced, 500 HP / 200 mana.
   - **JalRek-Jad** — tank/mage, 700 HP / 260 mana, higher damage.
   - **Kree'arra Jr.** — ranged skirmisher, 420 HP / 240 mana, ranged auto-attacks.
@@ -132,7 +139,15 @@ Last updated: M5.24 weighty movement, ambient creatures + cache group fix, 2026-
     10 s trial grants +4 permanent base melee damage per win; the barrier ends
     early if either fighter dies. Cast range is 75 tiles.
   Jad and Kree keep the shared Q bolt and R meteor.
-- Armor: every champion has a real armor stat (Monkey 30, Jad 40, Kree 18).
+- **OSRS client HUD**: an OSRS-style stat panel (Attack, Strength, Ranged,
+  Prayer, Hitpoints plus Run-Attack, Ranged-Bonus, Melee-Def and Ranged-Def),
+  a two-team roster panel with live health bars, an OSRS-style chat box with
+  coloured lines, and a prayer orb beside the status bars.
+- **Ranged damage**: champions with a `ranged` level scale ranged damage by
+  `1 + ranged / 100`; venom, piercing shots, executes and attack-speed buffs
+  are new unit states.
+- Armor: every champion has a real armor stat (Monkey 30, Jad 40, Kree 18,
+  Ranger 16).
   Physical damage is scaled by `100 / (100 + armor)`; negative armor amplifies
   damage. Pure damage bypasses armor. The HUD team panel shows ARM and DMG.
 - Demos: `--demo-duel` spawns a rival champion beside the hero for manual

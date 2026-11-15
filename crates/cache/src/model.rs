@@ -566,7 +566,7 @@ impl Model {
             out.texture_coords = Some(Vec::new());
         }
 
-        for part in parts {
+        for (part_index, part) in parts.iter().enumerate() {
             let base = out.vertex_x.len() as u32;
             out.vertex_x.extend_from_slice(&part.vertex_x);
             out.vertex_y.extend_from_slice(&part.vertex_y);
@@ -596,13 +596,20 @@ impl Model {
             }
 
             if let Some(groups) = &part.vertex_groups {
-                let merged = out.vertex_groups.get_or_insert_with(Vec::new);
-                if merged.len() < groups.len() {
-                    merged.resize(groups.len(), Vec::new());
+                if part_index == 0 {
+                    // The base model keeps its own skeleton untouched.
+                    let merged = out.vertex_groups.get_or_insert_with(Vec::new);
+                    if merged.len() < groups.len() {
+                        merged.resize(groups.len(), Vec::new());
+                    }
+                    for (index, vertices) in groups.iter().enumerate() {
+                        merged[index].extend(vertices.iter().map(|&vertex| vertex + base));
+                    }
                 }
-                for (index, vertices) in groups.iter().enumerate() {
-                    merged[index].extend(vertices.iter().map(|&vertex| vertex + base));
-                }
+                // Attachments deliberately stay outside the skeleton. Their
+                // groups belong to a different model, and folding them into
+                // the base model's group slots corrupts the root pivot, which
+                // throws the base model's body vertices out of the mesh.
             }
         }
 
@@ -935,7 +942,7 @@ mod tests {
     }
 
     #[test]
-    fn merge_offsets_faces_and_vertex_groups() {
+    fn merge_offsets_faces_and_keeps_the_base_skeleton() {
         let body = tiny_model(1, [[0, 0, 0], [1, 0, 0], [0, 1, 0]], 2);
         let crown = tiny_model(2, [[0, 0, 1], [1, 0, 1], [0, 1, 1]], 1);
 
@@ -944,8 +951,16 @@ mod tests {
         assert_eq!(merged.vertex_count, 6);
         assert_eq!(merged.face_count, 2);
         assert_eq!(merged.faces, vec![[0, 1, 2], [3, 4, 5]]);
-        assert_eq!(merged.vertex_groups.as_ref().unwrap()[2], vec![0, 1, 2]);
-        assert_eq!(merged.vertex_groups.as_ref().unwrap()[1], vec![3, 4, 5]);
+        // The base skeleton survives untouched. Attachment groups belong to a
+        // different model, so folding them into the base model's group slots
+        // corrupts the root pivot and tears the body apart.
+        let groups = merged.vertex_groups.as_ref().unwrap();
+        assert_eq!(groups.len(), 3);
+        assert_eq!(groups[2], vec![0, 1, 2]);
+        assert!(groups[0].is_empty());
+        assert!(groups[1].is_empty());
+        // The attachment vertices are still part of the mesh.
+        assert!(groups.iter().all(|group| !group.contains(&3)));
     }
 
     #[test]

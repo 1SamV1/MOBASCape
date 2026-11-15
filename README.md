@@ -110,6 +110,9 @@ cargo run -p rift-client -- --demo-kit --timescale 4
 
 # Play a different champion
 cargo run -p rift-client -- --champion jad
+
+# Blowpipe Ranger: ranged ADC with venom, kiting and a piercing execute
+cargo run -p rift-client -- --champion ranger
 cargo run -p rift-client -- --champion kree
 
 # Zoom the camera in on the hero (the default distance is 2750 world units)

@@ -50,6 +50,10 @@ pub struct ChampionConfig {
     pub attack_interval: f32,
     pub speed: f32,
     pub ranged_auto: bool,
+    /// Ranged level, shown in the OSRS-style stats panel and used to scale
+    /// ranged damage.
+    #[serde(default)]
+    pub ranged: f32,
     pub q_damage: f32,
     pub r_damage: f32,
     pub e_heal: f32,
@@ -167,5 +171,36 @@ impl ChampionConfig {
         if self.tagline.is_empty() {
             self.tagline = "A champion of the Karamja rift.".to_string();
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn blowpipe_ranger_kit_is_data_driven() {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../data/champions/ranger.json");
+        let data = std::fs::read_to_string(&path).expect("ranger.json");
+        let config: ChampionConfig = serde_json::from_str(&data).expect("ranger.json parses");
+        assert!(
+            config.ranged_auto,
+            "the ranger must auto-attack with a blowpipe"
+        );
+        assert_eq!(config.ranged, 99.0, "ranged level drives ranged damage");
+        assert_eq!(config.model, 314, "OSRS ranger torso model");
+        assert!(
+            config.attachments.contains(&176),
+            "the blowpipe must be merged into the ranger"
+        );
+        assert!(
+            config.attachments.len() >= 4,
+            "the ranger needs its full body"
+        );
+        assert!(
+            config.attack_range >= 512.0,
+            "blowpipe range should be long"
+        );
     }
 }

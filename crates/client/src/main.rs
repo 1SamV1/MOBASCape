@@ -1108,7 +1108,7 @@ impl App {
                     self.demo_kit_stage = 1;
                 }
                 if self.demo_kit_stage == 1 && self.demo_kit_timer >= 2.0 {
-                    let ok = animated.cast_e();
+                    let ok = animated.cast_e(collision, height);
                     tracing::info!("demo kit: E cast={ok}");
                     self.demo_kit_stage = 2;
                 }
@@ -1373,6 +1373,26 @@ impl App {
                 }
                 hover
             };
+            let roster = animated
+                .units
+                .iter()
+                .filter(|unit| unit.is_champion)
+                .map(|unit| HeroMarker {
+                    name: if unit.kind == UnitKind::Player {
+                        animated.champion_name().to_string()
+                    } else {
+                        "RIVAL CHAMPION".to_string()
+                    },
+                    team: unit.team,
+                    pos: (unit.pos.x, unit.pos.z),
+                    alive: unit.health > 0.0,
+                    health: unit.health,
+                    max_health: unit.max_health,
+                    mana: unit.mana,
+                    max_mana: unit.max_mana,
+                    level: unit.level,
+                })
+                .collect();
             let player_hud = PlayerHud {
                 health: stats.health,
                 max_health: stats.max_health,
@@ -1383,6 +1403,9 @@ impl App {
                 cooldowns: stats.cooldowns,
                 cooldown_maxima: stats.cooldown_maxima,
                 armor: stats.armor,
+                ranged: stats.ranged,
+                attack_interval: stats.attack_interval,
+                ability_power: stats.ability_power,
                 attack_damage: stats.attack_damage,
                 shield: stats.shield,
                 shield_timer: stats.shield_timer,
@@ -1406,6 +1429,7 @@ impl App {
                 hover,
                 biome: animated.current_biome(),
                 heroes: heroes.clone(),
+                roster,
                 delivery_pending: animated.delivery_count(),
                 delivery_state: match animated.delivery_state {
                     crate::animated::DeliveryState::Idle => 0,
@@ -1794,10 +1818,14 @@ impl App {
     }
 
     fn cast_e(&mut self) {
-        let Some(animated) = self.animated.as_mut() else {
+        let (Some(height), Some(collision), Some(animated)) = (
+            self.height.as_ref(),
+            self.collision.as_ref(),
+            self.animated.as_mut(),
+        ) else {
             return;
         };
-        let cast = animated.cast_e();
+        let cast = animated.cast_e(collision, height);
         println!("E cast={cast}");
     }
 

@@ -123,6 +123,16 @@ pub struct AnimatedUnit {
     pub armor_reduction: f32,
     pub armor_reduction_timer: f32,
     pub stun_timer: f32,
+    /// Venom: damage per tick while the timer runs.
+    pub venom_timer: f32,
+    pub venom_damage: f32,
+    pub venom_tick: f32,
+    pub venom_team: u8,
+    /// Attack speed multiplier from Footwork; 1.0 is the base rate.
+    pub attack_speed_mult: f32,
+    pub attack_speed_timer: f32,
+    /// Ranged level, used to scale ranged damage.
+    pub ranged: f32,
     pub is_champion: bool,
     /// Seconds before this unit becomes visible and starts acting. Used to
     /// stagger the members of a minion wave without changing the sim tick.
@@ -194,6 +204,10 @@ pub struct PlayerStats {
     pub shield_timer: f32,
     pub attack_damage: f32,
     pub armor: f32,
+    /// Ranged level, shown in the OSRS-style stats panel.
+    pub ranged: f32,
+    /// Seconds between basic attacks, shown as Run-Attack.
+    pub attack_interval: f32,
     /// Maximum cooldown per ability slot, used by the HUD fill bars.
     pub cooldown_maxima: [f32; 4],
     pub speed: f32,
@@ -275,6 +289,15 @@ pub struct DuelPeel {
     pub duration: f32,
 }
 
+#[derive(Clone, Copy, PartialEq, Eq, Default)]
+pub enum ProjectileStyle {
+    /// The chunky orange orb used by mage spells and tower bolts.
+    #[default]
+    Bolt,
+    /// A small pale blowpipe dart.
+    Dart,
+}
+
 pub struct Projectile {
     pub pos: Vec3,
     pub dir: Vec3,
@@ -287,6 +310,14 @@ pub struct Projectile {
     pub attacker: Option<usize>,
     /// Tower and watchtower bolts cannot reach Trial by Combat participants.
     pub tower_shot: bool,
+    pub style: ProjectileStyle,
+    /// Piercing shots fly on and can hit each unit only once.
+    pub pierce: bool,
+    pub hit: Vec<usize>,
+    /// Venom damage per tick applied to whatever the shot hits.
+    pub venom: f32,
+    /// Extra damage against targets under the execute threshold.
+    pub execute: f32,
 }
 
 struct MinionTemplate {
@@ -475,6 +506,7 @@ impl AnimatedScene {
             player.max_mana = champion.mana;
             player.level = 1;
             player.ranged_auto = champion.ranged_auto;
+            player.ranged = champion.ranged;
             player.model_yaw_offset = champion.model_yaw;
             player.armor = champion.armor;
             player.walk_arm = champion.walk_arm;
@@ -859,6 +891,8 @@ impl AnimatedScene {
             shield_timer: p.shield_timer,
             attack_damage: p.attack_damage + p.min_base_damage_bonus,
             armor: p.armor,
+            ranged: p.ranged,
+            attack_interval: p.attack_interval,
             cooldown_maxima: if self.champion_id == "monkey" {
                 [BANANARANG_COOLDOWN, 8.0, 12.0, TRIAL_COOLDOWN]
             } else {
@@ -1284,8 +1318,11 @@ impl AnimatedScene {
     fn player_land_attack(&mut self, target: usize) {
         let pi = self.player_index;
         let unit = &mut self.units[pi];
-        unit.attack_cooldown = unit.attack_interval;
-        let damage = unit.attack_damage + unit.min_base_damage_bonus;
+        unit.attack_cooldown = unit.attack_interval / unit.attack_speed_mult.max(0.1);
+        let mut damage = unit.attack_damage + unit.min_base_damage_bonus;
+        if unit.ranged_auto {
+            damage *= unit.ranged_scale();
+        }
         let ranged = unit.ranged_auto;
         let from = unit.pos + Vec3::Y * (unit.scale * 80.0);
         let team = unit.team;
@@ -1295,12 +1332,21 @@ impl AnimatedScene {
             self.projectiles.push(Projectile {
                 pos: from,
                 dir,
-                speed: 900.0,
-                life: 1.4,
+                speed: 1400.0,
+                life: 1.2,
                 damage,
                 team,
                 attacker: None,
                 tower_shot: false,
+                style: if self.champion_id == "ranger" {
+                    ProjectileStyle::Dart
+                } else {
+                    ProjectileStyle::Bolt
+                },
+                pierce: false,
+                hit: Vec::new(),
+                venom: 0.0,
+                execute: 0.0,
             });
         } else {
             self.damage_unit(target, damage, 0);
@@ -1319,13 +1365,14 @@ impl AnimatedScene {
         (x >> 8) as f32 / 16_777_216.0
     }
 
-    /// Cast the Q slot. King Awowogei throws his Bananarang; other champions
-    /// keep the shared arcane bolt aimed at the cursor.
+    /// Cast the Q slot. King Awowogei throws his Bananarang, the Blowpipe
+    /// Ranger looses a poisoned dart, and everyone else keeps the shared
+    /// arcane bolt aimed at the cursor.
     pub fn cast_q(&mut self, target: Vec3) -> bool {
-        if self.champion_id == "monkey" {
-            self.cast_bananarang()
-        } else {
-            self.cast_arcane_bolt(target)
+        match self.champion_id.as_str() {
+            "monkey" => self.cast_bananarang(),
+            "ranger" => self.cast_toxic_dart(target),
+            _ => self.cast_arcane_bolt(target),
         }
     }
 
@@ -1378,6 +1425,168 @@ impl AnimatedScene {
         true
     }
 
+    /// Blowpipe Ranger Q: a fast poisoned dart that stacks venom.
+    fn cast_toxic_dart(&mut self, target: Vec3) -> bool {
+        let pi = self.player_index;
+        let player = &mut self.units[pi];
+        if player.health <= 0.0
+            || player.stun_timer > 0.0
+            || player.cooldowns[0] > 0.0
+            || player.mana < 30.0
+        {
+            return false;
+        }
+        let flat = Vec3::new(target.x - player.pos.x, 0.0, target.z - player.pos.z);
+        if flat.length_squared() < 1.0 {
+            return false;
+        }
+        let dir = flat.normalize();
+        let damage = player.q_damage * player.ranged_scale() * (1.0 + player.ability_power / 100.0);
+        let pos = player.pos + Vec3::Y * (player.scale * 80.0) + dir * 40.0;
+        let team = player.team;
+        player.mana -= 30.0;
+        player.cooldowns[0] = 5.0;
+        self.projectiles.push(Projectile {
+            pos,
+            dir,
+            speed: 1500.0,
+            life: 1.2,
+            damage,
+            team,
+            attacker: Some(pi),
+            tower_shot: false,
+            style: ProjectileStyle::Dart,
+            pierce: false,
+            hit: Vec::new(),
+            venom: 4.0,
+            execute: 0.0,
+        });
+        true
+    }
+
+    /// Blowpipe Ranger W: a fan of darts that poisons everything it hits.
+    fn cast_dart_volley(&mut self, target: Vec3) -> bool {
+        let pi = self.player_index;
+        let player = &mut self.units[pi];
+        if player.health <= 0.0
+            || player.stun_timer > 0.0
+            || player.cooldowns[1] > 0.0
+            || player.mana < 50.0
+        {
+            return false;
+        }
+        let flat = Vec3::new(target.x - player.pos.x, 0.0, target.z - player.pos.z);
+        if flat.length_squared() < 1.0 {
+            return false;
+        }
+        let dir = flat.normalize();
+        let damage =
+            player.q_damage * 0.55 * player.ranged_scale() * (1.0 + player.ability_power / 100.0);
+        let team = player.team;
+        let origin = player.pos + Vec3::Y * (player.scale * 80.0);
+        player.mana -= 50.0;
+        player.cooldowns[1] = 12.0;
+        for index in -2..=2 {
+            let angle = index as f32 * 0.22;
+            let (sin, cos) = angle.sin_cos();
+            let rotated = Vec3::new(dir.x * cos - dir.z * sin, 0.0, dir.x * sin + dir.z * cos);
+            self.projectiles.push(Projectile {
+                pos: origin + rotated * 40.0,
+                dir: rotated,
+                speed: 1400.0,
+                life: 1.1,
+                damage,
+                team,
+                attacker: Some(pi),
+                tower_shot: false,
+                style: ProjectileStyle::Dart,
+                pierce: false,
+                hit: Vec::new(),
+                venom: 3.0,
+                execute: 0.0,
+            });
+        }
+        true
+    }
+
+    /// Blowpipe Ranger E: a backwards hop that speeds up attacks, the way an
+    /// OSRS ranger kites with a blowpipe.
+    fn cast_footwork(&mut self, collision: &WorldCollision, height: &HeightGrid) -> bool {
+        let pi = self.player_index;
+        let player = &mut self.units[pi];
+        if player.health <= 0.0
+            || player.stun_timer > 0.0
+            || player.cooldowns[2] > 0.0
+            || player.mana < 25.0
+        {
+            return false;
+        }
+        let forward = Vec3::new(player.yaw.sin(), 0.0, player.yaw.cos());
+        let mut destination = player.pos;
+        for step in (1..=4).rev() {
+            let p = player.pos - forward * (step as f32 * 128.0);
+            if collision.is_walkable_world(p.x, p.z) {
+                destination = Vec3::new(p.x, height.height_at(p.x, p.z), p.z);
+                break;
+            }
+        }
+        player.pos = destination;
+        player.attack_speed_mult = 1.4;
+        player.attack_speed_timer = 5.0;
+        player.mana -= 25.0;
+        player.cooldowns[2] = 14.0;
+        player.path.clear();
+        player.path_index = 0;
+        let pos = player.pos;
+        self.effects.push(Effect {
+            pos,
+            radius: 140.0,
+            remaining: 0.35,
+            duration: 0.35,
+            color: [120, 255, 170],
+        });
+        true
+    }
+
+    /// Blowpipe Ranger R: a piercing shot that executes wounded targets.
+    fn cast_deadshot(&mut self, target: Vec3) -> bool {
+        let pi = self.player_index;
+        let player = &mut self.units[pi];
+        if player.health <= 0.0
+            || player.stun_timer > 0.0
+            || player.cooldowns[3] > 0.0
+            || player.mana < 80.0
+        {
+            return false;
+        }
+        let flat = Vec3::new(target.x - player.pos.x, 0.0, target.z - player.pos.z);
+        if flat.length_squared() < 1.0 {
+            return false;
+        }
+        let dir = flat.normalize();
+        let damage = player.r_damage * player.ranged_scale() * (1.0 + player.ability_power / 100.0);
+        let pos = player.pos + Vec3::Y * (player.scale * 80.0) + dir * 40.0;
+        let team = player.team;
+        player.mana -= 80.0;
+        player.cooldowns[3] = 75.0;
+        self.projectiles.push(Projectile {
+            pos,
+            dir,
+            speed: 1800.0,
+            life: 1.6,
+            damage,
+            team,
+            attacker: Some(pi),
+            tower_shot: false,
+            style: ProjectileStyle::Dart,
+            pierce: true,
+            hit: Vec::new(),
+            venom: 2.0,
+            execute: 0.35,
+        });
+        true
+    }
+
     fn cast_arcane_bolt(&mut self, target: Vec3) -> bool {
         let pi = self.player_index;
         let player = &mut self.units[pi];
@@ -1407,6 +1616,11 @@ impl AnimatedScene {
             team,
             attacker: None,
             tower_shot: false,
+            style: ProjectileStyle::Bolt,
+            pierce: false,
+            hit: Vec::new(),
+            venom: 0.0,
+            execute: 0.0,
         });
         self.effects.push(Effect {
             pos,
@@ -1424,6 +1638,9 @@ impl AnimatedScene {
         collision: &WorldCollision,
         height: &HeightGrid,
     ) -> bool {
+        if self.champion_id == "ranger" {
+            return self.cast_dart_volley(target);
+        }
         let pi = self.player_index;
         let player = &mut self.units[pi];
         if player.health <= 0.0
@@ -1466,7 +1683,10 @@ impl AnimatedScene {
         true
     }
 
-    pub fn cast_e(&mut self) -> bool {
+    pub fn cast_e(&mut self, collision: &WorldCollision, height: &HeightGrid) -> bool {
+        if self.champion_id == "ranger" {
+            return self.cast_footwork(collision, height);
+        }
         let pi = self.player_index;
         let player = &mut self.units[pi];
         if player.health <= 0.0
@@ -1501,10 +1721,10 @@ impl AnimatedScene {
         target_index: Option<usize>,
         height: &HeightGrid,
     ) -> bool {
-        if self.champion_id == "monkey" {
-            self.cast_trial(target_index, height)
-        } else {
-            self.cast_meteor(target)
+        match self.champion_id.as_str() {
+            "monkey" => self.cast_trial(target_index, height),
+            "ranger" => self.cast_deadshot(target),
+            _ => self.cast_meteor(target),
         }
     }
 
@@ -2128,12 +2348,30 @@ impl AnimatedScene {
             }
         }
 
-        for unit in &mut self.units {
+        let mut venom_ticks: Vec<(usize, f32, u8)> = Vec::new();
+        for (unit_index, unit) in self.units.iter_mut().enumerate() {
             unit.hit_flash = (unit.hit_flash - dt).max(0.0);
             unit.death_anim = (unit.death_anim - dt).max(0.0);
             unit.attack_cooldown = (unit.attack_cooldown - dt).max(0.0);
             unit.attack_windup_timer = (unit.attack_windup_timer - dt).max(0.0);
             unit.stun_timer = (unit.stun_timer - dt).max(0.0);
+            if unit.attack_speed_timer > 0.0 {
+                unit.attack_speed_timer -= dt;
+                if unit.attack_speed_timer <= 0.0 {
+                    unit.attack_speed_mult = 1.0;
+                }
+            }
+            if unit.venom_timer > 0.0 {
+                unit.venom_timer -= dt;
+                unit.venom_tick -= dt;
+                if unit.venom_tick <= 0.0 {
+                    unit.venom_tick = 2.0;
+                    venom_ticks.push((unit_index, unit.venom_damage, unit.venom_team));
+                }
+                if unit.venom_timer <= 0.0 {
+                    unit.venom_damage = 0.0;
+                }
+            }
             if unit.armor_reduction_timer > 0.0 {
                 unit.armor_reduction_timer -= dt;
                 if unit.armor_reduction_timer <= 0.0 {
@@ -2212,6 +2450,10 @@ impl AnimatedScene {
         self.update_duel(dt);
         self.update_bananarangs(dt, height);
         self.update_projectiles(dt, height);
+
+        for (index, damage, team) in venom_ticks {
+            self.damage_unit(index, damage, team);
+        }
 
         // Replace the clock's share of every moving unit's animation time
         // with the distance it actually covered. This fixes foot sliding for
@@ -2408,6 +2650,11 @@ impl AnimatedScene {
                             team: unit.team,
                             attacker: None,
                             tower_shot: false,
+                            style: ProjectileStyle::Bolt,
+                            pierce: false,
+                            hit: Vec::new(),
+                            venom: 0.0,
+                            execute: 0.0,
                         });
                     } else {
                         self.damage_unit(target, damage, team);
@@ -2464,7 +2711,7 @@ impl AnimatedScene {
                 turn_toward(unit, dir.x.atan2(dir.z), dt);
             }
             if cooldown_ready {
-                unit.attack_cooldown = interval;
+                unit.attack_cooldown = interval / unit.attack_speed_mult.max(0.1);
                 self.damage_unit_by(target, damage, team, Some(index));
             }
         } else {
@@ -2525,6 +2772,11 @@ impl AnimatedScene {
                             team: 2,
                             attacker: None,
                             tower_shot: false,
+                            style: ProjectileStyle::Bolt,
+                            pierce: false,
+                            hit: Vec::new(),
+                            venom: 0.0,
+                            execute: 0.0,
                         });
                     } else {
                         self.damage_unit(ti, damage, 2);
@@ -2644,6 +2896,11 @@ impl AnimatedScene {
             team,
             attacker: Some(index),
             tower_shot: true,
+            style: ProjectileStyle::Bolt,
+            pierce: false,
+            hit: Vec::new(),
+            venom: 0.0,
+            execute: 0.0,
         });
     }
 
@@ -2707,6 +2964,11 @@ impl AnimatedScene {
                     team,
                     attacker: None,
                     tower_shot: true,
+                    style: ProjectileStyle::Bolt,
+                    pierce: false,
+                    hit: Vec::new(),
+                    venom: 0.0,
+                    execute: 0.0,
                 });
             }
         }
@@ -3224,11 +3486,12 @@ impl AnimatedScene {
                 continue;
             }
 
-            let mut hit = None;
+            let mut hits: Vec<(usize, f32)> = Vec::new();
             for (i, unit) in self.units.iter().enumerate() {
                 if unit.team == projectile.team
                     || unit.health <= 0.0
                     || (unit.team == 2 && unit.kind != UnitKind::Camp)
+                    || projectile.hit.contains(&i)
                     || (projectile.tower_shot
                         && self
                             .duel
@@ -3239,18 +3502,31 @@ impl AnimatedScene {
                 }
                 let radius = unit.hit_radius.max(70.0);
                 let center = unit.pos + Vec3::Y * (unit.bar_height * 0.35);
-                if projectile.pos.distance(center) <= radius {
-                    hit = Some(i);
+                if projectile.pos.distance(center) > radius {
+                    continue;
+                }
+                projectile.hit.push(i);
+                let mut damage = projectile.damage;
+                if projectile.execute > 0.0 && unit.health < unit.max_health * 0.25 {
+                    damage *= 1.0 + projectile.execute;
+                }
+                hits.push((i, damage));
+                if !projectile.pierce {
                     break;
                 }
             }
-            if let Some(index) = hit {
-                self.damage_unit_by(
-                    index,
-                    projectile.damage,
-                    projectile.team,
-                    projectile.attacker,
-                );
+            let hit_count = hits.len();
+            for (index, damage) in hits {
+                if projectile.venom > 0.0 {
+                    let poisoned = &mut self.units[index];
+                    if poisoned.venom_timer <= 0.0 {
+                        poisoned.venom_tick = 1.0;
+                    }
+                    poisoned.venom_timer = 6.0;
+                    poisoned.venom_damage = poisoned.venom_damage.max(projectile.venom);
+                    poisoned.venom_team = projectile.team;
+                }
+                self.damage_unit_by(index, damage, projectile.team, projectile.attacker);
                 self.effects.push(Effect {
                     pos: projectile.pos,
                     radius: 180.0,
@@ -3258,7 +3534,8 @@ impl AnimatedScene {
                     duration: 0.7,
                     color: [255, 120, 40],
                 });
-            } else {
+            }
+            if hit_count == 0 {
                 survivors.push(projectile);
             }
         }
@@ -3385,6 +3662,13 @@ impl AnimatedScene {
                 armor_reduction: 0.0,
                 armor_reduction_timer: 0.0,
                 stun_timer: 0.0,
+                venom_timer: 0.0,
+                venom_damage: 0.0,
+                venom_tick: 0.0,
+                venom_team: 0,
+                attack_speed_mult: 1.0,
+                attack_speed_timer: 0.0,
+                ranged: 0.0,
                 is_champion: false,
                 spawn_delay,
                 hit_radius: if super_minion {
@@ -3632,14 +3916,18 @@ impl AnimatedScene {
 
         // Attacks are only drawn inside the team's line of sight, so enemy
         // tower bolts do not reveal themselves through the fog of war.
-        let projectile_positions = self
+        let projectile_visuals = self
             .projectiles
             .iter()
             .filter(|projectile| self.in_team_vision(projectile.pos))
-            .map(|projectile| projectile.pos)
+            .map(|projectile| (projectile.pos, projectile.style))
             .collect::<Vec<_>>();
-        for pos in projectile_positions {
-            append_billboard(self, pos, 22.0, [255, 150, 40], camera_right, camera_up);
+        for (pos, style) in projectile_visuals {
+            let (size, color) = match style {
+                ProjectileStyle::Dart => (13.0, [226, 240, 255]),
+                ProjectileStyle::Bolt => (22.0, [255, 150, 40]),
+            };
+            append_billboard(self, pos, size, color, camera_right, camera_up);
         }
 
         let player_pos = self.units[self.player_index].pos;
@@ -3816,6 +4104,11 @@ impl AnimatedScene {
 }
 
 impl AnimatedUnit {
+    /// Ranged level scaling, matching the OSRS stat panel.
+    fn ranged_scale(&self) -> f32 {
+        1.0 + self.ranged / 100.0
+    }
+
     fn q_rank(&self) -> u8 {
         (1 + self.level.saturating_sub(1) / 2).min(5) as u8
     }
@@ -3944,6 +4237,13 @@ fn load_unit(
         armor_reduction: 0.0,
         armor_reduction_timer: 0.0,
         stun_timer: 0.0,
+        venom_timer: 0.0,
+        venom_damage: 0.0,
+        venom_tick: 0.0,
+        venom_team: 0,
+        attack_speed_mult: 1.0,
+        attack_speed_timer: 0.0,
+        ranged: 0.0,
         is_champion: kind.is_champion(),
         spawn_delay: 0.0,
         hit_radius,

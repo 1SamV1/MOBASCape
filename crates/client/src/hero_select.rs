@@ -101,6 +101,7 @@ mod tests {
             attack_interval: 1.0,
             speed: 1.0,
             ranged_auto: false,
+            ranged: 0.0,
             q_damage: 1.0,
             r_damage: 1.0,
             e_heal: 1.0,

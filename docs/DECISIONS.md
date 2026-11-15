@@ -583,3 +583,47 @@ river at three bridges. Player spawn sits inside the bottom-left courtyard.
 statue model flags, tower spacing, and per-base corner/centre/size data. The
 castle layout feeds both collision and the static mesh builder from one piece
 list, so walls and blocking geometry cannot drift apart.
+
+## ADR-042 — Legends of Bielnor clone: Blowpipe Ranger and OSRS fixed-layout HUD
+
+**Status:** accepted for the video-parity pass.
+
+Reference: *LoL but it's Runescape - "Blowpipe Ranger" ADC Gameplay* (Legends
+of Bielnor). The clip shows two things worth copying: a ranged marksman hero
+built on OSRS models and a blowpipe, and the OSRS fixed-layout interface
+rather than a generic action-RPG HUD.
+
+**New champion: Blowpipe Ranger** (`data/champions/ranger.json`)
+
+- Body model 221 (OSRS Ranger) with attachment 176 (the blowpipe), idle 2728 /
+  walk 819, 420 HP, 200 prayer, 99 ranged, 16 armor, 640 attack range.
+- Q **Toxic Dart** (30 mana, 5 s): a fast dart that deals ranged-scaled damage
+  and applies venom.
+- W **Dart Volley** (50 mana, 12 s): five darts in a fan, each poisoning.
+- E **Ranger's Footwork** (25 mana, 14 s): a backwards hop that grants +40%
+  attack speed for 5 s, the way an OSRS ranger kites.
+- R **Deadshot** (80 mana, 75 s): a piercing shot that deals +35% against
+  targets below 25% health.
+
+**Engine work**
+
+- `ranged` is now a real champion stat; ranged damage scales by
+  `1 + ranged / 100`.
+- Venom is a new unit state: a timer, a per-tick damage value and a source
+  team, ticked once every two seconds.
+- Projectiles gained a style (bolt or dart), piercing with a per-projectile
+  hit list, a venom payload and an execute multiplier.
+- Units gained an attack-speed multiplier with a timer.
+- `Model::merge` no longer folds an attachment's vertex groups into the base
+  model's skeleton. A held blowpipe used to share group slots with the
+  ranger's body, which corrupted the root pivot and tore the body mesh apart;
+  attachments now stay outside the animated groups and render in model space.
+
+**HUD work**
+
+- An OSRS stat panel on the left: Attack, Strength, Ranged, Prayer, Hitpoints,
+  then Run-Attack, Ranged-Bonus, Melee-Def and Ranged-Def.
+- A two-team roster panel on the right with live health bars, matching the
+  clip's team list.
+- The event log became an OSRS-style chat box with coloured lines, and a
+  prayer orb sits beside the status bars.
