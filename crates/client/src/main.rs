@@ -91,6 +91,9 @@ struct Cli {
     /// Demo: spawn a rival champion and automatically cast Trial by Combat.
     #[arg(long)]
     demo_trial: bool,
+    /// Demo: pop floating damage numbers, a kill shout and a minimap ping.
+    #[arg(long)]
+    demo_fx: bool,
     /// Demo: teleport to a jungle camp, attack it, and verify the buff.
     #[arg(long)]
     demo_camp: bool,
@@ -282,6 +285,7 @@ fn main() -> Result<()> {
         demo_trial: cli.demo_trial,
         demo_trial_timer: 0.0,
         demo_trial_stage: 0,
+        demo_fx: cli.demo_fx,
         demo_camp: cli.demo_camp,
         demo_watchtower: cli.demo_watchtower,
         demo_watchtower_timer: 0.0,
@@ -368,6 +372,7 @@ struct App {
     demo_trial: bool,
     demo_trial_timer: f32,
     demo_trial_stage: u8,
+    demo_fx: bool,
     demo_camp: bool,
     demo_watchtower: bool,
     demo_watchtower_timer: f32,
@@ -1248,6 +1253,10 @@ impl App {
             let steps = self.timescale.round().clamp(1.0, 20.0) as u32;
             for _ in 0..steps {
                 animated.update(dt, height, collision);
+                if self.demo_fx {
+                    // Re-pin the demo numbers so they do not drift off screen.
+                    animated.demo_fx();
+                }
             }
             animated.refresh_visibility(dt, collision);
             animated.prepare_render(height, camera_right, camera_up, camera_forward);
@@ -1393,6 +1402,25 @@ impl App {
                     level: unit.level,
                 })
                 .collect();
+            // Project the world's floating numbers into screen space so the
+            // HUD can draw them over the units that were hit.
+            let aspect = hud_w / hud_h.max(1.0);
+            let view_proj = renderer.camera.view_proj(aspect);
+            let mut damage_numbers = Vec::new();
+            for float in &animated.floats {
+                let clip = view_proj * glam::Vec4::new(float.pos.x, float.pos.y, float.pos.z, 1.0);
+                if clip.w <= 0.0 {
+                    continue;
+                }
+                let ndc_x = clip.x / clip.w;
+                let ndc_y = clip.y / clip.w;
+                if ndc_x.abs() > 1.2 || ndc_y.abs() > 1.2 {
+                    continue;
+                }
+                let screen_x = (ndc_x * 0.5 + 0.5) * hud_w;
+                let screen_y = (1.0 - (ndc_y * 0.5 + 0.5)) * hud_h;
+                damage_numbers.push((screen_x, screen_y, float.text.clone(), float.color));
+            }
             let player_hud = PlayerHud {
                 health: stats.health,
                 max_health: stats.max_health,
@@ -1430,6 +1458,13 @@ impl App {
                 biome: animated.current_biome(),
                 heroes: heroes.clone(),
                 roster,
+                damage_numbers,
+                announcement: animated.announcement.as_ref().map(|(text, _)| text.clone()),
+                kill_feed: animated
+                    .kill_feed
+                    .iter()
+                    .map(|(text, _)| text.clone())
+                    .collect(),
                 delivery_pending: animated.delivery_count(),
                 delivery_state: match animated.delivery_state {
                     crate::animated::DeliveryState::Idle => 0,

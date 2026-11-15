@@ -94,6 +94,12 @@ pub struct PlayerHud {
     pub biome: Option<String>,
     /// Team heroes for the minimap and the hero profile card.
     pub heroes: Vec<HeroMarker>,
+    /// Screen-space floating damage numbers: `(x, y, text, colour)`.
+    pub damage_numbers: Vec<(f32, f32, String, [u8; 3])>,
+    /// Centre-screen announcement, e.g. "YOU HAVE SLAIN A MINION!".
+    pub announcement: Option<String>,
+    /// Recent kill messages shown under the roster.
+    pub kill_feed: Vec<String>,
     /// Number of purchases waiting in the storage chest.
     pub delivery_pending: usize,
     /// 0 = idle, 1 = flying to the hero, 2 = returning.
@@ -370,6 +376,13 @@ impl Hud {
             self.quad(width, height, hx - 5.0, hy - 5.0, 10.0, 10.0, [10, 10, 12]);
             self.quad(width, height, hx - 4.0, hy - 4.0, 8.0, 8.0, [250, 250, 250]);
             self.quad(width, height, hx - 2.5, hy - 2.5, 5.0, 5.0, [70, 210, 120]);
+        }
+
+        // Ping marker on the last enemy the player hit.
+        if let Some((pos, _timer)) = &scene.ping {
+            let (px, py) = to_map(*pos);
+            self.quad(width, height, px - 1.5, py - 7.0, 3.0, 14.0, [235, 70, 60]);
+            self.quad(width, height, px - 7.0, py - 1.5, 14.0, 3.0, [235, 70, 60]);
         }
 
         // Camera viewport rectangle, Dota minimap style.
@@ -1063,6 +1076,37 @@ impl Hud {
                     },
                 );
             }
+        }
+
+        // Centre-screen announcement, like the reference client's kill shout.
+        if let Some(announcement) = player.announcement.as_deref() {
+            self.text_centered(
+                width,
+                height,
+                width * 0.5,
+                height * 0.30,
+                1.4,
+                announcement,
+                OSRS_YELLOW,
+            );
+        }
+
+        // Kill feed under the roster panel.
+        for (index, line) in player.kill_feed.iter().rev().take(4).enumerate() {
+            self.text(
+                width,
+                height,
+                width - 230.0,
+                188.0 + index as f32 * 13.0,
+                0.85,
+                line,
+                [225, 230, 240],
+            );
+        }
+
+        // Floating damage numbers over the units that were hit.
+        for (x, y, text, color) in &player.damage_numbers {
+            self.text(width, height, *x, *y, 1.0, text, *color);
         }
 
         // Current biome pocket label.

@@ -139,6 +139,11 @@ Last updated: M5.24 weighty movement, ambient creatures + cache group fix, 2026-
     10 s trial grants +4 permanent base melee damage per win; the barrier ends
     early if either fighter dies. Cast range is 75 tiles.
   Jad and Kree keep the shared Q bolt and R meteor.
+- **Combat feedback**: floating damage numbers over the unit that was hit, a
+  yellow centre-screen kill shout ("YOU HAVE SLAIN A MINION!"), a kill feed
+  under the roster panel, a red attack-range ring and a yellow target ring on
+  the ground, and a red minimap ping on the last enemy hit. `--demo-fx` pops all
+  of them for a quick visual check.
 - **OSRS client HUD**: an OSRS-style stat panel (Attack, Strength, Ranged,
   Prayer, Hitpoints plus Run-Attack, Ranged-Bonus, Melee-Def and Ranged-Def),
   a two-team roster panel with live health bars, an OSRS-style chat box with

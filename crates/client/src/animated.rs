@@ -59,6 +59,25 @@ pub enum UnitKind {
     DeliveryGuard,
 }
 
+/// Short display name used by kill announcements and the kill feed.
+fn short_unit_name(kind: UnitKind) -> &'static str {
+    match kind {
+        UnitKind::Player => "YOUR CHAMPION",
+        UnitKind::EnemyChampion => "A RIVAL CHAMPION",
+        UnitKind::MeleeMinion | UnitKind::RangedMinion => "A MINION",
+        UnitKind::Tower => "A TOWER",
+        UnitKind::Inhibitor => "AN INHIBITOR",
+        UnitKind::Nexus => "A NEXUS",
+        UnitKind::Camp => "A CAMP",
+        UnitKind::Watchtower => "A WATCHTOWER",
+        UnitKind::Dummy => "A DUMMY",
+        UnitKind::Ambient => "SCENERY",
+        UnitKind::Spectator => "A MONKEY",
+        UnitKind::StorageChest => "THE CHEST",
+        UnitKind::DeliveryGuard => "THE GUARD",
+    }
+}
+
 impl UnitKind {
     fn is_minion(self) -> bool {
         matches!(self, Self::MeleeMinion | Self::RangedMinion)
@@ -271,6 +290,14 @@ pub struct Bananarang {
     pub hit: Vec<usize>,
 }
 
+/// A number that pops over a unit when it is hit, like the reference client.
+pub struct FloatText {
+    pub pos: Vec3,
+    pub text: String,
+    pub color: [u8; 3],
+    pub life: f32,
+}
+
 pub struct DuelState {
     pub target: usize,
     pub center: Vec3,
@@ -353,6 +380,16 @@ pub struct AnimatedScene {
     spectator_indices: Vec<usize>,
     rng_state: u32,
     pub effects: Vec<Effect>,
+    /// Floating damage numbers currently in the world.
+    pub floats: Vec<FloatText>,
+    /// Centre-screen announcement, e.g. "YOU HAVE SLAIN A MINION!".
+    pub announcement: Option<(String, f32)>,
+    /// Keeps the announcement on screen instead of replacing it with kills.
+    pub announcement_pinned: bool,
+    /// Recent kill messages, newest last.
+    pub kill_feed: Vec<(String, f32)>,
+    /// Minimap ping on the last enemy the player hit.
+    pub ping: Option<(Vec3, f32)>,
     pub wave_timer: f32,
     /// Monotonic wave counter used to stagger formation jitter deterministically.
     pub wave_serial: u32,
@@ -799,6 +836,11 @@ impl AnimatedScene {
             spectator_indices,
             rng_state: 0x9E37_79B9,
             effects: Vec::new(),
+            floats: Vec::new(),
+            announcement: None,
+            announcement_pinned: false,
+            kill_feed: Vec::new(),
+            ping: None,
             wave_timer: 0.0,
             wave_serial: 0,
             kills: [0, 0],
@@ -865,6 +907,48 @@ impl AnimatedScene {
         }
         animated.wave_timer = animated.wave_interval;
         Ok(animated)
+    }
+
+    /// Pop the reference client's combat feedback: floating numbers, a kill
+    /// announcement, a kill feed and a minimap ping. Used by `--demo-fx`.
+    pub fn demo_fx(&mut self) {
+        let pi = self.player_index;
+        self.floats.clear();
+        let pos = self.units[pi].pos;
+        self.floats.push(FloatText {
+            pos: pos + Vec3::Y * 150.0,
+            text: "1,502".to_string(),
+            color: [255, 225, 120],
+            life: 9999.0,
+        });
+        self.floats.push(FloatText {
+            pos: pos + Vec3::Y * 240.0,
+            text: "330".to_string(),
+            color: [235, 235, 235],
+            life: 9999.0,
+        });
+        self.announcement = Some(("YOU HAVE SLAIN A MINION!".to_string(), 9999.0));
+        self.announcement_pinned = true;
+        self.kill_feed
+            .push(("YOU SLAIN A MINION".to_string(), 9999.0));
+        self.kill_feed
+            .push(("BLOWPIPE RANGER HAS SLAIN A MINION".to_string(), 9999.0));
+        self.ping = Some((pos + Vec3::new(600.0, 0.0, 300.0), 9999.0));
+        // Also show the attack range and target rings.
+        let pi = self.player_index;
+        let mut best: Option<(usize, f32)> = None;
+        for (index, unit) in self.units.iter().enumerate() {
+            if index == pi || unit.team != 1 || unit.health <= 0.0 {
+                continue;
+            }
+            let distance = unit.pos.distance(pos);
+            if best.is_none_or(|(_, best)| distance < best) {
+                best = Some((index, distance));
+            }
+        }
+        if let Some((index, _)) = best {
+            self.units[pi].attack_target = Some(index);
+        }
     }
 
     pub fn champion_name(&self) -> &str {
@@ -2288,6 +2372,29 @@ impl AnimatedScene {
     }
 
     pub fn update(&mut self, dt: f32, height: &HeightGrid, collision: &WorldCollision) {
+        // Floating numbers drift up and fade, announcements and the kill feed
+        // time out, and the minimap ping decays.
+        self.floats.retain_mut(|float| {
+            float.life -= dt;
+            float.pos.y += dt * 46.0;
+            float.life > 0.0
+        });
+        if let Some((_, timer)) = &mut self.announcement {
+            *timer -= dt;
+            if *timer <= 0.0 {
+                self.announcement = None;
+            }
+        }
+        self.kill_feed.retain_mut(|(_, timer)| {
+            *timer -= dt;
+            *timer > 0.0
+        });
+        if let Some((_, timer)) = &mut self.ping {
+            *timer -= dt;
+            if *timer <= 0.0 {
+                self.ping = None;
+            }
+        }
         let pi = self.player_index;
         let player_spawn = self.player_spawn;
         {
@@ -3105,7 +3212,7 @@ impl AnimatedScene {
             // amplified damage, so it cannot stall for the whole timer.
             team_mult *= 3.0;
         }
-        let (target_kind, camp_buff, respawn_time, killed) = {
+        let (target_kind, camp_buff, respawn_time, killed, amount) = {
             let unit = &mut self.units[index];
             if unit.health <= 0.0 {
                 return;
@@ -3129,12 +3236,33 @@ impl AnimatedScene {
                 unit.camp_buff,
                 unit.respawn_time,
                 unit.health <= 0.0,
+                amount,
             )
         };
         let hero_aggressor = match aggressor {
             Some(aggressor) => self.units[aggressor].kind == UnitKind::Player,
             None => attacker_team == 0,
         };
+        if amount > 0.0 {
+            let color = if index == self.player_index {
+                [255, 110, 100]
+            } else if hero_aggressor {
+                [255, 225, 120]
+            } else {
+                [235, 235, 235]
+            };
+            let pos = self.units[index].pos + Vec3::Y * (self.units[index].bar_height + 40.0);
+            self.floats.push(FloatText {
+                pos,
+                text: format!("{amount:.0}"),
+                color,
+                life: 1.2,
+            });
+        }
+        if index != self.player_index && self.units[index].team == 1 && hero_aggressor {
+            // Ping the target on the minimap, like the reference client.
+            self.ping = Some((self.units[index].pos, 6.0));
+        }
         if !killed {
             if target_kind == UnitKind::Camp && attacker_team < 2 && hero_aggressor {
                 let pi = self.player_index;
@@ -3148,6 +3276,26 @@ impl AnimatedScene {
         }
         if attacker_team == 0 && hero_aggressor {
             self.grant_reward(target_kind);
+        }
+        if target_kind != UnitKind::Camp {
+            let victim = short_unit_name(target_kind);
+            let killer = aggressor
+                .filter(|&a| a != index)
+                .map(|a| short_unit_name(self.units[a].kind))
+                .unwrap_or("THE RIFT");
+            if index == self.player_index {
+                if !self.announcement_pinned {
+                    self.announcement = Some((format!("YOU HAVE BEEN SLAIN BY {killer}"), 4.0));
+                }
+            } else if hero_aggressor {
+                if !self.announcement_pinned {
+                    self.announcement = Some((format!("YOU HAVE SLAIN {victim}!"), 4.0));
+                }
+                self.kill_feed.push((format!("YOU SLAIN {victim}"), 8.0));
+            } else if attacker_team == 0 {
+                self.kill_feed
+                    .push((format!("{killer} HAS SLAIN {victim}"), 8.0));
+            }
         }
         if attacker_team < 2 && target_kind != UnitKind::Camp {
             self.kills[attacker_team as usize] += 1;
@@ -4000,11 +4148,22 @@ impl AnimatedScene {
 
         let player = &self.units[self.player_index];
         let player_pos = player.pos;
+        let player_range = player.attack_range;
+        let player_target = player.attack_target;
         let attack_pending = player.attack_pending;
         let attack_windup = player.attack_windup;
         let windup_timer = player.attack_windup_timer;
         if player.health > 0.0 {
             append_ring(self, height, player_pos, 95.0, [90, 180, 255]);
+        }
+        // Attack range and target rings, like the reference client shows while
+        // the champion is fighting.
+        if player_target.is_some() {
+            append_ring_width(self, height, player_pos, player_range, [220, 60, 50], 0.975);
+            if let Some(target) = player_target {
+                let target_pos = self.units[target].pos;
+                append_ring_width(self, height, target_pos, 72.0, [250, 220, 90], 0.86);
+            }
         }
         if attack_pending {
             let progress = 1.0 - (windup_timer / attack_windup.max(0.001)).clamp(0.0, 1.0);
@@ -4783,7 +4942,21 @@ fn append_ring(
     radius: f32,
     color: [u8; 3],
 ) {
-    let segments = 32u32;
+    append_ring_width(scene, height, center, radius, color, 0.78);
+}
+
+/// A ground ring with an explicit band width. `inner` is the inner radius as a
+/// fraction of `radius`; 0.97 gives the thin range marker the reference
+/// client draws around a champion.
+fn append_ring_width(
+    scene: &mut AnimatedScene,
+    height: &HeightGrid,
+    center: Vec3,
+    radius: f32,
+    color: [u8; 3],
+    inner: f32,
+) {
+    let segments = 48u32;
     let base = scene.vertices.len() as u32;
     // Sample the terrain per vertex so the band hugs slopes instead of
     // slicing through them.
@@ -4791,7 +4964,6 @@ fn append_ring(
     for i in 0..segments {
         let a = i as f32 / segments as f32 * std::f32::consts::TAU;
         let b = (i + 1) as f32 / segments as f32 * std::f32::consts::TAU;
-        let inner = 0.78;
         let (ax, az) = (center.x + a.cos() * radius, center.z + a.sin() * radius);
         let (bx, bz) = (center.x + b.cos() * radius, center.z + b.sin() * radius);
         let (cx, cz) = (

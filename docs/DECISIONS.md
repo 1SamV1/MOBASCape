@@ -627,3 +627,19 @@ rather than a generic action-RPG HUD.
   clip's team list.
 - The event log became an OSRS-style chat box with coloured lines, and a
   prayer orb sits beside the status bars.
+
+## ADR-043 — Reference combat feedback: numbers, shouts, feeds and rings
+
+**Status:** accepted for the video-parity pass.
+
+The reference client (Legends of Bielnor) makes every trade legible with a
+handful of cheap overlays, and the Rift client now copies them:
+
+- **Floating damage numbers** rise from the unit that was hit. White for
+  neutral damage, yellow for the player's own hits, red for damage the player
+  took. They are projected from world space into the HUD pass.
+- **Kill shout**: a centre-screen yellow banner ("YOU HAVE SLAIN A MINION!").
+- **Kill feed**: recent kills listed under the roster panel.
+- **Range rings**: a thin red ring at the champion's attack range and a small
+  yellow ring on the current target.
+- **Minimap ping**: a red marker on the last enemy the player hit.
