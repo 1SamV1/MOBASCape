@@ -4,7 +4,10 @@ use std::path::Path;
 use anyhow::{Context, Result};
 use image::imageops::FilterType;
 
-const ATLAS_SIZE: u32 = 1024;
+// The atlas holds the item icons, the minimap and a shelf of champion
+// portraits. 2048px gives the portrait shelf room for a full roster without
+// dropping the last champion.
+const ATLAS_SIZE: u32 = 2048;
 const ITEM_SIZE: u32 = 128;
 /// Reserved shelf below the item/UI rows and above the font/minimap slots.
 const PORTRAIT_ROW_Y: u32 = 428;
@@ -216,18 +219,26 @@ impl UiAtlas {
     }
 
     /// Upload a baked champion portrait into the reserved portrait shelf.
+    /// Re-uploading a known champion reuses its slot instead of burning a new
+    /// one.
     pub fn add_hero_portrait(&mut self, key: &str, image: &image::RgbaImage) {
+        let fitted = if image.width() == PORTRAIT_SIZE && image.height() == PORTRAIT_SIZE {
+            image.clone()
+        } else {
+            image::imageops::resize(image, PORTRAIT_SIZE, PORTRAIT_SIZE, FilterType::Lanczos3)
+        };
+        if let Some(&uv) = self.hero_uv.get(key) {
+            let x = (uv[0] * self.width as f32).round() as u32;
+            let y = (uv[1] * self.height as f32).round() as u32;
+            self.copy(&fitted, x, y);
+            return;
+        }
         let index = self.hero_uv.len() as u32;
         let x = 2 + index * (PORTRAIT_SIZE + PORTRAIT_GAP);
         if x + PORTRAIT_SIZE > ATLAS_SIZE {
             tracing::warn!("hero portrait {key} does not fit in the UI atlas");
             return;
         }
-        let fitted = if image.width() == PORTRAIT_SIZE && image.height() == PORTRAIT_SIZE {
-            image.clone()
-        } else {
-            image::imageops::resize(image, PORTRAIT_SIZE, PORTRAIT_SIZE, FilterType::Lanczos3)
-        };
         let uv = self.copy(&fitted, x, PORTRAIT_ROW_Y);
         self.hero_uv.insert(key.to_string(), uv);
     }
@@ -243,8 +254,12 @@ impl UiAtlas {
     }
 
     fn copy(&mut self, image: &image::RgbaImage, x: u32, y: u32) -> [f32; 4] {
-        let w = image.width();
-        let h = image.height();
+        // Clamp to the atlas so a mis-sized upload can never panic.
+        let w = image.width().min(self.width.saturating_sub(x));
+        let h = image.height().min(self.height.saturating_sub(y));
+        if w == 0 || h == 0 {
+            return [0.0, 0.0, 0.0, 0.0];
+        }
         for py in 0..h {
             for px in 0..w {
                 let src = ((py * w + px) * 4) as usize;
