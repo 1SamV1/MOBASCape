@@ -203,6 +203,12 @@ Cache location: `.cache/osrs-235/cache` by default. Pass `--cache` and
   shop-button panels. `crates/client/src/ui_assets.rs` builds a 1024×1024 atlas;
   `ui.wgsl` samples it with nearest filtering. Missing assets fall back to
   procedural icons. See `docs/UI_ASSETS.md`; never commit `assets/`.
+- **Match flow**: hero select -> LOCK IN -> 5v5 lobby -> match. The hero-select
+  screen is the reference layout (filter tabs ALL/MELEE/RANGED/MAGIC, roster
+  grid, side rosters, ability detail panel). The lobby shows both lineups as
+  two rows of five hero cards with RADIANT/DIRE side tabs and the red
+  "LOADING - PLEASE WAIT..." button; it auto-starts after eight seconds of
+  wall-clock time, or the player can click the button or press Enter.
 - Four data-driven champions (`monkey`, `jad`, `kree`, `ranger`) with distinct
   models, stats, and ability numbers. A hero-select screen chooses among them
   and bakes cache-model portraits. King Awowogei uses Bananarang (Q) and Trial
@@ -234,7 +240,7 @@ Cache location: `.cache/osrs-235/cache` by default. Pass `--cache` and
   flower sprites are drawn opaque. The `0xff00ff` terrain overlay sentinel
   still uses a flat fallback colour. Dead-tree trunks read as pale spikes.
 - Animaya is not applied; only classic frame/framemap animation works.
-- No lobby, netcode, audio, or map editor. Ambient NPCs idle only.
+- No netcode, audio, or map editor. Ambient NPCs idle only.
 - The UI atlas depends on external PNGs in `assets/osrs-ui`; without them the
   shop uses procedural fallback icons and no OSRS tab sprites. The bronze sword
   icon is a trimmed detail render because the plain inventory icon file was not

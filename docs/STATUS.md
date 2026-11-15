@@ -1,6 +1,6 @@
 # Status
 
-Last updated: M5.24 weighty movement, ambient creatures + cache group fix, 2026-11-14.
+Last updated: reference 5v5 lobby + hero select parity, 2026-11-14.
 
 ## Working
 
@@ -213,7 +213,7 @@ Last updated: M5.24 weighty movement, ambient creatures + cache group fix, 2026-
 
 ## Verified
 
-- `cargo test --workspace`: 40 tests pass (9 cache, 24 client, 7 sim).
+- `cargo test --workspace`: 54 tests pass (14 cache, 33 client, 7 sim).
 - `cargo clippy --workspace --all-targets`: no warnings.
 - 117HD Core runs at **60–68 fps at 1280×720** on the dev machine at timescale 1;
   shadow modes measured **67 fps (off)**, **68 fps (blob)**, **66 fps (map)**.
@@ -328,7 +328,7 @@ Last updated: M5.24 weighty movement, ambient creatures + cache group fix, 2026-
 - Cache texture alpha cut-outs are rendered opaque; leaf and flower sprites are
   wrapped and colour-lifted rather than alpha-tested.
 - Fog/brush is client-side only; server-authoritative fog is required.
-- No lobby, netcode, audio, or map editor.
+- No netcode, audio, or map editor.
 
 ## Next tasks
 
