@@ -1873,6 +1873,197 @@ impl Hud {
         );
     }
 
+    /// The 5v5 lobby shown between the hero pick and the match: two rows of
+    /// five hero cards, a team tab on each side and the red loading button.
+    pub fn build_lobby(&mut self, width: f32, height: f32, select: &HeroSelect, mouse: (f64, f64)) {
+        self.vertices.clear();
+        self.indices.clear();
+        self.quad_alpha(width, height, 0.0, 0.0, width, height, [7, 9, 13], 0.88);
+
+        self.text_centered(
+            width,
+            height,
+            width * 0.5,
+            height * 0.045,
+            2.4,
+            "KARAMJA RIFT",
+            [245, 214, 137],
+        );
+        self.text_centered(
+            width,
+            height,
+            width * 0.5,
+            height * 0.045 + 38.0,
+            0.95,
+            "5V5 RANKED - BOTH TEAMS LOCKED IN",
+            [178, 184, 196],
+        );
+        let rule_w = (width * 0.62).min(820.0);
+        self.quad_alpha(
+            width,
+            height,
+            (width - rule_w) * 0.5,
+            height * 0.045 + 60.0,
+            rule_w,
+            1.0,
+            [188, 154, 86],
+            0.7,
+        );
+
+        // Team tabs down each side.
+        let (left_tab, right_tab) = hero_select::lobby_side_tabs(width, height);
+        for (rect, label, color) in [
+            (left_tab, "RADIANT", [96, 150, 235]),
+            (right_tab, "DIRE", [235, 105, 95]),
+        ] {
+            self.quad(width, height, rect.0, rect.1, rect.2, rect.3, color);
+            self.text_centered(
+                width,
+                height,
+                rect.0 + rect.2 * 0.5,
+                rect.1 + rect.3 * 0.5 - 6.0,
+                0.95,
+                label,
+                [250, 250, 250],
+            );
+        }
+
+        let (radiant, dire) = hero_select::lobby_teams(&select.champions, select.selected);
+        let cards = hero_select::lobby_card_rects(width, height);
+        for (index, &(x, y, cw, ch)) in cards.iter().enumerate() {
+            let team = index / 5;
+            let slot = index % 5;
+            let champion_index = if team == 0 {
+                radiant.get(slot)
+            } else {
+                dire.get(slot)
+            };
+            let Some(&champion_index) = champion_index else {
+                continue;
+            };
+            let Some(champion) = select.champions.get(champion_index) else {
+                continue;
+            };
+            let picked = champion_index == select.selected;
+            let accent = if team == 0 {
+                [110, 175, 255]
+            } else {
+                [255, 120, 110]
+            };
+            self.quad(
+                width,
+                height,
+                x,
+                y,
+                cw,
+                ch,
+                if picked { [86, 66, 36] } else { [34, 34, 40] },
+            );
+            self.rect_outline(
+                width,
+                height,
+                x + 1.0,
+                y + 1.0,
+                cw - 2.0,
+                ch - 2.0,
+                if picked { 2.0 } else { 1.0 },
+                if picked {
+                    [244, 206, 118]
+                } else {
+                    [82, 80, 74]
+                },
+                0.9,
+            );
+            // Team stripe.
+            self.quad(width, height, x + 4.0, y + 4.0, 6.0, ch - 8.0, accent);
+
+            let portrait = (cw * 0.52).min(ch * 0.60);
+            let px = x + (cw - portrait) * 0.5;
+            let py = y + 10.0;
+            self.quad_alpha(
+                width,
+                height,
+                px,
+                py,
+                portrait,
+                portrait,
+                [18, 21, 28],
+                0.95,
+            );
+            if let Some(uv) = self.atlas.hero_uv(&champion.id) {
+                self.sprite(
+                    width,
+                    height,
+                    px,
+                    py,
+                    portrait,
+                    portrait,
+                    uv,
+                    [255, 255, 255],
+                    1.0,
+                );
+            }
+            let name: String = champion.name.chars().take(13).collect();
+            self.text_centered(
+                width,
+                height,
+                x + cw * 0.5,
+                py + portrait + 4.0,
+                0.78,
+                &name,
+                [238, 232, 214],
+            );
+            self.text_centered(
+                width,
+                height,
+                x + cw * 0.5,
+                py + portrait + 19.0,
+                0.7,
+                &champion.class,
+                Self::class_color(&champion.class),
+            );
+            self.text_centered(
+                width,
+                height,
+                x + cw * 0.5,
+                py + portrait + 33.0,
+                0.68,
+                &format!(
+                    "HP {}  MP {}  RNG {}",
+                    champion.health as i32, champion.mana as i32, champion.ranged as i32
+                ),
+                [176, 178, 186],
+            );
+        }
+
+        // The red loading button.
+        let (bx, by, bw, bh) = hero_select::lobby_button_rect(width, height);
+        let hovered = hero_select::lobby_button_at(width, height, mouse);
+        self.quad(
+            width,
+            height,
+            bx,
+            by,
+            bw,
+            bh,
+            if hovered {
+                [190, 60, 60]
+            } else {
+                [150, 44, 44]
+            },
+        );
+        self.rect_outline(width, height, bx, by, bw, bh, 1.0, [236, 190, 96], 0.9);
+        self.text_centered(
+            width,
+            height,
+            bx + bw * 0.5,
+            by + bh * 0.5 - 7.0,
+            1.0,
+            "LOADING - PLEASE WAIT...",
+            [255, 238, 206],
+        );
+    }
+
     pub fn build_shop(&mut self, width: f32, height: f32, player: &PlayerHud, shop: &ItemShop) {
         if !player.shop_open {
             return;

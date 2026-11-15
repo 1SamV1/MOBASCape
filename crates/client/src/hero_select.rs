@@ -193,6 +193,67 @@ fn point_in_rect(rect: (f32, f32, f32, f32), cursor: (f64, f64)) -> bool {
     mx >= x && mx <= x + w && my >= y && my <= y + h
 }
 
+/// The two five-strong lineups shown on the lobby screen.
+pub fn lobby_teams(champions: &[ChampionConfig], selected: usize) -> (Vec<usize>, Vec<usize>) {
+    let count = champions.len();
+    if count == 0 {
+        return (Vec::new(), Vec::new());
+    }
+    let selected = selected.min(count - 1);
+    let mut radiant = vec![selected];
+    for step in 1..5 {
+        radiant.push((selected + step) % count);
+    }
+    let mut dire = Vec::new();
+    for step in 0..5 {
+        dire.push((selected + step + 1) % count);
+    }
+    (radiant, dire)
+}
+
+/// Lobby card grid: two rows of five.
+pub fn lobby_card_rects(width: f32, height: f32) -> Vec<(f32, f32, f32, f32)> {
+    let gap = 12.0;
+    let side = (width * 0.072).clamp(50.0, 92.0);
+    let area_x = side + 12.0;
+    let area_w = (width - side * 2.0 - 24.0).max(240.0);
+    let card_w = (area_w - gap * 4.0) / 5.0;
+    let card_h = (height * 0.245).clamp(132.0, 186.0);
+    let top = (height * 0.235).max(126.0);
+    (0..10)
+        .map(|index| {
+            let row = index / 5;
+            let column = index % 5;
+            (
+                area_x + column as f32 * (card_w + gap),
+                top + row as f32 * (card_h + gap + 26.0),
+                card_w,
+                card_h,
+            )
+        })
+        .collect()
+}
+
+/// Radiant and dire side tabs.
+#[allow(clippy::type_complexity)]
+pub fn lobby_side_tabs(width: f32, height: f32) -> ((f32, f32, f32, f32), (f32, f32, f32, f32)) {
+    let w = (width * 0.066).clamp(46.0, 84.0);
+    let h = (height * 0.42).clamp(210.0, 310.0);
+    let top = (height * 0.235).max(126.0);
+    ((6.0, top, w, h), (width - 6.0 - w, top, w, h))
+}
+
+/// The red "loading" button under the lobby cards.
+pub fn lobby_button_rect(width: f32, height: f32) -> (f32, f32, f32, f32) {
+    let w = 360.0f32.min(width * 0.32);
+    let h = 44.0;
+    ((width - w) * 0.5, height - h - 52.0, w, h)
+}
+
+pub fn lobby_button_at(width: f32, height: f32, cursor: (f64, f64)) -> bool {
+    point_in_rect(lobby_button_rect(width, height), cursor)
+}
+
 /// Wrap a description into fixed-width lines for the detail panel.
 pub fn wrap_text(text: &str, columns: usize) -> Vec<String> {
     let mut lines = Vec::new();

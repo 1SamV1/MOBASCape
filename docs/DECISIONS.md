@@ -663,3 +663,22 @@ matches that shape:
 
 Champion classes and ability tooltips are data-driven: each champion file
 carries a `class` and an `abilities` array of `{key, name, description}`.
+
+## ADR-045 — Reference 5v5 lobby between the pick and the match
+
+**Status:** accepted for the video-parity pass.
+
+The reference client does not drop straight from the hero picker into the
+match: it shows a lobby first.
+
+- Two rows of five hero cards, radiant on top and dire underneath, each card
+  carrying the baked portrait, the hero name, its combat class and a compact
+  stat line (HP / MP / RNG).
+- A blue RADIANT tab down the left edge and a red DIRE tab down the right.
+- The player's own pick is outlined in gold; the rest of the lineup is filled
+  from the roster so the screen always shows ten cards.
+- A red "LOADING - PLEASE WAIT..." button. Clicking it or pressing Enter drops
+  into the match, and it also auto-starts after eight seconds so the player is
+  never stuck on the lobby.
+
+The flow is now: hero select -> LOCK IN -> lobby -> match.

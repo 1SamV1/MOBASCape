@@ -265,6 +265,8 @@ fn main() -> Result<()> {
         height: Some(height),
         collision: Some(collision),
         hero_select: HeroSelect::new(champions, selected_champion, hero_select_open),
+        lobby_open: false,
+        lobby_timer: 0.0,
         window: None,
         renderer: None,
         held: HashSet::new(),
@@ -352,6 +354,9 @@ struct App {
     height: Option<HeightGrid>,
     collision: Option<WorldCollision>,
     hero_select: HeroSelect,
+    /// The 5v5 lobby shown between the hero pick and the match.
+    lobby_open: bool,
+    lobby_timer: f32,
     window: Option<Arc<Window>>,
     renderer: Option<Renderer>,
     held: HashSet<KeyCode>,
@@ -528,6 +533,14 @@ impl ApplicationHandler for App {
                     .as_ref()
                     .map(|r| (r.size.0 as f32, r.size.1 as f32))
                     .unwrap_or((1280.0, 720.0));
+                if self.lobby_open {
+                    if state == ElementState::Pressed
+                        && hero_select::lobby_button_at(w, h, self.mouse_pos)
+                    {
+                        self.start_match();
+                    }
+                    return;
+                }
                 if self.hero_select.open {
                     if state == ElementState::Pressed {
                         if let Some(filter) = hero_select::filter_at(w, h, self.mouse_pos) {
@@ -540,7 +553,7 @@ impl ApplicationHandler for App {
                         ) {
                             self.hero_select.select_slot(slot);
                         } else if hero_select::confirm_at(w, h, self.mouse_pos) {
-                            self.start_match();
+                            self.open_lobby();
                         }
                     }
                     return;
@@ -628,6 +641,18 @@ impl ApplicationHandler for App {
                     return;
                 };
 
+                if self.lobby_open {
+                    if event.state == ElementState::Pressed {
+                        match code {
+                            KeyCode::Escape => event_loop.exit(),
+                            KeyCode::Enter | KeyCode::NumpadEnter | KeyCode::Space => {
+                                self.start_match()
+                            }
+                            _ => {}
+                        }
+                    }
+                    return;
+                }
                 if self.hero_select.open {
                     if event.state == ElementState::Pressed {
                         match code {
@@ -643,7 +668,7 @@ impl ApplicationHandler for App {
                             KeyCode::KeyR => self.hero_select.set_filter(2),
                             KeyCode::KeyC => self.hero_select.set_filter(3),
                             KeyCode::Enter | KeyCode::NumpadEnter | KeyCode::Space => {
-                                self.start_match()
+                                self.open_lobby()
                             }
                             _ => {}
                         }
@@ -785,6 +810,12 @@ impl App {
         if self.hero_select.open {
             if self.renderer.is_some() {
                 self.tick_hero_select(dt);
+            }
+            return;
+        }
+        if self.lobby_open {
+            if self.renderer.is_some() {
+                self.tick_lobby(dt);
             }
             return;
         }
@@ -1651,8 +1682,66 @@ impl App {
         }
     }
 
+    /// Lock the pick in and move to the 5v5 lobby.
+    fn open_lobby(&mut self) {
+        let index = self.hero_select.selected;
+        let Some(champion) = self.hero_select.champions.get(index) else {
+            return;
+        };
+        tracing::info!("hero select: locked in {} ({})", champion.name, champion.id);
+        self.hero_select.open = false;
+        self.lobby_open = true;
+        self.lobby_timer = 0.0;
+        if let Some(window) = self.window.as_ref() {
+            window.set_title("Rift - Lobby");
+        }
+    }
+
+    /// Render the paused world behind the 5v5 lobby.
+    fn tick_lobby(&mut self, dt: f32) {
+        self.lobby_timer += dt;
+        let (w, h) = self
+            .renderer
+            .as_ref()
+            .map(|r| (r.size.0 as f32, r.size.1 as f32))
+            .unwrap_or((1280.0, 720.0));
+
+        if let (Some(renderer), Some(animated), Some(height), Some(collision)) = (
+            self.renderer.as_mut(),
+            self.animated.as_mut(),
+            self.height.as_ref(),
+            self.collision.as_ref(),
+        ) {
+            let eye = renderer.camera.eye();
+            let forward = (eye - renderer.camera.target).normalize_or_zero();
+            let right = forward.cross(Vec3::Y).normalize_or_zero();
+            let up = right.cross(forward).normalize_or_zero();
+            animated.refresh_visibility(dt.min(0.05), collision);
+            animated.prepare_render(height, right, up, forward);
+            renderer.set_dynamic_mesh(&animated.vertices, &animated.indices);
+            renderer.set_shadow_mesh(&animated.shadow_vertices, &animated.shadow_indices);
+            renderer.set_caster_mesh(&animated.caster_vertices, &animated.caster_indices);
+            renderer.set_lights(&animated.lights());
+            renderer.set_time(self.app_time);
+            renderer.set_vision(animated.player_pos(), 1500.0);
+            animated.visibility_dirty = false;
+        }
+
+        self.hud
+            .build_lobby(w, h, &self.hero_select, self.mouse_pos);
+        if let Some(renderer) = self.renderer.as_mut() {
+            renderer.set_hud_mesh(&self.hud.vertices, &self.hud.indices);
+        }
+        // The lobby auto-starts like the reference client, but the player can
+        // click the button or press Enter to drop in immediately.
+        if self.lobby_timer > 8.0 {
+            self.start_match();
+        }
+    }
+
     /// Lock in the highlighted champion and start a clean match.
     fn start_match(&mut self) {
+        self.lobby_open = false;
         let index = self.hero_select.selected;
         let Some(champion) = self.hero_select.champions.get(index).cloned() else {
             return;

@@ -144,6 +144,10 @@ Last updated: M5.24 weighty movement, ambient creatures + cache group fix, 2026-
   under the roster panel, a red attack-range ring and a yellow target ring on
   the ground, and a red minimap ping on the last enemy hit. `--demo-fx` pops all
   of them for a quick visual check.
+- **5v5 lobby**: after locking in, the reference lobby shows both lineups as
+  two rows of five hero cards (portrait, name, class, HP/MP/RNG), a RADIANT and
+  DIRE tab down each side, the player's pick highlighted in gold, and the red
+  "LOADING - PLEASE WAIT..." button that drops the teams into the match.
 - **Hero select**: the reference layout - filter tabs (ALL / MELEE / RANGED /
   MAGIC), a roster grid of hero cards with baked portraits, hotkeys and class
   tags, a "Your heroes" list on the left, a "Rival heroes" list on the right,
