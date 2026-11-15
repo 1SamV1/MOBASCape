@@ -26,5 +26,28 @@
   "weight": 82,
   "walk_arm": 0.0,
   "attack_windup": 0.3,
-  "armor": 30.0
+  "armor": 30.0,
+  "class": "MELEE",
+  "abilities": [
+    {
+      "key": "Q",
+      "name": "BANANARANG",
+      "description": "A comically large banana boomerang that sweeps out in a rounded trapezoid, striking every enemy it passes."
+    },
+    {
+      "key": "W",
+      "name": "ROYAL DASH",
+      "description": "The king blinks a short distance along the ground, leaving his enemies behind."
+    },
+    {
+      "key": "E",
+      "name": "KING'S DECREE",
+      "description": "A royal decree restores health and shields the king for a few seconds."
+    },
+    {
+      "key": "R",
+      "name": "TRIAL BY COMBAT",
+      "description": "A barrier traps the king and an enemy champion. Monkey subjects hurl banana peels that strip armor until one of them falls."
+    }
+  ]
 }

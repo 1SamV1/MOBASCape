@@ -1,11 +1,18 @@
 use crate::champion::ChampionConfig;
 
+/// Filter tabs across the top of the hero-select screen.
+pub const FILTERS: [&str; 4] = ["ALL", "MELEE", "RANGED", "MAGIC"];
+
 /// State for the pre-match champion picker.
 pub struct HeroSelect {
     pub open: bool,
     pub selected: usize,
     pub hover: Option<usize>,
     pub champions: Vec<ChampionConfig>,
+    /// Active filter tab.
+    pub filter: usize,
+    /// Champion indices shown by the current filter.
+    pub visible: Vec<usize>,
     /// Seconds spent on the screen, used for the selected-card pulse.
     pub time: f32,
 }
@@ -13,53 +20,166 @@ pub struct HeroSelect {
 impl HeroSelect {
     pub fn new(champions: Vec<ChampionConfig>, selected: usize, open: bool) -> Self {
         let selected = selected.min(champions.len().saturating_sub(1));
-        Self {
+        let mut select = Self {
             open,
             selected,
             hover: None,
             champions,
+            filter: 0,
+            visible: Vec::new(),
             time: 0.0,
+        };
+        select.apply_filter();
+        select
+    }
+
+    /// Recompute the visible roster for the active filter.
+    pub fn apply_filter(&mut self) {
+        self.visible = self
+            .champions
+            .iter()
+            .enumerate()
+            .filter(|(_, champion)| self.matches(champion))
+            .map(|(index, _)| index)
+            .collect();
+        if !self.visible.contains(&self.selected) {
+            if let Some(&first) = self.visible.first() {
+                self.selected = first;
+            }
         }
     }
 
+    fn matches(&self, champion: &ChampionConfig) -> bool {
+        match self.filter {
+            1 => champion.class.eq_ignore_ascii_case("MELEE"),
+            2 => champion.class.eq_ignore_ascii_case("RANGED"),
+            3 => champion.class.eq_ignore_ascii_case("MAGIC"),
+            _ => true,
+        }
+    }
+
+    pub fn set_filter(&mut self, filter: usize) {
+        self.filter = filter.min(FILTERS.len() - 1);
+        self.apply_filter();
+    }
+
     pub fn cycle(&mut self, delta: isize) {
-        if self.champions.is_empty() {
+        if self.visible.is_empty() {
             return;
         }
-        let count = self.champions.len() as isize;
-        self.selected = (self.selected as isize + delta).rem_euclid(count) as usize;
+        let count = self.visible.len() as isize;
+        let current = self
+            .visible
+            .iter()
+            .position(|&index| index == self.selected)
+            .unwrap_or(0) as isize;
+        let next = (current + delta).rem_euclid(count) as usize;
+        self.selected = self.visible[next];
+    }
+
+    /// Select by the slot shown in the roster grid.
+    pub fn select_slot(&mut self, slot: usize) {
+        if let Some(&index) = self.visible.get(slot) {
+            self.selected = index;
+        }
     }
 
     pub fn selected_champion(&self) -> Option<&ChampionConfig> {
         self.champions.get(self.selected)
     }
+
+    /// The other champions, shown in the rival roster panel.
+    pub fn rival_roster(&self) -> Vec<usize> {
+        self.champions
+            .iter()
+            .enumerate()
+            .filter(|(index, _)| *index != self.selected)
+            .map(|(index, _)| index)
+            .take(5)
+            .collect()
+    }
 }
 
-/// Card rectangle `(x, y, w, h)` for each champion.
-pub fn card_rects(width: f32, height: f32) -> [(f32, f32, f32, f32); 3] {
-    let gap = (width * 0.018).clamp(12.0, 26.0);
-    let card_w = ((width - 112.0 - gap * 2.0) / 3.0).clamp(226.0, 306.0);
-    let card_h = (height * 0.60).clamp(348.0, 454.0);
-    let total = card_w * 3.0 + gap * 2.0;
+/// Filter tab rectangles.
+pub fn filter_rects(width: f32, height: f32) -> Vec<(f32, f32, f32, f32)> {
+    let w = 148.0f32.min(width * 0.13);
+    let h = 30.0;
+    let gap = 8.0;
+    let total = FILTERS.len() as f32 * w + (FILTERS.len() - 1) as f32 * gap;
     let x0 = (width - total) * 0.5;
-    let y0 = (height * 0.155).max(82.0);
-    std::array::from_fn(|index| (x0 + index as f32 * (card_w + gap), y0, card_w, card_h))
+    let y = (height * 0.108).max(62.0);
+    (0..FILTERS.len())
+        .map(|index| (x0 + index as f32 * (w + gap), y, w, h))
+        .collect()
 }
 
-pub fn card_at(width: f32, height: f32, cursor: (f64, f64)) -> Option<usize> {
-    card_rects(width, height)
+pub fn filter_at(width: f32, height: f32, cursor: (f64, f64)) -> Option<usize> {
+    filter_rects(width, height)
         .iter()
         .position(|&rect| point_in_rect(rect, cursor))
 }
 
-/// Long gold button below the three cards.
+/// Grid area used by the roster cards.
+fn grid_area(width: f32, height: f32) -> (f32, f32, f32) {
+    let side = (width * 0.215).clamp(190.0, 280.0);
+    let x = side + 16.0;
+    let w = (width - side * 2.0 - 32.0).max(200.0);
+    let y = (height * 0.163).max(94.0);
+    (x, y, w)
+}
+
+/// Card rectangle `(x, y, w, h)` for each visible hero.
+pub fn card_rects(width: f32, height: f32, count: usize) -> Vec<(f32, f32, f32, f32)> {
+    let (area_x, area_y, area_w) = grid_area(width, height);
+    let gap = 8.0;
+    let cols = 8usize;
+    let card_w = ((area_w - gap * (cols as f32 - 1.0)) / cols as f32).clamp(64.0, 118.0);
+    let card_h = (card_w * 1.34).clamp(86.0, 152.0);
+    (0..count)
+        .map(|index| {
+            let column = index % cols;
+            let row = index / cols;
+            (
+                area_x + column as f32 * (card_w + gap),
+                area_y + row as f32 * (card_h + gap),
+                card_w,
+                card_h,
+            )
+        })
+        .collect()
+}
+
+/// Which visible slot the cursor is over.
+pub fn card_at(width: f32, height: f32, cursor: (f64, f64), count: usize) -> Option<usize> {
+    card_rects(width, height, count)
+        .iter()
+        .position(|&rect| point_in_rect(rect, cursor))
+}
+
+/// Left and right roster panels.
+#[allow(clippy::type_complexity)]
+pub fn roster_panels(width: f32, height: f32) -> ((f32, f32, f32, f32), (f32, f32, f32, f32)) {
+    let (_, area_y, _) = grid_area(width, height);
+    let w = (width * 0.215).clamp(190.0, 280.0);
+    let h = (height * 0.46).clamp(250.0, 340.0);
+    ((14.0, area_y, w, h), (width - 14.0 - w, area_y, w, h))
+}
+
+/// Detail panel under the roster grid.
+pub fn detail_rect(width: f32, height: f32) -> (f32, f32, f32, f32) {
+    let (area_x, _, area_w) = grid_area(width, height);
+    let top = (height * 0.163).max(94.0) + 176.0;
+    let h = (height - top - 64.0).clamp(190.0, 320.0);
+    (area_x, top, area_w, h)
+}
+
+/// Gold "lock in" button, top-right of the detail panel so it never sits on
+/// top of the ability list.
 pub fn confirm_rect(width: f32, height: f32) -> (f32, f32, f32, f32) {
-    let (_, card_y, _, card_h) = card_rects(width, height)[0];
-    let w = 286.0f32.min(width - 48.0);
-    let h = 46.0;
-    let x = (width - w) * 0.5;
-    let y = (card_y + card_h + 18.0).min(height - h - 48.0);
-    (x, y, w, h)
+    let (dx, dy, dw, _) = detail_rect(width, height);
+    let w = 188.0f32.min(dw * 0.4);
+    let h = 38.0;
+    (dx + dw - w - 16.0, dy + 14.0, w, h)
 }
 
 pub fn confirm_at(width: f32, height: f32, cursor: (f64, f64)) -> bool {
@@ -73,6 +193,25 @@ fn point_in_rect(rect: (f32, f32, f32, f32), cursor: (f64, f64)) -> bool {
     mx >= x && mx <= x + w && my >= y && my <= y + h
 }
 
+/// Wrap a description into fixed-width lines for the detail panel.
+pub fn wrap_text(text: &str, columns: usize) -> Vec<String> {
+    let mut lines = Vec::new();
+    let mut line = String::new();
+    for word in text.split_whitespace() {
+        if !line.is_empty() && line.chars().count() + word.chars().count() + 1 > columns {
+            lines.push(std::mem::take(&mut line));
+        }
+        if !line.is_empty() {
+            line.push(' ');
+        }
+        line.push_str(word);
+    }
+    if !line.is_empty() {
+        lines.push(line);
+    }
+    lines
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -83,6 +222,8 @@ mod tests {
             id: id.to_string(),
             name: id.to_string(),
             role: String::new(),
+            class: String::new(),
+            abilities: Vec::new(),
             tagline: String::new(),
             model: 0,
             attachments: Vec::new(),
@@ -117,46 +258,31 @@ mod tests {
     }
 
     #[test]
-    fn cards_are_distinct_and_hit_test_in_order() {
-        let (width, height) = (1280.0, 720.0);
-        let cards = card_rects(width, height);
-        for (index, card) in cards.iter().enumerate() {
-            let center = (
-                (card.0 + card.2 * 0.5) as f64,
-                (card.1 + card.3 * 0.5) as f64,
-            );
-            assert_eq!(card_at(width, height, center), Some(index));
-        }
-        assert!(cards[0].0 + cards[0].2 < cards[1].0);
-        assert_eq!(card_at(width, height, (5.0, 5.0)), None);
+    fn filters_pick_the_right_class() {
+        let mut select =
+            HeroSelect::new(vec![champion("a"), champion("b"), champion("c")], 0, true);
+        select.champions[0].class = "MELEE".to_string();
+        select.champions[1].class = "RANGED".to_string();
+        select.champions[2].class = "MAGIC".to_string();
+        select.set_filter(2);
+        assert_eq!(select.visible, vec![1]);
+        select.set_filter(0);
+        assert_eq!(select.visible.len(), 3);
     }
 
     #[test]
-    fn confirm_button_sits_below_the_cards() {
-        let (width, height) = (1280.0, 720.0);
-        let (_, card_y, _, card_h) = card_rects(width, height)[0];
-        let (_, button_y, _, _) = confirm_rect(width, height);
-        assert!(button_y > card_y + card_h);
-        let button = confirm_rect(width, height);
-        assert!(confirm_at(
-            width,
-            height,
-            (
-                (button.0 + button.2 * 0.5) as f64,
-                (button.1 + button.3 * 0.5) as f64
-            )
-        ));
-    }
-
-    #[test]
-    fn cycling_wraps_the_roster() {
-        let champions = vec![champion("a"), champion("b"), champion("c")];
-        let mut select = HeroSelect::new(champions, 0, true);
-        select.cycle(1);
+    fn card_slots_map_to_champions() {
+        let mut select = HeroSelect::new(vec![champion("a"), champion("b")], 0, true);
+        select.select_slot(1);
         assert_eq!(select.selected, 1);
-        select.cycle(-1);
+        select.cycle(1);
         assert_eq!(select.selected, 0);
-        select.cycle(-1);
-        assert_eq!(select.selected, 2);
+    }
+
+    #[test]
+    fn descriptions_wrap_to_the_panel_width() {
+        let lines = wrap_text("one two three four five six seven eight", 12);
+        assert!(lines.len() > 1);
+        assert!(lines.iter().all(|line| line.chars().count() <= 12));
     }
 }

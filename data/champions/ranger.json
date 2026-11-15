@@ -28,5 +28,28 @@
   "e_shield": 60,
   "w_distance": 400,
   "weight": 55,
-  "attack_windup": 0.25
+  "attack_windup": 0.25,
+  "class": "RANGED",
+  "abilities": [
+    {
+      "key": "Q",
+      "name": "TOXIC DART",
+      "description": "A fast poisoned dart that leaves the target venomed."
+    },
+    {
+      "key": "W",
+      "name": "DART VOLLEY",
+      "description": "A fan of five darts that poisons every enemy it hits."
+    },
+    {
+      "key": "E",
+      "name": "RANGER'S FOOTWORK",
+      "description": "The ranger hops backwards and attacks faster for a few seconds."
+    },
+    {
+      "key": "R",
+      "name": "DEADSHOT",
+      "description": "A piercing blowpipe shot that hits everything in its line and finishes off wounded targets."
+    }
+  ]
 }

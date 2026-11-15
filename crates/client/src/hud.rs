@@ -134,26 +134,6 @@ pub fn format_clock(seconds: f32) -> String {
     format!("{}:{:02}", total / 60, total % 60)
 }
 
-/// Split flavour text into fixed-width uppercase lines for the hero cards.
-fn wrap_text(text: &str, max_chars: usize) -> Vec<String> {
-    let mut lines = Vec::new();
-    let mut current = String::new();
-    for word in text.split_whitespace() {
-        if !current.is_empty() && current.len() + 1 + word.len() > max_chars {
-            lines.push(current);
-            current = String::new();
-        }
-        if !current.is_empty() {
-            current.push(' ');
-        }
-        current.push_str(word);
-    }
-    if !current.is_empty() {
-        lines.push(current);
-    }
-    lines
-}
-
 /// Screen-space rectangle of the minimap: `(x, y, width, height)`.
 pub fn minimap_rect(width: f32, height: f32) -> (f32, f32, f32, f32) {
     let size = 190.0;
@@ -1461,6 +1441,17 @@ impl Hud {
         );
     }
 
+    /// Colour used for a combat class badge: melee red, ranged blue, magic green.
+    fn class_color(class: &str) -> [u8; 3] {
+        if class.eq_ignore_ascii_case("RANGED") {
+            [96, 150, 235]
+        } else if class.eq_ignore_ascii_case("MAGIC") {
+            [110, 205, 130]
+        } else {
+            [225, 105, 95]
+        }
+    }
+
     /// Full-screen champion picker shown before a match starts.
     pub fn build_hero_select(
         &mut self,
@@ -1473,171 +1464,129 @@ impl Hud {
         self.indices.clear();
 
         // Dim the live map behind the lobby.
-        self.quad_alpha(width, height, 0.0, 0.0, width, height, [7, 9, 13], 0.84);
-        self.quad_alpha(
-            width,
-            height,
-            0.0,
-            0.0,
-            width,
-            height * 0.22,
-            [4, 6, 10],
-            0.42,
-        );
-        self.quad_alpha(
-            width,
-            height,
-            0.0,
-            height * 0.76,
-            width,
-            height * 0.24,
-            [4, 6, 10],
-            0.52,
-        );
+        self.quad_alpha(width, height, 0.0, 0.0, width, height, [7, 9, 13], 0.86);
 
         self.text_centered(
             width,
             height,
             width * 0.5,
-            height * 0.052,
-            2.9,
+            height * 0.028,
+            2.6,
             "CHOOSE YOUR HERO",
             [245, 214, 137],
-        );
-        self.text_centered(
-            width,
-            height,
-            width * 0.5,
-            height * 0.052 + 43.0,
-            0.92,
-            "THREE CHAMPIONS. ONE RIFT. LOCK IN BEFORE THE WAVES.",
-            [174, 182, 194],
         );
         let rule_w = (width * 0.58).min(760.0);
         self.quad_alpha(
             width,
             height,
             (width - rule_w) * 0.5,
-            height * 0.052 + 68.0,
+            height * 0.028 + 44.0,
             rule_w,
             1.0,
             [188, 154, 86],
             0.72,
         );
 
-        let accents = [[236, 188, 92], [116, 222, 160], [112, 174, 255]];
-        let cards = hero_select::card_rects(width, height);
-        for (index, &(x, y, cw, ch)) in cards.iter().enumerate() {
+        // Filter tabs.
+        for (index, &(x, y, w, h)) in hero_select::filter_rects(width, height).iter().enumerate() {
+            let active = index == select.filter;
+            self.quad(
+                width,
+                height,
+                x,
+                y,
+                w,
+                h,
+                if active { [150, 62, 62] } else { [38, 38, 44] },
+            );
+            self.rect_outline(
+                width,
+                height,
+                x,
+                y,
+                w,
+                h,
+                1.0,
+                if active { [236, 190, 96] } else { [86, 82, 74] },
+                0.85,
+            );
+            self.text_centered(
+                width,
+                height,
+                x + w * 0.5,
+                y + h * 0.5 - 7.0,
+                1.0,
+                hero_select::FILTERS[index],
+                if active {
+                    [255, 235, 190]
+                } else {
+                    [176, 176, 172]
+                },
+            );
+        }
+
+        // Roster grid.
+        let cards = hero_select::card_rects(width, height, select.visible.len());
+        for (slot, &(x, y, cw, ch)) in cards.iter().enumerate() {
+            let Some(&index) = select.visible.get(slot) else {
+                continue;
+            };
             let Some(champion) = select.champions.get(index) else {
                 continue;
             };
             let selected = index == select.selected;
-            let hovered = select.hover == Some(index);
-            let accent = accents[index % accents.len()];
-
-            // Selected cards get a soft gold halo. Hover is a quieter
-            // brightening so the two states read at a glance.
+            let hovered = select.hover == Some(slot);
             if selected {
-                let pulse = 0.20 + 0.10 * (select.time * 2.6 + index as f32).sin().abs();
+                let pulse = 0.20 + 0.10 * (select.time * 2.6 + slot as f32).sin().abs();
                 self.quad_alpha(
                     width,
                     height,
-                    x - 6.0,
-                    y - 6.0,
-                    cw + 12.0,
-                    ch + 12.0,
+                    x - 5.0,
+                    y - 5.0,
+                    cw + 10.0,
+                    ch + 10.0,
                     [236, 188, 92],
                     pulse,
                 );
             }
-            if let Some(uv) = self.atlas.ui_uv("panel") {
-                let tint = if selected {
-                    [255, 232, 170]
-                } else if hovered {
-                    [150, 146, 130]
-                } else {
-                    [92, 88, 78]
-                };
-                self.panel_sprite(width, height, x, y, cw, ch, uv, 14.0, tint);
-            } else {
-                self.quad(
-                    width,
-                    height,
-                    x - 2.0,
-                    y - 2.0,
-                    cw + 4.0,
-                    ch + 4.0,
-                    if selected {
-                        [170, 140, 72]
-                    } else {
-                        [82, 78, 68]
-                    },
-                );
-            }
-            self.quad_alpha(
-                width,
-                height,
-                x + 6.0,
-                y + 6.0,
-                cw - 12.0,
-                ch - 12.0,
-                [16, 19, 26],
-                0.94,
-            );
-            if selected {
-                self.rect_outline(
-                    width,
-                    height,
-                    x + 1.0,
-                    y + 1.0,
-                    cw - 2.0,
-                    ch - 2.0,
-                    2.0,
-                    [244, 206, 118],
-                    0.95,
-                );
-            } else if hovered {
-                self.rect_outline(
-                    width,
-                    height,
-                    x + 1.0,
-                    y + 1.0,
-                    cw - 2.0,
-                    ch - 2.0,
-                    1.0,
-                    [186, 182, 166],
-                    0.7,
-                );
-            }
-
-            // Portrait plate. Real cache-model renders are baked into the UI
-            // atlas at startup; the fallback keeps the screen usable if a
-            // model or idle sequence is missing.
-            let portrait_size = (cw * 0.68).min(ch * 0.44);
-            let px = x + (cw - portrait_size) * 0.5;
-            let py = y + 14.0;
             self.quad(
                 width,
                 height,
-                px - 2.0,
-                py - 2.0,
-                portrait_size + 4.0,
-                portrait_size + 4.0,
-                if selected {
-                    [104, 88, 54]
-                } else {
-                    [54, 56, 64]
-                },
+                x,
+                y,
+                cw,
+                ch,
+                if selected { [74, 58, 34] } else { [40, 40, 46] },
             );
+            self.rect_outline(
+                width,
+                height,
+                x + 1.0,
+                y + 1.0,
+                cw - 2.0,
+                ch - 2.0,
+                if selected { 2.0 } else { 1.0 },
+                if selected {
+                    [244, 206, 118]
+                } else if hovered {
+                    [186, 182, 166]
+                } else {
+                    [86, 82, 74]
+                },
+                0.9,
+            );
+            let portrait = cw * 0.66;
+            let px = x + (cw - portrait) * 0.5;
+            let py = y + 8.0;
             self.quad_alpha(
                 width,
                 height,
                 px,
                 py,
-                portrait_size,
-                portrait_size,
-                [20, 24, 32],
-                0.96,
+                portrait,
+                portrait,
+                [18, 21, 28],
+                0.95,
             );
             if let Some(uv) = self.atlas.hero_uv(&champion.id) {
                 self.sprite(
@@ -1645,171 +1594,260 @@ impl Hud {
                     height,
                     px,
                     py,
-                    portrait_size,
-                    portrait_size,
+                    portrait,
+                    portrait,
                     uv,
                     [255, 255, 255],
                     1.0,
                 );
-            } else {
-                self.quad_alpha(
-                    width,
-                    height,
-                    px,
-                    py,
-                    portrait_size,
-                    portrait_size,
-                    [accent[0] / 3, accent[1] / 3, accent[2] / 3],
-                    0.9,
-                );
-                let initial = champion
-                    .name
-                    .chars()
-                    .next()
-                    .unwrap_or('?')
-                    .to_uppercase()
-                    .to_string();
-                self.text_centered(
-                    width,
-                    height,
-                    px + portrait_size * 0.5,
-                    py + portrait_size * 0.26,
-                    portrait_size / 18.0,
-                    &initial,
-                    accent,
-                );
             }
-
+            let name: String = champion.name.chars().take(11).collect();
+            self.text_centered(
+                width,
+                height,
+                x + cw * 0.5,
+                py + portrait + 5.0,
+                0.72,
+                &name,
+                [238, 232, 214],
+            );
+            self.text_centered(
+                width,
+                height,
+                x + cw * 0.5,
+                py + portrait + 19.0,
+                0.72,
+                &champion.class,
+                Self::class_color(&champion.class),
+            );
             // Hotkey badge.
             self.quad_alpha(
                 width,
                 height,
-                x + 12.0,
-                y + 12.0,
-                27.0,
-                24.0,
+                x + 4.0,
+                y + 4.0,
+                20.0,
+                18.0,
                 [8, 10, 14],
                 0.86,
             );
             self.text_centered(
                 width,
                 height,
-                x + 25.5,
-                y + 15.0,
-                1.05,
-                &(index + 1).to_string(),
-                [236, 214, 160],
+                x + 14.0,
+                y + 7.0,
+                0.8,
+                &(slot + 1).to_string(),
+                [240, 226, 180],
             );
-            if selected {
-                self.text(
-                    width,
-                    height,
-                    x + cw - 65.0,
-                    y + 17.0,
-                    0.78,
-                    "PICKED",
-                    [244, 206, 118],
-                );
-            }
-
-            let name_y = py + portrait_size + 10.0;
-            self.text_centered(
-                width,
-                height,
-                x + cw * 0.5,
-                name_y,
-                1.62,
-                &champion.name.to_uppercase(),
-                if selected {
-                    [255, 236, 184]
-                } else {
-                    [235, 236, 240]
-                },
-            );
-            self.text_centered(
-                width,
-                height,
-                x + cw * 0.5,
-                name_y + 25.0,
-                0.9,
-                &champion.role.to_uppercase(),
-                accent,
-            );
-
-            let tagline = champion.tagline.to_uppercase();
-            for (line_index, line) in wrap_text(&tagline, 31).into_iter().take(2).enumerate() {
-                self.text_centered(
-                    width,
-                    height,
-                    x + cw * 0.5,
-                    name_y + 44.0 + line_index as f32 * 14.0,
-                    0.74,
-                    &line,
-                    [168, 174, 186],
-                );
-            }
-
-            // Compact stat bars. Fixed maxima keep comparisons across the
-            // three champions honest and legible.
-            let stats = [
-                ("HP", champion.health, 700.0, [88, 214, 124]),
-                ("MP", champion.mana, 300.0, [92, 154, 255]),
-                ("DMG", champion.damage, 20.0, [255, 148, 88]),
-                ("SPD", champion.speed, 500.0, [106, 220, 226]),
-                ("RANGE", champion.attack_range, 700.0, [232, 200, 112]),
-            ];
-            let rows_y = y + ch - 99.0;
-            for (row, (label, value, max, color)) in stats.iter().enumerate() {
-                let row_y = rows_y + row as f32 * 17.0;
-                self.text(width, height, x + 16.0, row_y, 0.76, label, [198, 202, 212]);
-                let value_text = format!("{value:.0}");
-                let value_width = self.text_width(&value_text, 0.76);
-                self.text(
-                    width,
-                    height,
-                    x + cw - 16.0 - value_width,
-                    row_y,
-                    0.76,
-                    &value_text,
-                    [226, 228, 234],
-                );
-                let bar_x = x + 58.0;
-                let bar_w = cw - 58.0 - 48.0;
-                self.quad(width, height, bar_x, row_y + 2.5, bar_w, 7.0, [10, 12, 17]);
-                self.quad(
-                    width,
-                    height,
-                    bar_x,
-                    row_y + 2.5,
-                    (bar_w * (value / max).clamp(0.0, 1.0)).max(1.0),
-                    7.0,
-                    *color,
-                );
-            }
         }
 
-        let (bx, by, bw, bh) = hero_select::confirm_rect(width, height);
-        let hovered = hero_select::confirm_at(width, height, mouse);
-        let pulse = 0.24 + 0.10 * (select.time * 3.2).sin().abs();
+        // Side rosters: your heroes on the left, the rival team on the right.
+        let (left_panel, right_panel) = hero_select::roster_panels(width, height);
+        self.hud_panel(
+            width,
+            height,
+            left_panel.0,
+            left_panel.1,
+            left_panel.2,
+            left_panel.3,
+        );
+        self.text(
+            width,
+            height,
+            left_panel.0 + 8.0,
+            left_panel.1 + 6.0,
+            0.95,
+            "YOUR HEROES",
+            OSRS_YELLOW,
+        );
+        for (row, &index) in select.visible.iter().enumerate().take(6) {
+            let Some(champion) = select.champions.get(index) else {
+                continue;
+            };
+            let y = left_panel.1 + 24.0 + row as f32 * 26.0;
+            self.quad(
+                width,
+                height,
+                left_panel.0 + 8.0,
+                y - 2.0,
+                18.0,
+                18.0,
+                Self::class_color(&champion.class),
+            );
+            let name: String = champion.name.chars().take(14).collect();
+            self.text(
+                width,
+                height,
+                left_panel.0 + 32.0,
+                y,
+                0.82,
+                &name,
+                [228, 226, 214],
+            );
+        }
+        self.hud_panel(
+            width,
+            height,
+            right_panel.0,
+            right_panel.1,
+            right_panel.2,
+            right_panel.3,
+        );
+        self.text(
+            width,
+            height,
+            right_panel.0 + 8.0,
+            right_panel.1 + 6.0,
+            0.95,
+            "RIVAL HEROES",
+            OSRS_YELLOW,
+        );
+        for (row, index) in select.rival_roster().into_iter().enumerate() {
+            let Some(champion) = select.champions.get(index) else {
+                continue;
+            };
+            let y = right_panel.1 + 24.0 + row as f32 * 26.0;
+            self.quad(
+                width,
+                height,
+                right_panel.0 + 8.0,
+                y - 2.0,
+                18.0,
+                18.0,
+                Self::class_color(&champion.class),
+            );
+            let name: String = champion.name.chars().take(14).collect();
+            self.text(
+                width,
+                height,
+                right_panel.0 + 32.0,
+                y,
+                0.82,
+                &name,
+                [228, 226, 214],
+            );
+        }
+
+        // Detail panel: the selected hero, its stats and its abilities.
+        let (dx, dy, dw, dh) = hero_select::detail_rect(width, height);
+        self.hud_panel(width, height, dx, dy, dw, dh);
+        let Some(champion) = select.selected_champion() else {
+            return;
+        };
+        let portrait = 74.0;
         self.quad_alpha(
             width,
             height,
-            bx - 5.0,
-            by - 5.0,
-            bw + 10.0,
-            bh + 10.0,
-            [236, 188, 92],
-            if hovered { 0.36 } else { pulse },
+            dx + 12.0,
+            dy + 12.0,
+            portrait,
+            portrait,
+            [18, 21, 28],
+            0.95,
         );
-        self.quad(
+        if let Some(uv) = self.atlas.hero_uv(&champion.id) {
+            self.sprite(
+                width,
+                height,
+                dx + 12.0,
+                dy + 12.0,
+                portrait,
+                portrait,
+                uv,
+                [255, 255, 255],
+                1.0,
+            );
+        }
+        self.text(
             width,
             height,
-            bx - 2.0,
-            by - 2.0,
-            bw + 4.0,
-            bh + 4.0,
-            [188, 156, 90],
+            dx + 96.0,
+            dy + 14.0,
+            1.25,
+            &champion.name,
+            [244, 232, 200],
         );
+        self.text(
+            width,
+            height,
+            dx + 96.0,
+            dy + 32.0,
+            0.85,
+            &format!("{}  ·  {}", champion.role, champion.class),
+            Self::class_color(&champion.class),
+        );
+        let stats = [
+            ("ATTACK", champion.damage),
+            ("STRENGTH", champion.damage),
+            ("RANGED", champion.ranged),
+            ("PRAYER", champion.mana),
+        ];
+        for (column, (label, value)) in stats.iter().enumerate() {
+            let x = dx + 96.0 + column as f32 * 92.0;
+            self.text(width, height, x, dy + 50.0, 0.78, label, [170, 170, 168]);
+            self.text(
+                width,
+                height,
+                x,
+                dy + 64.0,
+                0.95,
+                &format!("{value:.0}"),
+                [236, 236, 232],
+            );
+        }
+        let mut row_y = dy + 92.0;
+        for ability in &champion.abilities {
+            self.quad_alpha(
+                width,
+                height,
+                dx + 12.0,
+                row_y,
+                26.0,
+                22.0,
+                [8, 10, 14],
+                0.88,
+            );
+            self.text_centered(
+                width,
+                height,
+                dx + 25.0,
+                row_y + 4.0,
+                0.95,
+                &ability.key,
+                [246, 224, 170],
+            );
+            self.text(
+                width,
+                height,
+                dx + 48.0,
+                row_y + 2.0,
+                0.92,
+                &ability.name,
+                [232, 220, 186],
+            );
+            let columns = ((dw - 64.0) / 7.0).max(20.0) as usize;
+            for (line, text) in hero_select::wrap_text(&ability.description, columns)
+                .into_iter()
+                .take(2)
+                .enumerate()
+            {
+                self.text(
+                    width,
+                    height,
+                    dx + 48.0,
+                    row_y + 18.0 + line as f32 * 13.0,
+                    0.78,
+                    &text,
+                    [186, 188, 196],
+                );
+            }
+            row_y += 48.0;
+        }
+
+        // Lock in button.
+        let (bx, by, bw, bh) = hero_select::confirm_rect(width, height);
+        let hovered = hero_select::confirm_at(width, height, mouse);
         self.quad(
             width,
             height,
@@ -1817,44 +1855,24 @@ impl Hud {
             by,
             bw,
             bh,
-            if hovered { [54, 68, 42] } else { [40, 50, 34] },
+            if hovered {
+                [190, 60, 60]
+            } else {
+                [140, 44, 44]
+            },
         );
-        self.quad_alpha(
-            width,
-            height,
-            bx + 6.0,
-            by + 6.0,
-            bw - 12.0,
-            bh - 12.0,
-            [26, 33, 23],
-            0.7,
-        );
-        let lock_name = select
-            .selected_champion()
-            .map(|champion| format!("PLAY {}", champion.name.to_uppercase()))
-            .unwrap_or_else(|| "ENTER THE RIFT".to_string());
+        self.rect_outline(width, height, bx, by, bw, bh, 1.0, [236, 190, 96], 0.9);
         self.text_centered(
             width,
             height,
             bx + bw * 0.5,
-            by + 12.0,
-            1.34,
-            &lock_name,
-            [250, 231, 175],
-        );
-        self.text_centered(
-            width,
-            height,
-            width * 0.5,
-            by + bh + 12.0,
-            0.78,
-            "ARROWS OR 1-3 TO BROWSE   -   ENTER TO LOCK IN",
-            [156, 162, 174],
+            by + bh * 0.5 - 7.0,
+            1.0,
+            "LOCK IN",
+            [255, 238, 206],
         );
     }
 
-    /// Draw the six inventory slots and, when open, the fountain shop panel.
-    /// Geometry only: the window title carries item names and gold.
     pub fn build_shop(&mut self, width: f32, height: f32, player: &PlayerHud, shop: &ItemShop) {
         if !player.shop_open {
             return;

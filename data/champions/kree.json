@@ -25,5 +25,28 @@
   "weight": 45,
   "stop_time": 0.25,
   "attack_windup": 0.3,
-  "armor": 18.0
+  "armor": 18.0,
+  "class": "RANGED",
+  "abilities": [
+    {
+      "key": "Q",
+      "name": "ARCANE LANCE",
+      "description": "A bolt of dark magic that bursts on impact."
+    },
+    {
+      "key": "W",
+      "name": "KREE'S LEAP",
+      "description": "Kree leaps a long way across the ground."
+    },
+    {
+      "key": "E",
+      "name": "FLECHTALON GUARD",
+      "description": "A ward of scales and feathers shields Kree and restores health."
+    },
+    {
+      "key": "R",
+      "name": "SKYFIRE",
+      "description": "A falling column of sky fire scorches everything beneath it."
+    }
+  ]
 }

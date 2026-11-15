@@ -3,6 +3,15 @@ use std::path::Path;
 use anyhow::{Context, Result};
 use serde::Deserialize;
 
+/// One ability slot, shown in the hero-select detail panel.
+#[derive(Debug, Clone, Deserialize)]
+pub struct ChampionAbility {
+    /// Hotkey badge: Q, W, E or R.
+    pub key: String,
+    pub name: String,
+    pub description: String,
+}
+
 #[derive(Debug, Clone, Deserialize)]
 pub struct ChampionConfig {
     /// File stem used by the hero-select screen and portrait atlas.
@@ -12,6 +21,12 @@ pub struct ChampionConfig {
     /// Short role label shown under the name on the hero-select card.
     #[serde(default)]
     pub role: String,
+    /// Combat class: MELEE, RANGED or MAGIC. Drives the hero-select filters.
+    #[serde(default)]
+    pub class: String,
+    /// Ability list shown in the hero-select detail panel.
+    #[serde(default)]
+    pub abilities: Vec<ChampionAbility>,
     /// One-line flavour text shown on the hero-select card.
     #[serde(default)]
     pub tagline: String,
@@ -170,6 +185,9 @@ impl ChampionConfig {
         }
         if self.tagline.is_empty() {
             self.tagline = "A champion of the Karamja rift.".to_string();
+        }
+        if self.class.is_empty() {
+            self.class = if self.ranged_auto { "RANGED" } else { "MELEE" }.to_string();
         }
     }
 }

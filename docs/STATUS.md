@@ -144,6 +144,12 @@ Last updated: M5.24 weighty movement, ambient creatures + cache group fix, 2026-
   under the roster panel, a red attack-range ring and a yellow target ring on
   the ground, and a red minimap ping on the last enemy hit. `--demo-fx` pops all
   of them for a quick visual check.
+- **Hero select**: the reference layout - filter tabs (ALL / MELEE / RANGED /
+  MAGIC), a roster grid of hero cards with baked portraits, hotkeys and class
+  tags, a "Your heroes" list on the left, a "Rival heroes" list on the right,
+  and a detail panel with the hero's stats plus its Q/W/E/R names and
+  descriptions, and a gold LOCK IN button. Champion classes and ability
+  tooltips are data-driven in `data/champions/*.json`.
 - **OSRS client HUD**: an OSRS-style stat panel (Attack, Strength, Ranged,
   Prayer, Hitpoints plus Run-Attack, Ranged-Bonus, Melee-Def and Ranged-Def),
   a two-team roster panel with live health bars, an OSRS-style chat box with

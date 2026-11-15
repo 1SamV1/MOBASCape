@@ -643,3 +643,23 @@ handful of cheap overlays, and the Rift client now copies them:
 - **Range rings**: a thin red ring at the champion's attack range and a small
   yellow ring on the current target.
 - **Minimap ping**: a red marker on the last enemy the player hit.
+
+## ADR-044 — Reference hero select: filters, roster grid and ability tooltips
+
+**Status:** accepted for the video-parity pass.
+
+The reference client picks heroes from a dense grid rather than three large
+cards, and every hero carries a written ability list. The Rift picker now
+matches that shape:
+
+- Filter tabs across the top (ALL, MELEE, RANGED, MAGIC) that re-filter the
+  grid; `F`, `M`, `R` and `C` are the keyboard shortcuts.
+- A roster grid of hero cards with baked cache-model portraits, hotkey badges,
+  names and class tags.
+- A "Your heroes" list on the left and a "Rival heroes" list on the right.
+- A detail panel with the hero's portrait, role, class, combat stats and the
+  full Q/W/E/R list with names and descriptions.
+- A gold LOCK IN button in the panel header.
+
+Champion classes and ability tooltips are data-driven: each champion file
+carries a `class` and an `abilities` array of `{key, name, description}`.

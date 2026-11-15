@@ -530,8 +530,15 @@ impl ApplicationHandler for App {
                     .unwrap_or((1280.0, 720.0));
                 if self.hero_select.open {
                     if state == ElementState::Pressed {
-                        if let Some(index) = hero_select::card_at(w, h, self.mouse_pos) {
-                            self.hero_select.selected = index;
+                        if let Some(filter) = hero_select::filter_at(w, h, self.mouse_pos) {
+                            self.hero_select.set_filter(filter);
+                        } else if let Some(slot) = hero_select::card_at(
+                            w,
+                            h,
+                            self.mouse_pos,
+                            self.hero_select.visible.len(),
+                        ) {
+                            self.hero_select.select_slot(slot);
                         } else if hero_select::confirm_at(w, h, self.mouse_pos) {
                             self.start_match();
                         }
@@ -627,9 +634,14 @@ impl ApplicationHandler for App {
                             KeyCode::Escape => event_loop.exit(),
                             KeyCode::ArrowLeft | KeyCode::KeyA => self.hero_select.cycle(-1),
                             KeyCode::ArrowRight | KeyCode::KeyD => self.hero_select.cycle(1),
-                            KeyCode::Digit1 => self.hero_select.selected = 0,
-                            KeyCode::Digit2 => self.hero_select.selected = 1,
-                            KeyCode::Digit3 => self.hero_select.selected = 2,
+                            KeyCode::Digit1 => self.hero_select.select_slot(0),
+                            KeyCode::Digit2 => self.hero_select.select_slot(1),
+                            KeyCode::Digit3 => self.hero_select.select_slot(2),
+                            KeyCode::Digit4 => self.hero_select.select_slot(3),
+                            KeyCode::KeyF => self.hero_select.set_filter(0),
+                            KeyCode::KeyM => self.hero_select.set_filter(1),
+                            KeyCode::KeyR => self.hero_select.set_filter(2),
+                            KeyCode::KeyC => self.hero_select.set_filter(3),
                             KeyCode::Enter | KeyCode::NumpadEnter | KeyCode::Space => {
                                 self.start_match()
                             }
@@ -1604,7 +1616,8 @@ impl App {
             .as_ref()
             .map(|r| (r.size.0 as f32, r.size.1 as f32))
             .unwrap_or((1280.0, 720.0));
-        self.hero_select.hover = hero_select::card_at(w, h, self.mouse_pos);
+        self.hero_select.hover =
+            hero_select::card_at(w, h, self.mouse_pos, self.hero_select.visible.len());
 
         if let (Some(renderer), Some(animated), Some(height), Some(collision)) = (
             self.renderer.as_mut(),
