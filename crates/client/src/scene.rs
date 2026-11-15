@@ -2017,6 +2017,9 @@ pub fn build(
             if map.distance_to_lane(wx, wz) < 6.5 * 128.0 {
                 continue;
             }
+            if point_in_tile_rects(&castle_keep, wx / 128.0, wz / 128.0) {
+                continue;
+            }
             if keep_clear
                 .iter()
                 .any(|p| p.distance(Vec3::new(wx, p.y, wz)) < 6.0 * 128.0)
