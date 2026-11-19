@@ -1,6 +1,26 @@
 # Status
 
-Last updated: sim spectator overlay + hash trace (M7 slice 3), 2026-11-19.
+Last updated: standalone 3D sim arena bridge (M7 slice 4), 2026-11-19.
+
+## 2026-11-19 — M7 slice 4: 3D sim arena bridge
+
+- New `crates/client/src/sim3d.rs`: a standalone 3D spectator arena that
+  steps the authoritative `rift_sim::Match` and renders it with cache models.
+- Arena: a generated 64x64 platform with three lane strips, placed at world
+  origin so it cannot be confused with the live map. Camera is a dedicated
+  top-down spectator view; the prototype unit mesh and HUD are suppressed.
+- Actors: King Awowogei (blue hero), Kree'arra Jr. (red hero), OSRS imp
+  minions, and tower/inhibitor/nexus cache models, with team-coloured ground
+  rings. Missing models fall back to coloured boxes.
+- `--sim-3d --sim-seed N` runs the arena at fixed 30 Hz with the same
+  deterministic `Match` as the CLI. Minimal HUD shows tick, seed, state hash,
+  hero counts, wave timer and the winner.
+- This is a dev bridge, not the final renderer: the prototype map still owns
+  live gameplay. The next slice replaces that with this actor layer, animated
+  poses, health plates and local movement prediction.
+- Verified capture: `/tmp/opencode/sim3d7.png` (tick 795, three lanes, team
+  rings, structures, hash `fe0273656458b7f7`). Workspace tests 61, clippy
+  clean.
 
 ## 2026-11-19 — M7 slice 3: client consumes the sim
 

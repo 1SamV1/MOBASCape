@@ -4048,6 +4048,22 @@ fn append_castle_statue(mesh: &mut MeshData, base: Vec3, rot: Mat3, scale: f32) 
     );
 }
 
+/// Public actor hook for the sim arena viewer. Reuses the cache model path
+/// (textures, flat per-face normals, world-space planar UVs) without the map
+/// scenery heuristics.
+#[allow(clippy::too_many_arguments)]
+pub fn append_sim_actor(
+    mesh: &mut MeshData,
+    model: &Model,
+    base: Vec3,
+    angle: f32,
+    scale: f32,
+    tint: [f32; 3],
+    texture_hint: u32,
+) {
+    append_model_scaled_tinted(mesh, model, base, angle, scale, tint, texture_hint, false);
+}
+
 #[allow(clippy::too_many_arguments)]
 fn append_model_scaled_tinted(
     mesh: &mut MeshData,

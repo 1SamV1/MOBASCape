@@ -38,8 +38,11 @@ Goal: the match is a deterministic, headless, testable state machine.
 - **Slice 3 done:** `rift-tools match --trace-every N` external hash traces;
   client `--sim-overlay` runs the real `Match` and draws the three-lane
   spectator board with structures, minions, heroes, nexus HP and the live hash.
-- Remaining: map sim entities onto cache-backed 3D actors, replace the
-  prototype combat state and keep local movement prediction.
+- **Slice 4 done:** `--sim-3d` standalone 3D arena renders the real `Match`
+  with cache models for heroes, minions, towers, inhibitors and nexus, team
+  rings and a dedicated spectator camera.
+- Remaining: replace the prototype map/combat with this actor layer, animate
+  poses and health plates, and keep local movement prediction.
 - `crates/bots`: scripted dev bots that can finish a match headless.
 - `rift-tools match --seed N --ticks 3600` prints the result and hash.
 - Client becomes a renderer + input predictor over the sim.

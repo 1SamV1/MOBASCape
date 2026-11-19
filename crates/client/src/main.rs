@@ -10,6 +10,7 @@ mod motion;
 mod portraits;
 mod renderer;
 mod scene;
+mod sim3d;
 mod terrain_textures;
 mod ui_assets;
 
@@ -154,6 +155,9 @@ struct Cli {
     /// Seed for the sim spectator match.
     #[arg(long, default_value_t = 7)]
     sim_seed: u32,
+    /// Dev: render the headless sim in a standalone 3D spectator arena.
+    #[arg(long)]
+    sim_3d: bool,
 }
 
 fn main() -> Result<()> {
@@ -273,6 +277,11 @@ fn main() -> Result<()> {
     let minimap_image = minimap::render(&scene, animated.minimap_bounds, minimap::MINIMAP_SIZE);
     ui_atlas.add_minimap(&minimap_image);
     let ui_atlas = Arc::new(ui_atlas);
+    let sim3d = if cli.sim_3d {
+        Some(sim3d::Sim3d::new(&cache, cli.sim_seed, 64)?)
+    } else {
+        None
+    };
     let mut app = App {
         cache,
         scene: Some(scene),
@@ -295,10 +304,9 @@ fn main() -> Result<()> {
         debug_hud: cli.debug_hud,
         last_health: 0.0,
         damage_flash: 0.0,
-        sim_match: cli
-            .sim_overlay
-            .then(|| rift_sim::Match::new(cli.sim_seed, 64)),
+        sim_match: (cli.sim_overlay && !cli.sim_3d).then(|| rift_sim::Match::new(cli.sim_seed, 64)),
         sim_accum: 0.0,
+        sim3d,
         demo_target,
         demo_timer: 0.0,
         demo_combat: cli.demo_combat,
@@ -404,6 +412,8 @@ struct App {
     sim_match: Option<rift_sim::Match>,
     /// Fixed-step accumulator for the spectator sim.
     sim_accum: f32,
+    /// Optional standalone 3D spectator arena.
+    sim3d: Option<sim3d::Sim3d>,
     demo_target: Option<(f32, f32)>,
     demo_timer: f32,
     demo_combat: bool,
@@ -1358,22 +1368,34 @@ impl App {
                     guard += 1;
                 }
             }
+            if let Some(sim3d) = self.sim3d.as_mut() {
+                sim3d.advance(dt * self.timescale.max(1.0));
+            }
             animated.refresh_visibility(dt, collision);
             renderer.camera.shake = glam::Vec3::new(
                 (self.app_time * 87.0).sin(),
                 0.0,
                 (self.app_time * 71.0).cos(),
             ) * (self.damage_flash * 46.0);
-            animated.prepare_render(height, camera_right, camera_up, camera_forward);
-            renderer.set_dynamic_mesh(&animated.vertices, &animated.indices);
-            renderer.set_shadow_mesh(&animated.shadow_vertices, &animated.shadow_indices);
-            renderer.set_caster_mesh(&animated.caster_vertices, &animated.caster_indices);
-            renderer.set_lights(&animated.lights());
-            renderer.set_time(self.app_time);
-            // Fog of war is a shader-side circle around the hero, so it has
-            // no geometry to fight with the terrain's z levels.
-            renderer.set_vision(animated.player_pos(), 2600.0);
-            animated.visibility_dirty = false;
+            if let Some(sim3d) = self.sim3d.as_mut() {
+                renderer.set_dynamic_mesh(&sim3d.mesh.vertices, &sim3d.mesh.indices);
+                renderer.set_shadow_mesh(&[], &[]);
+                renderer.set_caster_mesh(&[], &[]);
+                renderer.set_lights(&[]);
+                renderer.set_time(self.app_time);
+                renderer.set_vision(sim3d.center(), 100_000.0);
+            } else {
+                animated.prepare_render(height, camera_right, camera_up, camera_forward);
+                renderer.set_dynamic_mesh(&animated.vertices, &animated.indices);
+                renderer.set_shadow_mesh(&animated.shadow_vertices, &animated.shadow_indices);
+                renderer.set_caster_mesh(&animated.caster_vertices, &animated.caster_indices);
+                renderer.set_lights(&animated.lights());
+                renderer.set_time(self.app_time);
+                // Fog of war is a shader-side circle around the hero, so it
+                // has no geometry to fight with the terrain's z levels.
+                renderer.set_vision(animated.player_pos(), 2600.0);
+                animated.visibility_dirty = false;
+            }
 
             let nexus0 = animated.nexus_health(0).unwrap_or((0.0, 1.0));
             let nexus1 = animated.nexus_health(1).unwrap_or((0.0, 1.0));
@@ -1671,34 +1693,43 @@ impl App {
                     .map(|(_, item)| item.id.clone())
                     .collect(),
             };
-            self.hud.build(
-                renderer.size.0 as f32,
-                renderer.size.1 as f32,
-                &player_hud,
-                &self.shop,
-                nexus0,
-                nexus1,
-                animated.wave_timer,
-                animated.wave_interval,
-                animated.match_over,
-                self.mouse_pos,
-            );
-            self.hud.build_shop(hud_w, hud_h, &player_hud, &self.shop);
-            self.hud.build_minimap(
-                renderer.size.0 as f32,
-                renderer.size.1 as f32,
-                animated,
-                (renderer.camera.target.x, renderer.camera.target.z),
-                renderer.camera.distance,
-                renderer.camera.pitch,
-                &heroes,
-            );
-            if let Some(sim) = self.sim_match.as_ref() {
-                self.hud
-                    .build_sim_overlay(renderer.size.0 as f32, renderer.size.1 as f32, sim);
+            if let Some(sim3d) = self.sim3d.as_ref() {
+                self.hud.build_sim3d_hud(hud_w, hud_h, &sim3d.game);
+            } else {
+                self.hud.build(
+                    renderer.size.0 as f32,
+                    renderer.size.1 as f32,
+                    &player_hud,
+                    &self.shop,
+                    nexus0,
+                    nexus1,
+                    animated.wave_timer,
+                    animated.wave_interval,
+                    animated.match_over,
+                    self.mouse_pos,
+                );
+                self.hud.build_shop(hud_w, hud_h, &player_hud, &self.shop);
+                self.hud.build_minimap(
+                    renderer.size.0 as f32,
+                    renderer.size.1 as f32,
+                    animated,
+                    (renderer.camera.target.x, renderer.camera.target.z),
+                    renderer.camera.distance,
+                    renderer.camera.pitch,
+                    &heroes,
+                );
+                if let Some(sim) = self.sim_match.as_ref() {
+                    self.hud
+                        .build_sim_overlay(renderer.size.0 as f32, renderer.size.1 as f32, sim);
+                }
             }
             renderer.set_hud_mesh(&self.hud.vertices, &self.hud.indices);
-            if self.follow {
+            if let Some(sim3d) = self.sim3d.as_ref() {
+                renderer.camera.target = sim3d.center();
+                renderer.camera.distance = 10000.0;
+                renderer.camera.pitch = 1.36;
+                renderer.update_camera();
+            } else if self.follow {
                 renderer.camera.target = animated.player_pos() + Vec3::Y * 140.0;
                 renderer.update_camera();
             }

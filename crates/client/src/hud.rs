@@ -1809,6 +1809,71 @@ impl Hud {
         );
     }
 
+    /// Minimal HUD for the standalone 3D sim arena.
+    pub fn build_sim3d_hud(&mut self, width: f32, height: f32, sim: &rift_sim::Match) {
+        self.vertices.clear();
+        self.indices.clear();
+        let w = 460.0;
+        let x = (width - w) * 0.5;
+        self.hud_panel(width, height, x, 8.0, w, 58.0);
+        self.text_centered(
+            width,
+            height,
+            width * 0.5,
+            14.0,
+            1.15,
+            "SIM 3D ARENA",
+            OSRS_GOLD,
+        );
+        self.text_centered(
+            width,
+            height,
+            width * 0.5,
+            32.0,
+            HUD_SMALL_SCALE,
+            &format!(
+                "TICK {}  ·  SEED {}  ·  HASH {:016x}",
+                sim.tick, sim.seed, sim.last_tick_hash
+            ),
+            [210, 215, 220],
+        );
+        self.text_centered(
+            width,
+            height,
+            width * 0.5,
+            47.0,
+            HUD_SMALL_SCALE,
+            &format!(
+                "BLUE {}  ·  RED {}  ·  WAVE {}S",
+                sim.alive_on(0),
+                sim.alive_on(1),
+                sim.wave_timer_ticks() / 30
+            ),
+            [235, 225, 170],
+        );
+        if let Some(winner) = sim.winner {
+            self.text_centered(
+                width,
+                height,
+                width * 0.5,
+                92.0,
+                2.2,
+                if winner == 2 {
+                    "DRAW"
+                } else if winner == 0 {
+                    "BLUE VICTORY"
+                } else {
+                    "RED VICTORY"
+                },
+                if winner == 0 {
+                    [110, 185, 255]
+                } else {
+                    [255, 120, 110]
+                },
+            );
+        }
+    }
+
     /// Dev spectator overlay for the headless sim. Draws the three lanes,
     /// structures, minions and heroes from `rift_sim::Match`, plus the live
     /// tick and state hash. This is the first client consumer of the sim;
