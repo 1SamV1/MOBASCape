@@ -305,6 +305,8 @@ pub struct FloatText {
     pub text: String,
     pub color: [u8; 3],
     pub life: f32,
+    /// Text scale. Bigger hits pop larger, like the reference client.
+    pub scale: f32,
 }
 
 pub struct DuelState {
@@ -932,12 +934,14 @@ impl AnimatedScene {
             text: "1,502".to_string(),
             color: [255, 225, 120],
             life: 9999.0,
+            scale: 1.7,
         });
         self.floats.push(FloatText {
             pos: pos + Vec3::Y * 240.0,
             text: "330".to_string(),
             color: [235, 235, 235],
             life: 9999.0,
+            scale: 1.15,
         });
         self.announcement = Some(("YOU HAVE SLAIN A MINION!".to_string(), 9999.0));
         self.announcement_pinned = true;
@@ -3270,6 +3274,7 @@ impl AnimatedScene {
                 text: format!("{amount:.0}"),
                 color,
                 life: 1.2,
+                scale: (0.9 + amount / 260.0).clamp(0.9, 1.8),
             });
         }
         if index != self.player_index && self.units[index].team == 1 && hero_aggressor {
@@ -4039,16 +4044,18 @@ impl AnimatedScene {
         }
         self.units = units;
 
+        // Minions and camps keep cheap world-space bars. Champions,
+        // structures and dummies use the readable screen-space plates built
+        // by the client, so drawing both would double up the health bars.
         let bars = self
             .units
             .iter()
             .filter(|unit| {
                 unit.health > 0.0
                     && unit.spawn_delay <= 0.0
-                    && (unit.team != 2 || unit.kind == UnitKind::Camp)
-                    && !matches!(
+                    && matches!(
                         unit.kind,
-                        UnitKind::Ambient | UnitKind::DeliveryGuard | UnitKind::StorageChest
+                        UnitKind::MeleeMinion | UnitKind::RangedMinion | UnitKind::Camp
                     )
             })
             .map(|unit| {

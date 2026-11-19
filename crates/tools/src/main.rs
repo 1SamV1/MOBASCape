@@ -301,7 +301,7 @@ fn materials(cache: &Cache, limit: u32) -> Result<()> {
         if files.len() < 400 || uniform {
             let mut parsed = 0usize;
             let mut histogram: std::collections::BTreeMap<u16, usize> = Default::default();
-            for (id, data) in &files {
+            for (_id, data) in &files {
                 if data.len() >= 10 {
                     let texture = u16::from_le_bytes([data[8], data[9]]);
                     histogram

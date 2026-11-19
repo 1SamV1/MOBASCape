@@ -1,6 +1,21 @@
 # Status
 
-Last updated: reference framing + terrain conditioning pass, 2026-11-19.
+Last updated: unit frames, hit feedback and terrain conditioning, 2026-11-19.
+
+## 2026-11-19 — M6.2 unit frames + hit feedback
+
+- Screen-space unit plates projected from the world: champion name, level,
+  HP and mana; structures and camps get name + HP. Plates de-overlap by
+  nudging lower-priority frames upward.
+- World-space HP bars remain only on lane minions and jungle camps, so
+  champions and structures no longer double-draw.
+- Damage numbers carry a per-hit scale (`0.9..1.8`) and a one-pixel shadow;
+  large hits read at a glance.
+- Committed player attacks show a `CAST` bar above the bottom cluster.
+- Ability cooldowns use a clockwise radial wedge instead of a vertical fill.
+- Taking damage triggers a red screen-edge vignette and a short camera shake;
+  both decay over ~0.4 s.
+- Fixed the unused `id` warning in `rift-tools`; workspace clippy is clean.
 
 ## 2026-11-19 — presentation & terrain pass (M6.1)
 

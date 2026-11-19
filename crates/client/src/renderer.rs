@@ -94,6 +94,8 @@ pub struct Camera {
     pub yaw: f32,
     pub pitch: f32,
     pub distance: f32,
+    /// Cosmetic hit-shake offset, added to the focus point for view/picking.
+    pub shake: Vec3,
 }
 
 impl Camera {
@@ -108,11 +110,17 @@ impl Camera {
             // horizon, with the hero about two tiles tall on screen.
             pitch: 0.95,
             distance: 3200.0,
+            shake: Vec3::ZERO,
         }
     }
 
+    /// Camera focus including the cosmetic hit shake.
+    pub fn focus(&self) -> Vec3 {
+        self.target + self.shake
+    }
+
     pub fn eye(&self) -> Vec3 {
-        self.target
+        self.focus()
             + Vec3::new(
                 self.distance * self.pitch.cos() * self.yaw.sin(),
                 self.distance * self.pitch.sin(),
@@ -121,7 +129,7 @@ impl Camera {
     }
 
     pub fn view_proj(&self, aspect: f32) -> Mat4 {
-        let view = Mat4::look_at_rh(self.eye(), self.target, Vec3::Y);
+        let view = Mat4::look_at_rh(self.eye(), self.focus(), Vec3::Y);
         let proj = Mat4::perspective_rh(50f32.to_radians(), aspect, 8.0, 60_000.0);
         proj * view
     }
@@ -2126,6 +2134,7 @@ impl Renderer {
 
 /// Map the readback buffer, strip row padding, swap BGRA to RGBA when the
 /// surface is BGRA, and write a PNG.
+#[allow(clippy::too_many_arguments)]
 fn write_screenshot(
     device: &wgpu::Device,
     buffer: &wgpu::Buffer,

@@ -287,6 +287,8 @@ fn main() -> Result<()> {
         initial_distance: cli.distance,
         initial_pitch: cli.pitch,
         debug_hud: cli.debug_hud,
+        last_health: 0.0,
+        damage_flash: 0.0,
         demo_target,
         demo_timer: 0.0,
         demo_combat: cli.demo_combat,
@@ -384,6 +386,10 @@ struct App {
     initial_distance: f32,
     initial_pitch: Option<f32>,
     debug_hud: bool,
+    /// Previous frame health, for the red damage vignette.
+    last_health: f32,
+    /// 0..1 red screen-edge flash after taking damage.
+    damage_flash: f32,
     demo_target: Option<(f32, f32)>,
     demo_timer: f32,
     demo_combat: bool,
@@ -1322,7 +1328,18 @@ impl App {
                     animated.demo_fx();
                 }
             }
+            let current_health = animated.player_stats().health;
+            if self.last_health > current_health + 0.5 {
+                self.damage_flash = (self.damage_flash + 0.55).min(0.9);
+            }
+            self.last_health = current_health;
+            self.damage_flash = (self.damage_flash - dt * 2.4).max(0.0);
             animated.refresh_visibility(dt, collision);
+            renderer.camera.shake = glam::Vec3::new(
+                (self.app_time * 87.0).sin(),
+                0.0,
+                (self.app_time * 71.0).cos(),
+            ) * (self.damage_flash * 46.0);
             animated.prepare_render(height, camera_right, camera_up, camera_forward);
             renderer.set_dynamic_mesh(&animated.vertices, &animated.indices);
             renderer.set_shadow_mesh(&animated.shadow_vertices, &animated.shadow_indices);
@@ -1483,8 +1500,89 @@ impl App {
                 }
                 let screen_x = (ndc_x * 0.5 + 0.5) * hud_w;
                 let screen_y = (1.0 - (ndc_y * 0.5 + 0.5)) * hud_h;
-                damage_numbers.push((screen_x, screen_y, float.text.clone(), float.color));
+                damage_numbers.push((
+                    screen_x,
+                    screen_y,
+                    float.text.clone(),
+                    float.color,
+                    float.scale,
+                ));
             }
+            // Screen-space name/health plates. Minions keep their cheap
+            // world-space bars; champions, structures and camps get the
+            // reference client's readable frame.
+            let mut unit_frames = Vec::new();
+            for (index, unit) in animated.units.iter().enumerate() {
+                if !unit.visible || unit.health <= 0.0 || unit.spawn_delay > 0.0 {
+                    continue;
+                }
+                let plate = matches!(
+                    unit.kind,
+                    UnitKind::Player
+                        | UnitKind::EnemyChampion
+                        | UnitKind::Tower
+                        | UnitKind::Inhibitor
+                        | UnitKind::Nexus
+                        | UnitKind::Watchtower
+                        | UnitKind::Camp
+                        | UnitKind::Dummy
+                );
+                if !plate {
+                    continue;
+                }
+                let clip = view_proj
+                    * glam::Vec4::new(
+                        unit.pos.x,
+                        unit.pos.y + unit.bar_height + 12.0,
+                        unit.pos.z,
+                        1.0,
+                    );
+                if clip.w <= 0.0 {
+                    continue;
+                }
+                let ndc_x = clip.x / clip.w;
+                let ndc_y = clip.y / clip.w;
+                if ndc_x.abs() > 1.15 || ndc_y.abs() > 1.15 {
+                    continue;
+                }
+                let Some((name, level, _)) = animated.unit_info(index) else {
+                    continue;
+                };
+                let hero = matches!(unit.kind, UnitKind::Player | UnitKind::EnemyChampion);
+                let structure = matches!(
+                    unit.kind,
+                    UnitKind::Tower | UnitKind::Inhibitor | UnitKind::Nexus | UnitKind::Watchtower
+                );
+                unit_frames.push(crate::hud::UnitFrame {
+                    x: (ndc_x * 0.5 + 0.5) * hud_w,
+                    y: (1.0 - (ndc_y * 0.5 + 0.5)) * hud_h,
+                    name,
+                    level,
+                    health: unit.health,
+                    max_health: unit.max_health,
+                    mana: unit.mana,
+                    max_mana: unit.max_mana,
+                    team: unit.team,
+                    hero,
+                    structure,
+                    width: if hero {
+                        184.0
+                    } else if structure {
+                        170.0
+                    } else {
+                        116.0
+                    },
+                });
+            }
+            let player_unit = &animated.units[animated.player_index];
+            let cast_progress = if player_unit.attack_pending {
+                Some(
+                    (1.0 - player_unit.attack_windup_timer / player_unit.attack_windup.max(0.001))
+                        .clamp(0.0, 1.0),
+                )
+            } else {
+                None
+            };
             let player_hud = PlayerHud {
                 health: stats.health,
                 max_health: stats.max_health,
@@ -1528,6 +1626,9 @@ impl App {
                 heroes: heroes.clone(),
                 roster,
                 damage_numbers,
+                unit_frames,
+                cast_progress,
+                damage_flash: self.damage_flash,
                 announcement: animated.announcement.as_ref().map(|(text, _)| text.clone()),
                 kill_feed: animated
                     .kill_feed

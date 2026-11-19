@@ -39,6 +39,23 @@ pub struct HoverInfo {
     pub description: &'static str,
 }
 
+/// A screen-space unit plate projected from the world by the client.
+#[derive(Clone)]
+pub struct UnitFrame {
+    pub x: f32,
+    pub y: f32,
+    pub name: String,
+    pub level: u32,
+    pub health: f32,
+    pub max_health: f32,
+    pub mana: f32,
+    pub max_mana: f32,
+    pub team: u8,
+    pub hero: bool,
+    pub structure: bool,
+    pub width: f32,
+}
+
 #[repr(C)]
 #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct UiVertex {
@@ -101,8 +118,14 @@ pub struct PlayerHud {
     pub biome: Option<String>,
     /// Team heroes for the minimap and the hero profile card.
     pub heroes: Vec<HeroMarker>,
-    /// Screen-space floating damage numbers: `(x, y, text, colour)`.
-    pub damage_numbers: Vec<(f32, f32, String, [u8; 3])>,
+    /// Screen-space floating damage numbers: `(x, y, text, colour, scale)`.
+    pub damage_numbers: Vec<(f32, f32, String, [u8; 3], f32)>,
+    /// Screen-space name/health plates for champions, structures and camps.
+    pub unit_frames: Vec<UnitFrame>,
+    /// 0..1 progress of a committed player attack, if one is winding up.
+    pub cast_progress: Option<f32>,
+    /// Red screen-edge flash while the player is taking damage.
+    pub damage_flash: f32,
     /// Centre-screen announcement, e.g. "YOU HAVE SLAIN A MINION!".
     pub announcement: Option<String>,
     /// Recent kill messages shown under the roster.
@@ -312,6 +335,7 @@ impl Hud {
         );
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn build_minimap(
         &mut self,
         width: f32,
@@ -800,19 +824,7 @@ impl Hud {
             );
             self.quad(width, height, bx, y0, box_size, box_size, [32, 34, 40]);
             let cooldown = player.cooldowns[i];
-            if cooldown > 0.0 {
-                let frac = (cooldown / maxima[i]).clamp(0.0, 1.0);
-                let fill_h = box_size * frac;
-                self.quad(
-                    width,
-                    height,
-                    bx,
-                    y0 + box_size - fill_h,
-                    box_size,
-                    fill_h,
-                    [16, 18, 24],
-                );
-            } else {
+            if cooldown <= 0.0 {
                 self.quad(width, height, bx + 15.0, y0 + 15.0, 28.0, 28.0, *color);
             }
             let icon_key = ["icon_q", "icon_w", "icon_e", "icon_r"][i];
@@ -825,6 +837,20 @@ impl Hud {
                 icon_key,
                 [255, 255, 255],
             );
+            // Clockwise radial sweep, the genre-standard cooldown read.
+            if cooldown > 0.0 {
+                let frac = (cooldown / maxima[i]).clamp(0.0, 1.0);
+                self.cooldown_wedge(
+                    width,
+                    height,
+                    bx + box_size * 0.5,
+                    y0 + box_size * 0.5,
+                    box_size * 0.5,
+                    frac,
+                    [10, 12, 18],
+                    0.74,
+                );
+            }
             self.text(
                 width,
                 height,
@@ -978,9 +1004,203 @@ impl Hud {
             );
         }
 
-        // Floating damage numbers over the units that were hit.
-        for (x, y, text, color) in &player.damage_numbers {
-            self.text(width, height, *x, *y, 1.0, text, *color);
+        // Screen-space unit plates: name, level, HP and (for champions) mana.
+        // These replace the old world-space bars on champions and structures,
+        // which were too small to read at the reference camera distance.
+        // The local player sorts first; any plate that would overlap an
+        // already placed one is nudged upward.
+        let mut frames = player.unit_frames.clone();
+        frames.sort_by(|a, b| {
+            (a.team != 0)
+                .cmp(&(b.team != 0))
+                .then(a.y.partial_cmp(&b.y).unwrap_or(std::cmp::Ordering::Equal))
+        });
+        for i in 1..frames.len() {
+            let mut y = frames[i].y;
+            let x = frames[i].x;
+            let w = frames[i].width;
+            for _ in 0..3 {
+                let mut moved = false;
+                for other in &frames[..i] {
+                    let dx = (x - other.x).abs();
+                    let dy = (y - other.y).abs();
+                    if dx < (w + other.width) * 0.5 && dy < 26.0 {
+                        y -= 22.0;
+                        moved = true;
+                    }
+                }
+                if !moved {
+                    break;
+                }
+            }
+            frames[i].y = y;
+        }
+        for frame in &frames {
+            let w = frame.width;
+            let x = (frame.x - w * 0.5).clamp(4.0, (width - w - 4.0).max(4.0));
+            let y = (frame.y - 30.0).clamp(64.0, (height - 140.0).max(64.0));
+            let team_color = if frame.team == 0 {
+                [110, 185, 255]
+            } else if frame.team == 2 {
+                [240, 190, 80]
+            } else {
+                [255, 100, 90]
+            };
+            self.quad_alpha(
+                width,
+                height,
+                x - 3.0,
+                y - 13.0,
+                w + 6.0,
+                26.0,
+                [8, 9, 12],
+                0.55,
+            );
+            let name: String = frame.name.chars().take(18).collect();
+            if frame.hero {
+                self.text(
+                    width,
+                    height,
+                    x + 2.0,
+                    y - 11.0,
+                    0.65,
+                    &format!("{}", frame.level),
+                    [235, 225, 150],
+                );
+                self.text(
+                    width,
+                    height,
+                    x + 20.0,
+                    y - 11.0,
+                    0.76,
+                    &name.to_uppercase(),
+                    team_color,
+                );
+            } else {
+                self.text_centered(
+                    width,
+                    height,
+                    x + w * 0.5,
+                    y - 11.0,
+                    0.68,
+                    &name.to_uppercase(),
+                    team_color,
+                );
+            }
+            let bar_h = if frame.hero {
+                7.0
+            } else if frame.structure {
+                6.0
+            } else {
+                5.0
+            };
+            self.quad(width, height, x, y, w, bar_h, [16, 16, 20]);
+            self.quad(
+                width,
+                height,
+                x,
+                y,
+                w * (frame.health / frame.max_health.max(1.0)).clamp(0.0, 1.0),
+                bar_h,
+                if frame.team == 0 {
+                    [70, 200, 105]
+                } else if frame.team == 2 {
+                    [220, 165, 60]
+                } else {
+                    [210, 60, 55]
+                },
+            );
+            if frame.hero && frame.max_mana > 0.0 {
+                self.quad(width, height, x, y + 8.0, w, 3.0, [16, 16, 22]);
+                self.quad(
+                    width,
+                    height,
+                    x,
+                    y + 8.0,
+                    w * (frame.mana / frame.max_mana.max(1.0)).clamp(0.0, 1.0),
+                    3.0,
+                    [70, 120, 235],
+                );
+            }
+        }
+
+        // Floating damage numbers over the units that were hit. Large hits
+        // pop larger; a one-pixel shadow keeps them readable over grass.
+        for (x, y, text, color, scale) in &player.damage_numbers {
+            self.text(
+                width,
+                height,
+                *x + 1.0,
+                *y + 1.0,
+                *scale,
+                text,
+                [12, 12, 16],
+            );
+            self.text(width, height, *x, *y, *scale, text, *color);
+        }
+
+        // Committed-attack cast bar above the bottom cluster.
+        if let Some(progress) = player.cast_progress {
+            let cw = 210.0;
+            let cx = width * 0.5 - cw * 0.5;
+            let cy = height - 182.0;
+            self.quad_alpha(
+                width,
+                height,
+                cx - 3.0,
+                cy - 3.0,
+                cw + 6.0,
+                14.0,
+                [8, 9, 12],
+                0.7,
+            );
+            self.quad(width, height, cx, cy, cw, 8.0, [30, 26, 20]);
+            self.quad(
+                width,
+                height,
+                cx,
+                cy,
+                cw * progress.clamp(0.0, 1.0),
+                8.0,
+                [250, 160, 55],
+            );
+            self.text_centered(
+                width,
+                height,
+                cx + cw * 0.5,
+                cy - 1.0,
+                0.65,
+                "CAST",
+                [255, 225, 170],
+            );
+        }
+
+        // Red edge vignette on damage, so a hit is felt even when the camera
+        // is looking away from the health bar.
+        if player.damage_flash > 0.01 {
+            let alpha = (player.damage_flash * 0.55).clamp(0.0, 0.55);
+            self.quad_alpha(width, height, 0.0, 0.0, width, 4.0, [220, 30, 25], alpha);
+            self.quad_alpha(
+                width,
+                height,
+                0.0,
+                height - 4.0,
+                width,
+                4.0,
+                [220, 30, 25],
+                alpha,
+            );
+            self.quad_alpha(width, height, 0.0, 0.0, 4.0, height, [220, 30, 25], alpha);
+            self.quad_alpha(
+                width,
+                height,
+                width - 4.0,
+                0.0,
+                4.0,
+                height,
+                [220, 30, 25],
+                alpha,
+            );
         }
 
         // Current biome pocket label.
@@ -2886,6 +3106,58 @@ impl Hud {
     ) {
         if let Some(uv) = self.atlas.ui_uv(key) {
             self.sprite(width, height, x, y, size, size, uv, tint, 1.0);
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    /// Draw a filled pie wedge for ability cooldowns. `fraction` is the
+    /// remaining cooldown (1 = just cast, 0 = ready), sweeping clockwise from
+    /// the top like a clock face.
+    #[allow(clippy::too_many_arguments)]
+    fn cooldown_wedge(
+        &mut self,
+        width: f32,
+        height: f32,
+        cx: f32,
+        cy: f32,
+        radius: f32,
+        fraction: f32,
+        color: [u8; 3],
+        alpha: f32,
+    ) {
+        let fraction = fraction.clamp(0.0, 1.0);
+        if fraction <= 0.001 || radius <= 0.0 {
+            return;
+        }
+        let segments = 40usize;
+        let start = -std::f32::consts::FRAC_PI_2;
+        let sweep = std::f32::consts::TAU * fraction;
+        let uv = self.atlas.white_uv;
+        let uv_center = [(uv[0] + uv[2]) * 0.5, (uv[1] + uv[3]) * 0.5];
+        let tint = [
+            srgb_to_linear(color[0] as f32 / 255.0),
+            srgb_to_linear(color[1] as f32 / 255.0),
+            srgb_to_linear(color[2] as f32 / 255.0),
+            alpha,
+        ];
+        let to_clip = |x: f32, y: f32| [2.0 * x / width - 1.0, 1.0 - 2.0 * y / height, 0.0];
+        let base = self.vertices.len() as u32;
+        self.vertices.push(UiVertex {
+            position: to_clip(cx, cy),
+            uv: uv_center,
+            color: tint,
+        });
+        for i in 0..=segments {
+            let angle = start + sweep * i as f32 / segments as f32;
+            self.vertices.push(UiVertex {
+                position: to_clip(cx + angle.cos() * radius, cy + angle.sin() * radius),
+                uv: uv_center,
+                color: tint,
+            });
+        }
+        for i in 0..segments {
+            self.indices
+                .extend_from_slice(&[base, base + 1 + i as u32, base + 2 + i as u32]);
         }
     }
 
