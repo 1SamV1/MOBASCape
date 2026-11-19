@@ -1,6 +1,27 @@
 # Status
 
-Last updated: unified OSRS HUD skin, 2026-11-19.
+Last updated: deterministic headless match spine (M7 slice 1), 2026-11-19.
+
+## 2026-11-19 — M7 slice 1: headless match spine
+
+- New `crates/sim/src/battle.rs`: a 5v5 bot match running at exactly **30 Hz**
+  (`TICK_HZ`, `TICK_MS`) with no wall-clock time, no OS RNG and no floats in
+  movement. Positions are fixed-point integers (1024 units per tile) and
+  distances use an integer square root.
+- Seeded xorshift RNG drives damage variance and 10% crits; the RNG state is
+  part of the hash.
+- Input commands: `MoveTo`, `Attack`, `Hold`, queued at tick boundaries.
+- Bot AI picks the nearest enemy, chases with the existing A* grid (central
+  wall + pillars force real pathing), and auto-attacks in range.
+- Stable FNV-1a `state_hash()` covers tick, winner, stats, RNG state, every
+  entity and its order/path.
+- `rift-tools match --seed 7 --ticks 3000` runs headless without opening the
+  cache. `seed=7` finishes at tick 1234 with winner team 0 and hash
+  `0e1634f61b9e7f1c`; repeated runs are identical. `seed=1` finishes at 1167.
+- Tests: 12 in `rift-sim` (5 new: tick rate, identical seeds, command
+  determinism, winner reached, integer roots). Workspace total is 59.
+- The client still runs its own prototype match; the next slice moves lanes,
+  economy and structures onto this spine and makes the client a renderer.
 
 ## 2026-11-19 — M6.4 HUD skin pass
 

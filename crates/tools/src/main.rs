@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use anyhow::{Context, Result, bail};
 use clap::{Parser, Subcommand};
 use rift_cache::{Cache, Model, ObjectDefinition, SpriteDefinition, Terrain, TextureDefinition};
+use rift_sim::Match as BattleMatch;
 
 #[derive(Parser, Debug)]
 #[command(name = "rift-tools", about = "OSRS cache inspection for Rift")]
@@ -73,6 +74,15 @@ enum Command {
         region_y: u32,
         out: PathBuf,
     },
+    /// Run a deterministic headless 5v5 bot match and print its state hash.
+    Match {
+        #[arg(long, default_value_t = 1)]
+        seed: u32,
+        #[arg(long, default_value_t = 3000)]
+        ticks: u64,
+        #[arg(long, default_value_t = 64)]
+        size: usize,
+    },
 }
 
 fn main() -> Result<()> {
@@ -84,6 +94,12 @@ fn main() -> Result<()> {
         .init();
 
     let cli = Cli::parse();
+    // The headless match is pure simulation and deliberately does not touch
+    // the cache: it must be runnable in CI without game assets.
+    if let Command::Match { seed, ticks, size } = &cli.command {
+        headless_match(*seed, *ticks, *size)?;
+        return Ok(());
+    }
     let cache = Cache::open_with_keys(&cli.cache, cli.keys.as_ref())
         .with_context(|| format!("opening cache at {}", cli.cache.display()))?;
 
@@ -110,8 +126,50 @@ fn main() -> Result<()> {
             region_y,
             out,
         } => terrain_obj(&cache, region_x, region_y, &out)?,
+        Command::Match { .. } => unreachable!("handled before opening the cache"),
     }
 
+    Ok(())
+}
+
+fn headless_match(seed: u32, ticks: u64, size: usize) -> Result<()> {
+    let mut game = BattleMatch::new(seed, size);
+    game.run(ticks);
+    println!(
+        "match seed={seed} size={size} ticks={} winner={:?} hash={:016x}",
+        game.tick,
+        game.winner,
+        game.state_hash()
+    );
+    println!(
+        "stats attacks={} crits={} deaths={} commands={}",
+        game.stats.attacks, game.stats.crits, game.stats.deaths, game.stats.commands
+    );
+    for team in 0u8..2 {
+        println!(
+            "team {team}: alive={} hp={}",
+            game.alive_on(team),
+            game.entities
+                .iter()
+                .filter(|entity| entity.team == team)
+                .map(|entity| entity.hp.max(0))
+                .sum::<i32>()
+        );
+    }
+    for entity in &game.entities {
+        println!(
+            "entity {:02} team {} pos=({},{}) tile=({},{}) hp={}/{} {}",
+            entity.id,
+            entity.team,
+            entity.x,
+            entity.z,
+            entity.tile().0,
+            entity.tile().1,
+            entity.hp.max(0),
+            entity.max_hp,
+            if entity.alive { "alive" } else { "dead" }
+        );
+    }
     Ok(())
 }
 

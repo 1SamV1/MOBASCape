@@ -1777,6 +1777,7 @@ dependencies = [
  "clap",
  "image",
  "rift-cache",
+ "rift-sim",
  "serde_json",
  "tracing",
  "tracing-subscriber",
