@@ -250,6 +250,40 @@ pub struct Effect {
     pub color: [u8; 3],
 }
 
+/// A short-lived billboard spark. Particles are cosmetic and deterministic:
+/// they use the scene RNG and never touch combat state.
+pub struct Particle {
+    pub pos: Vec3,
+    pub vel: Vec3,
+    pub color: [u8; 3],
+    pub size: f32,
+    pub remaining: f32,
+    pub duration: f32,
+    pub gravity: f32,
+    pub drag: f32,
+}
+
+/// A ground scorch or lingering ability stain.
+pub struct Decal {
+    pub pos: Vec3,
+    pub radius: f32,
+    pub remaining: f32,
+    pub duration: f32,
+    pub color: [u8; 3],
+}
+
+/// A delayed ground impact with a visible telegraph. Meteor and similar
+/// abilities land after `delay`, so opponents get a chance to step out.
+pub struct PendingImpact {
+    pub pos: Vec3,
+    pub radius: f32,
+    pub delay: f32,
+    pub duration: f32,
+    pub damage: f32,
+    pub team: u8,
+    pub color: [u8; 3],
+}
+
 #[derive(Debug, Clone, Copy)]
 pub struct SceneLight {
     pub pos: Vec3,
@@ -391,6 +425,12 @@ pub struct AnimatedScene {
     spectator_indices: Vec<usize>,
     rng_state: u32,
     pub effects: Vec<Effect>,
+    /// Billboard sparks emitted by abilities, impacts and deaths.
+    pub particles: Vec<Particle>,
+    /// Ground stains that fade over several seconds.
+    pub decals: Vec<Decal>,
+    /// Telegraphed ground impacts waiting to land.
+    pub pending_impacts: Vec<PendingImpact>,
     /// Floating damage numbers currently in the world.
     pub floats: Vec<FloatText>,
     /// Centre-screen announcement, e.g. "YOU HAVE SLAIN A MINION!".
@@ -846,6 +886,9 @@ impl AnimatedScene {
             spectator_indices,
             rng_state: 0x9E37_79B9,
             effects: Vec::new(),
+            particles: Vec::new(),
+            decals: Vec::new(),
+            pending_impacts: Vec::new(),
             floats: Vec::new(),
             announcement: None,
             announcement_pinned: false,
@@ -1469,6 +1512,52 @@ impl AnimatedScene {
         (x >> 8) as f32 / 16_777_216.0
     }
 
+    /// Emit a deterministic burst of billboard sparks. Kept under a hard cap
+    /// so a teamfight cannot grow the cosmetic buffer without bound.
+    fn emit_burst(
+        &mut self,
+        pos: Vec3,
+        color: [u8; 3],
+        count: usize,
+        speed: f32,
+        size: f32,
+        life: f32,
+    ) {
+        for _ in 0..count {
+            if self.particles.len() >= 320 {
+                break;
+            }
+            let angle = self.next_random() * std::f32::consts::TAU;
+            let radial = speed * (0.30 + self.next_random() * 0.70);
+            let upward = speed * (0.25 + self.next_random() * 0.95);
+            let particle_size = size * (0.55 + self.next_random() * 0.85);
+            let duration = life * (0.55 + self.next_random() * 0.75);
+            self.particles.push(Particle {
+                pos: pos + Vec3::Y * (size * 0.35),
+                vel: Vec3::new(angle.cos() * radial, upward, angle.sin() * radial),
+                color,
+                size: particle_size,
+                remaining: duration,
+                duration,
+                gravity: -520.0,
+                drag: 1.4,
+            });
+        }
+    }
+
+    fn add_decal(&mut self, pos: Vec3, radius: f32, color: [u8; 3], duration: f32) {
+        if self.decals.len() >= 48 {
+            self.decals.remove(0);
+        }
+        self.decals.push(Decal {
+            pos,
+            radius,
+            remaining: duration,
+            duration,
+            color,
+        });
+    }
+
     /// Cast the Q slot. King Awowogei throws his Bananarang, the Blowpipe
     /// Ranger looses a poisoned dart, and everyone else keeps the shared
     /// arcane bolt aimed at the cursor.
@@ -1526,6 +1615,7 @@ impl AnimatedScene {
             duration: 0.18,
             color: [255, 220, 60],
         });
+        self.emit_burst(start, [255, 220, 60], 12, 230.0, 18.0, 0.45);
         true
     }
 
@@ -1565,6 +1655,7 @@ impl AnimatedScene {
             venom: 4.0,
             execute: 0.0,
         });
+        self.emit_burst(pos, [120, 255, 120], 8, 190.0, 14.0, 0.4);
         true
     }
 
@@ -1649,6 +1740,8 @@ impl AnimatedScene {
             duration: 0.35,
             color: [120, 255, 170],
         });
+        self.emit_burst(pos, [140, 255, 170], 16, 260.0, 18.0, 0.55);
+        self.add_decal(pos, 90.0, [40, 82, 52], 1.6);
         true
     }
 
@@ -1688,6 +1781,7 @@ impl AnimatedScene {
             venom: 2.0,
             execute: 0.35,
         });
+        self.emit_burst(pos, [255, 90, 70], 14, 260.0, 16.0, 0.5);
         true
     }
 
@@ -1733,6 +1827,7 @@ impl AnimatedScene {
             duration: 0.22,
             color: [255, 120, 40],
         });
+        self.emit_burst(pos, [255, 150, 60], 10, 210.0, 15.0, 0.4);
         true
     }
 
@@ -1784,6 +1879,15 @@ impl AnimatedScene {
             duration: 0.35,
             color: [90, 220, 255],
         });
+        self.effects.push(Effect {
+            pos: destination,
+            radius: 170.0,
+            remaining: 0.42,
+            duration: 0.42,
+            color: [120, 235, 255],
+        });
+        self.emit_burst(start, [120, 225, 255], 18, 300.0, 18.0, 0.55);
+        self.emit_burst(destination, [170, 245, 255], 20, 320.0, 18.0, 0.6);
         true
     }
 
@@ -1814,6 +1918,8 @@ impl AnimatedScene {
             duration: 0.5,
             color: [90, 255, 140],
         });
+        self.emit_burst(pos, [120, 255, 160], 26, 170.0, 16.0, 0.9);
+        self.add_decal(pos, 130.0, [36, 90, 52], 2.6);
         true
     }
 
@@ -1909,6 +2015,7 @@ impl AnimatedScene {
             duration: 0.6,
             color: [80, 220, 255],
         });
+        self.emit_burst(center, [90, 220, 255], 34, 520.0, 22.0, 0.8);
         tracing::info!(
             "trial by combat: target {} arena radius {radius:.0}",
             target_index
@@ -1928,24 +2035,26 @@ impl AnimatedScene {
         }
         player.mana -= 80.0;
         player.cooldowns[3] = 45.0;
-        self.effects.push(Effect {
-            pos: target,
-            radius: 384.0,
-            remaining: 0.6,
-            duration: 0.6,
-            color: [255, 110, 50],
-        });
         let radius = 384.0;
         let damage = player.r_damage * (1.0 + player.ability_power / 100.0);
-        for i in 0..self.units.len() {
-            let unit = &self.units[i];
-            if unit.health <= 0.0 || unit.team == 0 || unit.team == 2 {
-                continue;
-            }
-            if unit.pos.distance(target) <= radius + unit.hit_radius {
-                self.damage_unit(i, damage, 0);
-            }
-        }
+        // Telegraph first, damage later. The rock is visible falling for the
+        // whole delay, so a mobile target can walk out of the circle.
+        self.pending_impacts.push(PendingImpact {
+            pos: target,
+            radius,
+            delay: 0.9,
+            duration: 0.9,
+            damage,
+            team: 0,
+            color: [255, 110, 50],
+        });
+        self.effects.push(Effect {
+            pos: target,
+            radius: radius * 0.35,
+            remaining: 0.3,
+            duration: 0.3,
+            color: [255, 190, 80],
+        });
         true
     }
 
@@ -2445,6 +2554,62 @@ impl AnimatedScene {
             effect.remaining -= dt;
         }
         self.effects.retain(|effect| effect.remaining > 0.0);
+
+        for particle in &mut self.particles {
+            particle.remaining -= dt;
+            particle.vel.y += particle.gravity * dt;
+            particle.vel *= (1.0 - particle.drag * dt).max(0.0);
+            particle.pos += particle.vel * dt;
+            let floor = height.height_at(particle.pos.x, particle.pos.z) + 2.0;
+            if particle.pos.y < floor {
+                particle.pos.y = floor;
+                particle.vel.y *= -0.25;
+                particle.vel.x *= 0.55;
+                particle.vel.z *= 0.55;
+            }
+        }
+        self.particles.retain(|particle| particle.remaining > 0.0);
+
+        for decal in &mut self.decals {
+            decal.remaining -= dt;
+        }
+        self.decals.retain(|decal| decal.remaining > 0.0);
+
+        let impacts = std::mem::take(&mut self.pending_impacts);
+        let mut surviving_impacts = Vec::with_capacity(impacts.len());
+        for mut impact in impacts {
+            impact.delay -= dt;
+            if impact.delay > 0.0 {
+                surviving_impacts.push(impact);
+                continue;
+            }
+            let hits = self
+                .units
+                .iter()
+                .enumerate()
+                .filter(|(_, unit)| {
+                    unit.health > 0.0
+                        && unit.team != impact.team
+                        && unit.team != 2
+                        && unit.pos.distance(impact.pos)
+                            <= impact.radius + unit.hit_radius.max(40.0)
+                })
+                .map(|(index, _)| index)
+                .collect::<Vec<_>>();
+            for index in hits {
+                self.damage_unit_by(index, impact.damage, impact.team, Some(self.player_index));
+            }
+            self.effects.push(Effect {
+                pos: impact.pos,
+                radius: impact.radius,
+                remaining: 0.65,
+                duration: 0.65,
+                color: impact.color,
+            });
+            self.emit_burst(impact.pos, impact.color, 40, 620.0, 34.0, 0.95);
+            self.add_decal(impact.pos, impact.radius * 0.72, [54, 30, 20], 9.0);
+        }
+        self.pending_impacts = surviving_impacts;
         if let Some((_, ref mut remaining)) = self.marker {
             *remaining -= dt;
             if *remaining <= 0.0 {
@@ -3276,6 +3441,9 @@ impl AnimatedScene {
                 life: 1.2,
                 scale: (0.9 + amount / 260.0).clamp(0.9, 1.8),
             });
+            if hero_aggressor || index == self.player_index {
+                self.emit_burst(pos, color, 3, 130.0, 7.0, 0.3);
+            }
         }
         if index != self.player_index && self.units[index].team == 1 && hero_aggressor {
             // Ping the target on the minimap, like the reference client.
@@ -3603,6 +3771,18 @@ impl AnimatedScene {
             let previous = bananarang_position(banana, height, return_target);
             banana.t += dt / banana.duration.max(0.01);
             let pos = bananarang_position(banana, height, return_target);
+            if self.particles.len() < 300 {
+                self.particles.push(Particle {
+                    pos,
+                    vel: Vec3::new(0.0, 30.0, 0.0),
+                    color: [255, 225, 80],
+                    size: 9.0,
+                    remaining: 0.28,
+                    duration: 0.28,
+                    gravity: -20.0,
+                    drag: 1.0,
+                });
+            }
             for index in 0..self.units.len() {
                 if banana.hit.contains(&index) {
                     continue;
@@ -3638,13 +3818,15 @@ impl AnimatedScene {
                 if stun > 0.0 {
                     self.units[index].stun_timer = self.units[index].stun_timer.max(stun);
                 }
+                let hit_color = if crit { [255, 90, 40] } else { [255, 220, 60] };
                 self.effects.push(Effect {
                     pos,
                     radius: if crit { 150.0 } else { 90.0 },
                     remaining: 0.25,
                     duration: 0.25,
-                    color: if crit { [255, 90, 40] } else { [255, 220, 60] },
+                    color: hit_color,
                 });
+                self.emit_burst(pos, hit_color, if crit { 14 } else { 8 }, 260.0, 15.0, 0.45);
             }
             banana.t < 1.0
         });
@@ -3656,6 +3838,23 @@ impl AnimatedScene {
         let mut survivors = Vec::with_capacity(projectiles.len());
 
         for mut projectile in projectiles {
+            // Trail: a couple of soft sparks behind every player projectile.
+            if projectile.team == 0 && self.particles.len() < 280 {
+                let (trail_color, trail_size) = match projectile.style {
+                    ProjectileStyle::Dart => ([120, 255, 140], 7.0),
+                    ProjectileStyle::Bolt => ([255, 170, 70], 10.0),
+                };
+                self.particles.push(Particle {
+                    pos: projectile.pos,
+                    vel: -projectile.dir * 40.0 + Vec3::Y * 18.0,
+                    color: trail_color,
+                    size: trail_size,
+                    remaining: 0.22,
+                    duration: 0.22,
+                    gravity: 0.0,
+                    drag: 2.0,
+                });
+            }
             projectile.life -= dt;
             projectile.pos += projectile.dir * projectile.speed * dt;
 
@@ -3706,13 +3905,21 @@ impl AnimatedScene {
                     poisoned.venom_team = projectile.team;
                 }
                 self.damage_unit_by(index, damage, projectile.team, projectile.attacker);
+                let (hit_color, hit_radius) = match projectile.style {
+                    ProjectileStyle::Dart => ([120, 255, 150], 120.0),
+                    ProjectileStyle::Bolt => ([255, 140, 50], 180.0),
+                };
                 self.effects.push(Effect {
                     pos: projectile.pos,
-                    radius: 180.0,
+                    radius: hit_radius,
                     remaining: 0.7,
                     duration: 0.7,
-                    color: [255, 120, 40],
+                    color: hit_color,
                 });
+                self.emit_burst(projectile.pos, hit_color, 10, 240.0, 14.0, 0.45);
+                if projectile.venom > 0.0 {
+                    self.add_decal(projectile.pos, 70.0, [34, 78, 44], 3.2);
+                }
             }
             if hit_count == 0 {
                 survivors.push(projectile);
@@ -3956,6 +4163,19 @@ impl AnimatedScene {
                 intensity: 1.6,
             });
         }
+        for impact in &self.pending_impacts {
+            let progress = 1.0 - (impact.delay / impact.duration.max(0.01)).clamp(0.0, 1.0);
+            lights.push(SceneLight {
+                pos: impact.pos + Vec3::Y * 80.0,
+                color: [
+                    impact.color[0] as f32 / 255.0,
+                    impact.color[1] as f32 / 255.0,
+                    impact.color[2] as f32 / 255.0,
+                ],
+                radius: impact.radius * 3.0,
+                intensity: 0.5 + progress * 2.4,
+            });
+        }
         lights
     }
 
@@ -4108,6 +4328,29 @@ impl AnimatedScene {
                 ProjectileStyle::Dart => (13.0, [226, 240, 255]),
                 ProjectileStyle::Bolt => (22.0, [255, 150, 40]),
             };
+            append_billboard(self, pos, size, color, camera_right, camera_up);
+        }
+
+        // Ability sparks. They fade by dimming toward black because the
+        // opaque scene pipeline has no per-vertex alpha.
+        let particles = self
+            .particles
+            .iter()
+            .filter(|p| self.in_team_vision(p.pos))
+            .map(|p| {
+                let t = (p.remaining / p.duration.max(0.01)).clamp(0.0, 1.0);
+                (
+                    p.pos,
+                    p.size * (0.45 + 0.55 * t),
+                    [
+                        (p.color[0] as f32 * (0.30 + 0.70 * t)) as u8,
+                        (p.color[1] as f32 * (0.30 + 0.70 * t)) as u8,
+                        (p.color[2] as f32 * (0.30 + 0.70 * t)) as u8,
+                    ],
+                )
+            })
+            .collect::<Vec<_>>();
+        for (pos, size, color) in particles {
             append_billboard(self, pos, size, color, camera_right, camera_up);
         }
 
@@ -4268,6 +4511,51 @@ impl AnimatedScene {
             if let Some(chest) = self.delivery_chest.and_then(|index| self.units.get(index)) {
                 append_ring(self, height, chest.pos, 150.0, [255, 210, 80]);
             }
+        }
+
+        // Lingering ground stains under the effects layer.
+        let decals = self
+            .decals
+            .iter()
+            .map(|d| {
+                let t = (d.remaining / d.duration.max(0.01)).clamp(0.0, 1.0);
+                let color = [
+                    (d.color[0] as f32 * (0.35 + t * 0.65)) as u8,
+                    (d.color[1] as f32 * (0.35 + t * 0.65)) as u8,
+                    (d.color[2] as f32 * (0.35 + t * 0.65)) as u8,
+                ];
+                (d.pos, d.radius, color)
+            })
+            .collect::<Vec<_>>();
+        for (pos, radius, color) in decals {
+            append_ring_width(self, height, pos, radius, color, 0.22);
+        }
+
+        // Telegraphed impacts: a pulsing danger circle plus the incoming rock.
+        let impacts = self
+            .pending_impacts
+            .iter()
+            .map(|i| {
+                let progress = 1.0 - (i.delay / i.duration.max(0.01)).clamp(0.0, 1.0);
+                let pulse = 0.72 + (i.delay * 18.0).sin().abs() * 0.28;
+                (i.pos, i.radius, progress, pulse)
+            })
+            .collect::<Vec<_>>();
+        for (pos, radius, progress, pulse) in impacts {
+            append_ring(self, height, pos, radius, [255, 80, 35]);
+            append_ring_width(self, height, pos, radius * pulse, [255, 150, 60], 0.60);
+            append_ring_width(
+                self,
+                height,
+                pos,
+                radius * (0.22 + progress * 0.68),
+                [255, 210, 120],
+                0.86,
+            );
+            let fall = 1500.0 * (1.0 - progress);
+            let meteor = pos + Vec3::Y * (fall + 140.0);
+            append_billboard(self, meteor, 96.0, [255, 130, 45], camera_right, camera_up);
+            append_billboard(self, meteor, 58.0, [255, 235, 170], camera_right, camera_up);
         }
 
         let effects = self

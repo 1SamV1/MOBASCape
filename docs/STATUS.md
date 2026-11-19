@@ -1,6 +1,24 @@
 # Status
 
-Last updated: unit frames, hit feedback and terrain conditioning, 2026-11-19.
+Last updated: ability VFX, telegraphs and particles, 2026-11-19.
+
+## 2026-11-19 — M6.3 ability VFX pass
+
+- Added a deterministic cosmetic particle system (capped at 320 live sparks)
+  with gravity, drag, ground bounce and team-vision filtering.
+- Projectiles now leave trails; dart hits leave a green burst and a short
+  poison stain, bolt hits leave an orange burst.
+- Bananarang leaves a gold trail and emits an impact burst on each hit.
+- Royal Dash emits cyan bursts at both ends and a second arrival ring.
+- King's Decree emits rising green sparks and a healing ground stain.
+- Trial by Combat bursts around the new arena.
+- R meteor is now telegraphed: a pulsing danger circle plus a visible falling
+  rock precedes a 0.9 s delayed impact, which then spawns a shockwave ring,
+  40 sparks and a scorch decal. Damage is applied by the impact, not on cast.
+- Pending impacts drive a warm point light that intensifies as the rock falls.
+- Verified visually: `--champion jad --demo-kit` at frames 185/200/250 shows
+  the telegraph, fall and impact; `--demo-combat` shows projectile trails.
+  `cargo test --workspace` and workspace clippy stay clean.
 
 ## 2026-11-19 — M6.2 unit frames + hit feedback
 
