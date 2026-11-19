@@ -1,8 +1,35 @@
 # Status
 
-Last updated: deterministic headless match spine (M7 slice 1), 2026-11-19.
+Last updated: headless three-lane match with structures and economy, 2026-11-19.
 
-## 2026-11-19 — M7 slice 1: headless match spine
+## 2026-11-19 — M7 slice 2: lanes, waves, structures, economy
+
+- The headless match is now a real three-lane game: top/mid/bottom waypoint
+  lanes, a scaled arena with jungle blocks, and lane assignments for both
+  hero teams.
+- Minion waves spawn every 25 s (first at 10 s), three per lane per team,
+  capped at 90 live minions per side.
+- Structures: one nexus, three towers and three inhibitors per team. Towers
+  and inhibitors shoot; the nexus is shielded until at least one enemy
+  inhibitor falls, then becomes destructible.
+- Minions advance their lane, stop to fight anything within 3 tiles, and deal
+  double damage to structures. Heroes have an 8-tile aggro radius, otherwise
+  push their lane and fall back to the enemy nexus at the end.
+- Hero economy: gold and XP on minion/structure/hero kills, level-ups increase
+  HP and damage. Heroes respawn at base after 15 s.
+- Match ends on nexus destruction; a 20-minute integer-only timeout compares
+  nexus health fractions if neither side closes.
+- `last_tick_hash` is written after every step, so per-tick determinism can be
+  asserted (the 600-tick test compares every tick).
+- `rift-tools match --seed 7` finishes at tick **6986**, team 0 wins, hash
+  `bc1f32e1b0f15ace`, 9 waves. Default is 12000 ticks and `--verbose` prints
+  every entity. Seed 1 also finishes before the timeout.
+- Tests: 14 in `rift-sim` (waves interval, guaranteed nexus ending, shield
+  rule, per-tick hash equality, commands, integer roots). Workspace total 61.
+- Remaining M7 work: move the client's lanes/combat/economy onto this `Match`,
+  add a state-hash trace mode and make the client a renderer over the sim.
+
+## 2026-11-19 — M7 slice 1: headless match spine (superseded by slice 2)
 
 - New `crates/sim/src/battle.rs`: a 5v5 bot match running at exactly **30 Hz**
   (`TICK_HZ`, `TICK_MS`) with no wall-clock time, no OS RNG and no floats in
@@ -15,13 +42,9 @@ Last updated: deterministic headless match spine (M7 slice 1), 2026-11-19.
   wall + pillars force real pathing), and auto-attacks in range.
 - Stable FNV-1a `state_hash()` covers tick, winner, stats, RNG state, every
   entity and its order/path.
-- `rift-tools match --seed 7 --ticks 3000` runs headless without opening the
-  cache. `seed=7` finishes at tick 1234 with winner team 0 and hash
-  `0e1634f61b9e7f1c`; repeated runs are identical. `seed=1` finishes at 1167.
-- Tests: 12 in `rift-sim` (5 new: tick rate, identical seeds, command
-  determinism, winner reached, integer roots). Workspace total is 59.
-- The client still runs its own prototype match; the next slice moves lanes,
-  economy and structures onto this spine and makes the client a renderer.
+- `rift-tools match` runs headless without opening the cache; slice 2 replaced
+  the duel arena with the three-lane map below.
+- Tests at that slice: 12 in `rift-sim`. Workspace total was 59.
 
 ## 2026-11-19 — M6.4 HUD skin pass
 

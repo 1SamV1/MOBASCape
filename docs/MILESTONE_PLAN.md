@@ -28,13 +28,15 @@ reference's information hierarchy; 60 fps at 1080p on the 680M.
 
 Goal: the match is a deterministic, headless, testable state machine.
 
-- **Slice 1 done:** `crates/sim/src/battle.rs` — fixed 30 Hz tick, integer
-  fixed-point positions, seeded RNG, MoveTo/Attack/Hold commands, bot-driven
-  5v5 with A* pathing, stable FNV state hash, `rift-tools match` headless
-  runner. Two identical runs produce identical hashes.
-- Move units, combat, waves, towers, camps, gold, XP, items and cooldowns out
-  of `client` into `crates/sim` behind a `Match` API (lanes and economy next).
-- Fixed 30 Hz tick, seeded RNG, state hash per tick, input commands.
+- **Slice 1 done:** fixed 30 Hz tick, integer fixed-point positions, seeded
+  RNG, MoveTo/Attack/Hold commands, bot-driven 5v5 with A* pathing, stable FNV
+  state hash and a cache-free headless runner.
+- **Slice 2 done:** three lanes, 25 s minion waves, towers/inhibitors/nexus,
+  nexus shield rule, structure combat, minion/hero structure pressure, hero
+  gold/XP/levels/respawns and a decisive nexus win condition. Per-tick hashes.
+  `rift-tools match --seed 7` ends at tick 6986 with hash `bc1f32e1b0f15ace`.
+- Remaining: move the client's lanes/combat/economy onto this `Match`, add
+  state-hash trace mode and render the sim state in the client.
 - `crates/bots`: scripted dev bots that can finish a match headless.
 - `rift-tools match --seed N --ticks 3600` prints the result and hash.
 - Client becomes a renderer + input predictor over the sim.

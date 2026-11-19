@@ -78,10 +78,13 @@ enum Command {
     Match {
         #[arg(long, default_value_t = 1)]
         seed: u32,
-        #[arg(long, default_value_t = 3000)]
+        #[arg(long, default_value_t = 12000)]
         ticks: u64,
         #[arg(long, default_value_t = 64)]
         size: usize,
+        /// Print every entity, not just the team summary.
+        #[arg(long)]
+        verbose: bool,
     },
 }
 
@@ -96,8 +99,14 @@ fn main() -> Result<()> {
     let cli = Cli::parse();
     // The headless match is pure simulation and deliberately does not touch
     // the cache: it must be runnable in CI without game assets.
-    if let Command::Match { seed, ticks, size } = &cli.command {
-        headless_match(*seed, *ticks, *size)?;
+    if let Command::Match {
+        seed,
+        ticks,
+        size,
+        verbose,
+    } = &cli.command
+    {
+        headless_match(*seed, *ticks, *size, *verbose)?;
         return Ok(());
     }
     let cache = Cache::open_with_keys(&cli.cache, cli.keys.as_ref())
@@ -132,7 +141,7 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-fn headless_match(seed: u32, ticks: u64, size: usize) -> Result<()> {
+fn headless_match(seed: u32, ticks: u64, size: usize, verbose: bool) -> Result<()> {
     let mut game = BattleMatch::new(seed, size);
     game.run(ticks);
     println!(
@@ -142,33 +151,75 @@ fn headless_match(seed: u32, ticks: u64, size: usize) -> Result<()> {
         game.state_hash()
     );
     println!(
-        "stats attacks={} crits={} deaths={} commands={}",
-        game.stats.attacks, game.stats.crits, game.stats.deaths, game.stats.commands
+        "stats attacks={} crits={} deaths={} commands={} waves={}",
+        game.stats.attacks,
+        game.stats.crits,
+        game.stats.deaths,
+        game.stats.commands,
+        game.stats.waves
     );
     for team in 0u8..2 {
+        let nexus = game.nexus(team);
+        let towers = game
+            .entities
+            .iter()
+            .filter(|entity| {
+                entity.team == team
+                    && entity.kind == rift_sim::battle::EntityKind::Tower
+                    && entity.alive
+            })
+            .count();
+        let inhibitors = game
+            .entities
+            .iter()
+            .filter(|entity| {
+                entity.team == team
+                    && entity.kind == rift_sim::battle::EntityKind::Inhibitor
+                    && entity.alive
+            })
+            .count();
+        let minions = game
+            .entities
+            .iter()
+            .filter(|entity| {
+                entity.team == team
+                    && entity.kind == rift_sim::battle::EntityKind::Minion
+                    && entity.alive
+            })
+            .count();
+        let gold = game
+            .entities
+            .iter()
+            .filter(|entity| entity.team == team)
+            .map(|entity| entity.gold)
+            .sum::<u32>();
         println!(
-            "team {team}: alive={} hp={}",
+            "team {team}: heroes={}/5 towers={towers}/3 inhibitors={inhibitors}/3 minions={minions} gold={gold} nexus={}/{} vulnerable={}",
             game.alive_on(team),
-            game.entities
-                .iter()
-                .filter(|entity| entity.team == team)
-                .map(|entity| entity.hp.max(0))
-                .sum::<i32>()
+            nexus.map(|entity| entity.hp.max(0)).unwrap_or(0),
+            nexus.map(|entity| entity.max_hp).unwrap_or(0),
+            game.nexus_vulnerable(team)
         );
     }
-    for entity in &game.entities {
-        println!(
-            "entity {:02} team {} pos=({},{}) tile=({},{}) hp={}/{} {}",
-            entity.id,
-            entity.team,
-            entity.x,
-            entity.z,
-            entity.tile().0,
-            entity.tile().1,
-            entity.hp.max(0),
-            entity.max_hp,
-            if entity.alive { "alive" } else { "dead" }
-        );
+    if verbose {
+        for entity in &game.entities {
+            println!(
+                "entity {:03} {:?} team {} lane {} pos=({},{}) tile=({},{}) hp={}/{} lvl={} gold={} {}",
+                entity.id,
+                entity.kind,
+                entity.team,
+                entity.lane,
+                entity.x,
+                entity.z,
+                entity.tile().0,
+                entity.tile().1,
+                entity.hp.max(0),
+                entity.max_hp,
+                entity.level,
+                entity.gold,
+                if entity.alive { "alive" } else { "dead" }
+            );
+        }
     }
     Ok(())
 }
