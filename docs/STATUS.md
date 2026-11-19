@@ -1,6 +1,22 @@
 # Status
 
-Last updated: ability VFX, telegraphs and particles, 2026-11-19.
+Last updated: unified OSRS HUD skin, 2026-11-19.
+
+## 2026-11-19 — M6.4 HUD skin pass
+
+- Added a shared three-step HUD type scale (`HUD_TITLE_SCALE`,
+  `HUD_BODY_SCALE`, `HUD_SMALL_SCALE`) instead of one-off font sizes.
+- Card titles now use the gold palette and a thin carved rule: objectives,
+  enemy team, chat, debug stats and the scoreboard underside.
+- Abilities and inventory slots share one beveled `slot_frame`: dark inset,
+  warm outer edge and top-left highlight. The old full colour block behind
+  ability icons is gone; ready slots now carry a class-coloured underline.
+- Shop and Deliver buttons use detached shadows, hover highlights, gold
+  outlines and disabled colours. The shop button flips to `CLOSE [B]` while
+  the window is open.
+- Confirmed the Fountain Shop already shares the same panel sprite, close
+  control, tabs and item-slot language; it now matches the in-game HUD.
+- Verified captures: `/tmp/opencode/skin_hud.png`, `/tmp/opencode/skin_shop.png`.
 
 ## 2026-11-19 — M6.3 ability VFX pass
 

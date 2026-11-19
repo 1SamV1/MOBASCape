@@ -22,6 +22,13 @@ pub const OSRS_GOLD: [u8; 3] = [255, 196, 0];
 /// readable on a 720p window.
 const TEXT_SCALE: f32 = 1.16;
 
+/// Shared HUD type scale. Cards use one title size, one body size and one
+/// caption size so the interface reads as a system rather than a pile of
+/// one-off labels.
+const HUD_TITLE_SCALE: f32 = 0.98;
+const HUD_BODY_SCALE: f32 = 0.82;
+const HUD_SMALL_SCALE: f32 = 0.70;
+
 /// Extra multiplier for the baked OSRS interface font. The atlas glyphs are
 /// authored at 16px, so this maps the authored HUD scale to whole pixels for
 /// crisp nearest-filtered text.
@@ -567,6 +574,8 @@ impl Hud {
     ) {
         self.vertices.clear();
         self.indices.clear();
+        let mouse_x = mouse.0 as f32;
+        let mouse_y = mouse.1 as f32;
 
         // Scoreboard strip. The reference client keeps only the match
         // essentials on the top edge: team kills, clock, personal K/D/A and
@@ -574,6 +583,15 @@ impl Hud {
         let strip_w = 760.0;
         let strip_x = (width - strip_w) * 0.5;
         self.hud_panel(width, height, strip_x, 0.0, strip_w, 34.0);
+        self.quad(
+            width,
+            height,
+            strip_x + 8.0,
+            33.0,
+            strip_w - 16.0,
+            1.0,
+            [86, 74, 50],
+        );
 
         self.icon(
             width,
@@ -813,20 +831,23 @@ impl Hud {
         let maxima = player.cooldown_maxima;
         for (i, color) in colors.iter().enumerate() {
             let bx = x0 + i as f32 * (box_size + gap);
+            self.slot_frame(width, height, bx, y0, box_size, box_size);
+            let cooldown = player.cooldowns[i];
+            // A thin class-coloured strip only when the slot is ready; the
+            // old full colour block read as a placeholder.
             self.quad(
                 width,
                 height,
-                bx - 2.0,
-                y0 - 2.0,
-                box_size + 4.0,
-                box_size + 4.0,
-                [70, 75, 85],
+                bx + 4.0,
+                y0 + box_size - 5.0,
+                box_size - 8.0,
+                2.0,
+                if cooldown <= 0.0 {
+                    *color
+                } else {
+                    [44, 44, 48]
+                },
             );
-            self.quad(width, height, bx, y0, box_size, box_size, [32, 34, 40]);
-            let cooldown = player.cooldowns[i];
-            if cooldown <= 0.0 {
-                self.quad(width, height, bx + 15.0, y0 + 15.0, 28.0, 28.0, *color);
-            }
             let icon_key = ["icon_q", "icon_w", "icon_e", "icon_r"][i];
             self.icon(
                 width,
@@ -858,7 +879,7 @@ impl Hud {
                 y0 + 3.0,
                 1.2,
                 ["Q", "W", "E", "R"][i],
-                [245, 245, 245],
+                *color,
             );
             if cooldown > 0.0 {
                 self.text_centered(
@@ -883,10 +904,11 @@ impl Hud {
             height,
             tx + 8.0,
             10.0,
-            1.0,
+            HUD_TITLE_SCALE,
             "ENEMY TEAM",
             [255, 120, 110],
         );
+        self.card_rule(width, height, tx, 4.0, 220.0);
         let enemies: Vec<&HeroMarker> =
             player.roster.iter().filter(|hero| hero.team == 1).collect();
         for slot in 0..5usize {
@@ -924,7 +946,7 @@ impl Hud {
                     height,
                     tx + 190.0,
                     y + 2.0,
-                    0.8,
+                    HUD_SMALL_SCALE,
                     &format!("LV{}", hero.level),
                     [220, 210, 190],
                 );
@@ -1219,10 +1241,11 @@ impl Hud {
             height,
             ox + 8.0,
             oy + 6.0,
-            1.0,
+            HUD_TITLE_SCALE,
             "OBJECTIVES",
-            OSRS_YELLOW,
+            OSRS_GOLD,
         );
+        self.card_rule(width, height, ox, oy, ow);
         self.text(
             width,
             height,
@@ -1253,7 +1276,15 @@ impl Hud {
         ];
         for (index, (label, blue, red)) in rows.iter().enumerate() {
             let y = oy + 34.0 + index as f32 * 12.0;
-            self.text(width, height, ox + 8.0, y, 0.8, label, [205, 205, 205]);
+            self.text(
+                width,
+                height,
+                ox + 8.0,
+                y,
+                HUD_BODY_SCALE,
+                label,
+                [205, 205, 205],
+            );
             self.text(
                 width,
                 height,
@@ -1382,7 +1413,16 @@ impl Hud {
             let sx = 22.0;
             let sy = oy + 176.0;
             self.hud_panel(width, height, sx, sy, 230.0, 142.0);
-            self.text(width, height, sx + 8.0, sy + 6.0, 1.0, "STATS", OSRS_YELLOW);
+            self.text(
+                width,
+                height,
+                sx + 8.0,
+                sy + 6.0,
+                HUD_TITLE_SCALE,
+                "STATS",
+                OSRS_GOLD,
+            );
+            self.card_rule(width, height, sx, sy, 230.0);
             let stat_rows = [
                 ("ATTACK", player.attack_damage),
                 ("STRENGTH", player.attack_damage),
@@ -1442,16 +1482,17 @@ impl Hud {
             height,
             lx + 8.0,
             ly + 6.0,
-            1.0,
+            HUD_TITLE_SCALE,
             "CHAT",
-            [220, 200, 150],
+            OSRS_GOLD,
         );
+        self.card_rule(width, height, lx, ly, 340.0);
         if player.events.is_empty() {
             self.text(
                 width,
                 height,
                 lx + 8.0,
-                ly + 22.0,
+                ly + 26.0,
                 0.85,
                 "NO EVENTS YET",
                 [180, 185, 195],
@@ -1476,8 +1517,8 @@ impl Hud {
                     width,
                     height,
                     lx + 8.0,
-                    ly + 22.0 + i as f32 * 15.0,
-                    0.85,
+                    ly + 26.0 + i as f32 * 15.0,
+                    HUD_BODY_SCALE,
                     &line,
                     color,
                 );
@@ -1589,6 +1630,8 @@ impl Hud {
         {
             let (bx, by, bw, bh) = crate::items::delivery_button_rect(width, height);
             let ready = player.delivery_pending > 0 && player.delivery_state == 0;
+            let hovered =
+                mouse_x >= bx && mouse_x <= bx + bw && mouse_y >= by && mouse_y <= by + bh;
             let label = match player.delivery_state {
                 1 => "GUARD IN FLIGHT".to_string(),
                 2 => "GUARD RETURNING".to_string(),
@@ -1597,11 +1640,24 @@ impl Hud {
             self.quad(
                 width,
                 height,
+                bx - 2.0,
+                by - 2.0,
+                bw + 4.0,
+                bh + 4.0,
+                [8, 8, 10],
+            );
+            self.quad(
+                width,
+                height,
                 bx - 1.0,
                 by - 1.0,
                 bw + 2.0,
                 bh + 2.0,
-                [82, 76, 58],
+                if hovered && ready {
+                    [150, 132, 82]
+                } else {
+                    [82, 76, 58]
+                },
             );
             self.quad(
                 width,
@@ -1610,8 +1666,15 @@ impl Hud {
                 by,
                 bw,
                 bh,
-                if ready { [48, 74, 42] } else { [28, 28, 32] },
+                if ready {
+                    if hovered { [64, 98, 56] } else { [48, 74, 42] }
+                } else {
+                    [28, 28, 32]
+                },
             );
+            if hovered && ready {
+                self.rect_outline(width, height, bx, by, bw, bh, 1.0, [236, 200, 110], 0.8);
+            }
             self.text_centered(
                 width,
                 height,
@@ -1620,9 +1683,9 @@ impl Hud {
                 1.0,
                 &label,
                 if ready {
-                    [200, 255, 170]
+                    [210, 255, 180]
                 } else {
-                    [150, 150, 150]
+                    [140, 140, 140]
                 },
             );
         }
@@ -1632,6 +1695,17 @@ impl Hud {
         let inv_y = height - 96.0;
         self.draw_inventory_slots(width, height, inv_x, inv_y, 34.0, 6.0, shop);
         let (bx, by, bw, bh) = shop_button_rect(width, height);
+        let shop_hovered =
+            mouse_x >= bx && mouse_x <= bx + bw && mouse_y >= by && mouse_y <= by + bh;
+        self.quad(
+            width,
+            height,
+            bx - 2.0,
+            by - 2.0,
+            bw + 4.0,
+            bh + 4.0,
+            [8, 8, 10],
+        );
         self.quad(
             width,
             height,
@@ -1639,10 +1713,28 @@ impl Hud {
             by - 1.0,
             bw + 2.0,
             bh + 2.0,
-            [82, 76, 58],
+            if shop_hovered {
+                [152, 134, 84]
+            } else {
+                [82, 76, 58]
+            },
         );
         if let Some(uv) = self.atlas.ui_uv("tab") {
-            self.sprite(width, height, bx, by, bw, bh, uv, [255, 240, 200], 1.0);
+            self.sprite(
+                width,
+                height,
+                bx,
+                by,
+                bw,
+                bh,
+                uv,
+                if shop_hovered {
+                    [255, 252, 230]
+                } else {
+                    [248, 232, 190]
+                },
+                1.0,
+            );
             self.quad_alpha(
                 width,
                 height,
@@ -1650,11 +1742,27 @@ impl Hud {
                 by + 3.0,
                 bw - 6.0,
                 bh - 6.0,
-                [24, 24, 28],
+                if shop_hovered {
+                    [40, 38, 28]
+                } else {
+                    [24, 24, 28]
+                },
                 0.82,
             );
         } else {
-            self.quad(width, height, bx, by, bw, bh, [30, 28, 22]);
+            self.quad(
+                width,
+                height,
+                bx,
+                by,
+                bw,
+                bh,
+                if shop_hovered {
+                    [58, 52, 36]
+                } else {
+                    [30, 28, 22]
+                },
+            );
         }
         self.text_centered(
             width,
@@ -1662,8 +1770,16 @@ impl Hud {
             bx + bw * 0.5,
             by + 7.0,
             0.9,
-            "SHOP [B]",
-            [245, 220, 150],
+            if player.shop_open {
+                "CLOSE [B]"
+            } else {
+                "SHOP [B]"
+            },
+            if shop_hovered {
+                [255, 248, 220]
+            } else {
+                [245, 220, 150]
+            },
         );
 
         // Crosshair at the cursor.
@@ -2922,16 +3038,7 @@ impl Hud {
     ) {
         for i in 0..6 {
             let sx = x + i as f32 * (slot + gap);
-            self.quad(
-                width,
-                height,
-                sx - 1.0,
-                y - 1.0,
-                slot + 2.0,
-                slot + 2.0,
-                [82, 76, 58],
-            );
-            self.quad(width, height, sx, y, slot, slot, [18, 20, 25]);
+            self.slot_frame(width, height, sx, y, slot, slot);
             if let Some(index) = shop.owned[i] {
                 if let Some(item) = shop.items.get(index) {
                     self.draw_item_icon(width, height, sx + 3.0, y + 3.0, slot - 6.0, item, 1.0);
@@ -3248,6 +3355,49 @@ impl Hud {
             self.indices
                 .extend_from_slice(&[base, base + 1 + step as u32, base + 2 + step as u32]);
         }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    /// Shared OSRS-style beveled slot used by abilities and inventory. One
+    /// dark inset, a warm outer edge and a top-left highlight read as carved
+    /// stone without needing a second sprite.
+    fn slot_frame(&mut self, width: f32, height: f32, x: f32, y: f32, w: f32, h: f32) {
+        self.quad(
+            width,
+            height,
+            x - 3.0,
+            y - 3.0,
+            w + 6.0,
+            h + 6.0,
+            [8, 8, 10],
+        );
+        self.quad(
+            width,
+            height,
+            x - 1.0,
+            y - 1.0,
+            w + 2.0,
+            h + 2.0,
+            [78, 68, 48],
+        );
+        self.quad(width, height, x, y, w, h, [17, 18, 22]);
+        self.quad(width, height, x, y, w, 1.0, [108, 96, 68]);
+        self.quad(width, height, x, y, 1.0, h, [90, 80, 58]);
+        self.quad(width, height, x, y + h - 1.0, w, 1.0, [10, 10, 12]);
+        self.quad(width, height, x + w - 1.0, y, 1.0, h, [10, 10, 12]);
+    }
+
+    /// Thin gold rule under a card title.
+    fn card_rule(&mut self, width: f32, height: f32, x: f32, y: f32, w: f32) {
+        self.quad(
+            width,
+            height,
+            x + 8.0,
+            y + 20.0,
+            w - 16.0,
+            1.0,
+            [86, 74, 50],
+        );
     }
 
     #[allow(clippy::too_many_arguments)]
