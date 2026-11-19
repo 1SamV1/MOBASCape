@@ -85,6 +85,9 @@ enum Command {
         /// Print every entity, not just the team summary.
         #[arg(long)]
         verbose: bool,
+        /// Print `tick hash` every N ticks (0 = off).
+        #[arg(long, default_value_t = 0)]
+        trace_every: u64,
     },
 }
 
@@ -104,9 +107,10 @@ fn main() -> Result<()> {
         ticks,
         size,
         verbose,
+        trace_every,
     } = &cli.command
     {
-        headless_match(*seed, *ticks, *size, *verbose)?;
+        headless_match(*seed, *ticks, *size, *verbose, *trace_every)?;
         return Ok(());
     }
     let cache = Cache::open_with_keys(&cli.cache, cli.keys.as_ref())
@@ -141,9 +145,27 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-fn headless_match(seed: u32, ticks: u64, size: usize, verbose: bool) -> Result<()> {
+fn headless_match(
+    seed: u32,
+    ticks: u64,
+    size: usize,
+    verbose: bool,
+    trace_every: u64,
+) -> Result<()> {
     let mut game = BattleMatch::new(seed, size);
-    game.run(ticks);
+    if trace_every > 0 {
+        for _ in 0..ticks {
+            if game.winner.is_some() {
+                break;
+            }
+            game.step();
+            if game.tick % trace_every == 0 {
+                println!("trace tick={} hash={:016x}", game.tick, game.last_tick_hash);
+            }
+        }
+    } else {
+        game.run(ticks);
+    }
     println!(
         "match seed={seed} size={size} ticks={} winner={:?} hash={:016x}",
         game.tick,

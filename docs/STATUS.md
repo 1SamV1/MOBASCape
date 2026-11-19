@@ -1,6 +1,22 @@
 # Status
 
-Last updated: headless three-lane match with structures and economy, 2026-11-19.
+Last updated: sim spectator overlay + hash trace (M7 slice 3), 2026-11-19.
+
+## 2026-11-19 — M7 slice 3: client consumes the sim
+
+- `rift-tools match --trace-every N` prints `tick hash` lines, so a run can
+  be compared externally without dumping all entities. Seed 7 traces are
+  identical across runs (1000/2000/3000… ticks).
+- Client gained a **SIM SPECTATOR** dev overlay (`--sim-overlay`,
+  `--sim-seed N`): it runs the real `rift_sim::Match` on a fixed-step
+  accumulator and draws the three lanes, structures, minions, heroes, nexus
+  health, wave timer, live tick and `last_tick_hash`.
+- The overlay is the first client consumer of the authoritative sim. It does
+  not replace the 3D actor state yet; that is the next slice (map sim entities
+  onto cache models, keep local movement prediction).
+- Verified: overlay at tick 1540 shows blue/red structures, 8 minions, hero
+  health bars and hash `3214a38435b7f6bc`; trace runs and the CLI summary agree
+  with the sim tests. Workspace tests stay at 61 and clippy is clean.
 
 ## 2026-11-19 — M7 slice 2: lanes, waves, structures, economy
 

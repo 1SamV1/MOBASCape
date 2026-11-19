@@ -406,6 +406,20 @@ impl Match {
             .count()
     }
 
+    /// Arena edge length in tiles.
+    pub fn arena_size(&self) -> i32 {
+        self.grid.width()
+    }
+
+    /// Ticks until the next minion wave, and the wave interval in ticks.
+    pub fn wave_timer_ticks(&self) -> u16 {
+        self.wave_timer
+    }
+
+    pub fn wave_interval_ticks(&self) -> u16 {
+        WAVE_INTERVAL
+    }
+
     pub fn nexus(&self, team: u8) -> Option<&Entity> {
         self.entities
             .iter()

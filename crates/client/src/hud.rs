@@ -11,6 +11,7 @@ use crate::items::{
 };
 use crate::scene::srgb_to_linear;
 use crate::ui_assets::UiAtlas;
+use rift_sim::EntityKind;
 
 /// OSRS interface colours. The RuneScape client draws all of its text with a
 /// crisp pixel font and a one pixel black shadow in these palette colours.
@@ -1806,6 +1807,284 @@ impl Hud {
             16.0,
             [235, 235, 235],
         );
+    }
+
+    /// Dev spectator overlay for the headless sim. Draws the three lanes,
+    /// structures, minions and heroes from `rift_sim::Match`, plus the live
+    /// tick and state hash. This is the first client consumer of the sim;
+    /// model-backed 3D rendering comes next.
+    pub fn build_sim_overlay(&mut self, width: f32, height: f32, sim: &rift_sim::Match) {
+        let panel_w = 560.0;
+        let panel_h = 620.0;
+        let px = (width - panel_w) * 0.5;
+        let py = (height - panel_h) * 0.5;
+        self.quad_alpha(width, height, 0.0, 0.0, width, height, [0, 0, 0], 0.28);
+        self.hud_panel(width, height, px, py, panel_w, panel_h);
+        self.text_centered(
+            width,
+            height,
+            px + panel_w * 0.5,
+            py + 8.0,
+            1.25,
+            "SIM SPECTATOR",
+            OSRS_GOLD,
+        );
+        self.text_centered(
+            width,
+            height,
+            px + panel_w * 0.5,
+            py + 26.0,
+            HUD_SMALL_SCALE,
+            &format!("TICK {}  · 30 HZ  · SEED {}", sim.tick, sim.seed),
+            [200, 205, 215],
+        );
+
+        let ax = px + 30.0;
+        let ay = py + 50.0;
+        let arena = 500.0;
+        let size = sim.arena_size().max(1) as f32;
+        let to_screen =
+            |tx: i32, tz: i32| (ax + tx as f32 / size * arena, ay + tz as f32 / size * arena);
+        self.quad(
+            width,
+            height,
+            ax - 2.0,
+            ay - 2.0,
+            arena + 4.0,
+            arena + 4.0,
+            [8, 9, 12],
+        );
+        self.quad(width, height, ax, ay, arena, arena, [17, 22, 18]);
+        // Grid lines every 8 tiles.
+        for step in (0..=size as i32).step_by(8) {
+            let (x, _) = to_screen(step, 0);
+            let (_, z) = to_screen(0, step);
+            self.line(width, height, x, ay, x, ay + arena, 1.0, [48, 58, 44], 0.35);
+            self.line(width, height, ax, z, ax + arena, z, 1.0, [48, 58, 44], 0.35);
+        }
+        // Lanes.
+        for lane in &sim.lanes {
+            for pair in lane.windows(2) {
+                let (x0, z0) = to_screen(pair[0].0, pair[0].1);
+                let (x1, z1) = to_screen(pair[1].0, pair[1].1);
+                self.line(width, height, x0, z0, x1, z1, 5.0, [128, 108, 70], 0.55);
+                self.line(width, height, x0, z0, x1, z1, 2.0, [190, 164, 110], 0.55);
+            }
+        }
+
+        // Structures first so units draw on top.
+        for entity in &sim.entities {
+            let structure = matches!(
+                entity.kind,
+                EntityKind::Tower | EntityKind::Inhibitor | EntityKind::Nexus
+            );
+            if !structure {
+                continue;
+            }
+            let (sx, sy) = to_screen(entity.tile().0, entity.tile().1);
+            let size_px = match entity.kind {
+                EntityKind::Nexus => 16.0,
+                EntityKind::Tower => 10.0,
+                _ => 8.0,
+            };
+            let color = if entity.team == 0 {
+                [90, 150, 235]
+            } else {
+                [225, 80, 70]
+            };
+            self.quad(
+                width,
+                height,
+                sx - size_px * 0.5 - 2.0,
+                sy - size_px * 0.5 - 2.0,
+                size_px + 4.0,
+                size_px + 4.0,
+                [8, 8, 10],
+            );
+            self.quad(
+                width,
+                height,
+                sx - size_px * 0.5,
+                sy - size_px * 0.5,
+                size_px,
+                size_px,
+                if entity.alive { color } else { [54, 46, 46] },
+            );
+            if entity.alive {
+                let hp = entity.hp_fraction();
+                self.quad(
+                    width,
+                    height,
+                    sx - size_px,
+                    sy - size_px * 0.5 - 6.0,
+                    size_px * 2.0,
+                    2.0,
+                    [10, 10, 12],
+                );
+                self.quad(
+                    width,
+                    height,
+                    sx - size_px,
+                    sy - size_px * 0.5 - 6.0,
+                    size_px * 2.0 * hp,
+                    2.0,
+                    color,
+                );
+            }
+        }
+
+        // Minions and heroes.
+        for entity in &sim.entities {
+            if !entity.alive {
+                continue;
+            }
+            let (sx, sy) = to_screen(entity.tile().0, entity.tile().1);
+            let color = if entity.team == 0 {
+                [110, 185, 255]
+            } else {
+                [255, 105, 95]
+            };
+            match entity.kind {
+                EntityKind::Minion => {
+                    self.quad(width, height, sx - 2.0, sy - 2.0, 4.0, 4.0, color);
+                }
+                EntityKind::Hero => {
+                    self.orb(width, height, sx, sy, 7.0, [20, 20, 24]);
+                    self.orb(width, height, sx, sy, 5.5, color);
+                    let hp = entity.hp_fraction();
+                    self.quad(width, height, sx - 12.0, sy - 13.0, 24.0, 3.0, [10, 10, 12]);
+                    self.quad(
+                        width,
+                        height,
+                        sx - 12.0,
+                        sy - 13.0,
+                        24.0 * hp,
+                        3.0,
+                        [80, 220, 120],
+                    );
+                }
+                _ => {}
+            }
+        }
+
+        // Match state.
+        let blue = sim
+            .nexus(0)
+            .map(|n| (n.hp.max(0), n.max_hp))
+            .unwrap_or((0, 1));
+        let red = sim
+            .nexus(1)
+            .map(|n| (n.hp.max(0), n.max_hp))
+            .unwrap_or((0, 1));
+        self.text(
+            width,
+            height,
+            ax,
+            ay + arena + 8.0,
+            HUD_SMALL_SCALE,
+            &format!("BLUE NEXUS {}/{}", blue.0, blue.1),
+            [110, 185, 255],
+        );
+        self.text(
+            width,
+            height,
+            ax + 240.0,
+            ay + arena + 8.0,
+            HUD_SMALL_SCALE,
+            &format!("RED NEXUS {}/{}", red.0, red.1),
+            [255, 120, 110],
+        );
+        let wave = sim.wave_timer_ticks();
+        let minions = sim
+            .entities
+            .iter()
+            .filter(|entity| entity.kind == EntityKind::Minion && entity.alive)
+            .count();
+        self.text(
+            width,
+            height,
+            ax,
+            ay + arena + 22.0,
+            HUD_SMALL_SCALE,
+            &format!(
+                "WAVE {}S   HEROES {} / 5   MINIONS {}",
+                wave / 30,
+                sim.alive_on(0),
+                minions
+            ),
+            [200, 200, 190],
+        );
+        self.text(
+            width,
+            height,
+            ax,
+            ay + arena + 36.0,
+            HUD_SMALL_SCALE,
+            &format!("HASH {:016x}", sim.last_tick_hash),
+            [235, 205, 120],
+        );
+        if let Some(winner) = sim.winner {
+            let color = if winner == 0 {
+                [110, 185, 255]
+            } else if winner == 1 {
+                [255, 120, 110]
+            } else {
+                [220, 220, 220]
+            };
+            self.text_centered(
+                width,
+                height,
+                ax + arena * 0.5,
+                ay + arena * 0.5 - 10.0,
+                3.0,
+                if winner == 2 { "DRAW" } else { "VICTORY" },
+                color,
+            );
+        }
+    }
+
+    /// Arbitrary-angle line built from one thin quad, for the spectator map.
+    #[allow(clippy::too_many_arguments)]
+    fn line(
+        &mut self,
+        width: f32,
+        height: f32,
+        x0: f32,
+        y0: f32,
+        x1: f32,
+        y1: f32,
+        thickness: f32,
+        color: [u8; 3],
+        alpha: f32,
+    ) {
+        let dx = x1 - x0;
+        let dy = y1 - y0;
+        let len = (dx * dx + dy * dy).sqrt().max(0.001);
+        let nx = -dy / len * thickness * 0.5;
+        let ny = dx / len * thickness * 0.5;
+        let uv = self.atlas.white_uv;
+        let tint = [
+            srgb_to_linear(color[0] as f32 / 255.0),
+            srgb_to_linear(color[1] as f32 / 255.0),
+            srgb_to_linear(color[2] as f32 / 255.0),
+            alpha,
+        ];
+        let to_clip = |x: f32, y: f32| [2.0 * x / width - 1.0, 1.0 - 2.0 * y / height, 0.0];
+        let base = self.vertices.len() as u32;
+        for (x, y) in [
+            (x0 + nx, y0 + ny),
+            (x1 + nx, y1 + ny),
+            (x1 - nx, y1 - ny),
+            (x0 - nx, y0 - ny),
+        ] {
+            self.vertices.push(UiVertex {
+                position: to_clip(x, y),
+                uv: [uv[0], uv[1]],
+                color: tint,
+            });
+        }
+        self.indices
+            .extend_from_slice(&[base, base + 1, base + 2, base + 2, base + 1, base + 3]);
     }
 
     /// Colour used for a combat class badge: melee red, ranged blue, magic green.

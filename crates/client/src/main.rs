@@ -148,6 +148,12 @@ struct Cli {
     /// Show the engineer stat sheet and visibility counters in the HUD.
     #[arg(long)]
     debug_hud: bool,
+    /// Dev: run the headless sim and draw its live spectator overlay.
+    #[arg(long)]
+    sim_overlay: bool,
+    /// Seed for the sim spectator match.
+    #[arg(long, default_value_t = 7)]
+    sim_seed: u32,
 }
 
 fn main() -> Result<()> {
@@ -289,6 +295,10 @@ fn main() -> Result<()> {
         debug_hud: cli.debug_hud,
         last_health: 0.0,
         damage_flash: 0.0,
+        sim_match: cli
+            .sim_overlay
+            .then(|| rift_sim::Match::new(cli.sim_seed, 64)),
+        sim_accum: 0.0,
         demo_target,
         demo_timer: 0.0,
         demo_combat: cli.demo_combat,
@@ -390,6 +400,10 @@ struct App {
     last_health: f32,
     /// 0..1 red screen-edge flash after taking damage.
     damage_flash: f32,
+    /// Optional headless match shown by the dev spectator overlay.
+    sim_match: Option<rift_sim::Match>,
+    /// Fixed-step accumulator for the spectator sim.
+    sim_accum: f32,
     demo_target: Option<(f32, f32)>,
     demo_timer: f32,
     demo_combat: bool,
@@ -1334,6 +1348,16 @@ impl App {
             }
             self.last_health = current_health;
             self.damage_flash = (self.damage_flash - dt * 2.4).max(0.0);
+            if let Some(sim) = self.sim_match.as_mut() {
+                self.sim_accum += dt * self.timescale.max(1.0);
+                let fixed = 1.0 / rift_sim::TICK_HZ as f32;
+                let mut guard = 0;
+                while self.sim_accum >= fixed && guard < 12 {
+                    sim.step();
+                    self.sim_accum -= fixed;
+                    guard += 1;
+                }
+            }
             animated.refresh_visibility(dt, collision);
             renderer.camera.shake = glam::Vec3::new(
                 (self.app_time * 87.0).sin(),
@@ -1669,6 +1693,10 @@ impl App {
                 renderer.camera.pitch,
                 &heroes,
             );
+            if let Some(sim) = self.sim_match.as_ref() {
+                self.hud
+                    .build_sim_overlay(renderer.size.0 as f32, renderer.size.1 as f32, sim);
+            }
             renderer.set_hud_mesh(&self.hud.vertices, &self.hud.indices);
             if self.follow {
                 renderer.camera.target = animated.player_pos() + Vec3::Y * 140.0;
@@ -1807,6 +1835,10 @@ impl App {
         self.hud
             .build_hero_select(w, h, &self.hero_select, self.mouse_pos);
         if let Some(renderer) = self.renderer.as_mut() {
+            if let Some(sim) = self.sim_match.as_ref() {
+                self.hud
+                    .build_sim_overlay(renderer.size.0 as f32, renderer.size.1 as f32, sim);
+            }
             renderer.set_hud_mesh(&self.hud.vertices, &self.hud.indices);
         }
     }
@@ -1858,6 +1890,10 @@ impl App {
         self.hud
             .build_lobby(w, h, &self.hero_select, self.mouse_pos);
         if let Some(renderer) = self.renderer.as_mut() {
+            if let Some(sim) = self.sim_match.as_ref() {
+                self.hud
+                    .build_sim_overlay(renderer.size.0 as f32, renderer.size.1 as f32, sim);
+            }
             renderer.set_hud_mesh(&self.hud.vertices, &self.hud.indices);
         }
         // The lobby auto-starts like the reference client, but the player can

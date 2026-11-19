@@ -35,8 +35,11 @@ Goal: the match is a deterministic, headless, testable state machine.
   nexus shield rule, structure combat, minion/hero structure pressure, hero
   gold/XP/levels/respawns and a decisive nexus win condition. Per-tick hashes.
   `rift-tools match --seed 7` ends at tick 6986 with hash `bc1f32e1b0f15ace`.
-- Remaining: move the client's lanes/combat/economy onto this `Match`, add
-  state-hash trace mode and render the sim state in the client.
+- **Slice 3 done:** `rift-tools match --trace-every N` external hash traces;
+  client `--sim-overlay` runs the real `Match` and draws the three-lane
+  spectator board with structures, minions, heroes, nexus HP and the live hash.
+- Remaining: map sim entities onto cache-backed 3D actors, replace the
+  prototype combat state and keep local movement prediction.
 - `crates/bots`: scripted dev bots that can finish a match headless.
 - `rift-tools match --seed N --ticks 3600` prints the result and hash.
 - Client becomes a renderer + input predictor over the sim.
