@@ -10,7 +10,6 @@ mod motion;
 mod portraits;
 mod renderer;
 mod scene;
-mod sim3d;
 mod terrain_textures;
 mod ui_assets;
 
@@ -149,15 +148,12 @@ struct Cli {
     /// Show the engineer stat sheet and visibility counters in the HUD.
     #[arg(long)]
     debug_hud: bool,
-    /// Dev: run the headless sim and draw its live spectator overlay.
+    /// Start in spectator mode, cycling cameras over both teams' champions.
     #[arg(long)]
-    sim_overlay: bool,
-    /// Seed for the sim spectator match.
-    #[arg(long, default_value_t = 7)]
-    sim_seed: u32,
-    /// Dev: render the headless sim in a standalone 3D spectator arena.
+    spectate: bool,
+    /// Champion index to start spectating (dev verification).
     #[arg(long)]
-    sim_3d: bool,
+    spectate_index: Option<usize>,
 }
 
 fn main() -> Result<()> {
@@ -277,8 +273,18 @@ fn main() -> Result<()> {
     let minimap_image = minimap::render(&scene, animated.minimap_bounds, minimap::MINIMAP_SIZE);
     ui_atlas.add_minimap(&minimap_image);
     let ui_atlas = Arc::new(ui_atlas);
-    let sim3d = if cli.sim_3d {
-        Some(sim3d::Sim3d::new(&cache, cli.sim_seed, 64)?)
+    let initial_player = animated.player_index;
+    let champion_indices: Vec<usize> = animated
+        .units
+        .iter()
+        .enumerate()
+        .filter(|(_, unit)| unit.is_champion)
+        .map(|(index, _)| index)
+        .collect();
+    let initial_spectator = if let Some(slot) = cli.spectate_index {
+        champion_indices.get(slot).copied()
+    } else if cli.spectate {
+        Some(initial_player)
     } else {
         None
     };
@@ -304,9 +310,7 @@ fn main() -> Result<()> {
         debug_hud: cli.debug_hud,
         last_health: 0.0,
         damage_flash: 0.0,
-        sim_match: (cli.sim_overlay && !cli.sim_3d).then(|| rift_sim::Match::new(cli.sim_seed, 64)),
-        sim_accum: 0.0,
-        sim3d,
+        spectator: initial_spectator,
         demo_target,
         demo_timer: 0.0,
         demo_combat: cli.demo_combat,
@@ -408,12 +412,8 @@ struct App {
     last_health: f32,
     /// 0..1 red screen-edge flash after taking damage.
     damage_flash: f32,
-    /// Optional headless match shown by the dev spectator overlay.
-    sim_match: Option<rift_sim::Match>,
-    /// Fixed-step accumulator for the spectator sim.
-    sim_accum: f32,
-    /// Optional standalone 3D spectator arena.
-    sim3d: Option<sim3d::Sim3d>,
+    /// When set, the camera follows this champion index instead of the player.
+    spectator: Option<usize>,
     demo_target: Option<(f32, f32)>,
     demo_timer: f32,
     demo_combat: bool,
@@ -735,6 +735,14 @@ impl ApplicationHandler for App {
                         } else {
                             event_loop.exit();
                         }
+                    } else if code == KeyCode::KeyV {
+                        self.toggle_spectator();
+                    } else if code == KeyCode::KeyZ {
+                        self.cycle_spectator(-1);
+                    } else if code == KeyCode::KeyX {
+                        self.cycle_spectator(1);
+                    } else if self.spectator.is_some() {
+                        // Spectator is view-only: gameplay keys stay asleep.
                     } else if code == KeyCode::KeyF {
                         self.follow = !self.follow;
                         println!("follow={}", self.follow);
@@ -1013,6 +1021,7 @@ impl App {
             .is_some()
         });
         let steering = self.lmb_down
+            && self.spectator.is_none()
             && !over_minimap
             && !self.demo_camp
             && !self.demo_combat
@@ -1358,44 +1367,17 @@ impl App {
             }
             self.last_health = current_health;
             self.damage_flash = (self.damage_flash - dt * 2.4).max(0.0);
-            if let Some(sim) = self.sim_match.as_mut() {
-                self.sim_accum += dt * self.timescale.max(1.0);
-                let fixed = 1.0 / rift_sim::TICK_HZ as f32;
-                let mut guard = 0;
-                while self.sim_accum >= fixed && guard < 12 {
-                    sim.step();
-                    self.sim_accum -= fixed;
-                    guard += 1;
-                }
-            }
-            if let Some(sim3d) = self.sim3d.as_mut() {
-                sim3d.advance(dt * self.timescale.max(1.0));
-            }
             animated.refresh_visibility(dt, collision);
-            renderer.camera.shake = glam::Vec3::new(
-                (self.app_time * 87.0).sin(),
-                0.0,
-                (self.app_time * 71.0).cos(),
-            ) * (self.damage_flash * 46.0);
-            if let Some(sim3d) = self.sim3d.as_mut() {
-                renderer.set_dynamic_mesh(&sim3d.mesh.vertices, &sim3d.mesh.indices);
-                renderer.set_shadow_mesh(&[], &[]);
-                renderer.set_caster_mesh(&[], &[]);
-                renderer.set_lights(&[]);
-                renderer.set_time(self.app_time);
-                renderer.set_vision(sim3d.center(), 100_000.0);
-            } else {
-                animated.prepare_render(height, camera_right, camera_up, camera_forward);
-                renderer.set_dynamic_mesh(&animated.vertices, &animated.indices);
-                renderer.set_shadow_mesh(&animated.shadow_vertices, &animated.shadow_indices);
-                renderer.set_caster_mesh(&animated.caster_vertices, &animated.caster_indices);
-                renderer.set_lights(&animated.lights());
-                renderer.set_time(self.app_time);
-                // Fog of war is a shader-side circle around the hero, so it
-                // has no geometry to fight with the terrain's z levels.
-                renderer.set_vision(animated.player_pos(), 2600.0);
-                animated.visibility_dirty = false;
-            }
+            animated.prepare_render(height, camera_right, camera_up, camera_forward);
+            renderer.set_dynamic_mesh(&animated.vertices, &animated.indices);
+            renderer.set_shadow_mesh(&animated.shadow_vertices, &animated.shadow_indices);
+            renderer.set_caster_mesh(&animated.caster_vertices, &animated.caster_indices);
+            renderer.set_lights(&animated.lights());
+            renderer.set_time(self.app_time);
+            // Fog of war is a shader-side circle around the hero, so it has
+            // no geometry to fight with the terrain's z levels.
+            renderer.set_vision(animated.player_pos(), 2600.0);
+            animated.visibility_dirty = false;
 
             let nexus0 = animated.nexus_health(0).unwrap_or((0.0, 1.0));
             let nexus1 = animated.nexus_health(1).unwrap_or((0.0, 1.0));
@@ -1675,6 +1657,19 @@ impl App {
                 unit_frames,
                 cast_progress,
                 damage_flash: self.damage_flash,
+                spectator: self.spectator.and_then(|index| {
+                    let unit = animated.units.get(index)?;
+                    let (name, level, _) = animated.unit_info(index)?;
+                    Some(crate::hud::SpectatorInfo {
+                        name,
+                        level,
+                        health: unit.health,
+                        max_health: unit.max_health,
+                        mana: unit.mana,
+                        max_mana: unit.max_mana,
+                        team: unit.team,
+                    })
+                }),
                 announcement: animated.announcement.as_ref().map(|(text, _)| text.clone()),
                 kill_feed: animated
                     .kill_feed
@@ -1693,42 +1688,34 @@ impl App {
                     .map(|(_, item)| item.id.clone())
                     .collect(),
             };
-            if let Some(sim3d) = self.sim3d.as_ref() {
-                self.hud.build_sim3d_hud(hud_w, hud_h, &sim3d.game);
-            } else {
-                self.hud.build(
-                    renderer.size.0 as f32,
-                    renderer.size.1 as f32,
-                    &player_hud,
-                    &self.shop,
-                    nexus0,
-                    nexus1,
-                    animated.wave_timer,
-                    animated.wave_interval,
-                    animated.match_over,
-                    self.mouse_pos,
-                );
-                self.hud.build_shop(hud_w, hud_h, &player_hud, &self.shop);
-                self.hud.build_minimap(
-                    renderer.size.0 as f32,
-                    renderer.size.1 as f32,
-                    animated,
-                    (renderer.camera.target.x, renderer.camera.target.z),
-                    renderer.camera.distance,
-                    renderer.camera.pitch,
-                    &heroes,
-                );
-                if let Some(sim) = self.sim_match.as_ref() {
-                    self.hud
-                        .build_sim_overlay(renderer.size.0 as f32, renderer.size.1 as f32, sim);
-                }
-            }
+            self.hud.build(
+                renderer.size.0 as f32,
+                renderer.size.1 as f32,
+                &player_hud,
+                &self.shop,
+                nexus0,
+                nexus1,
+                animated.wave_timer,
+                animated.wave_interval,
+                animated.match_over,
+                self.mouse_pos,
+            );
+            self.hud.build_shop(hud_w, hud_h, &player_hud, &self.shop);
+            self.hud.build_minimap(
+                renderer.size.0 as f32,
+                renderer.size.1 as f32,
+                animated,
+                (renderer.camera.target.x, renderer.camera.target.z),
+                renderer.camera.distance,
+                renderer.camera.pitch,
+                &heroes,
+            );
             renderer.set_hud_mesh(&self.hud.vertices, &self.hud.indices);
-            if let Some(sim3d) = self.sim3d.as_ref() {
-                renderer.camera.target = sim3d.center();
-                renderer.camera.distance = 10000.0;
-                renderer.camera.pitch = 1.36;
-                renderer.update_camera();
+            if let Some(index) = self.spectator {
+                if let Some(unit) = animated.units.get(index) {
+                    renderer.camera.target = unit.pos + Vec3::Y * 140.0;
+                    renderer.update_camera();
+                }
             } else if self.follow {
                 renderer.camera.target = animated.player_pos() + Vec3::Y * 140.0;
                 renderer.update_camera();
@@ -1866,10 +1853,6 @@ impl App {
         self.hud
             .build_hero_select(w, h, &self.hero_select, self.mouse_pos);
         if let Some(renderer) = self.renderer.as_mut() {
-            if let Some(sim) = self.sim_match.as_ref() {
-                self.hud
-                    .build_sim_overlay(renderer.size.0 as f32, renderer.size.1 as f32, sim);
-            }
             renderer.set_hud_mesh(&self.hud.vertices, &self.hud.indices);
         }
     }
@@ -1921,10 +1904,6 @@ impl App {
         self.hud
             .build_lobby(w, h, &self.hero_select, self.mouse_pos);
         if let Some(renderer) = self.renderer.as_mut() {
-            if let Some(sim) = self.sim_match.as_ref() {
-                self.hud
-                    .build_sim_overlay(renderer.size.0 as f32, renderer.size.1 as f32, sim);
-            }
             renderer.set_hud_mesh(&self.hud.vertices, &self.hud.indices);
         }
         // The lobby auto-starts like the reference client, but the player can
@@ -2096,7 +2075,54 @@ impl App {
         }
     }
 
+    fn champion_indices(&self) -> Vec<usize> {
+        self.animated
+            .as_ref()
+            .map(|animated| {
+                animated
+                    .units
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, unit)| unit.is_champion)
+                    .map(|(index, _)| index)
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    fn toggle_spectator(&mut self) {
+        if self.spectator.is_some() {
+            self.spectator = None;
+            self.follow = true;
+            return;
+        }
+        let champions = self.champion_indices();
+        if let Some(&first) = champions.first() {
+            self.spectator = Some(first);
+            self.follow = false;
+        }
+    }
+
+    fn cycle_spectator(&mut self, delta: i32) {
+        let champions = self.champion_indices();
+        if champions.is_empty() {
+            return;
+        }
+        let current = self
+            .spectator
+            .and_then(|index| champions.iter().position(|&candidate| candidate == index));
+        let next = match current {
+            Some(position) => (position as i32 + delta).rem_euclid(champions.len() as i32) as usize,
+            None => 0,
+        };
+        self.spectator = Some(champions[next]);
+        self.follow = false;
+    }
+
     fn pick_and_move(&mut self) {
+        if self.spectator.is_some() {
+            return;
+        }
         let (Some(renderer), Some(height), Some(collision), Some(animated)) = (
             self.renderer.as_ref(),
             self.height.as_ref(),

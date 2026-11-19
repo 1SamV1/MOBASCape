@@ -11,7 +11,6 @@ use crate::items::{
 };
 use crate::scene::srgb_to_linear;
 use crate::ui_assets::UiAtlas;
-use rift_sim::EntityKind;
 
 /// OSRS interface colours. The RuneScape client draws all of its text with a
 /// crisp pixel font and a one pixel black shadow in these palette colours.
@@ -45,6 +44,17 @@ pub struct HoverInfo {
     pub team: u8,
     pub kind: UnitKind,
     pub description: &'static str,
+}
+
+#[derive(Clone)]
+pub struct SpectatorInfo {
+    pub name: String,
+    pub level: u32,
+    pub health: f32,
+    pub max_health: f32,
+    pub mana: f32,
+    pub max_mana: f32,
+    pub team: u8,
 }
 
 /// A screen-space unit plate projected from the world by the client.
@@ -134,6 +144,7 @@ pub struct PlayerHud {
     pub cast_progress: Option<f32>,
     /// Red screen-edge flash while the player is taking damage.
     pub damage_flash: f32,
+    pub spectator: Option<SpectatorInfo>,
     /// Centre-screen announcement, e.g. "YOU HAVE SLAIN A MINION!".
     pub announcement: Option<String>,
     /// Recent kill messages shown under the roster.
@@ -575,6 +586,7 @@ impl Hud {
     ) {
         self.vertices.clear();
         self.indices.clear();
+        let spectating = player.spectator.is_some();
         let mouse_x = mouse.0 as f32;
         let mouse_y = mouse.1 as f32;
 
@@ -664,90 +676,148 @@ impl Hud {
             [235, 225, 150],
         );
 
-        // Hero profile card above the minimap: portrait, name, level and
-        // health so you can see who the marker on the map is.
-        if let Some(hero) = player.heroes.first() {
-            let (mx, my, msize, _) = minimap_rect(width, height);
-            let card_h = 58.0;
-            let card_y = (my - card_h - 8.0).max(120.0);
-            self.hud_panel(width, height, mx, card_y, msize, card_h);
-            let portrait = 42.0;
-            self.quad(
-                width,
-                height,
-                mx + 8.0,
-                card_y + 8.0,
-                portrait,
-                portrait,
-                [70, 64, 44],
-            );
-            self.quad(
-                width,
-                height,
-                mx + 10.0,
-                card_y + 10.0,
-                portrait - 4.0,
-                portrait - 4.0,
-                [40, 92, 52],
-            );
-            let initial = hero
-                .name
-                .chars()
-                .next()
-                .map(|c| c.to_ascii_uppercase())
-                .unwrap_or('?');
-            self.text_centered(
-                width,
-                height,
-                mx + 8.0 + portrait * 0.5,
-                card_y + 18.0,
-                2.4,
-                &initial.to_string(),
-                OSRS_YELLOW,
-            );
+        if let Some(spectator) = &player.spectator {
+            let bar_w = 560.0;
+            let bar_x = (width - bar_w) * 0.5;
+            self.hud_panel(width, height, bar_x, 38.0, bar_w, 54.0);
+            let team = if spectator.team == 0 {
+                [110, 185, 255]
+            } else {
+                [255, 120, 110]
+            };
             self.text(
                 width,
                 height,
-                mx + 58.0,
-                card_y + 7.0,
-                1.15,
-                &player.champion_name.to_uppercase(),
-                OSRS_WHITE,
-            );
-            self.text(
-                width,
-                height,
-                mx + 58.0,
-                card_y + 20.0,
-                0.95,
+                bar_x + 10.0,
+                42.0,
+                0.8,
                 &format!(
-                    "LV {}  {}/6  {}G",
-                    player.level, player.items_owned, player.gold
+                    "SPECTATING {}  ·  LV {}  ·  {}  ·  Z/X SWITCH  ·  V EXIT",
+                    spectator.name.to_uppercase(),
+                    spectator.level,
+                    if spectator.team == 0 { "BLUE" } else { "RED" }
                 ),
-                OSRS_YELLOW,
+                team,
             );
-            self.panel(
+            self.quad(width, height, bar_x + 10.0, 59.0, 300.0, 6.0, [16, 16, 20]);
+            self.quad(
                 width,
                 height,
-                mx + 58.0,
-                card_y + 33.0,
-                124.0,
-                9.0,
-                (hero.health / hero.max_health.max(1.0)).clamp(0.0, 1.0),
-                [70, 190, 95],
+                bar_x + 10.0,
+                59.0,
+                300.0 * (spectator.health / spectator.max_health.max(1.0)).clamp(0.0, 1.0),
+                6.0,
+                [70, 200, 105],
             );
-            self.panel(
+            self.quad(width, height, bar_x + 10.0, 68.0, 300.0, 4.0, [16, 16, 22]);
+            self.quad(
                 width,
                 height,
-                mx + 58.0,
-                card_y + 44.0,
-                124.0,
-                7.0,
-                (hero.mana / hero.max_mana.max(1.0)).clamp(0.0, 1.0),
+                bar_x + 10.0,
+                68.0,
+                300.0 * (spectator.mana / spectator.max_mana.max(1.0)).clamp(0.0, 1.0),
+                4.0,
                 [70, 120, 235],
+            );
+            self.text(
+                width,
+                height,
+                bar_x + 320.0,
+                58.0,
+                0.70,
+                &format!(
+                    "HP {:.0}/{:.0}   MP {:.0}/{:.0}",
+                    spectator.health, spectator.max_health, spectator.mana, spectator.max_mana
+                ),
+                [220, 220, 215],
             );
         }
 
+        if !spectating {
+            // Hero profile card above the minimap: portrait, name, level and
+            // health so you can see who the marker on the map is.
+            if let Some(hero) = player.heroes.first() {
+                let (mx, my, msize, _) = minimap_rect(width, height);
+                let card_h = 58.0;
+                let card_y = (my - card_h - 8.0).max(120.0);
+                self.hud_panel(width, height, mx, card_y, msize, card_h);
+                let portrait = 42.0;
+                self.quad(
+                    width,
+                    height,
+                    mx + 8.0,
+                    card_y + 8.0,
+                    portrait,
+                    portrait,
+                    [70, 64, 44],
+                );
+                self.quad(
+                    width,
+                    height,
+                    mx + 10.0,
+                    card_y + 10.0,
+                    portrait - 4.0,
+                    portrait - 4.0,
+                    [40, 92, 52],
+                );
+                let initial = hero
+                    .name
+                    .chars()
+                    .next()
+                    .map(|c| c.to_ascii_uppercase())
+                    .unwrap_or('?');
+                self.text_centered(
+                    width,
+                    height,
+                    mx + 8.0 + portrait * 0.5,
+                    card_y + 18.0,
+                    2.4,
+                    &initial.to_string(),
+                    OSRS_YELLOW,
+                );
+                self.text(
+                    width,
+                    height,
+                    mx + 58.0,
+                    card_y + 7.0,
+                    1.15,
+                    &player.champion_name.to_uppercase(),
+                    OSRS_WHITE,
+                );
+                self.text(
+                    width,
+                    height,
+                    mx + 58.0,
+                    card_y + 20.0,
+                    0.95,
+                    &format!(
+                        "LV {}  {}/6  {}G",
+                        player.level, player.items_owned, player.gold
+                    ),
+                    OSRS_YELLOW,
+                );
+                self.panel(
+                    width,
+                    height,
+                    mx + 58.0,
+                    card_y + 33.0,
+                    124.0,
+                    9.0,
+                    (hero.health / hero.max_health.max(1.0)).clamp(0.0, 1.0),
+                    [70, 190, 95],
+                );
+                self.panel(
+                    width,
+                    height,
+                    mx + 58.0,
+                    card_y + 44.0,
+                    124.0,
+                    7.0,
+                    (hero.mana / hero.max_mana.max(1.0)).clamp(0.0, 1.0),
+                    [70, 120, 235],
+                );
+            }
+        }
         // Dota style unit tooltip that follows the cursor.
         if let Some(hover) = &player.hover {
             let title = if hover.kind == UnitKind::Player {
@@ -817,84 +887,85 @@ impl Hud {
             );
         }
 
-        // Four ability boxes, bottom-centre.
-        let box_size = 58.0;
-        let gap = 8.0;
-        let total = box_size * 4.0 + gap * 3.0;
-        let x0 = (width - total) * 0.5;
-        let y0 = height - 96.0;
-        let colors = [
-            [255, 150, 40],
-            [90, 220, 255],
-            [90, 255, 140],
-            [255, 90, 60],
-        ];
-        let maxima = player.cooldown_maxima;
-        for (i, color) in colors.iter().enumerate() {
-            let bx = x0 + i as f32 * (box_size + gap);
-            self.slot_frame(width, height, bx, y0, box_size, box_size);
-            let cooldown = player.cooldowns[i];
-            // A thin class-coloured strip only when the slot is ready; the
-            // old full colour block read as a placeholder.
-            self.quad(
-                width,
-                height,
-                bx + 4.0,
-                y0 + box_size - 5.0,
-                box_size - 8.0,
-                2.0,
-                if cooldown <= 0.0 {
-                    *color
-                } else {
-                    [44, 44, 48]
-                },
-            );
-            let icon_key = ["icon_q", "icon_w", "icon_e", "icon_r"][i];
-            self.icon(
-                width,
-                height,
-                bx + 14.0,
-                y0 + 14.0,
-                box_size - 28.0,
-                icon_key,
-                [255, 255, 255],
-            );
-            // Clockwise radial sweep, the genre-standard cooldown read.
-            if cooldown > 0.0 {
-                let frac = (cooldown / maxima[i]).clamp(0.0, 1.0);
-                self.cooldown_wedge(
+        if !spectating {
+            // Four ability boxes, bottom-centre.
+            let box_size = 58.0;
+            let gap = 8.0;
+            let total = box_size * 4.0 + gap * 3.0;
+            let x0 = (width - total) * 0.5;
+            let y0 = height - 96.0;
+            let colors = [
+                [255, 150, 40],
+                [90, 220, 255],
+                [90, 255, 140],
+                [255, 90, 60],
+            ];
+            let maxima = player.cooldown_maxima;
+            for (i, color) in colors.iter().enumerate() {
+                let bx = x0 + i as f32 * (box_size + gap);
+                self.slot_frame(width, height, bx, y0, box_size, box_size);
+                let cooldown = player.cooldowns[i];
+                // A thin class-coloured strip only when the slot is ready; the
+                // old full colour block read as a placeholder.
+                self.quad(
                     width,
                     height,
-                    bx + box_size * 0.5,
-                    y0 + box_size * 0.5,
-                    box_size * 0.5,
-                    frac,
-                    [10, 12, 18],
-                    0.74,
+                    bx + 4.0,
+                    y0 + box_size - 5.0,
+                    box_size - 8.0,
+                    2.0,
+                    if cooldown <= 0.0 {
+                        *color
+                    } else {
+                        [44, 44, 48]
+                    },
                 );
-            }
-            self.text(
-                width,
-                height,
-                bx + 4.0,
-                y0 + 3.0,
-                1.2,
-                ["Q", "W", "E", "R"][i],
-                *color,
-            );
-            if cooldown > 0.0 {
-                self.text_centered(
+                let icon_key = ["icon_q", "icon_w", "icon_e", "icon_r"][i];
+                self.icon(
                     width,
                     height,
-                    bx + box_size * 0.5,
-                    y0 + 40.0,
-                    1.1,
-                    &format!("{:.0}", cooldown.ceil()),
-                    [220, 220, 220],
+                    bx + 14.0,
+                    y0 + 14.0,
+                    box_size - 28.0,
+                    icon_key,
+                    [255, 255, 255],
                 );
+                // Clockwise radial sweep, the genre-standard cooldown read.
+                if cooldown > 0.0 {
+                    let frac = (cooldown / maxima[i]).clamp(0.0, 1.0);
+                    self.cooldown_wedge(
+                        width,
+                        height,
+                        bx + box_size * 0.5,
+                        y0 + box_size * 0.5,
+                        box_size * 0.5,
+                        frac,
+                        [10, 12, 18],
+                        0.74,
+                    );
+                }
+                self.text(
+                    width,
+                    height,
+                    bx + 4.0,
+                    y0 + 3.0,
+                    1.2,
+                    ["Q", "W", "E", "R"][i],
+                    *color,
+                );
+                if cooldown > 0.0 {
+                    self.text_centered(
+                        width,
+                        height,
+                        bx + box_size * 0.5,
+                        y0 + 40.0,
+                        1.1,
+                        &format!("{:.0}", cooldown.ceil()),
+                        [220, 220, 220],
+                    );
+                }
             }
         }
-
         // Enemy team card on the right edge. Five fixed slots keep the card
         // stable before a full 5v5 roster exists.
         let tx = width - 238.0;
@@ -1526,118 +1597,179 @@ impl Hud {
             }
         }
 
-        // Buff indicator sits just above the bottom health bars; the
-        // reference client keeps the top-left corner clear for the scoreboard.
-        if let Some((remaining, duration, color)) = player.buff {
-            let fill = (remaining / duration.max(0.1)).clamp(0.0, 1.0);
-            let bx = width * 0.5 - 130.0;
-            self.panel(width, height, bx, height - 168.0, 260.0, 10.0, fill, color);
-            if let Some(label) = player.buff_label {
-                self.text(
-                    width,
-                    height,
-                    bx + 6.0,
-                    height - 167.0,
-                    0.8,
-                    &format!("{label} {remaining:.0}S"),
-                    [240, 240, 240],
-                );
+        if !spectating {
+            // Buff indicator sits just above the bottom health bars; the
+            // reference client keeps the top-left corner clear for the scoreboard.
+            if let Some((remaining, duration, color)) = player.buff {
+                let fill = (remaining / duration.max(0.1)).clamp(0.0, 1.0);
+                let bx = width * 0.5 - 130.0;
+                self.panel(width, height, bx, height - 168.0, 260.0, 10.0, fill, color);
+                if let Some(label) = player.buff_label {
+                    self.text(
+                        width,
+                        height,
+                        bx + 6.0,
+                        height - 167.0,
+                        0.8,
+                        &format!("{label} {remaining:.0}S"),
+                        [240, 240, 240],
+                    );
+                }
             }
-        }
 
-        // Health/mana bars above the ability row, with an OSRS-style orb.
-        let cx = width * 0.5 - 130.0;
-        self.orb(
-            width,
-            height,
-            width * 0.5 - 168.0,
-            height - 96.0,
-            15.0,
-            [70, 120, 235],
-        );
-        self.orb(
-            width,
-            height,
-            width * 0.5 - 168.0,
-            height - 96.0,
-            11.0,
-            [180, 210, 255],
-        );
-        self.panel(
-            width,
-            height,
-            cx,
-            height - 148.0,
-            260.0,
-            14.0,
-            (player.health / player.max_health.max(1.0)).clamp(0.0, 1.0),
-            [70, 190, 95],
-        );
-        self.text(
-            width,
-            height,
-            cx + 6.0,
-            height - 147.0,
-            0.85,
-            &format!("HP {:.0}/{:.0}", player.health, player.max_health),
-            [245, 245, 245],
-        );
-        self.panel(
-            width,
-            height,
-            cx,
-            height - 130.0,
-            260.0,
-            12.0,
-            (player.mana / player.max_mana.max(1.0)).clamp(0.0, 1.0),
-            [70, 120, 235],
-        );
-        self.text(
-            width,
-            height,
-            cx + 6.0,
-            height - 129.0,
-            0.8,
-            &format!("MP {:.0}/{:.0}", player.mana, player.max_mana),
-            [235, 242, 255],
-        );
-
-        // Shield overlay rides on top of the health bar; XP is a thin strip
-        // under mana so the bottom cluster stays compact.
-        if player.shield > 0.0 && player.shield_timer > 0.0 {
-            let fraction = (player.shield / 120.0).clamp(0.0, 1.0);
-            self.quad(
+            // Health/mana bars above the ability row, with an OSRS-style orb.
+            let cx = width * 0.5 - 130.0;
+            self.orb(
+                width,
+                height,
+                width * 0.5 - 168.0,
+                height - 96.0,
+                15.0,
+                [70, 120, 235],
+            );
+            self.orb(
+                width,
+                height,
+                width * 0.5 - 168.0,
+                height - 96.0,
+                11.0,
+                [180, 210, 255],
+            );
+            self.panel(
                 width,
                 height,
                 cx,
                 height - 148.0,
-                260.0 * fraction,
-                3.0,
-                [110, 225, 255],
+                260.0,
+                14.0,
+                (player.health / player.max_health.max(1.0)).clamp(0.0, 1.0),
+                [70, 190, 95],
             );
-        }
-        self.quad(width, height, cx, height - 116.0, 260.0, 3.0, [34, 30, 42]);
-        self.quad(
-            width,
-            height,
-            cx,
-            height - 116.0,
-            260.0 * (player.xp / player.xp_next.max(1.0)).clamp(0.0, 1.0),
-            3.0,
-            [160, 96, 220],
-        );
+            self.text(
+                width,
+                height,
+                cx + 6.0,
+                height - 147.0,
+                0.85,
+                &format!("HP {:.0}/{:.0}", player.health, player.max_health),
+                [245, 245, 245],
+            );
+            self.panel(
+                width,
+                height,
+                cx,
+                height - 130.0,
+                260.0,
+                12.0,
+                (player.mana / player.max_mana.max(1.0)).clamp(0.0, 1.0),
+                [70, 120, 235],
+            );
+            self.text(
+                width,
+                height,
+                cx + 6.0,
+                height - 129.0,
+                0.8,
+                &format!("MP {:.0}/{:.0}", player.mana, player.max_mana),
+                [235, 242, 255],
+            );
 
-        // Delivery guard button, bottom-right next to the shop button.
-        {
-            let (bx, by, bw, bh) = crate::items::delivery_button_rect(width, height);
-            let ready = player.delivery_pending > 0 && player.delivery_state == 0;
-            let hovered =
+            // Shield overlay rides on top of the health bar; XP is a thin strip
+            // under mana so the bottom cluster stays compact.
+            if player.shield > 0.0 && player.shield_timer > 0.0 {
+                let fraction = (player.shield / 120.0).clamp(0.0, 1.0);
+                self.quad(
+                    width,
+                    height,
+                    cx,
+                    height - 148.0,
+                    260.0 * fraction,
+                    3.0,
+                    [110, 225, 255],
+                );
+            }
+            self.quad(width, height, cx, height - 116.0, 260.0, 3.0, [34, 30, 42]);
+            self.quad(
+                width,
+                height,
+                cx,
+                height - 116.0,
+                260.0 * (player.xp / player.xp_next.max(1.0)).clamp(0.0, 1.0),
+                3.0,
+                [160, 96, 220],
+            );
+
+            // Delivery guard button, bottom-right next to the shop button.
+            {
+                let (bx, by, bw, bh) = crate::items::delivery_button_rect(width, height);
+                let ready = player.delivery_pending > 0 && player.delivery_state == 0;
+                let hovered =
+                    mouse_x >= bx && mouse_x <= bx + bw && mouse_y >= by && mouse_y <= by + bh;
+                let label = match player.delivery_state {
+                    1 => "GUARD IN FLIGHT".to_string(),
+                    2 => "GUARD RETURNING".to_string(),
+                    _ => format!("DELIVER ({})", player.delivery_pending),
+                };
+                self.quad(
+                    width,
+                    height,
+                    bx - 2.0,
+                    by - 2.0,
+                    bw + 4.0,
+                    bh + 4.0,
+                    [8, 8, 10],
+                );
+                self.quad(
+                    width,
+                    height,
+                    bx - 1.0,
+                    by - 1.0,
+                    bw + 2.0,
+                    bh + 2.0,
+                    if hovered && ready {
+                        [150, 132, 82]
+                    } else {
+                        [82, 76, 58]
+                    },
+                );
+                self.quad(
+                    width,
+                    height,
+                    bx,
+                    by,
+                    bw,
+                    bh,
+                    if ready {
+                        if hovered { [64, 98, 56] } else { [48, 74, 42] }
+                    } else {
+                        [28, 28, 32]
+                    },
+                );
+                if hovered && ready {
+                    self.rect_outline(width, height, bx, by, bw, bh, 1.0, [236, 200, 110], 0.8);
+                }
+                self.text_centered(
+                    width,
+                    height,
+                    bx + bw * 0.5,
+                    by + 6.0,
+                    1.0,
+                    &label,
+                    if ready {
+                        [210, 255, 180]
+                    } else {
+                        [140, 140, 140]
+                    },
+                );
+            }
+
+            // Inventory and shop button, bottom-right.
+            let inv_x = width - 454.0;
+            let inv_y = height - 96.0;
+            self.draw_inventory_slots(width, height, inv_x, inv_y, 34.0, 6.0, shop);
+            let (bx, by, bw, bh) = shop_button_rect(width, height);
+            let shop_hovered =
                 mouse_x >= bx && mouse_x <= bx + bw && mouse_y >= by && mouse_y <= by + bh;
-            let label = match player.delivery_state {
-                1 => "GUARD IN FLIGHT".to_string(),
-                2 => "GUARD RETURNING".to_string(),
-                _ => format!("DELIVER ({})", player.delivery_pending),
-            };
             self.quad(
                 width,
                 height,
@@ -1654,135 +1786,75 @@ impl Hud {
                 by - 1.0,
                 bw + 2.0,
                 bh + 2.0,
-                if hovered && ready {
-                    [150, 132, 82]
+                if shop_hovered {
+                    [152, 134, 84]
                 } else {
                     [82, 76, 58]
                 },
             );
-            self.quad(
-                width,
-                height,
-                bx,
-                by,
-                bw,
-                bh,
-                if ready {
-                    if hovered { [64, 98, 56] } else { [48, 74, 42] }
-                } else {
-                    [28, 28, 32]
-                },
-            );
-            if hovered && ready {
-                self.rect_outline(width, height, bx, by, bw, bh, 1.0, [236, 200, 110], 0.8);
+            if let Some(uv) = self.atlas.ui_uv("tab") {
+                self.sprite(
+                    width,
+                    height,
+                    bx,
+                    by,
+                    bw,
+                    bh,
+                    uv,
+                    if shop_hovered {
+                        [255, 252, 230]
+                    } else {
+                        [248, 232, 190]
+                    },
+                    1.0,
+                );
+                self.quad_alpha(
+                    width,
+                    height,
+                    bx + 3.0,
+                    by + 3.0,
+                    bw - 6.0,
+                    bh - 6.0,
+                    if shop_hovered {
+                        [40, 38, 28]
+                    } else {
+                        [24, 24, 28]
+                    },
+                    0.82,
+                );
+            } else {
+                self.quad(
+                    width,
+                    height,
+                    bx,
+                    by,
+                    bw,
+                    bh,
+                    if shop_hovered {
+                        [58, 52, 36]
+                    } else {
+                        [30, 28, 22]
+                    },
+                );
             }
             self.text_centered(
                 width,
                 height,
                 bx + bw * 0.5,
-                by + 6.0,
-                1.0,
-                &label,
-                if ready {
-                    [210, 255, 180]
+                by + 7.0,
+                0.9,
+                if player.shop_open {
+                    "CLOSE [B]"
                 } else {
-                    [140, 140, 140]
+                    "SHOP [B]"
+                },
+                if shop_hovered {
+                    [255, 248, 220]
+                } else {
+                    [245, 220, 150]
                 },
             );
         }
-
-        // Inventory and shop button, bottom-right.
-        let inv_x = width - 454.0;
-        let inv_y = height - 96.0;
-        self.draw_inventory_slots(width, height, inv_x, inv_y, 34.0, 6.0, shop);
-        let (bx, by, bw, bh) = shop_button_rect(width, height);
-        let shop_hovered =
-            mouse_x >= bx && mouse_x <= bx + bw && mouse_y >= by && mouse_y <= by + bh;
-        self.quad(
-            width,
-            height,
-            bx - 2.0,
-            by - 2.0,
-            bw + 4.0,
-            bh + 4.0,
-            [8, 8, 10],
-        );
-        self.quad(
-            width,
-            height,
-            bx - 1.0,
-            by - 1.0,
-            bw + 2.0,
-            bh + 2.0,
-            if shop_hovered {
-                [152, 134, 84]
-            } else {
-                [82, 76, 58]
-            },
-        );
-        if let Some(uv) = self.atlas.ui_uv("tab") {
-            self.sprite(
-                width,
-                height,
-                bx,
-                by,
-                bw,
-                bh,
-                uv,
-                if shop_hovered {
-                    [255, 252, 230]
-                } else {
-                    [248, 232, 190]
-                },
-                1.0,
-            );
-            self.quad_alpha(
-                width,
-                height,
-                bx + 3.0,
-                by + 3.0,
-                bw - 6.0,
-                bh - 6.0,
-                if shop_hovered {
-                    [40, 38, 28]
-                } else {
-                    [24, 24, 28]
-                },
-                0.82,
-            );
-        } else {
-            self.quad(
-                width,
-                height,
-                bx,
-                by,
-                bw,
-                bh,
-                if shop_hovered {
-                    [58, 52, 36]
-                } else {
-                    [30, 28, 22]
-                },
-            );
-        }
-        self.text_centered(
-            width,
-            height,
-            bx + bw * 0.5,
-            by + 7.0,
-            0.9,
-            if player.shop_open {
-                "CLOSE [B]"
-            } else {
-                "SHOP [B]"
-            },
-            if shop_hovered {
-                [255, 248, 220]
-            } else {
-                [245, 220, 150]
-            },
-        );
-
         // Crosshair at the cursor.
         if player.shop_open {
             return;
@@ -1807,349 +1879,6 @@ impl Hud {
             16.0,
             [235, 235, 235],
         );
-    }
-
-    /// Minimal HUD for the standalone 3D sim arena.
-    pub fn build_sim3d_hud(&mut self, width: f32, height: f32, sim: &rift_sim::Match) {
-        self.vertices.clear();
-        self.indices.clear();
-        let w = 460.0;
-        let x = (width - w) * 0.5;
-        self.hud_panel(width, height, x, 8.0, w, 58.0);
-        self.text_centered(
-            width,
-            height,
-            width * 0.5,
-            14.0,
-            1.15,
-            "SIM 3D ARENA",
-            OSRS_GOLD,
-        );
-        self.text_centered(
-            width,
-            height,
-            width * 0.5,
-            32.0,
-            HUD_SMALL_SCALE,
-            &format!(
-                "TICK {}  ·  SEED {}  ·  HASH {:016x}",
-                sim.tick, sim.seed, sim.last_tick_hash
-            ),
-            [210, 215, 220],
-        );
-        self.text_centered(
-            width,
-            height,
-            width * 0.5,
-            47.0,
-            HUD_SMALL_SCALE,
-            &format!(
-                "BLUE {}  ·  RED {}  ·  WAVE {}S",
-                sim.alive_on(0),
-                sim.alive_on(1),
-                sim.wave_timer_ticks() / 30
-            ),
-            [235, 225, 170],
-        );
-        if let Some(winner) = sim.winner {
-            self.text_centered(
-                width,
-                height,
-                width * 0.5,
-                92.0,
-                2.2,
-                if winner == 2 {
-                    "DRAW"
-                } else if winner == 0 {
-                    "BLUE VICTORY"
-                } else {
-                    "RED VICTORY"
-                },
-                if winner == 0 {
-                    [110, 185, 255]
-                } else {
-                    [255, 120, 110]
-                },
-            );
-        }
-    }
-
-    /// Dev spectator overlay for the headless sim. Draws the three lanes,
-    /// structures, minions and heroes from `rift_sim::Match`, plus the live
-    /// tick and state hash. This is the first client consumer of the sim;
-    /// model-backed 3D rendering comes next.
-    pub fn build_sim_overlay(&mut self, width: f32, height: f32, sim: &rift_sim::Match) {
-        let panel_w = 560.0;
-        let panel_h = 620.0;
-        let px = (width - panel_w) * 0.5;
-        let py = (height - panel_h) * 0.5;
-        self.quad_alpha(width, height, 0.0, 0.0, width, height, [0, 0, 0], 0.28);
-        self.hud_panel(width, height, px, py, panel_w, panel_h);
-        self.text_centered(
-            width,
-            height,
-            px + panel_w * 0.5,
-            py + 8.0,
-            1.25,
-            "SIM SPECTATOR",
-            OSRS_GOLD,
-        );
-        self.text_centered(
-            width,
-            height,
-            px + panel_w * 0.5,
-            py + 26.0,
-            HUD_SMALL_SCALE,
-            &format!("TICK {}  · 30 HZ  · SEED {}", sim.tick, sim.seed),
-            [200, 205, 215],
-        );
-
-        let ax = px + 30.0;
-        let ay = py + 50.0;
-        let arena = 500.0;
-        let size = sim.arena_size().max(1) as f32;
-        let to_screen =
-            |tx: i32, tz: i32| (ax + tx as f32 / size * arena, ay + tz as f32 / size * arena);
-        self.quad(
-            width,
-            height,
-            ax - 2.0,
-            ay - 2.0,
-            arena + 4.0,
-            arena + 4.0,
-            [8, 9, 12],
-        );
-        self.quad(width, height, ax, ay, arena, arena, [17, 22, 18]);
-        // Grid lines every 8 tiles.
-        for step in (0..=size as i32).step_by(8) {
-            let (x, _) = to_screen(step, 0);
-            let (_, z) = to_screen(0, step);
-            self.line(width, height, x, ay, x, ay + arena, 1.0, [48, 58, 44], 0.35);
-            self.line(width, height, ax, z, ax + arena, z, 1.0, [48, 58, 44], 0.35);
-        }
-        // Lanes.
-        for lane in &sim.lanes {
-            for pair in lane.windows(2) {
-                let (x0, z0) = to_screen(pair[0].0, pair[0].1);
-                let (x1, z1) = to_screen(pair[1].0, pair[1].1);
-                self.line(width, height, x0, z0, x1, z1, 5.0, [128, 108, 70], 0.55);
-                self.line(width, height, x0, z0, x1, z1, 2.0, [190, 164, 110], 0.55);
-            }
-        }
-
-        // Structures first so units draw on top.
-        for entity in &sim.entities {
-            let structure = matches!(
-                entity.kind,
-                EntityKind::Tower | EntityKind::Inhibitor | EntityKind::Nexus
-            );
-            if !structure {
-                continue;
-            }
-            let (sx, sy) = to_screen(entity.tile().0, entity.tile().1);
-            let size_px = match entity.kind {
-                EntityKind::Nexus => 16.0,
-                EntityKind::Tower => 10.0,
-                _ => 8.0,
-            };
-            let color = if entity.team == 0 {
-                [90, 150, 235]
-            } else {
-                [225, 80, 70]
-            };
-            self.quad(
-                width,
-                height,
-                sx - size_px * 0.5 - 2.0,
-                sy - size_px * 0.5 - 2.0,
-                size_px + 4.0,
-                size_px + 4.0,
-                [8, 8, 10],
-            );
-            self.quad(
-                width,
-                height,
-                sx - size_px * 0.5,
-                sy - size_px * 0.5,
-                size_px,
-                size_px,
-                if entity.alive { color } else { [54, 46, 46] },
-            );
-            if entity.alive {
-                let hp = entity.hp_fraction();
-                self.quad(
-                    width,
-                    height,
-                    sx - size_px,
-                    sy - size_px * 0.5 - 6.0,
-                    size_px * 2.0,
-                    2.0,
-                    [10, 10, 12],
-                );
-                self.quad(
-                    width,
-                    height,
-                    sx - size_px,
-                    sy - size_px * 0.5 - 6.0,
-                    size_px * 2.0 * hp,
-                    2.0,
-                    color,
-                );
-            }
-        }
-
-        // Minions and heroes.
-        for entity in &sim.entities {
-            if !entity.alive {
-                continue;
-            }
-            let (sx, sy) = to_screen(entity.tile().0, entity.tile().1);
-            let color = if entity.team == 0 {
-                [110, 185, 255]
-            } else {
-                [255, 105, 95]
-            };
-            match entity.kind {
-                EntityKind::Minion => {
-                    self.quad(width, height, sx - 2.0, sy - 2.0, 4.0, 4.0, color);
-                }
-                EntityKind::Hero => {
-                    self.orb(width, height, sx, sy, 7.0, [20, 20, 24]);
-                    self.orb(width, height, sx, sy, 5.5, color);
-                    let hp = entity.hp_fraction();
-                    self.quad(width, height, sx - 12.0, sy - 13.0, 24.0, 3.0, [10, 10, 12]);
-                    self.quad(
-                        width,
-                        height,
-                        sx - 12.0,
-                        sy - 13.0,
-                        24.0 * hp,
-                        3.0,
-                        [80, 220, 120],
-                    );
-                }
-                _ => {}
-            }
-        }
-
-        // Match state.
-        let blue = sim
-            .nexus(0)
-            .map(|n| (n.hp.max(0), n.max_hp))
-            .unwrap_or((0, 1));
-        let red = sim
-            .nexus(1)
-            .map(|n| (n.hp.max(0), n.max_hp))
-            .unwrap_or((0, 1));
-        self.text(
-            width,
-            height,
-            ax,
-            ay + arena + 8.0,
-            HUD_SMALL_SCALE,
-            &format!("BLUE NEXUS {}/{}", blue.0, blue.1),
-            [110, 185, 255],
-        );
-        self.text(
-            width,
-            height,
-            ax + 240.0,
-            ay + arena + 8.0,
-            HUD_SMALL_SCALE,
-            &format!("RED NEXUS {}/{}", red.0, red.1),
-            [255, 120, 110],
-        );
-        let wave = sim.wave_timer_ticks();
-        let minions = sim
-            .entities
-            .iter()
-            .filter(|entity| entity.kind == EntityKind::Minion && entity.alive)
-            .count();
-        self.text(
-            width,
-            height,
-            ax,
-            ay + arena + 22.0,
-            HUD_SMALL_SCALE,
-            &format!(
-                "WAVE {}S   HEROES {} / 5   MINIONS {}",
-                wave / 30,
-                sim.alive_on(0),
-                minions
-            ),
-            [200, 200, 190],
-        );
-        self.text(
-            width,
-            height,
-            ax,
-            ay + arena + 36.0,
-            HUD_SMALL_SCALE,
-            &format!("HASH {:016x}", sim.last_tick_hash),
-            [235, 205, 120],
-        );
-        if let Some(winner) = sim.winner {
-            let color = if winner == 0 {
-                [110, 185, 255]
-            } else if winner == 1 {
-                [255, 120, 110]
-            } else {
-                [220, 220, 220]
-            };
-            self.text_centered(
-                width,
-                height,
-                ax + arena * 0.5,
-                ay + arena * 0.5 - 10.0,
-                3.0,
-                if winner == 2 { "DRAW" } else { "VICTORY" },
-                color,
-            );
-        }
-    }
-
-    /// Arbitrary-angle line built from one thin quad, for the spectator map.
-    #[allow(clippy::too_many_arguments)]
-    fn line(
-        &mut self,
-        width: f32,
-        height: f32,
-        x0: f32,
-        y0: f32,
-        x1: f32,
-        y1: f32,
-        thickness: f32,
-        color: [u8; 3],
-        alpha: f32,
-    ) {
-        let dx = x1 - x0;
-        let dy = y1 - y0;
-        let len = (dx * dx + dy * dy).sqrt().max(0.001);
-        let nx = -dy / len * thickness * 0.5;
-        let ny = dx / len * thickness * 0.5;
-        let uv = self.atlas.white_uv;
-        let tint = [
-            srgb_to_linear(color[0] as f32 / 255.0),
-            srgb_to_linear(color[1] as f32 / 255.0),
-            srgb_to_linear(color[2] as f32 / 255.0),
-            alpha,
-        ];
-        let to_clip = |x: f32, y: f32| [2.0 * x / width - 1.0, 1.0 - 2.0 * y / height, 0.0];
-        let base = self.vertices.len() as u32;
-        for (x, y) in [
-            (x0 + nx, y0 + ny),
-            (x1 + nx, y1 + ny),
-            (x1 - nx, y1 - ny),
-            (x0 - nx, y0 - ny),
-        ] {
-            self.vertices.push(UiVertex {
-                position: to_clip(x, y),
-                uv: [uv[0], uv[1]],
-                color: tint,
-            });
-        }
-        self.indices
-            .extend_from_slice(&[base, base + 1, base + 2, base + 2, base + 1, base + 3]);
     }
 
     /// Colour used for a combat class badge: melee red, ranged blue, magic green.

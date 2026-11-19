@@ -1,6 +1,26 @@
 # Status
 
-Last updated: standalone 3D sim arena bridge (M7 slice 4), 2026-11-19.
+Last updated: main-game spectator cameras, 2026-11-19.
+
+## 2026-11-19 — Focus correction: main-game spectator
+
+- Removed the experimental client sim overlay and standalone 3D sim arena
+  (`--sim-overlay`, `--sim-3d`, `--sim-control`). They were a detour from the
+  core game loop. The headless sim crate and `rift-tools match` remain the
+  server-spine work, but the client is back on the real match.
+- Spectator mode is now a camera swap over the main game's champions:
+  - `V` toggles spectator mode; `Z`/`X` cycle cameras;
+  - `--spectate` starts attached to the local champion;
+  - `--spectate-index N` starts on a specific champion slot (verification).
+- While spectating: camera follows the chosen champion, the HUD shows name,
+  level, team, HP and mana, the player's ability/inventory/health cluster is
+  hidden, click-to-move and QWER input are disabled, and the hero profile card
+  is suppressed so the view is clean.
+- Restored the per-frame `animated.refresh_visibility(dt, collision)` call
+  that was lost during the cleanup; the client is back to **p50 17.4 ms**
+  (~58 fps) instead of the accidental 26 ms regression.
+- Verified capture: `/tmp/opencode/spectate_clean.png` (rival champion camera,
+  spectator bar, clean HUD). Tests 61, clippy clean.
 
 ## 2026-11-19 — M7 slice 4: 3D sim arena bridge
 

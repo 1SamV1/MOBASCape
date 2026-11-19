@@ -35,14 +35,12 @@ Goal: the match is a deterministic, headless, testable state machine.
   nexus shield rule, structure combat, minion/hero structure pressure, hero
   gold/XP/levels/respawns and a decisive nexus win condition. Per-tick hashes.
   `rift-tools match --seed 7` ends at tick 6986 with hash `bc1f32e1b0f15ace`.
-- **Slice 3 done:** `rift-tools match --trace-every N` external hash traces;
-  client `--sim-overlay` runs the real `Match` and draws the three-lane
-  spectator board with structures, minions, heroes, nexus HP and the live hash.
-- **Slice 4 done:** `--sim-3d` standalone 3D arena renders the real `Match`
-  with cache models for heroes, minions, towers, inhibitors and nexus, team
-  rings and a dedicated spectator camera.
-- Remaining: replace the prototype map/combat with this actor layer, animate
-  poses and health plates, and keep local movement prediction.
+- **Slice 3 done:** `rift-tools match --trace-every N` external hash traces.
+- **Focus correction:** the client-side sim overlay and standalone 3D arena
+  were removed; they pulled attention away from the real match. Spectator
+  mode is now a camera swap over the main game's champions (`V`, `Z`/`X`).
+- Remaining M7 work stays headless: keep the sim and CLI as the server spine,
+  and defer client migration until the core game loop is satisfying.
 - `crates/bots`: scripted dev bots that can finish a match headless.
 - `rift-tools match --seed N --ticks 3600` prints the result and hash.
 - Client becomes a renderer + input predictor over the sim.
