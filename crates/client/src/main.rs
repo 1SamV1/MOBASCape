@@ -52,7 +52,7 @@ struct Cli {
     #[arg(long, default_value_t = 2)]
     radius: u32,
     /// Initial camera distance in world units.
-    #[arg(long, default_value_t = 2750.0)]
+    #[arg(long, default_value_t = 3200.0)]
     distance: f32,
     /// Optional initial camera pitch in radians (dev screenshots).
     #[arg(long)]
@@ -136,9 +136,18 @@ struct Cli {
     /// Run a fixed-duration frame-time benchmark, then exit (seconds).
     #[arg(long)]
     benchmark: Option<f32>,
+    /// Dev: write a PNG of the presented frame, then exit.
+    #[arg(long)]
+    screenshot: Option<PathBuf>,
+    /// Dev: frames to draw before `--screenshot` captures (default 90).
+    #[arg(long, default_value_t = 90)]
+    screenshot_after: u32,
     /// Simulation speed multiplier for verification.
     #[arg(long, default_value_t = 1.0)]
     timescale: f32,
+    /// Show the engineer stat sheet and visibility counters in the HUD.
+    #[arg(long)]
+    debug_hud: bool,
 }
 
 fn main() -> Result<()> {
@@ -277,6 +286,7 @@ fn main() -> Result<()> {
         lmb_press: None,
         initial_distance: cli.distance,
         initial_pitch: cli.pitch,
+        debug_hud: cli.debug_hud,
         demo_target,
         demo_timer: 0.0,
         demo_combat: cli.demo_combat,
@@ -337,6 +347,10 @@ fn main() -> Result<()> {
         benchmark_remaining: cli.benchmark,
         benchmark_samples: Vec::new(),
         benchmark_done: false,
+        screenshot_request: cli
+            .screenshot
+            .clone()
+            .map(|path| (path, cli.screenshot_after)),
         app_time: 0.0,
         lane_log_timer: 0.0,
         last_frame: Instant::now(),
@@ -369,6 +383,7 @@ struct App {
     lmb_press: Option<Instant>,
     initial_distance: f32,
     initial_pitch: Option<f32>,
+    debug_hud: bool,
     demo_target: Option<(f32, f32)>,
     demo_timer: f32,
     demo_combat: bool,
@@ -425,6 +440,7 @@ struct App {
     benchmark_remaining: Option<f32>,
     benchmark_samples: Vec<f32>,
     benchmark_done: bool,
+    screenshot_request: Option<(std::path::PathBuf, u32)>,
     app_time: f32,
     lane_log_timer: f32,
     last_frame: Instant,
@@ -497,6 +513,9 @@ impl ApplicationHandler for App {
         renderer.set_graphics_mode(!self.graphics_classic);
         renderer.set_shadow_mode(parse_shadow_mode(&self.shadow_mode));
         renderer.set_debug_view(self.debug_view);
+        if let Some((path, after)) = self.screenshot_request.take() {
+            renderer.request_screenshot(path, after);
+        }
         renderer.update_camera();
         tracing::info!(
             "camera target {:?}, distance {:.0}; click the ground to move",
@@ -1312,7 +1331,7 @@ impl App {
             renderer.set_time(self.app_time);
             // Fog of war is a shader-side circle around the hero, so it has
             // no geometry to fight with the terrain's z levels.
-            renderer.set_vision(animated.player_pos(), 1500.0);
+            renderer.set_vision(animated.player_pos(), 2600.0);
             animated.visibility_dirty = false;
 
             let nexus0 = animated.nexus_health(0).unwrap_or((0.0, 1.0));
@@ -1498,6 +1517,11 @@ impl App {
                 events: self.event_log.clone(),
                 kills: (scores.0.0, scores.1.0),
                 deaths: (scores.0.1, scores.1.1),
+                player_kills: stats.kills,
+                player_deaths: stats.deaths,
+                player_assists: stats.assists,
+                player_cs: stats.cs,
+                debug_hud: self.debug_hud,
                 match_time: self.app_time,
                 hover,
                 biome: animated.current_biome(),
@@ -1540,6 +1564,8 @@ impl App {
                 renderer.size.1 as f32,
                 animated,
                 (renderer.camera.target.x, renderer.camera.target.z),
+                renderer.camera.distance,
+                renderer.camera.pitch,
                 &heroes,
             );
             renderer.set_hud_mesh(&self.hud.vertices, &self.hud.indices);
@@ -1669,7 +1695,7 @@ impl App {
             renderer.set_caster_mesh(&animated.caster_vertices, &animated.caster_indices);
             renderer.set_lights(&animated.lights());
             renderer.set_time(self.app_time);
-            renderer.set_vision(animated.player_pos(), 1500.0);
+            renderer.set_vision(animated.player_pos(), 2600.0);
             animated.visibility_dirty = false;
             if self.follow {
                 renderer.camera.target = animated.player_pos() + Vec3::Y * 140.0;
@@ -1724,7 +1750,7 @@ impl App {
             renderer.set_caster_mesh(&animated.caster_vertices, &animated.caster_indices);
             renderer.set_lights(&animated.lights());
             renderer.set_time(self.app_time);
-            renderer.set_vision(animated.player_pos(), 1500.0);
+            renderer.set_vision(animated.player_pos(), 2600.0);
             animated.visibility_dirty = false;
         }
 

@@ -1,6 +1,31 @@
 # Status
 
-Last updated: reference 5v5 lobby + hero select parity, 2026-11-14.
+Last updated: reference framing + terrain conditioning pass, 2026-11-19.
+
+## 2026-11-19 — presentation & terrain pass (M6.1)
+
+- Camera default moved to the reference framing: 3200 units at 0.95 rad
+  (~54°), so heroes read large and the map reads as a place.
+- Scoreboard strip now shows only blue kills, match clock, red kills, personal
+  K/D/A and CS. Personal kill/death/assist and creep-score counters were added
+  to the match state and only credit damage attributed to the player.
+- Right edge is a five-slot enemy team card (portrait chip, level, HP, MP);
+  left edge is a single objectives card with team comparison, nexus bars and
+  wave/buff readout. The engineer stat sheet is behind `--debug-hud`.
+- Minimap carries a level/XP/gold strip along its bottom edge.
+- Terrain conditioning: `relax_heights` removes single-tile rock spikes,
+  `add_rolling_relief` adds two octaves of sub-tile rolling relief so flat
+  fields are not tabletops, and `flatten_bases` levels each courtyard to its
+  centre height with a soft skirt. This fixes the "rocky or too flat" ground.
+- Grass shader: micro-relief normal perturbation, directional blade streaks,
+  stronger fine speckle and slightly higher saturation so the field reads as
+  grass at the new camera distance instead of a flat wash.
+- Verified: `cargo test --workspace` green (14+33+7); debug benchmark at
+  1280×720 immediate p50 16.4 ms / p95 17.1 ms (~60 fps). Screenshots captured
+  for field and base views.
+- Note: an experimental flagstone courtyard overlay was tried and reverted; it
+  fought an unresolved depth artifact. The levelled grass base with the stone
+  fountain ring is the current base look.
 
 ## Working
 

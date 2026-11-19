@@ -32,6 +32,11 @@ enum Command {
     ScanColors,
     /// Print an underlay definition.
     Underlay { id: u32 },
+    /// Dump the raw bytes of the material definitions in the config archive.
+    Materials {
+        #[arg(long, default_value_t = 8)]
+        limit: u32,
+    },
     /// Print an overlay definition.
     Overlay { id: u32 },
     /// Print an NPC definition.
@@ -88,6 +93,7 @@ fn main() -> Result<()> {
         Command::Locations { region_x, region_y } => locations(&cache, region_x, region_y)?,
         Command::ScanColors => scan_colors(&cache)?,
         Command::Underlay { id } => underlay(&cache, id)?,
+        Command::Materials { limit } => materials(&cache, limit)?,
         Command::Overlay { id } => overlay(&cache, id)?,
         Command::Npc { id } => npc(&cache, id)?,
         Command::FindNpc { query, limit } => find_npc(&cache, &query, limit)?,
@@ -208,6 +214,131 @@ fn locations(cache: &Cache, region_x: u32, region_y: u32) -> Result<()> {
             .map(|def| def.name)
             .unwrap_or_default();
         println!("  object {id:6} x{count:<4} {name}");
+    }
+    Ok(())
+}
+
+fn fnv1a(text: &str) -> i32 {
+    let mut hash: u32 = 0x811c9dc5;
+    for byte in text.as_bytes() {
+        hash ^= u32::from(*byte);
+        hash = hash.wrapping_mul(0x0100_0193);
+    }
+    hash as i32
+}
+
+fn materials(cache: &Cache, limit: u32) -> Result<()> {
+    let reference = cache.reference(2)?;
+    let names = [
+        "materials",
+        "material",
+        "underlay",
+        "overlay",
+        "object",
+        "npc",
+        "variance",
+        "item",
+        "particle",
+        "skeleton",
+        "sound",
+        "spell",
+        "textures",
+        "animation",
+        "graphic",
+        "sound_effect",
+    ];
+    for archive in &reference.archives {
+        let matched = names
+            .iter()
+            .find(|name| fnv1a(name) == archive.name_hash)
+            .copied()
+            .unwrap_or("?");
+        println!(
+            "archive {:2} files={:5} hash={:11} name={matched}",
+            archive.id,
+            archive.files.len(),
+            archive.name_hash
+        );
+    }
+    for archive in [1u32, 4u32] {
+        let files = cache.archive_files_with_ids(2, archive)?;
+        let mut ok = 0usize;
+        let mut bad = Vec::new();
+        for (id, data) in &files {
+            let parsed = if archive == 1 {
+                rift_cache::UnderlayDefinition::parse(*id, data).is_ok()
+            } else {
+                rift_cache::OverlayDefinition::parse(*id, data).is_ok()
+            };
+            if parsed {
+                ok += 1;
+            } else {
+                bad.push((
+                    *id,
+                    data.len(),
+                    data.iter().take(20).copied().collect::<Vec<u8>>(),
+                ));
+            }
+        }
+        println!("archive {archive}: {ok} parsed, {} failed", bad.len());
+        for (id, len, bytes) in bad.iter().take(3) {
+            let hex: Vec<String> = bytes.iter().map(|b| format!("{b:02x}")).collect();
+            println!("  id {id} len {len}: {}", hex.join(" "));
+        }
+    }
+    for archive in [3u32] {
+        let Ok(files) = cache.archive_files_with_ids(2, archive) else {
+            continue;
+        };
+        let lens: Vec<usize> = files.iter().map(|(_, d)| d.len()).collect();
+        let min_len = lens.iter().min().copied().unwrap_or(0);
+        let max_len = lens.iter().max().copied().unwrap_or(0);
+        let uniform = min_len == max_len;
+        println!(
+            "probe archive {archive}: files={} len={min_len}..{max_len} uniform={uniform}",
+            files.len()
+        );
+        if files.len() < 400 || uniform {
+            let mut parsed = 0usize;
+            let mut histogram: std::collections::BTreeMap<u16, usize> = Default::default();
+            for (id, data) in &files {
+                if data.len() >= 10 {
+                    let texture = u16::from_le_bytes([data[8], data[9]]);
+                    histogram
+                        .entry(texture)
+                        .and_modify(|c| *c += 1)
+                        .or_insert(1);
+                    parsed += 1;
+                }
+            }
+            println!("   parsed {parsed}/{} u16-texture histogram", files.len());
+            let top: Vec<(u16, usize)> = histogram.iter().take(12).map(|(k, v)| (*k, *v)).collect();
+            println!("   histogram {top:?}");
+
+            for (id, data) in files.iter().take(6) {
+                let ints: Vec<i32> = data
+                    .chunks_exact(4)
+                    .map(|c| i32::from_le_bytes([c[0], c[1], c[2], c[3]]))
+                    .collect();
+                let bytes: Vec<String> = data.iter().map(|b| format!("{b:02x}")).collect();
+                println!("   id {id}: bytes={} ints={ints:?}", bytes.join(" "));
+            }
+        }
+    }
+    let files = cache.archive_files_with_ids(2, 0)?;
+    println!("material files: {}", files.len());
+    for (id, data) in files.iter().take(limit as usize) {
+        let head: Vec<String> = data.iter().take(24).map(|b| format!("{b:02x}")).collect();
+        let ints: Vec<i32> = data
+            .chunks_exact(4)
+            .take(6)
+            .map(|c| i32::from_le_bytes([c[0], c[1], c[2], c[3]]))
+            .collect();
+        println!(
+            "material {id:5} len={:3} head={} ints={ints:?}",
+            data.len(),
+            head.join(" ")
+        );
     }
     Ok(())
 }

@@ -100,9 +100,14 @@ impl Camera {
     pub fn new(target: Vec3) -> Self {
         Self {
             target,
-            yaw: 0.72,
-            pitch: 0.86,
-            distance: 4400.0,
+            // Straight north-up view: the minimap treats small z as north, so
+            // the camera must look down -Z with no yaw for the screen and the
+            // minimap viewport to agree on what "forward" means.
+            yaw: 0.0,
+            // Close to the reference clip: roughly 54 degrees above the
+            // horizon, with the hero about two tiles tall on screen.
+            pitch: 0.95,
+            distance: 3200.0,
         }
     }
 
@@ -349,6 +354,9 @@ pub struct Renderer {
     shadow_view: wgpu::TextureView,
     shadow_mode: u32,
     shadow_tick: u32,
+    /// Dev-only screenshot request: path plus the number of frames still to
+    /// draw before the surface is copied back to the CPU.
+    screenshot: Option<(std::path::PathBuf, u32)>,
     depth_view: wgpu::TextureView,
     terrain: ChunkedMesh,
     models: ChunkedMesh,
@@ -438,7 +446,9 @@ impl Renderer {
         let scene_format = wgpu::TextureFormat::Rgba16Float;
 
         let config = wgpu::SurfaceConfiguration {
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+            // COPY_SRC is only used by the dev screenshot path, but the usage
+            // must be declared when the surface is configured.
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
             format,
             color_space: wgpu::SurfaceColorSpace::Auto,
             width,
@@ -1406,6 +1416,7 @@ impl Renderer {
             shadow_view,
             shadow_mode: 2,
             shadow_tick: 0,
+            screenshot: None,
             depth_view,
             terrain,
             models,
@@ -1438,6 +1449,13 @@ impl Renderer {
         renderer.update_camera();
 
         Ok(renderer)
+    }
+
+    /// Ask the renderer to write the next presented frame to `path` after a
+    /// warm-up of `delay_frames` frames. Used by the visual-parity workflow;
+    /// it has no effect on normal gameplay.
+    pub fn request_screenshot(&mut self, path: std::path::PathBuf, delay_frames: u32) {
+        self.screenshot = Some((path, delay_frames));
     }
 
     pub fn resize(&mut self, width: u32, height: u32) {
@@ -2030,10 +2048,130 @@ impl Renderer {
             }
         }
 
+        // Dev screenshot: copy the composited surface (scene + HUD) before it
+        // is presented. Reads back synchronously; only used by tooling.
+        let mut capture = None;
+        if let Some((path, remaining)) = self.screenshot.as_mut() {
+            if *remaining == 0 {
+                let width = self.config.width;
+                let height = self.config.height;
+                let bytes_per_pixel = 4u32;
+                let unpadded = width * bytes_per_pixel;
+                let align = wgpu::COPY_BYTES_PER_ROW_ALIGNMENT;
+                let padded = unpadded.div_ceil(align) * align;
+                let buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
+                    label: Some("screenshot readback"),
+                    size: (padded as u64) * (height as u64),
+                    usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
+                    mapped_at_creation: false,
+                });
+                encoder.copy_texture_to_buffer(
+                    wgpu::TexelCopyTextureInfo {
+                        texture: &output.texture,
+                        mip_level: 0,
+                        origin: wgpu::Origin3d::ZERO,
+                        aspect: wgpu::TextureAspect::All,
+                    },
+                    wgpu::TexelCopyBufferInfo {
+                        buffer: &buffer,
+                        layout: wgpu::TexelCopyBufferLayout {
+                            offset: 0,
+                            bytes_per_row: Some(padded),
+                            rows_per_image: Some(height),
+                        },
+                    },
+                    wgpu::Extent3d {
+                        width,
+                        height,
+                        depth_or_array_layers: 1,
+                    },
+                );
+                capture = Some((
+                    path.clone(),
+                    buffer,
+                    padded,
+                    unpadded,
+                    width,
+                    height,
+                    self.config.format,
+                ));
+                self.screenshot = None;
+            } else {
+                *remaining -= 1;
+            }
+        }
+
         self.queue.submit(std::iter::once(encoder.finish()));
         self.queue.present(output);
+
+        if let Some((path, buffer, padded, unpadded, width, height, format)) = capture {
+            if let Err(err) = write_screenshot(
+                &self.device,
+                &buffer,
+                padded,
+                unpadded,
+                width,
+                height,
+                format,
+                &path,
+            ) {
+                tracing::error!("screenshot: {err:#}");
+            } else {
+                tracing::info!("screenshot written to {}", path.display());
+            }
+        }
         Ok(())
     }
+}
+
+/// Map the readback buffer, strip row padding, swap BGRA to RGBA when the
+/// surface is BGRA, and write a PNG.
+fn write_screenshot(
+    device: &wgpu::Device,
+    buffer: &wgpu::Buffer,
+    padded_row: u32,
+    row_bytes: u32,
+    width: u32,
+    height: u32,
+    format: wgpu::TextureFormat,
+    path: &std::path::Path,
+) -> Result<()> {
+    let slice = buffer.slice(..);
+    let (sender, receiver) = std::sync::mpsc::channel();
+    slice.map_async(wgpu::MapMode::Read, move |result| {
+        let _ = sender.send(result);
+    });
+    device.poll(wgpu::PollType::wait_indefinitely())?;
+    receiver
+        .recv()
+        .map_err(|err| anyhow::anyhow!("screenshot map channel closed: {err}"))?
+        .map_err(|err| anyhow::anyhow!("screenshot map failed: {err:?}"))?;
+
+    let mapped = slice.get_mapped_range()?;
+    let mut pixels = Vec::with_capacity((width * height * 4) as usize);
+    for row in 0..height {
+        let start = (row * padded_row) as usize;
+        let end = start + row_bytes as usize;
+        pixels.extend_from_slice(&mapped[start..end]);
+    }
+    let swap = matches!(
+        format,
+        wgpu::TextureFormat::Bgra8Unorm | wgpu::TextureFormat::Bgra8UnormSrgb
+    );
+    if swap {
+        for pixel in pixels.chunks_exact_mut(4) {
+            pixel.swap(0, 2);
+        }
+    }
+    drop(mapped);
+    buffer.unmap();
+
+    let image = image::RgbaImage::from_raw(width, height, pixels)
+        .ok_or_else(|| anyhow::anyhow!("screenshot buffer size mismatch"))?;
+    image
+        .save(path)
+        .map_err(|err| anyhow::anyhow!("writing {}: {err}", path.display()))?;
+    Ok(())
 }
 
 fn create_dynamic_buffer(

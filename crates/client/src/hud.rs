@@ -20,7 +20,7 @@ pub const OSRS_GOLD: [u8; 3] = [255, 196, 0];
 
 /// The HUD text is drawn at this multiple of the authored sizes so it stays
 /// readable on a 720p window.
-const TEXT_SCALE: f32 = 1.32;
+const TEXT_SCALE: f32 = 1.16;
 
 /// Extra multiplier for the baked OSRS interface font. The atlas glyphs are
 /// authored at 16px, so this maps the authored HUD scale to whole pixels for
@@ -86,6 +86,13 @@ pub struct PlayerHud {
     /// Team scoreboard: kills and deaths per team.
     pub kills: (u32, u32),
     pub deaths: (u32, u32),
+    /// The local player's own scoreboard line.
+    pub player_kills: u32,
+    pub player_deaths: u32,
+    pub player_assists: u32,
+    pub player_cs: u32,
+    /// Show the engineer stat sheet and visibility counters.
+    pub debug_hud: bool,
     /// Seconds since the match started.
     pub match_time: f32,
     /// Unit under the cursor.
@@ -311,6 +318,8 @@ impl Hud {
         height: f32,
         scene: &AnimatedScene,
         camera_pos: (f32, f32),
+        camera_distance: f32,
+        camera_pitch: f32,
         heroes: &[HeroMarker],
     ) {
         let (x, y, size, _) = minimap_rect(width, height);
@@ -339,6 +348,53 @@ impl Hud {
             self.sprite(width, height, x, y, size, size, uv, [255, 255, 255], 1.0);
         }
 
+        // Level/XP/gold strip along the bottom edge of the minimap, matching
+        // the reference client's compact economy readout.
+        {
+            let stats = scene.player_stats();
+            let strip_h = 16.0;
+            let sy = y + size - strip_h;
+            self.quad(width, height, x, sy, size, strip_h, [10, 10, 14]);
+            self.quad(
+                width,
+                height,
+                x + 4.0,
+                sy + 11.0,
+                size - 8.0,
+                4.0,
+                [34, 28, 44],
+            );
+            self.quad(
+                width,
+                height,
+                x + 4.0,
+                sy + 11.0,
+                (size - 8.0) * (stats.xp / stats.xp_next.max(1.0)).clamp(0.0, 1.0),
+                4.0,
+                [160, 96, 220],
+            );
+            self.text(
+                width,
+                height,
+                x + 5.0,
+                sy + 1.0,
+                0.75,
+                &format!("LV {}", stats.level),
+                [235, 225, 150],
+            );
+            let gold = format!("{}G", stats.gold);
+            let gw = self.text_width(&gold, 0.75);
+            self.text(
+                width,
+                height,
+                x + size - gw - 5.0,
+                sy + 1.0,
+                0.75,
+                &gold,
+                OSRS_GOLD,
+            );
+        }
+
         let (min, max) = scene.minimap_bounds;
         let to_map = |p: glam::Vec3| {
             // North (small z) is up, matching the camera's view direction.
@@ -365,12 +421,15 @@ impl Hud {
             self.quad(width, height, px - 7.0, py - 1.5, 14.0, 3.0, [235, 70, 60]);
         }
 
-        // Camera viewport rectangle, Dota minimap style.
+        // Camera viewport rectangle, Dota minimap style. Approximate the
+        // ground footprint of the 50 degree perspective camera so the box
+        // matches what the player can actually see.
         {
-            let half = 900.0;
+            let half_w = camera_distance * 0.466 * (width / height.max(1.0));
+            let half_h = camera_distance * 0.466 / camera_pitch.sin().max(0.2);
             let corners = [
-                glam::Vec3::new(camera_pos.0 - half, 0.0, camera_pos.1 - half),
-                glam::Vec3::new(camera_pos.0 + half, 0.0, camera_pos.1 + half),
+                glam::Vec3::new(camera_pos.0 - half_w, 0.0, camera_pos.1 - half_h),
+                glam::Vec3::new(camera_pos.0 + half_w, 0.0, camera_pos.1 + half_h),
             ];
             let (cx0, cy0) = to_map(corners[0]);
             let (cx1, cy1) = to_map(corners[1]);
@@ -485,294 +544,81 @@ impl Hud {
         self.vertices.clear();
         self.indices.clear();
 
-        // Health, mana, XP, and buff panels, top-left.
-        self.panel(
-            width,
-            height,
-            22.0,
-            22.0,
-            300.0,
-            26.0,
-            player.health / player.max_health,
-            [70, 190, 95],
-        );
-        self.panel(
-            width,
-            height,
-            22.0,
-            52.0,
-            300.0,
-            20.0,
-            player.mana / player.max_mana.max(1.0),
-            [70, 120, 235],
-        );
-        self.panel(
-            width,
-            height,
-            22.0,
-            76.0,
-            300.0,
-            9.0,
-            (player.xp / player.xp_next.max(1.0)).clamp(0.0, 1.0),
-            [170, 90, 230],
-        );
-        if player.shield > 0.0 && player.shield_timer > 0.0 {
-            self.panel(
-                width,
-                height,
-                22.0,
-                47.0,
-                300.0,
-                4.0,
-                (player.shield / 120.0).clamp(0.0, 1.0),
-                [90, 255, 140],
-            );
-        }
-        self.icon(width, height, 27.0, 26.0, 18.0, "icon_hp", [255, 255, 255]);
-        self.text(
-            width,
-            height,
-            49.0,
-            27.0,
-            1.25,
-            &format!("HP {:.0}/{:.0}", player.health, player.max_health),
-            OSRS_WHITE,
-        );
-        self.icon(width, height, 27.0, 56.0, 18.0, "icon_mp", [255, 255, 255]);
-        self.text(
-            width,
-            height,
-            49.0,
-            58.0,
-            1.05,
-            &format!("MP {:.0}/{:.0}", player.mana, player.max_mana),
-            [235, 242, 255],
-        );
-        self.icon(width, height, 23.0, 87.0, 16.0, "icon_xp", [255, 255, 255]);
-        self.text(
-            width,
-            height,
-            42.0,
-            88.0,
-            0.95,
-            &format!(
-                "LV {}  XP {:.0}/{:.0}",
-                player.level, player.xp, player.xp_next
-            ),
-            OSRS_YELLOW,
-        );
-        self.icon(
-            width,
-            height,
-            176.0,
-            86.0,
-            17.0,
-            "icon_gold",
-            [255, 255, 255],
-        );
-        self.text(
-            width,
-            height,
-            196.0,
-            88.0,
-            1.05,
-            &format!("GOLD {}G", player.gold),
-            OSRS_GOLD,
-        );
-        if let Some((remaining, duration, color)) = player.buff {
-            let fill = (remaining / duration.max(0.1)).clamp(0.0, 1.0);
-            self.panel(width, height, 22.0, 86.0, 150.0, 10.0, fill, color);
-            if let Some(label) = player.buff_label {
-                self.text(
-                    width,
-                    height,
-                    26.0,
-                    87.0,
-                    0.9,
-                    &format!("{label} {remaining:.0}S"),
-                    [250, 250, 250],
-                );
-            }
-        }
-
-        // Dota style scoreboard strip across the top of the screen.
+        // Scoreboard strip. The reference client keeps only the match
+        // essentials on the top edge: team kills, clock, personal K/D/A and
+        // creep score. Everything else is contextual.
         let strip_w = 760.0;
         let strip_x = (width - strip_w) * 0.5;
-        self.hud_panel(width, height, strip_x, 0.0, strip_w, 30.0);
-        self.text(
+        self.hud_panel(width, height, strip_x, 0.0, strip_w, 34.0);
+
+        self.icon(
             width,
             height,
             strip_x + 12.0,
-            9.0,
-            1.1,
-            &format!("GOLD {}", player.gold),
-            OSRS_GOLD,
-        );
-        self.text(
-            width,
-            height,
-            strip_x + 96.0,
-            9.0,
-            1.1,
-            &format!("WAVE {:.0}S", wave_timer),
-            OSRS_WHITE,
-        );
-        self.text(
-            width,
-            height,
-            strip_x + 186.0,
-            9.0,
-            1.1,
-            &format!("MINIONS {}", player.minions),
-            OSRS_WHITE,
-        );
-        self.text(
-            width,
-            height,
-            strip_x + 278.0,
-            9.0,
-            1.1,
-            &format!("ITEMS {}/6", player.items_owned),
-            OSRS_WHITE,
-        );
-        self.text(
-            width,
-            height,
-            strip_x + 372.0,
-            9.0,
-            1.1,
-            &format!("VIS {}", player.visible_enemies),
-            OSRS_WHITE,
-        );
-        self.text(
-            width,
-            height,
-            strip_x + 428.0,
-            9.0,
-            1.05,
-            &format!("K/D {}/{}", player.kills.0, player.deaths.0),
-            OSRS_WHITE,
-        );
-        self.icon(
-            width,
-            height,
-            strip_x + 482.0,
-            7.0,
-            16.0,
+            8.0,
+            18.0,
             "icon_swords",
             [255, 255, 255],
         );
         self.text(
             width,
             height,
-            strip_x + 500.0,
-            9.0,
-            1.25,
+            strip_x + 36.0,
+            10.0,
+            1.2,
             &format!("BLUE {}", player.kills.0),
             [110, 175, 255],
         );
+
         self.text_centered(
             width,
             height,
-            strip_x + 588.0,
+            strip_x + 330.0,
             9.0,
-            1.25,
+            1.45,
             &format_clock(player.match_time),
             [245, 225, 120],
         );
+
         self.icon(
             width,
             height,
-            strip_x + 642.0,
-            7.0,
-            16.0,
-            "icon_skull",
-            [255, 255, 255],
-        );
-        self.icon(
-            width,
-            height,
-            strip_x + 642.0,
-            7.0,
-            16.0,
+            strip_x + 470.0,
+            8.0,
+            18.0,
             "icon_skull",
             [255, 255, 255],
         );
         self.text(
             width,
             height,
-            strip_x + 662.0,
-            9.0,
-            1.25,
+            strip_x + 494.0,
+            10.0,
+            1.2,
             &format!("RED {}", player.kills.1),
             [255, 120, 110],
         );
 
-        // Nexus health bars, top-centre.
-        let bar_w = 220.0;
-        let gap = 24.0;
-        let x0 = (width - (bar_w * 2.0 + gap)) * 0.5;
-        self.panel(
+        self.text(
             width,
             height,
-            x0,
-            34.0,
-            bar_w,
-            16.0,
-            (nexus0.0 / nexus0.1.max(1.0)).clamp(0.0, 1.0),
-            [80, 150, 255],
-        );
-        self.panel(
-            width,
-            height,
-            x0 + bar_w + gap,
-            34.0,
-            bar_w,
-            16.0,
-            (nexus1.0 / nexus1.1.max(1.0)).clamp(0.0, 1.0),
-            [220, 65, 60],
-        );
-        let wave_fill = if wave_interval > 0.0 {
-            (1.0 - wave_timer / wave_interval).clamp(0.0, 1.0)
-        } else {
-            0.0
-        };
-        self.panel(
-            width,
-            height,
-            width * 0.5 - 90.0,
-            66.0,
-            180.0,
-            6.0,
-            wave_fill,
-            [220, 190, 60],
+            strip_x + 604.0,
+            11.0,
+            1.0,
+            &format!(
+                "KDA {}/{}/{}",
+                player.player_kills, player.player_deaths, player.player_assists
+            ),
+            [235, 235, 235],
         );
         self.text(
             width,
             height,
-            x0,
-            52.0,
-            1.1,
-            &format!("BLUE {:.0}", nexus0.0),
-            [110, 175, 255],
-        );
-        self.text(
-            width,
-            height,
-            x0 + bar_w + gap,
-            52.0,
-            1.1,
-            &format!("RED {:.0}", nexus1.0),
-            [255, 120, 110],
-        );
-        self.text_centered(
-            width,
-            height,
-            width * 0.5,
-            74.0,
-            0.9,
-            &format!("WAVE {:.0}S", wave_timer),
-            [230, 210, 120],
+            strip_x + 706.0,
+            11.0,
+            1.0,
+            &format!("CS {}", player.player_cs),
+            [235, 225, 150],
         );
 
         // Hero profile card above the minimap: portrait, name, level and
@@ -822,7 +668,7 @@ impl Hud {
                 mx + 58.0,
                 card_y + 7.0,
                 1.15,
-                &hero.name.to_uppercase(),
+                &player.champion_name.to_uppercase(),
                 OSRS_WHITE,
             );
             self.text(
@@ -831,7 +677,10 @@ impl Hud {
                 mx + 58.0,
                 card_y + 20.0,
                 0.95,
-                &format!("LV {}  {}G", hero.level, player.gold),
+                &format!(
+                    "LV {}  {}/6  {}G",
+                    player.level, player.items_owned, player.gold
+                ),
                 OSRS_YELLOW,
             );
             self.panel(
@@ -998,62 +847,107 @@ impl Hud {
             }
         }
 
-        // Team roster, top-right: both teams with live health bars, like the
-        // Legends of Bielnor client.
+        // Enemy team card on the right edge. Five fixed slots keep the card
+        // stable before a full 5v5 roster exists.
         let tx = width - 238.0;
-        self.hud_panel(width, height, tx, 4.0, 220.0, 176.0);
-        self.text(width, height, tx + 8.0, 10.0, 1.0, "YOUR TEAM", OSRS_YELLOW);
+        let card_h = 162.0;
+        self.hud_panel(width, height, tx, 4.0, 220.0, card_h);
         self.text(
             width,
             height,
             tx + 8.0,
-            24.0,
-            1.1,
-            &player.champion_name,
-            [240, 240, 240],
+            10.0,
+            1.0,
+            "ENEMY TEAM",
+            [255, 120, 110],
         );
-        self.text(
-            width,
-            height,
-            tx + 8.0,
-            40.0,
-            0.9,
-            &format!(
-                "LV {}   {}/6 ITEMS   GOLD {}",
-                player.level, player.items_owned, player.gold
-            ),
-            [200, 200, 200],
-        );
-        for (team, label, color) in [
-            (0u8, "BLUE TEAM", [110, 175, 255]),
-            (1u8, "RED TEAM", [255, 120, 110]),
-        ] {
-            let header = 54.0 + team as f32 * 62.0;
-            self.text(width, height, tx + 8.0, header, 0.9, label, color);
-            for (row, hero) in player
-                .roster
-                .iter()
-                .filter(|hero| hero.team == team)
-                .take(4)
-                .enumerate()
-            {
-                let y = header + 14.0 + row as f32 * 12.0;
-                let name: String = hero.name.chars().take(11).collect();
-                self.text(width, height, tx + 8.0, y, 0.8, &name, color);
-                self.quad(width, height, tx + 92.0, y + 1.0, 108.0, 6.0, [38, 38, 44]);
-                let fraction = (hero.health / hero.max_health.max(1.0)).clamp(0.0, 1.0);
-                self.quad(
+        let enemies: Vec<&HeroMarker> =
+            player.roster.iter().filter(|hero| hero.team == 1).collect();
+        for slot in 0..5usize {
+            let y = 26.0 + slot as f32 * 26.0;
+            self.quad(width, height, tx + 8.0, y, 22.0, 22.0, [58, 36, 38]);
+            self.quad(width, height, tx + 9.0, y + 1.0, 20.0, 20.0, [118, 58, 56]);
+            if let Some(hero) = enemies.get(slot) {
+                let initial = hero
+                    .name
+                    .chars()
+                    .next()
+                    .map(|c| c.to_ascii_uppercase())
+                    .unwrap_or('?');
+                self.text_centered(
                     width,
                     height,
-                    tx + 92.0,
-                    y + 1.0,
-                    108.0 * fraction,
+                    tx + 19.0,
+                    y + 5.0,
+                    1.1,
+                    &initial.to_string(),
+                    [255, 225, 210],
+                );
+                let name: String = hero.name.chars().take(13).collect();
+                self.text(
+                    width,
+                    height,
+                    tx + 36.0,
+                    y + 2.0,
+                    0.85,
+                    &name,
+                    [240, 235, 230],
+                );
+                self.text(
+                    width,
+                    height,
+                    tx + 190.0,
+                    y + 2.0,
+                    0.8,
+                    &format!("LV{}", hero.level),
+                    [220, 210, 190],
+                );
+                let hp = (hero.health / hero.max_health.max(1.0)).clamp(0.0, 1.0);
+                self.panel(
+                    width,
+                    height,
+                    tx + 36.0,
+                    y + 13.0,
+                    154.0,
                     6.0,
+                    hp,
                     if hero.alive {
-                        [90, 210, 110]
+                        [200, 70, 62]
                     } else {
-                        [130, 60, 60]
+                        [80, 50, 50]
                     },
+                );
+                let mp = (hero.mana / hero.max_mana.max(1.0)).clamp(0.0, 1.0);
+                self.panel(
+                    width,
+                    height,
+                    tx + 36.0,
+                    y + 20.0,
+                    154.0,
+                    4.0,
+                    mp,
+                    [70, 120, 235],
+                );
+            } else {
+                self.text_centered(width, height, tx + 19.0, y + 5.0, 1.0, "?", [120, 105, 105]);
+                self.text(
+                    width,
+                    height,
+                    tx + 36.0,
+                    y + 3.0,
+                    0.8,
+                    "OPEN SLOT",
+                    [105, 100, 100],
+                );
+                self.panel(
+                    width,
+                    height,
+                    tx + 36.0,
+                    y + 15.0,
+                    154.0,
+                    4.0,
+                    0.0,
+                    [48, 48, 52],
                 );
             }
         }
@@ -1077,7 +971,7 @@ impl Hud {
                 width,
                 height,
                 width - 230.0,
-                188.0 + index as f32 * 13.0,
+                172.0 + index as f32 * 13.0,
                 0.85,
                 line,
                 [225, 230, 240],
@@ -1094,64 +988,12 @@ impl Hud {
             self.text_centered(width, height, width * 0.5, 96.0, 1.3, label, OSRS_YELLOW);
         }
 
-        // OSRS-style stat panel, left, under the objectives.
-        let sx = 22.0;
-        let sy = 232.0;
-        self.hud_panel(width, height, sx, sy, 230.0, 142.0);
-        self.text(width, height, sx + 8.0, sy + 6.0, 1.0, "STATS", OSRS_YELLOW);
-        let stat_rows = [
-            ("ATTACK", player.attack_damage),
-            ("STRENGTH", player.attack_damage),
-            ("RANGED", player.ranged),
-            ("PRAYER", player.mana),
-            ("HITPOINTS", player.health),
-        ];
-        for (index, (label, value)) in stat_rows.iter().enumerate() {
-            let y = sy + 20.0 + index as f32 * 13.0;
-            self.text(width, height, sx + 8.0, y, 0.85, label, [205, 205, 205]);
-            self.text(
-                width,
-                height,
-                sx + 150.0,
-                y,
-                0.85,
-                &format!("{value:.0}"),
-                [235, 235, 235],
-            );
-        }
-        self.text(
-            width,
-            height,
-            sx + 8.0,
-            sy + 88.0,
-            0.85,
-            "BONUSES",
-            OSRS_YELLOW,
-        );
-        let bonus_rows = [
-            ("RUN-ATTACK", player.attack_interval),
-            ("RANGED-BONUS", player.ability_power),
-            ("MELEE-DEF", player.armor),
-            ("RANGED-DEF", player.armor),
-        ];
-        for (index, (label, value)) in bonus_rows.iter().enumerate() {
-            let y = sy + 102.0 + index as f32 * 12.0;
-            self.text(width, height, sx + 8.0, y, 0.85, label, [205, 205, 205]);
-            self.text(
-                width,
-                height,
-                sx + 150.0,
-                y,
-                0.85,
-                &format!("{value:.0}"),
-                [235, 235, 235],
-            );
-        }
-
-        // Objectives panel, left.
+        // Objectives card: team comparison and nexus health, like the single
+        // macro panel in the reference client.
         let ox = 22.0;
         let oy = 112.0;
-        self.hud_panel(width, height, ox, oy, 230.0, 112.0);
+        let ow = 230.0;
+        self.hud_panel(width, height, ox, oy, ow, 160.0);
         self.text(
             width,
             height,
@@ -1166,27 +1008,98 @@ impl Hud {
             height,
             ox + 8.0,
             oy + 22.0,
-            0.9,
-            &format!("NEXUS {:.0}/{:.0}", nexus0.0, nexus0.1),
+            0.75,
+            "BLUE",
             [110, 175, 255],
         );
         self.text(
             width,
             height,
+            ox + 132.0,
+            oy + 22.0,
+            0.75,
+            "RED",
+            [255, 120, 110],
+        );
+        let rows: [(&str, u32, u32); 4] = [
+            ("KILLS", player.kills.0, player.kills.1),
+            ("DEATHS", player.deaths.0, player.deaths.1),
+            ("TOWERS", player.towers.0 as u32, player.towers.1 as u32),
+            (
+                "INHIBITORS",
+                player.inhibitors.0 as u32,
+                player.inhibitors.1 as u32,
+            ),
+        ];
+        for (index, (label, blue, red)) in rows.iter().enumerate() {
+            let y = oy + 34.0 + index as f32 * 12.0;
+            self.text(width, height, ox + 8.0, y, 0.8, label, [205, 205, 205]);
+            self.text(
+                width,
+                height,
+                ox + 108.0,
+                y,
+                0.8,
+                &blue.to_string(),
+                [150, 200, 255],
+            );
+            self.text(
+                width,
+                height,
+                ox + 188.0,
+                y,
+                0.8,
+                &red.to_string(),
+                [255, 170, 160],
+            );
+        }
+        // Nexus health bars.
+        self.text(
+            width,
+            height,
             ox + 8.0,
-            oy + 36.0,
-            0.9,
-            &format!("INHIB {}/{}", player.inhibitors.0, player.inhibitors.1),
-            [220, 180, 120],
+            oy + 86.0,
+            0.8,
+            "NEXUS",
+            OSRS_YELLOW,
+        );
+        self.panel(
+            width,
+            height,
+            ox + 66.0,
+            oy + 88.0,
+            150.0,
+            6.0,
+            (nexus0.0 / nexus0.1.max(1.0)).clamp(0.0, 1.0),
+            [80, 150, 255],
+        );
+        self.panel(
+            width,
+            height,
+            ox + 66.0,
+            oy + 97.0,
+            150.0,
+            6.0,
+            (nexus1.0 / nexus1.1.max(1.0)).clamp(0.0, 1.0),
+            [220, 65, 60],
         );
         self.text(
             width,
             height,
             ox + 8.0,
-            oy + 50.0,
-            0.9,
-            &format!("TOWERS {}/{}", player.towers.0, player.towers.1),
-            [220, 180, 120],
+            oy + 106.0,
+            0.7,
+            &format!("{:.0}", nexus0.0),
+            [150, 200, 255],
+        );
+        self.text(
+            width,
+            height,
+            ox + 188.0,
+            oy + 106.0,
+            0.7,
+            &format!("{:.0}", nexus1.0),
+            [255, 170, 160],
         );
         let buff_line = player
             .buff
@@ -1202,29 +1115,103 @@ impl Hud {
             width,
             height,
             ox + 8.0,
-            oy + 64.0,
-            0.9,
-            &buff_line,
-            [255, 170, 80],
+            oy + 126.0,
+            0.75,
+            &format!("WAVE {wave_timer:.0}S   {buff_line}"),
+            [220, 190, 130],
+        );
+        let wave_fill = if wave_interval > 0.0 {
+            (1.0 - wave_timer / wave_interval).clamp(0.0, 1.0)
+        } else {
+            0.0
+        };
+        self.quad(
+            width,
+            height,
+            ox + 8.0,
+            oy + 138.0,
+            ow - 16.0,
+            3.0,
+            [38, 34, 30],
+        );
+        self.quad(
+            width,
+            height,
+            ox + 8.0,
+            oy + 138.0,
+            (ow - 16.0) * wave_fill,
+            3.0,
+            [220, 190, 60],
         );
         self.text(
             width,
             height,
             ox + 8.0,
-            oy + 78.0,
-            0.9,
-            &format!("VISIBLE {}", player.visible_enemies),
-            [200, 220, 240],
+            oy + 146.0,
+            0.7,
+            &format!(
+                "VISIBLE {}   MINIONS {}",
+                player.visible_enemies, player.minions
+            ),
+            [150, 160, 170],
         );
-        self.text(
-            width,
-            height,
-            ox + 8.0,
-            oy + 92.0,
-            0.9,
-            &format!("MINIONS {}", player.minions),
-            [200, 220, 240],
-        );
+
+        // Engineer stat sheet, opt-in. The reference client never shows this
+        // during a normal match.
+        if player.debug_hud {
+            let sx = 22.0;
+            let sy = oy + 176.0;
+            self.hud_panel(width, height, sx, sy, 230.0, 142.0);
+            self.text(width, height, sx + 8.0, sy + 6.0, 1.0, "STATS", OSRS_YELLOW);
+            let stat_rows = [
+                ("ATTACK", player.attack_damage),
+                ("STRENGTH", player.attack_damage),
+                ("RANGED", player.ranged),
+                ("PRAYER", player.mana),
+                ("HITPOINTS", player.health),
+            ];
+            for (index, (label, value)) in stat_rows.iter().enumerate() {
+                let y = sy + 20.0 + index as f32 * 13.0;
+                self.text(width, height, sx + 8.0, y, 0.85, label, [205, 205, 205]);
+                self.text(
+                    width,
+                    height,
+                    sx + 150.0,
+                    y,
+                    0.85,
+                    &format!("{value:.0}"),
+                    [235, 235, 235],
+                );
+            }
+            self.text(
+                width,
+                height,
+                sx + 8.0,
+                sy + 88.0,
+                0.85,
+                "BONUSES",
+                OSRS_YELLOW,
+            );
+            let bonus_rows = [
+                ("RUN-ATTACK", player.attack_interval),
+                ("RANGED-BONUS", player.ability_power),
+                ("MELEE-DEF", player.armor),
+                ("RANGED-DEF", player.armor),
+            ];
+            for (index, (label, value)) in bonus_rows.iter().enumerate() {
+                let y = sy + 102.0 + index as f32 * 12.0;
+                self.text(width, height, sx + 8.0, y, 0.85, label, [205, 205, 205]);
+                self.text(
+                    width,
+                    height,
+                    sx + 150.0,
+                    y,
+                    0.85,
+                    &format!("{value:.0}"),
+                    [235, 235, 235],
+                );
+            }
+        }
 
         // Event log, bottom-left.
         let lx = 18.0;
@@ -1273,6 +1260,25 @@ impl Hud {
                     0.85,
                     &line,
                     color,
+                );
+            }
+        }
+
+        // Buff indicator sits just above the bottom health bars; the
+        // reference client keeps the top-left corner clear for the scoreboard.
+        if let Some((remaining, duration, color)) = player.buff {
+            let fill = (remaining / duration.max(0.1)).clamp(0.0, 1.0);
+            let bx = width * 0.5 - 130.0;
+            self.panel(width, height, bx, height - 168.0, 260.0, 10.0, fill, color);
+            if let Some(label) = player.buff_label {
+                self.text(
+                    width,
+                    height,
+                    bx + 6.0,
+                    height - 167.0,
+                    0.8,
+                    &format!("{label} {remaining:.0}S"),
+                    [240, 240, 240],
                 );
             }
         }
@@ -1332,6 +1338,31 @@ impl Hud {
             0.8,
             &format!("MP {:.0}/{:.0}", player.mana, player.max_mana),
             [235, 242, 255],
+        );
+
+        // Shield overlay rides on top of the health bar; XP is a thin strip
+        // under mana so the bottom cluster stays compact.
+        if player.shield > 0.0 && player.shield_timer > 0.0 {
+            let fraction = (player.shield / 120.0).clamp(0.0, 1.0);
+            self.quad(
+                width,
+                height,
+                cx,
+                height - 148.0,
+                260.0 * fraction,
+                3.0,
+                [110, 225, 255],
+            );
+        }
+        self.quad(width, height, cx, height - 116.0, 260.0, 3.0, [34, 30, 42]);
+        self.quad(
+            width,
+            height,
+            cx,
+            height - 116.0,
+            260.0 * (player.xp / player.xp_next.max(1.0)).clamp(0.0, 1.0),
+            3.0,
+            [160, 96, 220],
         );
 
         // Delivery guard button, bottom-right next to the shop button.
@@ -2739,7 +2770,7 @@ impl Hud {
     /// as a nine-slice, with the old flat quads as a fallback.
     pub fn hud_panel(&mut self, width: f32, height: f32, x: f32, y: f32, w: f32, h: f32) {
         if let Some(uv) = self.atlas.ui_uv("panel") {
-            self.panel_sprite(width, height, x, y, w, h, uv, 12.0, [72, 68, 62]);
+            self.panel_sprite(width, height, x, y, w, h, uv, 12.0, [56, 53, 48]);
         } else {
             self.quad(width, height, x, y, w, h, [20, 20, 24]);
             self.quad(width, height, x, y, w, 1.0, [82, 76, 58]);
@@ -2836,7 +2867,7 @@ impl Hud {
                     u0 + su * (col + 1) as f32,
                     v0 + sv * (row + 1) as f32,
                 ];
-                self.sprite(width, height, qx, qy, qw, qh, qu, tint, 1.0);
+                self.sprite(width, height, qx, qy, qw, qh, qu, tint, 0.93);
             }
         }
     }

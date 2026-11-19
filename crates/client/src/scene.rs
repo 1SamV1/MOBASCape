@@ -24,7 +24,7 @@ const RUIN_SCALE_MAX: f32 = 1.85;
 /// Small cache objects scattered over the grass: flowers, ferns, mushrooms,
 /// loose rocks, twigs, roots and stumps. 117HD's ground is dense with these,
 /// and they do most of the work in making a flat texture field feel natural.
-const DECOR_LIMIT: usize = 800;
+const DECOR_LIMIT: usize = 2600;
 const DECOR_LANE_CLEAR: f32 = 2.6 * 128.0;
 const DECOR_STRUCTURE_CLEAR: f32 = 2.2 * 128.0;
 /// Cache decorations that are a single untextured plane or a placeholder cube
@@ -74,6 +74,15 @@ impl SceneVertex {
     pub fn unlit(position: Vec3, color: [u8; 3]) -> Self {
         let mut vertex = Self::new(position, Vec3::Y, color);
         vertex.material = 1;
+        vertex
+    }
+
+    /// Lit, world-space triplanar stone. The procedural castle boxes carry no
+    /// authored UVs, so a planar cache sprite would smear on their vertical
+    /// faces; the shader projects the stone sprite on all three axes instead.
+    pub fn stone(position: Vec3, normal: Vec3, color: [u8; 3]) -> Self {
+        let mut vertex = Self::new(position, normal, color);
+        vertex.material = 8;
         vertex
     }
 
@@ -368,16 +377,22 @@ pub struct Atmosphere {
 impl Default for Atmosphere {
     fn default() -> Self {
         Self {
-            sun_dir: [-0.45, 0.78, 0.35],
-            sun_color: [0.95, 0.82, 0.62],
-            ambient_sky: [0.35, 0.45, 0.60],
-            ambient_ground: [0.20, 0.22, 0.16],
-            fog_color: [0.52, 0.66, 0.78],
-            fog_density: 0.000012,
-            fog_height: 120.0,
-            sky_top: [0.24, 0.42, 0.72],
-            sky_horizon: [0.52, 0.66, 0.78],
-            ground_fog: 0.04,
+            // Late-afternoon sun, low enough to throw long shadows across the
+            // lanes and to keep the ground out of the washed-out noon range.
+            sun_dir: [-0.42, 0.62, 0.38],
+            sun_color: [0.92, 0.82, 0.63],
+            // Overcast sky bounce: neutral warm grey rather than the saturated
+            // blue of the early build, which was turning every shadow cyan.
+            ambient_sky: [0.50, 0.53, 0.51],
+            ambient_ground: [0.26, 0.24, 0.19],
+            // Warm grey-green haze. The reference clip never resolves the
+            // ground at distance, it dissolves into a pale olive mist.
+            fog_color: [0.40, 0.42, 0.35],
+            fog_density: 0.000022,
+            fog_height: 340.0,
+            sky_top: [0.27, 0.35, 0.40],
+            sky_horizon: [0.56, 0.60, 0.56],
+            ground_fog: 0.14,
         }
     }
 }
@@ -1474,6 +1489,26 @@ pub fn build(
         }
     }
 
+    // Terrain conditioning: the raw cache heightfield is spiky in places and
+    // dead flat in others. Relax single-tile spikes, add gentle rolling
+    // relief, and level the team courtyards so bases read as built plazas
+    // instead of rocky fields. Lanes are re-levelled by the pass below.
+    relax_heights(&mut heights, size, &water_mask, 2);
+    add_rolling_relief(
+        &mut heights,
+        size,
+        origin_tile_x,
+        origin_tile_y,
+        &water_mask,
+    );
+    flatten_bases(
+        &mut heights,
+        size,
+        origin_tile_x,
+        origin_tile_y,
+        map.castle.as_ref(),
+    );
+
     // Smooth the per-tile color field before triangulating. Two box-blur
     // passes remove the hard square boundaries between adjacent tiles; the
     // resulting per-corner colors interpolate across the terrain mesh.
@@ -1928,6 +1963,44 @@ pub fn build(
             push_blob_quad(&mut shadow_mesh, base, shadow, 0.16);
         }
         decor_placements += 1;
+
+        // A second, jittered copy of roughly half the props. Real object
+        // lists are sparse (about one decoration every sixty tiles), while
+        // the reference ground is carpeted. The clone is cheap: same decoded
+        // model, no collision, and skipped when it would land in water.
+        let clone_seed = seed.wrapping_mul(0x85EB_CA6B).wrapping_add(0x27D4_EB2F);
+        if hash01(clone_seed) < 0.55 {
+            let ox = (hash01(clone_seed << 1) - 0.5) * 2.1 * 128.0;
+            let oz = (hash01(clone_seed << 3) - 0.5) * 2.1 * 128.0;
+            let cx = wx + ox;
+            let cz = wz + oz;
+            let cgx = (cx / 128.0).floor() as i32 - origin_tile_x;
+            let cgy = (cz / 128.0).floor() as i32 - origin_tile_y;
+            if cgx >= 0
+                && cgy >= 0
+                && (cgx as usize) < size
+                && (cgy as usize) < size
+                && water_mask[cgy as usize * size + cgx as usize] <= 0.03
+            {
+                let cbase = Vec3::new(cx, height.height_at(cx, cz), cz);
+                let cscale = scale * (0.72 + hash01(clone_seed << 5) * 0.5);
+                let cangle = angle + (hash01(clone_seed << 7) - 0.5) * std::f32::consts::FRAC_PI_2;
+                append_ground_decor(
+                    &mut model_mesh,
+                    model,
+                    cbase,
+                    cangle,
+                    cscale,
+                    kind,
+                    clone_seed,
+                );
+                let cshadow = kind.shadow_size() * cscale;
+                if cshadow > 0.0 {
+                    push_blob_quad(&mut shadow_mesh, cbase, cshadow, 0.14);
+                }
+                decor_placements += 1;
+            }
+        }
     }
     tracing::info!("ground decor: {} props", decor_placements);
 
@@ -2908,6 +2981,117 @@ fn load_overlays(cache: &Cache) -> Result<HashMap<u32, OverlayDefinition>> {
     Ok(out)
 }
 
+/// Gaussian-relax the heightfield to remove single-tile rock spikes while
+/// keeping broad hills. River cells are left untouched so the carved bed and
+/// banks stay exactly where the water mesh expects them.
+fn relax_heights(heights: &mut [f32], size: usize, water: &[f32], passes: usize) {
+    const NEIGHBOURS: [(i32, i32, f32); 8] = [
+        (-1, 0, 2.0),
+        (1, 0, 2.0),
+        (0, -1, 2.0),
+        (0, 1, 2.0),
+        (-1, -1, 1.0),
+        (1, -1, 1.0),
+        (-1, 1, 1.0),
+        (1, 1, 1.0),
+    ];
+    for _ in 0..passes {
+        let src = heights.to_vec();
+        for gy in 1..size - 1 {
+            for gx in 1..size - 1 {
+                let i = gy * size + gx;
+                if water[i] > 0.05 {
+                    continue;
+                }
+                let mut sum = src[i] * 4.0;
+                let mut weight = 4.0;
+                for (dx, dy, w) in NEIGHBOURS {
+                    let j = (gy as i32 + dy) as usize * size + (gx as i32 + dx) as usize;
+                    if water[j] > 0.05 {
+                        continue;
+                    }
+                    sum += src[j] * w;
+                    weight += w;
+                }
+                heights[i] = sum / weight;
+            }
+        }
+    }
+}
+
+/// Add two octaves of very low frequency relief so large flat fields read as
+/// rolling ground instead of a tabletop. Amplitudes stay well under a tile so
+/// pathing, collision and the lane levelling pass are unaffected.
+fn add_rolling_relief(
+    heights: &mut [f32],
+    size: usize,
+    origin_tile_x: i32,
+    origin_tile_y: i32,
+    water: &[f32],
+) {
+    for gy in 0..size {
+        for gx in 0..size {
+            let i = gy * size + gx;
+            if water[i] > 0.05 {
+                continue;
+            }
+            let wx = (origin_tile_x + gx as i32) as f32 * 128.0;
+            let wz = (origin_tile_y + gy as i32) as f32 * 128.0;
+            let broad = (value_noise(wx * 0.00042, wz * 0.00042) - 0.5) * 52.0;
+            let medium = (value_noise(wx * 0.0011 + 31.0, wz * 0.0011 + 7.0) - 0.5) * 18.0;
+            heights[i] += broad + medium;
+        }
+    }
+}
+
+/// Level each team courtyard to its centre height with a soft skirt at the
+/// walls. The cache ground under a base is uneven; a built plaza should be
+/// flat so structures, the fountain and future paving sit flush.
+fn flatten_bases(
+    heights: &mut [f32],
+    size: usize,
+    origin_tile_x: i32,
+    origin_tile_y: i32,
+    castle: Option<&CastleSpec>,
+) {
+    let Some(castle) = castle else { return };
+    for base in &castle.bases {
+        let half = base.size * 0.5;
+        let cx = base.center.0;
+        let cz = base.center.1;
+        let ci = ((cz - origin_tile_y as f32).clamp(0.0, size as f32 - 1.0) as usize) * size
+            + (cx - origin_tile_x as f32).clamp(0.0, size as f32 - 1.0) as usize;
+        let target = heights[ci];
+        let x0 = cx - half;
+        let x1 = cx + half;
+        let z0 = cz - half;
+        let z1 = cz + half;
+        let gx0 = (x0 - origin_tile_x as f32 - 3.0).floor().max(0.0) as usize;
+        let gx1 = (x1 - origin_tile_x as f32 + 3.0)
+            .ceil()
+            .min(size as f32 - 1.0) as usize;
+        let gy0 = (z0 - origin_tile_y as f32 - 3.0).floor().max(0.0) as usize;
+        let gy1 = (z1 - origin_tile_y as f32 + 3.0)
+            .ceil()
+            .min(size as f32 - 1.0) as usize;
+        for gy in gy0..=gy1 {
+            for gx in gx0..=gx1 {
+                let tx = (origin_tile_x + gx as i32) as f32;
+                let tz = (origin_tile_y + gy as i32) as f32;
+                // Depth inside the courtyard rectangle, in tiles. Negative
+                // outside; the skirt blends over three tiles at the wall.
+                let depth = (tx - x0).min(x1 - tx).min(tz - z0).min(z1 - tz);
+                let t = smoothstep(-1.0, 2.0, depth);
+                if t <= 0.0 {
+                    continue;
+                }
+                let i = gy * size + gx;
+                heights[i] = heights[i] * (1.0 - t) + target * t;
+            }
+        }
+    }
+}
+
 fn box_blur_colors(colors: &[[u8; 3]], size: usize, radius: i32) -> Vec<[u8; 3]> {
     let mut horizontal = vec![[0u8; 3]; colors.len()];
     for y in 0..size {
@@ -3578,24 +3762,26 @@ fn append_castle_mesh(
     placed
 }
 
-const CASTLE_TOP: [u8; 3] = [244, 242, 230];
-const CASTLE_SIDE: [u8; 3] = [218, 216, 205];
-const CASTLE_DARK: [u8; 3] = [174, 172, 162];
+const CASTLE_TOP: [u8; 3] = [234, 232, 223];
+const CASTLE_SIDE: [u8; 3] = [222, 219, 209];
+const CASTLE_DARK: [u8; 3] = [188, 185, 176];
 const CASTLE_BLUE: [u8; 3] = [92, 146, 214];
 
-fn push_unlit_quad(mesh: &mut MeshData, a: Vec3, b: Vec3, c: Vec3, d: Vec3, color: [u8; 3]) {
+fn push_stone_quad(mesh: &mut MeshData, a: Vec3, b: Vec3, c: Vec3, d: Vec3, color: [u8; 3]) {
     let base = mesh.vertices.len() as u32;
+    let normal = (b - a).cross(c - a).normalize_or_zero();
     for p in [a, b, c, d] {
-        mesh.vertices.push(SceneVertex::unlit(p, color));
+        mesh.vertices.push(SceneVertex::stone(p, normal, color));
     }
     mesh.indices
         .extend_from_slice(&[base, base + 1, base + 2, base + 2, base + 1, base + 3]);
 }
 
-fn push_unlit_tri(mesh: &mut MeshData, a: Vec3, b: Vec3, c: Vec3, color: [u8; 3]) {
+fn push_stone_tri(mesh: &mut MeshData, a: Vec3, b: Vec3, c: Vec3, color: [u8; 3]) {
     let base = mesh.vertices.len() as u32;
+    let normal = (b - a).cross(c - a).normalize_or_zero();
     for p in [a, b, c] {
-        mesh.vertices.push(SceneVertex::unlit(p, color));
+        mesh.vertices.push(SceneVertex::stone(p, normal, color));
     }
     mesh.indices.extend_from_slice(&[base, base + 1, base + 2]);
 }
@@ -3615,7 +3801,7 @@ fn append_castle_box(
         base + rot * (center + Vec3::new(x * half.x, y * half.y, z * half.z))
     };
     // Top and bottom.
-    push_unlit_quad(
+    push_stone_quad(
         mesh,
         p(-1.0, 1.0, -1.0),
         p(1.0, 1.0, -1.0),
@@ -3623,7 +3809,7 @@ fn append_castle_box(
         p(-1.0, 1.0, 1.0),
         top,
     );
-    push_unlit_quad(
+    push_stone_quad(
         mesh,
         p(-1.0, -1.0, -1.0),
         p(1.0, -1.0, -1.0),
@@ -3632,7 +3818,7 @@ fn append_castle_box(
         bottom,
     );
     // Four sides.
-    push_unlit_quad(
+    push_stone_quad(
         mesh,
         p(-1.0, -1.0, -1.0),
         p(1.0, -1.0, -1.0),
@@ -3640,7 +3826,7 @@ fn append_castle_box(
         p(-1.0, 1.0, -1.0),
         side,
     );
-    push_unlit_quad(
+    push_stone_quad(
         mesh,
         p(-1.0, -1.0, 1.0),
         p(1.0, -1.0, 1.0),
@@ -3648,7 +3834,7 @@ fn append_castle_box(
         p(-1.0, 1.0, 1.0),
         side,
     );
-    push_unlit_quad(
+    push_stone_quad(
         mesh,
         p(-1.0, -1.0, -1.0),
         p(-1.0, -1.0, 1.0),
@@ -3656,7 +3842,7 @@ fn append_castle_box(
         p(-1.0, 1.0, -1.0),
         side,
     );
-    push_unlit_quad(
+    push_stone_quad(
         mesh,
         p(1.0, -1.0, -1.0),
         p(1.0, -1.0, 1.0),
@@ -3819,12 +4005,12 @@ fn append_castle_platform(mesh: &mut MeshData, base: Vec3, scale: f32) {
         let outer_b = center + Vec3::new(b.cos() * outer, 0.0, b.sin() * outer);
         let inner_a = inner_center + Vec3::new(a.cos() * inner, 0.0, a.sin() * inner);
         let inner_b = inner_center + Vec3::new(b.cos() * inner, 0.0, b.sin() * inner);
-        push_unlit_tri(mesh, center, outer_a, outer_b, CASTLE_TOP);
-        push_unlit_tri(mesh, inner_center, inner_a, inner_b, CASTLE_BLUE);
+        push_stone_tri(mesh, center, outer_a, outer_b, CASTLE_TOP);
+        push_stone_tri(mesh, inner_center, inner_a, inner_b, CASTLE_BLUE);
         // Side skirt.
         let foot_a = base + Vec3::new(a.cos() * outer, 0.0, a.sin() * outer);
         let foot_b = base + Vec3::new(b.cos() * outer, 0.0, b.sin() * outer);
-        push_unlit_quad(mesh, foot_a, outer_a, outer_b, foot_b, CASTLE_SIDE);
+        push_stone_quad(mesh, foot_a, outer_a, outer_b, foot_b, CASTLE_SIDE);
     }
 }
 

@@ -234,6 +234,12 @@ pub struct PlayerStats {
     pub cooldown_maxima: [f32; 4],
     pub speed: f32,
     pub ability_power: f32,
+    /// Personal match line for the scoreboard strip.
+    pub kills: u32,
+    pub deaths: u32,
+    pub assists: u32,
+    /// Creep score (lane minions last-hit by the player).
+    pub cs: u32,
 }
 
 pub struct Effect {
@@ -399,6 +405,12 @@ pub struct AnimatedScene {
     /// Team scoreboard counters.
     pub kills: [u32; 2],
     pub deaths: [u32; 2],
+    /// The local player's own match line, shown in the scoreboard strip.
+    pub player_kills: u32,
+    pub player_deaths: u32,
+    pub player_assists: u32,
+    /// Creep score: enemy lane minions last-hit by the player.
+    pub player_cs: u32,
     pub wave_interval: f32,
     pub gold_income: f32,
     pub lanes: Vec<Vec<Vec3>>,
@@ -841,6 +853,10 @@ impl AnimatedScene {
             wave_serial: 0,
             kills: [0, 0],
             deaths: [0, 0],
+            player_kills: 0,
+            player_deaths: 0,
+            player_assists: 0,
+            player_cs: 0,
             wave_interval: scene.map.wave_interval,
             gold_income: 0.0,
             lanes: scene
@@ -980,6 +996,10 @@ impl AnimatedScene {
             },
             speed: p.speed,
             ability_power: p.ability_power,
+            kills: self.player_kills,
+            deaths: self.player_deaths,
+            assists: self.player_assists,
+            cs: self.player_cs,
         }
     }
 
@@ -3289,6 +3309,19 @@ impl AnimatedScene {
                 self.kill_feed
                     .push((format!("{killer} HAS SLAIN {victim}"), 8.0));
             }
+        }
+        // Personal scoreboard line. Only damage attributed directly to the
+        // player counts, so allied minions do not feed the player's CS.
+        if aggressor == Some(self.player_index) {
+            if matches!(target_kind, UnitKind::MeleeMinion | UnitKind::RangedMinion) {
+                self.player_cs += 1;
+            }
+            if matches!(target_kind, UnitKind::Player | UnitKind::EnemyChampion) {
+                self.player_kills += 1;
+            }
+        }
+        if index == self.player_index {
+            self.player_deaths += 1;
         }
         if attacker_team < 2 && target_kind != UnitKind::Camp {
             self.kills[attacker_team as usize] += 1;
