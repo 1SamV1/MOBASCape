@@ -15,6 +15,7 @@ pub mod atlas;
 pub mod draw;
 pub mod font;
 pub mod hud;
+pub mod outline;
 pub mod raster;
 pub mod scale;
 pub mod test_screen;

@@ -2,6 +2,7 @@
 //! screen. It is all pure: no cache, no graphics card, no match.
 
 pub mod ability_bar;
+pub mod announcements;
 pub mod chat;
 pub mod inventory;
 pub mod kill_feed;
