@@ -41,13 +41,15 @@ Last updated: interface stage 3 assembled on top of M5.6, 2026-11-20.
   shop overlay is display-only for now: buying stays in the old HUD. The
   other components still use the stage 3 sample until their own bridges are
   added. Team frames are bridged too, but the current match is one hero a
-  side, so they stay empty until allied champions are spawned. The
-  conversions are in `crates/client/src/ui_live.rs`, with the damage log in
-  `AnimatedScene`, and are unit tested.
-- Verified: `cargo test --workspace` 246 tests pass, 3 ignored; the client
+  side, so they stay empty until allied champions are spawned. Clicking a
+  unit now selects it and fills the target panel with its live name, kind,
+  health, description and combat figures; clicking the ground clears the
+  selection. The conversions are in `crates/client/src/ui_live.rs`, with the
+  damage log in `AnimatedScene`, and are unit tested.
+- Verified: `cargo test --workspace` 247 tests pass, 3 ignored; the client
   and tools build; the stage 3 layout tests, live score/ability/minimap/
-  objectives/plates/chat/shop/tooltip/announcement/death/team-frame tests,
-  sim battle tests and cache decoders all run.
+  objectives/plates/chat/shop/tooltip/announcement/death/team-frame/target
+  tests, sim battle tests and cache decoders all run.
 
 
 ## 2026-11-19 — Lane readability

@@ -38,8 +38,9 @@ designed for fast-paced low-team-count matches.
 > assembled whole, accepted at PR #1. Stage 4 has started: `--ui-live` reads
 > the live score strip, ability bar, minimap, objectives, unit plates, chat,
 > kill feed, shop, shop tooltip, announcements, death overlay (with real
-> damage breakdown bars) and team frames from the match. The old HUD remains
-> the running default until the other components follow. See [docs/STATUS.md](docs/STATUS.md),
+> damage breakdown bars), team frames and a click-selected target panel from
+> the match. The old HUD remains the running default until the other
+> components follow. See [docs/STATUS.md](docs/STATUS.md),
 > [docs/UI_ASSETS.md](docs/UI_ASSETS.md) and
 > [docs/INTERFACE_STAGE3_REVIEW.md](docs/INTERFACE_STAGE3_REVIEW.md).
 

@@ -10,7 +10,8 @@ use glam::{Vec2, Vec3};
 use rift_ui::hud::state::{
     AbilityState, AllyState, CampState, ChatKind, ChatLine, DamageSource, DeathState,
     KillFeedEntry, LaneState, MapPoint, MinimapState, NexusState, ObjectivesState, PlateKind,
-    ScoreState, ShopItem, ShopState, StructureMark, TooltipState, UnitPlate,
+    ScoreState, ShopItem, ShopState, StructureMark, TargetStat, TargetState, TooltipState,
+    UnitPlate,
 };
 
 pub fn score(player: &PlayerHud) -> ScoreState {
@@ -306,6 +307,53 @@ pub fn tooltip(shop: &ItemShop, mouse: (i32, i32)) -> Option<TooltipState> {
         text: String::new(),
         at: mouse,
     })
+}
+
+/// The selected unit as the target panel's slice. Gone or dead units are
+/// not shown.
+pub fn target(animated: &AnimatedScene, selected: Option<usize>) -> Option<TargetState> {
+    let unit = animated.units.get(selected?)?;
+    if unit.health <= 0.0 {
+        return None;
+    }
+    let (name, _, description) = animated.unit_info(selected?)?;
+    let stat = |label: &str, value: String| TargetStat {
+        label: label.to_string(),
+        value,
+    };
+    Some(TargetState {
+        name,
+        kind: kind_name(unit.kind).to_string(),
+        blue: unit.team == 0,
+        description: description.to_string(),
+        health: count(unit.health),
+        max_health: count(unit.max_health),
+        stats: vec![
+            stat("Attack", format!("{:.0}", unit.attack_damage)),
+            stat(
+                "Attack speed",
+                format!("{:.2}", 1.0 / unit.attack_interval.max(0.01)),
+            ),
+            stat("Defence melee", format!("{:.0}", unit.armor)),
+            stat("Defence mage", format!("{:.0}", unit.armor)),
+            stat("Power", format!("{:.0}", unit.ability_power)),
+            stat("Range", format!("{:.1}", unit.attack_range / 128.0)),
+            stat("Defence ranged", format!("{:.0}", unit.armor)),
+            stat("Move", format!("{:.1}", unit.speed / 128.0)),
+        ],
+    })
+}
+
+fn kind_name(kind: UnitKind) -> &'static str {
+    match kind {
+        UnitKind::Player | UnitKind::EnemyChampion => "Hero",
+        UnitKind::MeleeMinion | UnitKind::RangedMinion => "Minion",
+        UnitKind::Tower | UnitKind::Inhibitor | UnitKind::Nexus | UnitKind::Watchtower => {
+            "Structure"
+        }
+        UnitKind::Camp => "Camp",
+        _ => "Unit",
+    }
 }
 
 /// The player's allied champions, excluding the player. The current match is
@@ -760,5 +808,14 @@ mod tests {
         let dead = ally_from("Ally".to_string(), 0.0, 700.0, 0.0, 260.0, 6, 4.2);
         assert!(dead.dead);
         assert_eq!(dead.respawn_seconds, Some(5));
+    }
+
+    #[test]
+    fn unit_kinds_name_the_target_panel_tag() {
+        assert_eq!(kind_name(UnitKind::EnemyChampion), "Hero");
+        assert_eq!(kind_name(UnitKind::MeleeMinion), "Minion");
+        assert_eq!(kind_name(UnitKind::Tower), "Structure");
+        assert_eq!(kind_name(UnitKind::Camp), "Camp");
+        assert_eq!(kind_name(UnitKind::Ambient), "Unit");
     }
 }

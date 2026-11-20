@@ -356,6 +356,7 @@ fn main() -> Result<()> {
         last_health: 0.0,
         damage_flash: 0.0,
         spectator: initial_spectator,
+        selected: None,
         demo_target,
         demo_timer: 0.0,
         demo_combat: cli.demo_combat,
@@ -467,6 +468,8 @@ struct App {
     damage_flash: f32,
     /// When set, the camera follows this champion index instead of the player.
     spectator: Option<usize>,
+    /// The unit whose details the live target panel is showing.
+    selected: Option<usize>,
     demo_target: Option<(f32, f32)>,
     demo_timer: f32,
     demo_combat: bool,
@@ -1814,6 +1817,7 @@ impl App {
                 Some(&self.shop),
                 ui_camera,
                 (self.mouse_pos.0 as i32, self.mouse_pos.1 as i32),
+                self.selected,
             );
             if let Some(index) = self.spectator {
                 if let Some(unit) = animated.units.get(index) {
@@ -2057,6 +2061,7 @@ impl App {
         self.app_time = 0.0;
         self.lmb_down = false;
         self.lmb_press = None;
+        self.selected = None;
         self.held.clear();
         self.follow = true;
         self.last_frame = Instant::now();
@@ -2227,28 +2232,34 @@ impl App {
         if self.spectator.is_some() {
             return;
         }
-        let (Some(renderer), Some(height), Some(collision), Some(animated)) = (
-            self.renderer.as_ref(),
-            self.height.as_ref(),
-            self.collision.as_ref(),
-            self.animated.as_mut(),
-        ) else {
-            return;
-        };
-        if let Some((origin, dir)) = renderer.screen_ray(self.mouse_pos.0, self.mouse_pos.1) {
-            if let Some(index) = animated.pick_unit(origin, dir) {
+        let picked = {
+            let (Some(renderer), Some(height), Some(collision), Some(animated)) = (
+                self.renderer.as_ref(),
+                self.height.as_ref(),
+                self.collision.as_ref(),
+                self.animated.as_mut(),
+            ) else {
+                return;
+            };
+            let mut picked = None;
+            if let Some((origin, dir)) = renderer.screen_ray(self.mouse_pos.0, self.mouse_pos.1)
+                && let Some(index) = animated.pick_unit(origin, dir)
+            {
                 let ok = animated.set_attack_target(index, collision, height);
                 println!("ATTACK target={index} ok={ok}");
-                return;
+                picked = Some(index);
+            } else if let Some(point) =
+                renderer.pick_ground(self.mouse_pos.0, self.mouse_pos.1, height)
+            {
+                let waypoints = animated.set_player_target(point, collision, height);
+                println!(
+                    "MOVE target={:.0},{:.0},{:.0} path={} waypoints",
+                    point.x, point.y, point.z, waypoints
+                );
             }
-        }
-        if let Some(point) = renderer.pick_ground(self.mouse_pos.0, self.mouse_pos.1, height) {
-            let waypoints = animated.set_player_target(point, collision, height);
-            println!(
-                "MOVE target={:.0},{:.0},{:.0} path={} waypoints",
-                point.x, point.y, point.z, waypoints
-            );
-        }
+            picked
+        };
+        self.selected = picked;
     }
 
     fn cast_q(&mut self) {
@@ -2449,6 +2460,7 @@ fn draw_ui_overlay(
     shop: Option<&ItemShop>,
     camera: (f32, f32, f32, f32),
     mouse: (i32, i32),
+    selected: Option<usize>,
 ) {
     let Some(theme) = theme else {
         return;
@@ -2457,6 +2469,7 @@ fn draw_ui_overlay(
         let mut state = rift_ui::hud::sample::whole_for(renderer.size);
         if live {
             state.tooltip = None;
+            state.target = None;
             if let Some(player) = player {
                 state.score = crate::ui_live::score(player);
                 state.ability = crate::ui_live::ability(player);
@@ -2468,6 +2481,7 @@ fn draw_ui_overlay(
             if let (Some(player), Some(animated)) = (player, animated) {
                 state.death = crate::ui_live::death(player, animated);
                 state.allies = crate::ui_live::allies(animated);
+                state.target = crate::ui_live::target(animated, selected);
             }
             if let (Some(animated), Some(scene)) = (animated, scene) {
                 state.minimap = crate::ui_live::minimap(scene, animated, camera, renderer.size);
