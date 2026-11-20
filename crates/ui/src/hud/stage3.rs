@@ -5,13 +5,16 @@
 
 use crate::draw::DrawList;
 use crate::hud::layout::{Layout, Piece};
-use crate::hud::{score_strip, sketch, state::HudState};
+use crate::hud::{ability_bar, score_strip, sketch, state::HudState};
 use crate::theme::Theme;
 
 pub fn build(theme: &Theme, layout: &Layout, state: &HudState) -> DrawList {
     let mut list = sketch::build(theme, layout);
     if let Some(area) = layout.get(Piece::Score) {
         score_strip::draw(theme, &mut list, area, &state.score);
+    }
+    if let Some(area) = layout.get(Piece::Ability) {
+        ability_bar::draw(theme, &mut list, area, &state.ability);
     }
     list
 }

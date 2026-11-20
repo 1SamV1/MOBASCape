@@ -1,6 +1,7 @@
 //! The stage 3 interface's plain data, placing pass and labelled step B
 //! screen. It is all pure: no cache, no graphics card, no match.
 
+pub mod ability_bar;
 pub mod layout;
 pub mod sample;
 pub mod score_strip;
