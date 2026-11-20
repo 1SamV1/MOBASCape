@@ -9,8 +9,9 @@ Last updated: interface stage 3 assembled on top of M5.6, 2026-11-20.
   theme, scale by fit, the placing/collapse pass, every component, the
   assembled whole, and the review sheet in `docs/INTERFACE_STAGE3_REVIEW.md`.
 - `--ui-theme-sheet` draws every role; `--ui-layout` draws the assembled
-  sample interface over the game. The old `crates/client/src/hud.rs` and its
-  3D unit bars remain the default until the reviewer accepts the new one.
+  sample interface over the game. Stage 3 was accepted at the merge of PR
+  #1. The old `crates/client/src/hud.rs` and its 3D unit bars remain the
+  running default until stage 4 connects each component to the match.
 - The interface owns its own pass in `crates/client/src/ui_pass.rs`; the
   theme loader is `crates/client/src/theme_file.rs`. Both sit beside the
   M5.6 HUD pipeline and the 117HD renderer.

@@ -7,8 +7,9 @@ objectives, step 5 team frames, step 6 target panel, step 7 unit plates,
 step 8 inventory, step 9 chat, step 10 kill feed, step 11 announcements,
 step 12 tooltip, step 13 shop, step 14 death overlay and step 15 the whole
 are built and tested headlessly; the assembled interface and its differences
-are in `docs/INTERFACE_STAGE3_REVIEW.md`, and `hud.rs` is still the
-default.** The stage 3 plan was frozen separately in
+are in `docs/INTERFACE_STAGE3_REVIEW.md`, and stage 3 was accepted at the
+merge of PR #1. `hud.rs` remains the running default until stage 4 connects
+`HudState` to the match.** The stage 3 plan was frozen separately in
 `docs/INTERFACE_STAGE3_PLAN.md`; each later stage and component still needs
 its own go-ahead after the stage before it has passed its check. A change to
 this document is a design change and is reviewed like one.

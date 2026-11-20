@@ -1,10 +1,10 @@
 # Interface stage 3: the whole, and the final comparison
 
-Status: **built and rendered headlessly; waiting for the reviewer's eye.**
-The old `crates/client/src/hud.rs` is still the default and still runs the
-match. This file lists what the assembled interface matches and where it
-differs from the reference. It is evidence for the review, not a new design
-and not a sign-off.
+Status: **accepted at the merge of PR #1 on 20 November 2026.** The
+differences below were accepted with it. The old `crates/client/src/hud.rs`
+is still the running default: stage 4 connects `HudState` to the match, one
+component at a time, before the new interface replaces it. This file stays
+as the record of what was compared and what was decided.
 
 ## The pictures
 
@@ -103,9 +103,10 @@ This is the hierarchy `docs/INTERFACE.md` asks for.
 - A scoreboard or hero selection.
 - Grey death rendering, a live cursor, or fading kill-feed entries.
 
-## What acceptance needs
+## Acceptance
 
-A reviewer's pass over the four pictures above beside S2, S3, S4 and S5, and
-a decision on the differences in this file. No geometry clash is left at the
-two supported sizes, and every figure in the plan's step B tests is produced
-by the code rather than carried over from the Python script.
+The reviewer merged PR #1, accepting the four pictures and the nine
+differences above. No geometry clash is left at the two supported sizes, and
+every figure in the plan's step B tests is produced by the code rather than
+carried over from the Python script. The running HUD changes only when stage
+4 gives each component live data.

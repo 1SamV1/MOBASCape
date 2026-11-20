@@ -35,8 +35,8 @@ designed for fast-paced low-team-count matches.
 > and a Dota style scoreboard, unit tooltip, minimap viewport and biome label.
 > The interface branch adds stage 3 in `crates/ui`: a cache-backed theme,
 > scale by fit, the placing/collapse pass, and every component through the
-> assembled whole, waiting for the reviewer's eye in `--ui-layout`. The old
-> HUD remains the default until then. See [docs/STATUS.md](docs/STATUS.md),
+> assembled whole, accepted at PR #1. The old HUD remains the running
+> default until stage 4 connects each component to the match. See [docs/STATUS.md](docs/STATUS.md),
 > [docs/UI_ASSETS.md](docs/UI_ASSETS.md) and
 > [docs/INTERFACE_STAGE3_REVIEW.md](docs/INTERFACE_STAGE3_REVIEW.md).
 
