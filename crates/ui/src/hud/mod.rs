@@ -16,6 +16,7 @@ pub mod stage3;
 pub mod state;
 pub mod target_panel;
 pub mod team_frames;
+pub mod tooltip;
 pub mod unit_plates;
 
 pub use layout::{

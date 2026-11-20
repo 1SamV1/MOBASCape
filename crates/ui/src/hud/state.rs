@@ -127,6 +127,19 @@ pub struct InventoryItem {
     pub colour: [u8; 3],
 }
 
+/// The item tooltip: the title and price, green stat lines, and a passive
+/// whose name is orange and whose text wraps in white. `at` is the cursor in
+/// window pixels; the tooltip is placed beside it and kept in the window.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TooltipState {
+    pub title: String,
+    pub price: u32,
+    pub stats: Vec<String>,
+    pub passive: Option<String>,
+    pub text: String,
+    pub at: (i32, i32),
+}
+
 /// Who a chat line comes from, which decides its colours: a system line is
 /// dark on the parchment, a match event is blue, and a player's name takes
 /// their team's colour with their hero in brackets.
@@ -187,7 +200,7 @@ pub struct HudState {
     pub chat: Vec<ChatLine>,
     pub feed: Vec<KillFeedEntry>,
     pub announcement: Option<String>,
-    pub tooltip: Option<String>,
+    pub tooltip: Option<TooltipState>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

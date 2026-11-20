@@ -5,7 +5,7 @@
 use crate::hud::state::{
     AbilityState, AllyState, CampState, ChatKind, ChatLine, HudState, InventoryItem, KillFeedEntry,
     LaneState, MapPoint, MinimapState, NexusState, ObjectivesState, PlateKind, ScoreState,
-    StructureMark, TargetStat, TargetState, UnitPlate,
+    StructureMark, TargetStat, TargetState, TooltipState, UnitPlate,
 };
 
 pub fn state() -> HudState {
@@ -19,6 +19,9 @@ pub fn state() -> HudState {
 pub fn state_for(window: (u32, u32)) -> HudState {
     let mut state = base();
     state.plates = plates(window);
+    if let Some(tooltip) = state.tooltip.as_mut() {
+        tooltip.at = ((window.0 / 2) as i32, (window.1 * 35 / 100) as i32);
+    }
     state
 }
 
@@ -336,7 +339,14 @@ fn base() -> HudState {
             },
         ],
         announcement: Some("Giant Mole has appeared!".to_string()),
-        tooltip: Some("Berserker ring: +8 damage".to_string()),
+        tooltip: Some(TooltipState {
+            title: "Berserker ring".to_string(),
+            price: 700,
+            stats: vec!["+8 damage".to_string(), "+15% ability power".to_string()],
+            passive: Some("Berserk".to_string()),
+            text: "Every fourth strike deals 15% more damage.".to_string(),
+            at: (0, 0),
+        }),
     }
 }
 

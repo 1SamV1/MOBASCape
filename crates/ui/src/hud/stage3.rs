@@ -6,7 +6,7 @@ use crate::draw::DrawList;
 use crate::hud::layout::{Layout, Piece};
 use crate::hud::{
     ability_bar, announcements, chat, inventory, kill_feed, minimap, objectives, score_strip,
-    sketch, state::HudState, target_panel, team_frames, unit_plates,
+    sketch, state::HudState, target_panel, team_frames, tooltip, unit_plates,
 };
 use crate::theme::Theme;
 
@@ -56,6 +56,9 @@ pub fn build(theme: &Theme, layout: &Layout, state: &HudState) -> DrawList {
     }
     if let Some(text) = state.announcement.as_deref() {
         announcements::draw(theme, &mut list, text);
+    }
+    if let Some(tooltip) = state.tooltip.as_ref() {
+        tooltip::draw(theme, &mut list, tooltip);
     }
     list
 }
