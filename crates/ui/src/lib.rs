@@ -18,6 +18,7 @@ pub mod hud;
 pub mod outline;
 pub mod raster;
 pub mod scale;
+pub mod scroll;
 pub mod test_screen;
 pub mod theme;
 pub mod theme_sheet;

@@ -127,6 +127,31 @@ pub struct InventoryItem {
     pub colour: [u8; 3],
 }
 
+/// One item in the shop's list.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ShopItem {
+    pub name: String,
+    pub price: u32,
+    pub colour: [u8; 3],
+    pub stats: Vec<String>,
+    /// What this item builds into, when the item system has upgrades.
+    pub builds_into: Option<String>,
+}
+
+/// The shop overlay. Stage 3 holds one category and our six items; stage 4
+/// adds buying and a live gold count.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ShopState {
+    pub open: bool,
+    pub category: String,
+    pub search: String,
+    pub items: Vec<ShopItem>,
+    pub selected: usize,
+    /// How far the item list is scrolled, in interface pixels.
+    pub scroll: i32,
+    pub hint: String,
+}
+
 /// The item tooltip: the title and price, green stat lines, and a passive
 /// whose name is orange and whose text wraps in white. `at` is the cursor in
 /// window pixels; the tooltip is placed beside it and kept in the window.
@@ -201,6 +226,7 @@ pub struct HudState {
     pub feed: Vec<KillFeedEntry>,
     pub announcement: Option<String>,
     pub tooltip: Option<TooltipState>,
+    pub shop: ShopState,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

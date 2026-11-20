@@ -11,6 +11,7 @@ pub mod minimap;
 pub mod objectives;
 pub mod sample;
 pub mod score_strip;
+pub mod shop;
 pub mod sketch;
 pub mod stage3;
 pub mod state;

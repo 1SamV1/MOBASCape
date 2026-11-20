@@ -5,7 +5,7 @@
 use crate::hud::state::{
     AbilityState, AllyState, CampState, ChatKind, ChatLine, HudState, InventoryItem, KillFeedEntry,
     LaneState, MapPoint, MinimapState, NexusState, ObjectivesState, PlateKind, ScoreState,
-    StructureMark, TargetStat, TargetState, TooltipState, UnitPlate,
+    ShopItem, ShopState, StructureMark, TargetStat, TargetState, TooltipState, UnitPlate,
 };
 
 pub fn state() -> HudState {
@@ -347,6 +347,42 @@ fn base() -> HudState {
             text: "Every fourth strike deals 15% more damage.".to_string(),
             at: (0, 0),
         }),
+        shop: ShopState {
+            open: true,
+            category: "Items".to_string(),
+            search: "Search items".to_string(),
+            items: vec![
+                shop_item("Bronze sword", 300, [180, 120, 60], &["+10 damage"]),
+                shop_item("Iron platebody", 400, [160, 160, 170], &["+150 health"]),
+                shop_item(
+                    "Amulet of fury",
+                    800,
+                    [80, 200, 220],
+                    &["+15 damage", "+50 health", "+20 mana"],
+                ),
+                shop_item(
+                    "Berserker ring",
+                    700,
+                    [220, 80, 80],
+                    &["+8 damage", "+15% ability power"],
+                ),
+                shop_item(
+                    "Ahrim's staff",
+                    900,
+                    [120, 80, 200],
+                    &["+40 mana", "+30% ability power"],
+                ),
+                shop_item(
+                    "Dragon boots",
+                    600,
+                    [200, 60, 60],
+                    &["+30 health", "+40 speed"],
+                ),
+            ],
+            selected: 3,
+            scroll: 0,
+            hint: "Click an item to inspect it.".to_string(),
+        },
     }
 }
 
@@ -450,5 +486,15 @@ fn plate(
         health,
         max_health,
         blue,
+    }
+}
+
+fn shop_item(name: &str, price: u32, colour: [u8; 3], stats: &[&str]) -> ShopItem {
+    ShopItem {
+        name: name.to_string(),
+        price,
+        colour,
+        stats: stats.iter().map(|line| (*line).to_string()).collect(),
+        builds_into: None,
     }
 }
