@@ -3,9 +3,10 @@
 //! component reads the match until stage 4.
 
 use crate::hud::state::{
-    AbilityState, AllyState, CampState, ChatKind, ChatLine, HudState, InventoryItem, KillFeedEntry,
-    LaneState, MapPoint, MinimapState, NexusState, ObjectivesState, PlateKind, ScoreState,
-    ShopItem, ShopState, StructureMark, TargetStat, TargetState, TooltipState, UnitPlate,
+    AbilityState, AllyState, CampState, ChatKind, ChatLine, DamageSource, DeathState, HudState,
+    InventoryItem, KillFeedEntry, LaneState, MapPoint, MinimapState, NexusState, ObjectivesState,
+    PlateKind, ScoreState, ShopItem, ShopState, StructureMark, TargetStat, TargetState,
+    TooltipState, UnitPlate,
 };
 
 pub fn state() -> HudState {
@@ -383,6 +384,25 @@ fn base() -> HudState {
             scroll: 0,
             hint: "Click an item to inspect it.".to_string(),
         },
+        death: Some(DeathState {
+            respawn_seconds: 3,
+            killer: "Kree".to_string(),
+            killer_blue: false,
+            damage: vec![
+                DamageSource {
+                    name: "Kree".to_string(),
+                    amount: 420,
+                },
+                DamageSource {
+                    name: "Meteor".to_string(),
+                    amount: 240,
+                },
+                DamageSource {
+                    name: "Ignite".to_string(),
+                    amount: 70,
+                },
+            ],
+        }),
     }
 }
 

@@ -5,8 +5,8 @@
 use crate::draw::DrawList;
 use crate::hud::layout::{Layout, Piece};
 use crate::hud::{
-    ability_bar, announcements, chat, inventory, kill_feed, minimap, objectives, score_strip, shop,
-    sketch, state::HudState, target_panel, team_frames, tooltip, unit_plates,
+    ability_bar, announcements, chat, death, inventory, kill_feed, minimap, objectives,
+    score_strip, shop, sketch, state::HudState, target_panel, team_frames, tooltip, unit_plates,
 };
 use crate::theme::Theme;
 
@@ -26,7 +26,9 @@ pub fn build(theme: &Theme, layout: &Layout, state: &HudState) -> DrawList {
             Piece::Feed,
         ],
     );
-    unit_plates::draw(theme, &mut list, &state.plates);
+    if state.death.is_none() {
+        unit_plates::draw(theme, &mut list, &state.plates);
+    }
     if let Some(area) = layout.get(Piece::Score) {
         score_strip::draw(theme, &mut list, area, &state.score);
     }
@@ -57,11 +59,15 @@ pub fn build(theme: &Theme, layout: &Layout, state: &HudState) -> DrawList {
     if let Some(text) = state.announcement.as_deref() {
         announcements::draw(theme, &mut list, text);
     }
-    if let Some(tooltip) = state.tooltip.as_ref() {
-        tooltip::draw(theme, &mut list, tooltip);
-    }
-    if state.shop.open {
-        shop::draw(theme, &mut list, &state.shop, state.gold);
+    if let Some(death) = state.death.as_ref() {
+        death::draw(theme, &mut list, death);
+    } else {
+        if state.shop.open {
+            shop::draw(theme, &mut list, &state.shop, state.gold);
+        }
+        if let Some(tooltip) = state.tooltip.as_ref() {
+            tooltip::draw(theme, &mut list, tooltip);
+        }
     }
     list
 }

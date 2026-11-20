@@ -152,6 +152,29 @@ pub struct ShopState {
     pub hint: String,
 }
 
+/// One source of damage on the death panel.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DamageSource {
+    pub name: String,
+    pub amount: u32,
+}
+
+/// The death overlay. `total` is taken from the sources, so the bars and the
+/// figure cannot disagree.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DeathState {
+    pub respawn_seconds: u32,
+    pub killer: String,
+    pub killer_blue: bool,
+    pub damage: Vec<DamageSource>,
+}
+
+impl DeathState {
+    pub fn total(&self) -> u32 {
+        self.damage.iter().map(|source| source.amount).sum()
+    }
+}
+
 /// The item tooltip: the title and price, green stat lines, and a passive
 /// whose name is orange and whose text wraps in white. `at` is the cursor in
 /// window pixels; the tooltip is placed beside it and kept in the window.
@@ -227,6 +250,7 @@ pub struct HudState {
     pub announcement: Option<String>,
     pub tooltip: Option<TooltipState>,
     pub shop: ShopState,
+    pub death: Option<DeathState>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

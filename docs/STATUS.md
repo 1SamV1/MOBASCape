@@ -1,6 +1,6 @@
 # Status
 
-Last updated: interface stage 3 step 13, 2026-11-20.
+Last updated: interface stage 3 step 14, 2026-11-20.
 
 ## Working
 
@@ -116,13 +116,19 @@ Last updated: interface stage 3 step 13, 2026-11-20.
   with colours and prices, the chosen item's detail and Buy button, and the
   "Your items" foot line with the hint and gold. The item list is clipped and
   scrolled through a pure `Scroll` in `crates/ui/src/scroll.rs`.
+- Interface stage 3 step 14: the death overlay is drawn in `--ui-layout`:
+  the match dimmed, "Oh dear, you are dead!" in red with a dark outline, the
+  yellow respawn countdown, and a 330-wide dark panel with the killer, one
+  bar per damage source and each figure with the total. Unit plates and the
+  shop and tooltip are stood down while the sample is dead. The scene is
+  dimmed only; drawing the world grey is a later rendering task.
 - Dev demos: `--demo-target`, `--demo-combat`, `--demo-camp`, `--demo-kit`,
   `--demo-shop`, `--champion`, `--timescale`, `--ui-test`,
   `--ui-theme-sheet`, `--ui-layout`, `--ui-scale`.
 
 ## Verified
 
-- `cargo test --workspace`: 189 tests pass, 2 ignored (the optional pictures
+- `cargo test --workspace`: 192 tests pass, 2 ignored (the optional pictures
   of the theme sheet and the labelled layout). The 15 new layout tests check
   the 1920 by 1080 rectangles, the collapse at 1280 by 720 and 1366 by
   768, the scale edges, the 953 by 280 minimum, requested scales, 7/8/9 clearance, the objectives'
@@ -135,8 +141,9 @@ Last updated: interface stage 3 step 13, 2026-11-20.
   1920 by 1080, scale 1, usual coverage 16.5%, no clashes and no steps; the
   score strip, ability bar, minimap, objectives, team frames, target panel,
   unit plates, inventory, chat, kill feed, announcement, tooltip and shop in
-  it are the real components, the rest are labelled rectangles. The shop
-  overlay is open in the sample, so the picture also shows its dim and frame.
+  it are the real components, the rest are labelled rectangles. The sample
+  is a death state, so the picture shows the dim and the death overlay; the
+  shop and tooltip data are present but stood down while dead.
 - Score strip tests: within its rectangle at scales 1 to 4; no pixel outside
   the rectangle; a theme with only a font still draws panel fallback and
   text.
@@ -172,6 +179,9 @@ Last updated: interface stage 3 step 13, 2026-11-20.
 - Shop tests: centred at 782 by 580; all content inside the frame at scales
   1 to 4; only the dim outside it; and the font-only fallback. The scroll
   tests clamp an offset at the top and last page and map content to the view.
+- Death tests: the 330 by 80 panel centred for three sources and their total;
+  the dim covering the window with all content inside at scales 1 to 4; and
+  the font-only fallback.
 - **Item shop demo**: granted 4000 gold; bought all six items; final title
   `HP 730/730`, `MP 260/260`, `gold 300`, `dmg 45 spd 460`, `items 6/6`,
   ability power 45%.
@@ -198,7 +208,9 @@ Last updated: interface stage 3 step 13, 2026-11-20.
   reference's letter height is still unconfirmed (plan section 5.10). The
   tooltip shows one sample item at a sample cursor position; following the
   real cursor is stage 4. The shop draws sample items and gold; its Buy
-  button and scroll offset are inert until stage 4.
+  button and scroll offset are inert until stage 4. The death overlay uses
+  sample respawn, killer and damage figures, and dims the scene rather than
+  drawing it in grey.
 - Sprite names on the theme sheet are shortened (`icon.` and `map.dot.` are
   omitted) to fit; the full role names are in the theme file and the load log.
 - Item purchases are client-side in this prototype. The authoritative server
@@ -224,7 +236,8 @@ Last updated: interface stage 3 step 13, 2026-11-20.
 
 1. Run `--ui-theme-sheet` and `--ui-layout` on the GPU, compare them with the
    reference screenshots, and fix what the eye finds.
-2. Stage 3 step 14: the death overlay, then the whole together.
+2. Stage 3 step 15: the whole interface together, then the final comparison
+   with S2, S3, S4 and S5.
 3. HUD text/font atlas for the old shop names/costs, gold, HP/MP, level and
    labels until the new components replace it.
 4. Item selling/combining/passives and five champions with distinct kits.

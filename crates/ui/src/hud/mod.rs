@@ -4,6 +4,7 @@
 pub mod ability_bar;
 pub mod announcements;
 pub mod chat;
+pub mod death;
 pub mod inventory;
 pub mod kill_feed;
 pub mod layout;

@@ -5,9 +5,9 @@ have passed and are frozen with it. Stage 3's step A theme, step B placing
 pass, step 1 score strip, step 2 ability bar, step 3 minimap, step 4
 objectives, step 5 team frames, step 6 target panel, step 7 unit plates,
 step 8 inventory, step 9 chat, step 10 kill feed, step 11 announcements,
-step 12 tooltip and step 13 shop are built and tested headlessly; the other
-components are not built, and `hud.rs` is still the default.** The stage 3
-plan was frozen separately in
+step 12 tooltip, step 13 shop and step 14 death overlay are built and
+tested headlessly; the other components are not built, and `hud.rs` is still
+the default.** The stage 3 plan was frozen separately in
 `docs/INTERFACE_STAGE3_PLAN.md`; each later stage and component still needs
 its own go-ahead after the stage before it has passed its check. A change to
 this document is a design change and is reviewed like one.
