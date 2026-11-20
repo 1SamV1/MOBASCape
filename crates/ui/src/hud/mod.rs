@@ -10,6 +10,7 @@ pub mod score_strip;
 pub mod sketch;
 pub mod stage3;
 pub mod state;
+pub mod team_frames;
 
 pub use layout::{
     Conflict, Layout, Piece, choose_scale, closer_than_gap, effective_scale, fits_full, holds,

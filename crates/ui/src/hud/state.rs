@@ -83,6 +83,8 @@ pub struct AllyState {
     pub max_resource: u32,
     pub level: u8,
     pub dead: bool,
+    /// Seconds until respawn, when `dead`.
+    pub respawn_seconds: Option<u32>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

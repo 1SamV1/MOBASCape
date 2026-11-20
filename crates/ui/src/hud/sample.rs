@@ -172,6 +172,7 @@ pub fn state() -> HudState {
                 max_resource: 260,
                 level: 7,
                 dead: false,
+                respawn_seconds: None,
             },
             AllyState {
                 name: "Jad".to_string(),
@@ -181,6 +182,7 @@ pub fn state() -> HudState {
                 max_resource: 260,
                 level: 6,
                 dead: false,
+                respawn_seconds: None,
             },
             AllyState {
                 name: "Kree".to_string(),
@@ -190,6 +192,7 @@ pub fn state() -> HudState {
                 max_resource: 240,
                 level: 6,
                 dead: true,
+                respawn_seconds: Some(12),
             },
             AllyState {
                 name: "Monkey".to_string(),
@@ -199,6 +202,7 @@ pub fn state() -> HudState {
                 max_resource: 260,
                 level: 7,
                 dead: false,
+                respawn_seconds: None,
             },
         ],
         target: Some(TargetState {
