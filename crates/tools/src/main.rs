@@ -1,5 +1,5 @@
 use std::io::Write;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
 use clap::{Parser, Subcommand};
@@ -68,6 +68,14 @@ enum Command {
     Sprite { id: u32, out: PathBuf },
     /// Export the sprite behind a texture definition from index 9 as a PNG.
     Texture { id: u32, out: PathBuf },
+    /// Scrape index 9 textures (and optionally every index 8 sprite) to a folder.
+    DumpTextures {
+        #[arg(long, default_value = "assets/cache-scrape")]
+        out: PathBuf,
+        /// Also write every index-8 sprite group.
+        #[arg(long)]
+        sprites: bool,
+    },
     /// Export terrain height/colour data as an OBJ for quick inspection.
     TerrainObj {
         region_x: u32,
@@ -134,6 +142,7 @@ fn main() -> Result<()> {
         Command::ExportObj { id, out } => export_obj(&cache, id, &out)?,
         Command::Sprite { id, out } => sprite(&cache, id, &out)?,
         Command::Texture { id, out } => texture(&cache, id, &out)?,
+        Command::DumpTextures { out, sprites } => dump_textures(&cache, &out, sprites)?,
         Command::TerrainObj {
             region_x,
             region_y,
@@ -736,6 +745,106 @@ fn sprite(cache: &Cache, id: u32, out: &PathBuf) -> Result<()> {
         frame.height,
         out.display()
     );
+    Ok(())
+}
+
+fn dump_textures(cache: &Cache, out: &Path, dump_sprites: bool) -> Result<()> {
+    let texture_dir = out.join("textures");
+    std::fs::create_dir_all(&texture_dir)?;
+    let files = cache.archive_files_with_ids(9, 0)?;
+    let mut csv = String::from(
+        "texture,sprite,animation_direction,animation_speed,width,height,frames,path\n",
+    );
+    let mut written = 0usize;
+    for (id, data) in &files {
+        let definition = match TextureDefinition::load(*id, data) {
+            Ok(definition) => definition,
+            Err(err) => {
+                tracing::warn!("texture {id}: {err:#}");
+                continue;
+            }
+        };
+        let group = match cache.group(8, definition.sprite_id) {
+            Ok(group) => group,
+            Err(err) => {
+                tracing::warn!("texture {id}: sprite {}: {err:#}", definition.sprite_id);
+                continue;
+            }
+        };
+        let sprite = match SpriteDefinition::load(definition.sprite_id, &group.data) {
+            Ok(sprite) => sprite,
+            Err(err) => {
+                tracing::warn!("texture {id}: {err:#}");
+                continue;
+            }
+        };
+        let Some(frame) = sprite.frames.first() else {
+            continue;
+        };
+        let path = texture_dir.join(format!("texture_{id:04}.png"));
+        let image = image::RgbaImage::from_raw(frame.width, frame.height, frame.pixels.clone())
+            .context("texture frame buffer does not match its dimensions")?;
+        image.save(&path)?;
+        csv.push_str(&format!(
+            "{id},{},{},{},{},{},{},{}\n",
+            definition.sprite_id,
+            definition.animation_direction,
+            definition.animation_speed,
+            frame.width,
+            frame.height,
+            sprite.frames.len(),
+            path.display()
+        ));
+        written += 1;
+    }
+    std::fs::write(out.join("textures.csv"), csv)?;
+    println!(
+        "textures: {written}/{} definitions -> {}",
+        files.len(),
+        texture_dir.display()
+    );
+
+    if dump_sprites {
+        let sprite_dir = out.join("sprites");
+        std::fs::create_dir_all(&sprite_dir)?;
+        let mut sprite_csv = String::from("sprite,frames,width,height,path\n");
+        let mut sprite_count = 0usize;
+        for id in 0..cache.group_count(8) {
+            let Ok(group) = cache.group(8, id) else {
+                continue;
+            };
+            let Ok(sprite) = SpriteDefinition::load(id, &group.data) else {
+                continue;
+            };
+            let Some(frame) = sprite.frames.first() else {
+                continue;
+            };
+            if frame.width == 0 || frame.height == 0 {
+                continue;
+            }
+            let path = sprite_dir.join(format!("sprite_{id:05}.png"));
+            let Some(image) =
+                image::RgbaImage::from_raw(frame.width, frame.height, frame.pixels.clone())
+            else {
+                continue;
+            };
+            image.save(&path)?;
+            sprite_csv.push_str(&format!(
+                "{id},{},{},{},{}\n",
+                sprite.frames.len(),
+                frame.width,
+                frame.height,
+                path.display()
+            ));
+            sprite_count += 1;
+        }
+        std::fs::write(out.join("sprites.csv"), sprite_csv)?;
+        println!(
+            "sprites: {sprite_count}/{} groups -> {}",
+            cache.group_count(8),
+            sprite_dir.display()
+        );
+    }
     Ok(())
 }
 

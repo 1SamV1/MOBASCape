@@ -92,19 +92,19 @@ fn fs(input: VsOut) -> @location(0) vec4<f32> {
     // The clip is graded like a foggy late-afternoon painting: low saturation,
     // warm highlights, cool lifted shadows and a heavy edge falloff. The old
     // pass only tinted a few channels and left the highlighter greens intact.
-    color *= 0.90;
-    color *= vec3<f32>(1.08, 0.97, 1.0);
+    color *= 0.94;
+    color *= vec3<f32>(1.03, 1.0, 0.99);
 
     // Desaturate the whole frame. Terrain is the main offender; grading it
     // here keeps props and effects consistent with it.
     let l0 = luma(color);
-    color = mix(vec3<f32>(l0), color, 0.79);
+    color = mix(vec3<f32>(l0), color, 0.88);
 
     // Split tone: shadow blue-grey, highlight warm cream.
     let l1 = luma(color);
     let split = mix(
-        vec3<f32>(0.88, 0.94, 1.04),
-        vec3<f32>(1.10, 1.02, 0.82),
+        vec3<f32>(0.92, 0.97, 1.03),
+        vec3<f32>(1.06, 1.02, 0.92),
         smoothstep(0.10, 0.62, l1)
     );
     color *= split;
@@ -114,13 +114,13 @@ fn fs(input: VsOut) -> @location(0) vec4<f32> {
     color += vec3<f32>(0.018, 0.017, 0.011) * (1.0 - smoothstep(0.0, 0.34, l1));
 
     // Filmic contrast around a low pivot deepens the forest floor.
-    color = clamp((color - 0.42) * 1.10 + 0.42, vec3<f32>(0.0), vec3<f32>(1.0));
+    color = clamp((color - 0.42) * 1.06 + 0.42, vec3<f32>(0.0), vec3<f32>(1.0));
 
     // Heavy painterly vignette: the corners fade into the same fog colour as
     // the horizon, pulling the eye to the centre of the fight.
     let centred = input.uv - vec2<f32>(0.5);
     let vignette = 1.0 - smoothstep(0.28, 1.00, length(centred * vec2<f32>(1.0, 1.22)));
-    color *= mix(0.62, 1.0, vignette);
+    color *= mix(0.72, 1.0, vignette);
 
     let dither = fract(sin(dot(input.uv * dimensions, vec2<f32>(12.9898, 78.233))) * 43758.5453);
     color += (dither - 0.5) / 255.0;
