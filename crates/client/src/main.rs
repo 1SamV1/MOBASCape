@@ -2441,6 +2441,7 @@ fn draw_ui_overlay(
         let mut state = rift_ui::hud::sample::whole_for(renderer.size);
         if live && let Some(player) = player {
             state.score = crate::ui_live::score(player);
+            state.ability = crate::ui_live::ability(player);
         }
         let placed = rift_ui::hud::place(&state, renderer.size, scale);
         let detail = format!(
