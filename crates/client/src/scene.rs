@@ -4,36 +4,104 @@ use std::path::Path;
 use anyhow::{Context, Result};
 use glam::{Mat3, Vec2, Vec3};
 use rift_cache::{
-    Cache, Locations, Model, ObjectDefinition, OverlayDefinition, Terrain, UnderlayDefinition,
-    light::{blend, ground_lightness, light, shade, shade_rgb, tint},
+    Cache, Locations, Model, NpcDefinition, ObjectDefinition, OverlayDefinition, Terrain,
+    UnderlayDefinition,
 };
-use rift_sim::heights::{Agreement, Ground, HeightMap, Reading, agreement};
 use rift_sim::{Grid, find_path, simplify_path};
 use serde::Deserialize;
 
-#[repr(C)]
-#[derive(Debug, Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
-pub struct Vertex {
-    pub position: [f32; 3],
-    pub color: [f32; 4],
+/// Cache scenery is authored for a first-person player, but the MOBA camera
+/// frames a hero that is roughly two tiles tall. Natural props therefore need
+/// a stylistic lift so trees and ruins tower over the heroes instead of
+/// reading as garden ornaments.
+const NATURAL_SCENERY_SCALE: f32 = 1.5;
+const POCKET_SCENERY_SCALE: f32 = 1.35;
+const TREE_LINE_SCALE_MIN: f32 = 1.35;
+const TREE_LINE_SCALE_MAX: f32 = 2.05;
+const RUIN_SCALE_MIN: f32 = 1.35;
+const RUIN_SCALE_MAX: f32 = 1.85;
+
+/// Small cache objects scattered over the grass: flowers, ferns, mushrooms,
+/// loose rocks, twigs, roots and stumps. 117HD's ground is dense with these,
+/// and they do most of the work in making a flat texture field feel natural.
+const DECOR_LIMIT: usize = 2600;
+const DECOR_LANE_CLEAR: f32 = 2.6 * 128.0;
+const DECOR_STRUCTURE_CLEAR: f32 = 2.2 * 128.0;
+/// Cache decorations that are a single untextured plane or a placeholder cube
+/// look wrong once the flat-colour fallback is applied.
+const DECOR_MODEL_BLOCKLIST: &[u32] = &[3951, 4730, 32530];
+
+/// Convert an sRGB channel to linear light. The surface is an sRGB target, so
+/// shader output must be linear or the palette is double-gamma corrected.
+pub fn srgb_to_linear(c: f32) -> f32 {
+    if c <= 0.04045 {
+        c / 12.92
+    } else {
+        ((c + 0.055) / 1.055).powf(2.4)
+    }
 }
 
-impl Vertex {
-    pub fn new(position: Vec3, color: [u8; 3]) -> Self {
+#[repr(C)]
+#[derive(Debug, Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct SceneVertex {
+    pub position: [f32; 3],
+    pub normal: [f32; 3],
+    pub color: [f32; 4],
+    pub uv: [f32; 2],
+    pub ao: f32,
+    pub material: u32,
+    pub texture_id: u32,
+}
+
+impl SceneVertex {
+    pub fn new(position: Vec3, normal: Vec3, color: [u8; 3]) -> Self {
         Self {
             position: position.to_array(),
+            normal: normal.normalize_or_zero().to_array(),
             color: [
-                color[0] as f32 / 255.0,
-                color[1] as f32 / 255.0,
-                color[2] as f32 / 255.0,
+                srgb_to_linear(color[0] as f32 / 255.0),
+                srgb_to_linear(color[1] as f32 / 255.0),
+                srgb_to_linear(color[2] as f32 / 255.0),
                 1.0,
             ],
+            uv: [0.0, 0.0],
+            ao: 1.0,
+            material: 0,
+            texture_id: 0,
+        }
+    }
+
+    pub fn unlit(position: Vec3, color: [u8; 3]) -> Self {
+        let mut vertex = Self::new(position, Vec3::Y, color);
+        vertex.material = 1;
+        vertex
+    }
+
+    /// Lit, world-space triplanar stone. The procedural castle boxes carry no
+    /// authored UVs, so a planar cache sprite would smear on their vertical
+    /// faces; the shader projects the stone sprite on all three axes instead.
+    pub fn stone(position: Vec3, normal: Vec3, color: [u8; 3]) -> Self {
+        let mut vertex = Self::new(position, normal, color);
+        vertex.material = 8;
+        vertex
+    }
+
+    pub fn blob(position: Vec3, alpha: f32, uv: [f32; 2]) -> Self {
+        Self {
+            position: position.to_array(),
+            normal: Vec3::Y.to_array(),
+            color: [0.0, 0.0, 0.0, alpha],
+            uv,
+            ao: 1.0,
+            material: 2,
+            texture_id: 0,
         }
     }
 }
 
+#[derive(Default)]
 pub struct MeshData {
-    pub vertices: Vec<Vertex>,
+    pub vertices: Vec<SceneVertex>,
     pub indices: Vec<u32>,
 }
 
@@ -45,7 +113,7 @@ impl MeshData {
         }
     }
 
-    pub fn push_triangle(&mut self, a: Vertex, b: Vertex, c: Vertex) {
+    pub fn push_triangle(&mut self, a: SceneVertex, b: SceneVertex, c: SceneVertex) {
         let base = self.vertices.len() as u32;
         self.vertices.extend_from_slice(&[a, b, c]);
         self.indices.extend_from_slice(&[base, base + 1, base + 2]);
@@ -77,15 +145,9 @@ impl HeightGrid {
         let h10 = self.heights[y0 * self.size + x0 + 1];
         let h01 = self.heights[(y0 + 1) * self.size + x0];
         let h11 = self.heights[(y0 + 1) * self.size + x0 + 1];
-        // The ground is drawn as two triangles a tile, split along the line
-        // from (1,0) to (0,1). Read the height off the same triangle that is
-        // drawn there, so a foot placed at this height is on the ground and
-        // neither in it nor above it.
-        if fx + fy <= 1.0 {
-            h00 + (h10 - h00) * fx + (h01 - h00) * fy
-        } else {
-            h11 + (h01 - h11) * (1.0 - fx) + (h10 - h11) * (1.0 - fy)
-        }
+        let a = h00 + (h10 - h00) * fx;
+        let b = h01 + (h11 - h01) * fx;
+        a + (b - a) * fy
     }
 
     pub fn contains(&self, world_x: f32, world_z: f32) -> bool {
@@ -95,321 +157,97 @@ impl HeightGrid {
     }
 }
 
-/// Cells of the walkable map to a game tile, each way. At one cell to a tile
-/// a thin trunk closed a whole tile; at four, obstacles can be marked at the
-/// size they are seen.
-pub const NAV_PER_TILE: i32 = 4;
-/// The width of one cell of the walkable map, in world units.
-pub const NAV_CELL: i32 = 128 / NAV_PER_TILE;
-/// Half the width a unit needs to pass. Every obstacle is marked this much
-/// wider than it is, so a unit can be treated as a point. One size for every
-/// unit for now; a size per champion needs a map per size.
-pub const BODY_RADIUS: f32 = 28.0;
-/// The part of a thing that stands in the way: its surface between these two
-/// heights above the ground. What is lower can be stepped over (roots, loose
-/// stones); what is higher passes overhead (leaves, an overhang).
-const SOLID_FROM: f32 = 48.0;
-const SOLID_TO: f32 = 160.0;
-/// The step the start-up climbing measurement tries. No champion has it yet.
-const CLIMB_STEP: f32 = 96.0;
-
 #[derive(Clone)]
 pub struct WorldCollision {
-    /// Where units may stand right now.
     grid: Grid,
-    /// The ground and scenery alone, which never change during a match.
-    open: Grid,
-    /// The structures, which do: one that has fallen no longer blocks.
-    structures: Vec<StructureGround>,
-    /// Where things can be stood on and how tall they are, and the height of
-    /// the ground (docs/MOVEMENT.md, rough ground, stage 1). Built and
-    /// checked, and read by nothing that moves yet.
-    heights: Option<std::sync::Arc<(HeightMap, Ground)>>,
+    sight_grid: Grid,
     origin_tile_x: i32,
     origin_tile_y: i32,
 }
 
-/// The steepest a surface may be, in degrees from level, and still be stood
-/// on. Measured against the real tower: at 45 the monkey's step reaches the
-/// whole top of its mound and Jad's reaches only its loose stones.
-pub const STANDING_ANGLE: f32 = 45.0;
-
-/// The height data for a map as it is being put together, and how it
-/// compares, shape by shape, with the walkable map that decides movement.
-struct HeightBuild {
-    map: HeightMap,
-    shapes: usize,
-    found: Agreement,
-    /// The first few shapes on which the two disagreed, for the log.
-    differing: Vec<String>,
-}
-
-/// The ground one structure stands on.
-#[derive(Clone)]
-pub struct StructureGround {
-    /// Where the structure is placed, to tell it from the others.
-    pub pos: Vec3,
-    /// The cells of the map it blocks while it stands.
-    pub cells: Vec<(i32, i32)>,
-    pub standing: bool,
-}
-
 impl WorldCollision {
-    /// `open` is the map with no structures on it; they are marked from
-    /// `structures`.
-    pub fn new(
-        open: Grid,
-        origin_tile_x: i32,
-        origin_tile_y: i32,
-        structures: Vec<StructureGround>,
-    ) -> Self {
-        let mut collision = Self {
-            grid: open.clone(),
-            open,
-            structures,
-            heights: None,
+    pub fn new(grid: Grid, sight_grid: Grid, origin_tile_x: i32, origin_tile_y: i32) -> Self {
+        Self {
+            grid,
+            sight_grid,
             origin_tile_x,
             origin_tile_y,
-        };
-        collision.mark_structures();
-        collision
-    }
-
-    /// The height data and the ground's heights, once the map is built.
-    #[allow(dead_code)]
-    pub fn heights(&self) -> Option<&(HeightMap, Ground)> {
-        self.heights.as_deref()
-    }
-
-    fn mark_structures(&mut self) {
-        self.grid = self.open.clone();
-        for structure in self.structures.iter().filter(|s| s.standing) {
-            for &(cx, cy) in &structure.cells {
-                self.grid.set_blocked(cx, cy, true);
-            }
         }
     }
 
-    /// Tell the map whether the structure placed at `pos` still stands. The
-    /// ground under a fallen tower is open: collision follows what is there
-    /// to be seen, and a fallen structure is not drawn. Cheap to call every
-    /// frame; the map is only redone when something has changed.
-    pub fn set_standing(&mut self, pos: Vec3, standing: bool) {
-        let mut changed = false;
-        for structure in &mut self.structures {
-            let near =
-                (structure.pos.x - pos.x).abs() < 1.0 && (structure.pos.z - pos.z).abs() < 1.0;
-            if near && structure.standing != standing {
-                structure.standing = standing;
-                changed = true;
-            }
-        }
-        if changed {
-            self.mark_structures();
-        }
-    }
-
-    /// Width in game tiles (not cells).
     pub fn width(&self) -> i32 {
-        self.grid.width() / NAV_PER_TILE
+        self.grid.width()
     }
 
-    /// Height in game tiles (not cells).
     pub fn height(&self) -> i32 {
-        self.grid.height() / NAV_PER_TILE
-    }
-
-    pub fn grid(&self) -> &Grid {
-        &self.grid
+        self.grid.height()
     }
 
     pub fn origin_tile(&self) -> (i32, i32) {
         (self.origin_tile_x, self.origin_tile_y)
     }
 
-    /// The cell of the walkable map that holds a point in the world.
-    pub fn cell_of(&self, world_x: f32, world_z: f32) -> (i32, i32) {
-        let cell = self.grid.cell() as f32;
+    pub fn tile_of(&self, world_x: f32, world_z: f32) -> (i32, i32) {
         (
-            ((world_x - (self.origin_tile_x * 128) as f32) / cell).floor() as i32,
-            ((world_z - (self.origin_tile_y * 128) as f32) / cell).floor() as i32,
+            (world_x / 128.0).floor() as i32 - self.origin_tile_x,
+            (world_z / 128.0).floor() as i32 - self.origin_tile_y,
         )
     }
 
-    /// The middle of a cell of the walkable map, on the ground.
-    pub fn world_of_cell(&self, cx: i32, cy: i32, height: &HeightGrid) -> Vec3 {
-        let cell = self.grid.cell() as f32;
-        let x = (self.origin_tile_x * 128) as f32 + (cx as f32 + 0.5) * cell;
-        let z = (self.origin_tile_y * 128) as f32 + (cy as f32 + 0.5) * cell;
+    pub fn world_of_tile(&self, tx: i32, ty: i32, height: &HeightGrid) -> Vec3 {
+        let x = (self.origin_tile_x + tx) as f32 * 128.0 + 64.0;
+        let z = (self.origin_tile_y + ty) as f32 * 128.0 + 64.0;
         Vec3::new(x, height.height_at(x, z), z)
     }
 
-    /// Whether a straight walk between two points in the world is clear.
-    pub fn clear_line(&self, from: Vec3, to: Vec3) -> bool {
-        self.grid
-            .line_of_sight(self.cell_of(from.x, from.z), self.cell_of(to.x, to.z))
-    }
-
     pub fn is_walkable_world(&self, world_x: f32, world_z: f32) -> bool {
-        let (cx, cy) = self.cell_of(world_x, world_z);
-        self.grid.is_walkable(cx, cy)
+        let (tx, ty) = self.tile_of(world_x, world_z);
+        self.grid.is_walkable(tx, ty)
     }
 
-    /// The nearest cell a unit may stand in, searching up to twelve tiles out.
+    /// Trees, walls, and structures block sight; water does not.
+    pub fn blocks_sight_tile(&self, tx: i32, ty: i32) -> bool {
+        !self.sight_grid.is_walkable(tx, ty)
+    }
+
     pub fn nearest_walkable_world(&self, world_x: f32, world_z: f32) -> Option<(i32, i32)> {
-        let (cx, cy) = self.cell_of(world_x, world_z);
-        self.grid.nearest_walkable(cx, cy, 12 * NAV_PER_TILE)
+        let (tx, ty) = self.tile_of(world_x, world_z);
+        self.grid.nearest_walkable(tx, ty, 12)
     }
 
     pub fn path_world(&self, start: Vec3, goal: Vec3, height: &HeightGrid) -> Vec<Vec3> {
-        // the pathfinder looks only a few cells for somewhere to stand; look
-        // as far as it used to in tiles before handing over
-        let reach = 8 * NAV_PER_TILE;
-        let (sx, sy) = self.cell_of(start.x, start.z);
-        let (gx, gy) = self.cell_of(goal.x, goal.z);
-        let (Some(start_cell), Some(goal_cell)) = (
-            self.grid.nearest_walkable(sx, sy, reach),
-            self.grid.nearest_walkable(gx, gy, reach),
-        ) else {
-            return Vec::new();
-        };
-        let Some(path) = find_path(&self.grid, start_cell, goal_cell) else {
+        let start_tile = self.tile_of(start.x, start.z);
+        let goal_tile = self.tile_of(goal.x, goal.z);
+        let Some(path) = find_path(&self.grid, start_tile, goal_tile) else {
             return Vec::new();
         };
         let simplified = simplify_path(&self.grid, &path);
         simplified
             .into_iter()
             .skip(1)
-            .map(|(cx, cy)| self.world_of_cell(cx, cy, height))
+            .map(|(tx, ty)| self.world_of_tile(tx, ty, height))
             .collect()
     }
-}
 
-/// The game's models are built facing down their own -z axis: at the game's
-/// angle 0 a character looks south. A unit's `yaw` is the heading it travels
-/// and attacks along, measured from +z, so the body needs this half turn to
-/// put its face, and not its back, on that heading. Drawing only, but anything
-/// that works out where a drawn model's parts are must apply the same turn.
-pub const MODEL_FORWARD_TURN: f32 = std::f32::consts::PI;
-
-/// Block the ground a model stands on, from the shape it is drawn with.
-///
-/// The model's corners are turned and scaled by the very function that draws
-/// it (`model_vertex_scaled`), so the blocked ground lies under the drawn
-/// thing whichever way it is turned and wherever in its own space it was
-/// built. Returns how many cells of the map the thing itself covers.
-#[allow(clippy::too_many_arguments)]
-fn block_model(
-    grid: &mut Grid,
-    heights: &mut HeightBuild,
-    origin_tile_x: i32,
-    origin_tile_y: i32,
-    model: &Model,
-    base: Vec3,
-    rot: Mat3,
-    scale: f32,
-) -> usize {
-    // with no base added, a corner comes out as (across, height, along)
-    let corner = |i: u32| model_vertex_scaled(model, i as usize, Vec3::ZERO, rot, scale).to_array();
-    let triangles: Vec<[[f32; 3]; 3]> = model
-        .faces
-        .iter()
-        .filter(|face| face.iter().all(|&i| (i as usize) < model.vertex_count))
-        .map(|&[a, b, c]| [corner(a), corner(b), corner(c)])
-        .collect();
-    let at = (
-        base.x - (origin_tile_x * 128) as f32,
-        base.z - (origin_tile_y * 128) as f32,
-    );
-
-    // Stage 1 of the rough-ground work: the same shape is also read into the
-    // height data, and the two readings are compared. This changes nothing
-    // about what blocks; the walkable map below is made exactly as before.
-    heights.map.add_shape(
-        &triangles,
-        at,
-        &Reading {
-            mirrored: true,
-            standing_angle: STANDING_ANGLE,
-            head: Some(SOLID_TO),
-        },
-    );
-    let found = agreement(
-        &triangles,
-        at,
-        true,
-        STANDING_ANGLE,
-        SOLID_FROM,
-        SOLID_TO,
-        BODY_RADIUS.round() as i32,
-        NAV_CELL,
-    );
-    heights.shapes += 1;
-    heights.found.add(found);
-    if !found.agrees() && heights.differing.len() < 8 {
-        heights.differing.push(format!(
-            "model {} at {:.0},{:.0}: {} cells only in the walkable map, {} only in the height data",
-            model.id, base.x, base.z, found.only_map, found.only_heights
-        ));
+    /// Move with axis-separated collision sliding. Used by hold-to-steer.
+    pub fn slide_move(&self, pos: Vec3, delta: Vec3, height: &HeightGrid) -> Vec3 {
+        let mut next = pos + delta;
+        if self.is_walkable_world(next.x, next.z) {
+            next.y = height.height_at(next.x, next.z);
+            return next;
+        }
+        next = pos + Vec3::new(delta.x, 0.0, 0.0);
+        if self.is_walkable_world(next.x, next.z) {
+            next.y = height.height_at(next.x, next.z);
+            return next;
+        }
+        next = pos + Vec3::new(0.0, 0.0, delta.z);
+        if self.is_walkable_world(next.x, next.z) {
+            next.y = height.height_at(next.x, next.z);
+            return next;
+        }
+        pos
     }
-
-    grid.block_solid(
-        &triangles,
-        at,
-        SOLID_FROM,
-        SOLID_TO,
-        BODY_RADIUS.round() as i32,
-    )
-}
-
-/// The cells a model would block, without blocking them: for a structure,
-/// whose ground has to be given back if it falls. Returns the cells and how
-/// many of them the model itself covers.
-#[allow(clippy::too_many_arguments)]
-fn model_ground(
-    like: &Grid,
-    heights: &mut HeightBuild,
-    origin_tile_x: i32,
-    origin_tile_y: i32,
-    model: &Model,
-    base: Vec3,
-    rot: Mat3,
-    scale: f32,
-) -> (Vec<(i32, i32)>, usize) {
-    let mut alone = Grid::with_cell(like.width() as usize, like.height() as usize, like.cell());
-    let covered = block_model(
-        &mut alone,
-        heights,
-        origin_tile_x,
-        origin_tile_y,
-        model,
-        base,
-        rot,
-        scale,
-    );
-    let cells = (0..alone.height())
-        .flat_map(|cy| (0..alone.width()).map(move |cx| (cx, cy)))
-        .filter(|&(cx, cy)| alone.is_blocked(cx, cy))
-        .collect();
-    (cells, covered)
-}
-
-/// Block, or open, a disc of the walkable map around a point in the world.
-fn mark_disc(
-    grid: &mut Grid,
-    origin_tile_x: i32,
-    origin_tile_y: i32,
-    world_x: f32,
-    world_z: f32,
-    radius: f32,
-    blocked: bool,
-) {
-    grid.set_disc(
-        (world_x - (origin_tile_x * 128) as f32).round() as i32,
-        (world_z - (origin_tile_y * 128) as f32).round() as i32,
-        radius.round() as i32,
-        blocked,
-    );
 }
 
 #[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
@@ -418,12 +256,17 @@ pub enum StructureKind {
     Tower,
     Inhibitor,
     Nexus,
+    /// A lane watchtower. It acquires a target inside its short aggro radius
+    /// and then keeps firing until the target dies or leaves the longer
+    /// locked range.
+    Watchtower,
 }
 
 #[derive(Debug, Clone)]
 pub struct StructureSpawn {
     pub team: u8,
     pub kind: StructureKind,
+    pub lane_index: Option<usize>,
     pub tile: [f32; 2],
     pub model_id: u32,
     pub pos: Vec3,
@@ -432,6 +275,7 @@ pub struct StructureSpawn {
     pub damage: f32,
     pub interval: f32,
     pub scale: f32,
+    pub aggro: f32,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -445,6 +289,77 @@ struct StructureJson {
     damage: f32,
     interval: f32,
     scale: f32,
+    /// Range at which a watchtower first acquires a target. Once it has a
+    /// target it keeps firing from `range`, which is the larger lock range.
+    #[serde(default)]
+    aggro: f32,
+}
+
+/// A biome pocket: a rectangle of a real OSRS region transplanted into the
+/// map so each side of the rift has its own scenery and ground palette.
+#[derive(Debug, Clone, Deserialize)]
+struct BiomeJson {
+    id: String,
+    #[serde(default)]
+    side: String,
+    #[serde(default)]
+    label: String,
+    /// OSRS region (region_x, region_y) the pocket is cut from.
+    region: [u32; 2],
+    /// Source rectangle inside the region: x, y, width, height (tiles).
+    #[serde(default)]
+    rect: Option<[u32; 4]>,
+    /// Map tile where the source rectangle is placed.
+    origin: [f32; 2],
+    /// Ground tint multiplier applied to the pocket terrain.
+    #[serde(default)]
+    tint: Option<[f32; 3]>,
+    /// Grass layer: 0 classic, 1 lush, 2 dry, 3 steppe, 4 dire, 5 straw.
+    #[serde(default)]
+    grass: Option<u8>,
+    /// Scenery budget for the pocket.
+    #[serde(default = "default_budget")]
+    budget: usize,
+}
+
+fn default_budget() -> usize {
+    90
+}
+
+fn default_grass_variant(id: &str) -> u8 {
+    match id {
+        "radiant_human_city" | "radiant_elven_lands" | "radiant_gnome_stronghold" => 1,
+        "dire_dark_magic" | "dire_vampire" => 4,
+        "dire_ogre" => 3,
+        "dire_goblin" => 2,
+        _ => 0,
+    }
+}
+
+/// The river that splits the map between the radiant and dire halves.
+#[derive(Debug, Clone, Deserialize)]
+struct RiverJson {
+    points: Vec<[f32; 2]>,
+    /// Half width of the river in tiles.
+    #[serde(default = "default_river_width")]
+    width: f32,
+    /// How far the bed is cut below the banks, in world units.
+    #[serde(default = "default_river_depth")]
+    depth: f32,
+    /// Tiles where a lane crosses the river and stays walkable.
+    #[serde(default)]
+    bridges: Vec<[f32; 2]>,
+    /// Water surface height at the first and last point (world units).
+    #[serde(default)]
+    levels: Option<[f32; 2]>,
+}
+
+fn default_river_width() -> f32 {
+    3.5
+}
+
+fn default_river_depth() -> f32 {
+    30.0
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -453,6 +368,46 @@ struct LaneJson {
     waypoints: Vec<[f32; 2]>,
     towers: Vec<StructureJson>,
     inhibitors: Vec<StructureJson>,
+    #[serde(default)]
+    watchtowers: Vec<StructureJson>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(default)]
+pub struct Atmosphere {
+    pub sun_dir: [f32; 3],
+    pub sun_color: [f32; 3],
+    pub ambient_sky: [f32; 3],
+    pub ambient_ground: [f32; 3],
+    pub fog_color: [f32; 3],
+    pub fog_density: f32,
+    pub fog_height: f32,
+    pub sky_top: [f32; 3],
+    pub sky_horizon: [f32; 3],
+    pub ground_fog: f32,
+}
+
+impl Default for Atmosphere {
+    fn default() -> Self {
+        Self {
+            // Late-afternoon sun, low enough to throw long shadows across the
+            // lanes and to keep the ground out of the washed-out noon range.
+            sun_dir: [-0.42, 0.62, 0.38],
+            sun_color: [0.92, 0.82, 0.63],
+            // Overcast sky bounce: neutral warm grey rather than the saturated
+            // blue of the early build, which was turning every shadow cyan.
+            ambient_sky: [0.50, 0.53, 0.51],
+            ambient_ground: [0.26, 0.24, 0.19],
+            // Warm grey-green haze. The reference clip never resolves the
+            // ground at distance, it dissolves into a pale olive mist.
+            fog_color: [0.40, 0.42, 0.35],
+            fog_density: 0.000022,
+            fog_height: 340.0,
+            sky_top: [0.27, 0.35, 0.40],
+            sky_horizon: [0.56, 0.60, 0.56],
+            ground_fog: 0.14,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -460,12 +415,118 @@ struct MapJson {
     #[serde(default)]
     name: String,
     wave_interval: f32,
+    /// Player spawn tile. Defaults to the first lane's second waypoint.
+    #[serde(default)]
+    spawn: Option<[f32; 2]>,
     nexus: Vec<StructureJson>,
     lanes: Vec<LaneJson>,
     #[serde(default)]
     camps: Vec<CampJson>,
     #[serde(default)]
     brush: Vec<[f32; 4]>,
+    #[serde(default)]
+    biomes: Vec<BiomeJson>,
+    #[serde(default)]
+    river: Option<RiverJson>,
+    #[serde(default)]
+    castle: Option<CastleJson>,
+    #[serde(default)]
+    atmosphere: Atmosphere,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct CastleJson {
+    /// Map bounds in tiles: x0, z0, x1, z1.
+    bounds: [f32; 4],
+    wall_model: u32,
+    #[serde(default = "one")]
+    wall_scale: f32,
+    tower_model: u32,
+    #[serde(default = "one")]
+    tower_scale: f32,
+    #[serde(default)]
+    gate_model: u32,
+    #[serde(default = "one")]
+    gate_scale: f32,
+    #[serde(default)]
+    platform_model: Option<u32>,
+    #[serde(default)]
+    statue_model: Option<u32>,
+    /// Fraction of each perimeter edge between towers. 0.25 = four spans.
+    #[serde(default = "default_tower_spacing")]
+    tower_spacing: f32,
+    #[serde(default)]
+    bases: Vec<CastleBaseJson>,
+}
+
+fn default_tower_spacing() -> f32 {
+    0.25
+}
+
+fn one() -> f32 {
+    1.0
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct CastleBaseJson {
+    team: u8,
+    center: [f32; 2],
+    size: f32,
+    /// "bottom_left" or "top_right".
+    corner: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CastlePieceKind {
+    Wall,
+    Tower,
+    Gate,
+    Platform,
+    Statue,
+}
+
+/// Generated castle wall/tower geometry shared by collision and rendering.
+#[derive(Debug, Clone)]
+struct CastlePiece {
+    kind: CastlePieceKind,
+    model: u32,
+    tile: [f32; 2],
+    yaw: f32,
+    scale: f32,
+    /// Forced stone texture for cache-model statues.
+    texture: u32,
+    /// Footprint in tiles centred on `tile` (1 = 1x1, 2 = 2x2).
+    footprint: f32,
+    block: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct CastleSpec {
+    pub bounds: (f32, f32, f32, f32),
+    pub wall_model: u32,
+    pub wall_scale: f32,
+    pub tower_model: u32,
+    pub tower_scale: f32,
+    pub gate_model: u32,
+    pub gate_scale: f32,
+    pub platform_model: Option<u32>,
+    pub statue_model: Option<u32>,
+    pub tower_spacing: f32,
+    pub bases: Vec<CastleBase>,
+}
+
+#[derive(Debug, Clone)]
+pub struct CastleBase {
+    pub team: u8,
+    pub center: (f32, f32),
+    pub size: f32,
+    pub corner: CastleCorner,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CastleCorner {
+    BottomLeft,
+    TopRight,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -485,6 +546,18 @@ struct CampJson {
     respawn: f32,
     buff: String,
     scale: f32,
+    #[serde(default)]
+    damage: f32,
+    #[serde(default)]
+    range: f32,
+    #[serde(default)]
+    interval: f32,
+    #[serde(default)]
+    speed: f32,
+    #[serde(default)]
+    aggro: f32,
+    #[serde(default)]
+    leash: f32,
 }
 
 #[derive(Debug, Clone)]
@@ -498,6 +571,34 @@ pub struct CampSpawn {
     pub respawn: f32,
     pub buff: CampBuff,
     pub scale: f32,
+    pub damage: f32,
+    pub range: f32,
+    pub interval: f32,
+    pub speed: f32,
+    pub aggro: f32,
+    pub leash: f32,
+}
+
+#[derive(Debug, Clone)]
+pub struct BiomePocket {
+    pub id: String,
+    pub side: String,
+    pub label: String,
+    pub region: (u32, u32),
+    pub rect: (u32, u32, u32, u32),
+    pub origin: (i32, i32),
+    pub tint: [f32; 3],
+    pub grass_variant: u8,
+    pub budget: usize,
+}
+
+#[derive(Debug, Clone)]
+pub struct RiverSpec {
+    pub points: Vec<(f32, f32)>,
+    pub width: f32,
+    pub depth: f32,
+    pub bridges: Vec<(f32, f32)>,
+    pub levels: Option<(f32, f32)>,
 }
 
 #[derive(Debug, Clone)]
@@ -513,7 +614,229 @@ pub struct MapLayout {
     pub structures: Vec<StructureSpawn>,
     pub camps: Vec<CampSpawn>,
     pub brush: Vec<(f32, f32, f32, f32)>,
+    pub biomes: Vec<BiomePocket>,
+    pub river: Option<RiverSpec>,
+    pub castle: Option<CastleSpec>,
+    /// Authored player spawn tile, if any.
+    pub spawn: Option<(f32, f32)>,
     pub wave_interval: f32,
+    pub atmosphere: Atmosphere,
+}
+
+impl CastleSpec {
+    fn base_rect(&self, base: &CastleBase) -> (f32, f32, f32, f32) {
+        let half = base.size * 0.5;
+        (
+            base.center.0 - half,
+            base.center.1 - half,
+            base.center.0 + half,
+            base.center.1 + half,
+        )
+    }
+
+    /// Scenery-free rectangles: the wall bands and the two base courtyards.
+    pub fn keep_clear(&self) -> Vec<(f32, f32, f32, f32)> {
+        let (x0, z0, x1, z1) = self.bounds;
+        let band = 3.0;
+        let mut rects = vec![
+            (x0 - band, z0 - band, x1 + band, z0 + band),
+            (x0 - band, z1 - band, x1 + band, z1 + band),
+            (x0 - band, z0 - band, x0 + band, z1 + band),
+            (x1 - band, z0 - band, x1 + band, z1 + band),
+        ];
+        for base in &self.bases {
+            let (bx0, bz0, bx1, bz1) = self.base_rect(base);
+            rects.push((bx0 - band, bz0 - band, bx1 + band, bz1 + band));
+        }
+        rects
+    }
+
+    /// Generate the full castle geometry. This one list feeds both collision
+    /// and the static mesh builder, so they can never disagree.
+    fn layout(&self) -> Vec<CastlePiece> {
+        let (x0, z0, x1, z1) = self.bounds;
+        let mut walls: Vec<(f32, f32, f32)> = Vec::new();
+        let mut towers: Vec<(f32, f32)> = Vec::new();
+        let mut gates: Vec<(f32, f32, f32)> = Vec::new();
+        let mut statues: Vec<(f32, f32, f32)> = Vec::new();
+
+        for x in x0.round() as i32..=x1.round() as i32 {
+            let x = x as f32;
+            walls.push((x, z0, 0.0));
+            walls.push((x, z1, std::f32::consts::PI));
+        }
+        for z in z0.round() as i32 + 1..z1.round() as i32 {
+            let z = z as f32;
+            walls.push((x0, z, std::f32::consts::FRAC_PI_2));
+            walls.push((x1, z, -std::f32::consts::FRAC_PI_2));
+        }
+
+        let step = self.tower_spacing.clamp(0.05, 0.5);
+        let mut f = step;
+        while f < 0.999 {
+            let x = x0 + (x1 - x0) * f;
+            let z = z0 + (z1 - z0) * f;
+            towers.push((x, z0));
+            towers.push((x, z1));
+            towers.push((x0, z));
+            towers.push((x1, z));
+            f += step;
+        }
+        towers.extend([(x0, z0), (x1, z0), (x0, z1), (x1, z1)]);
+
+        let gate_half = 4.0;
+        for base in &self.bases {
+            let (bx0, bz0, bx1, bz1) = self.base_rect(base);
+            let (cx, cz) = base.center;
+            tracing::trace!(
+                "castle base team {} at {:.1},{:.1} corner {:?}",
+                base.team,
+                cx,
+                cz,
+                base.corner
+            );
+            let dir = match base.corner {
+                CastleCorner::BottomLeft => 1.0,
+                CastleCorner::TopRight => -1.0,
+            };
+
+            // Inner walls face the map centre; the two outer sides use the
+            // perimeter wall. Each inner side gets a gate gap centred on the
+            // nexus so lanes can leave the courtyard.
+            let inner_x = if dir > 0.0 { bx1 } else { bx0 };
+            let inner_z = if dir > 0.0 { bz0 } else { bz1 };
+            for z in bz0.round() as i32..=bz1.round() as i32 {
+                let z = z as f32;
+                if (z - cz).abs() < gate_half {
+                    continue;
+                }
+                walls.push((inner_x, z, std::f32::consts::FRAC_PI_2));
+            }
+            for x in bx0.round() as i32..=bx1.round() as i32 {
+                let x = x as f32;
+                if (x - cx).abs() < gate_half {
+                    continue;
+                }
+                walls.push((x, inner_z, 0.0));
+            }
+
+            let gate_yaw_x = if dir > 0.0 {
+                -std::f32::consts::FRAC_PI_2
+            } else {
+                std::f32::consts::FRAC_PI_2
+            };
+            let gate_yaw_z = if dir > 0.0 { 0.0 } else { std::f32::consts::PI };
+            gates.push((inner_x, cz, gate_yaw_x));
+            gates.push((cx, inner_z, gate_yaw_z));
+
+            // Corner towers inset from the perimeter so their 2x2 footprints
+            // do not hang outside the map.
+            let inset = 2.5;
+            for (tx, tz) in [
+                (bx0 + inset, bz0 + inset),
+                (bx1 - inset, bz0 + inset),
+                (bx0 + inset, bz1 - inset),
+                (bx1 - inset, bz1 - inset),
+            ] {
+                towers.push((tx, tz));
+            }
+
+            if self.statue_model.is_some() {
+                statues.push((cx - 4.0, cz, std::f32::consts::FRAC_PI_2));
+                statues.push((cx + 4.0, cz, -std::f32::consts::FRAC_PI_2));
+                statues.push((cx, cz - 4.0, std::f32::consts::PI));
+                statues.push((cx, cz + 4.0, 0.0));
+            }
+        }
+
+        towers.sort_by(|a, b| {
+            a.0.partial_cmp(&b.0)
+                .unwrap_or(std::cmp::Ordering::Equal)
+                .then(a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal))
+        });
+        towers.dedup_by(|a, b| (a.0 - b.0).abs() < 3.0 && (a.1 - b.1).abs() < 3.0);
+
+        walls.retain(|wall| {
+            !towers
+                .iter()
+                .any(|t| (wall.0 - t.0).abs() < 2.0 && (wall.1 - t.1).abs() < 2.0)
+        });
+
+        let mut pieces = Vec::new();
+        for (x, z, yaw) in walls {
+            pieces.push(CastlePiece {
+                kind: CastlePieceKind::Wall,
+                model: self.wall_model,
+                tile: [x, z],
+                yaw,
+                scale: self.wall_scale,
+                texture: 46,
+                footprint: 1.0,
+                block: true,
+            });
+        }
+        for (x, z) in towers {
+            pieces.push(CastlePiece {
+                kind: CastlePieceKind::Tower,
+                model: self.tower_model,
+                tile: [x, z],
+                yaw: 0.0,
+                scale: self.tower_scale,
+                texture: 46,
+                footprint: 2.0,
+                block: true,
+            });
+        }
+        if self.gate_model != 0 {
+            for (x, z, yaw) in gates {
+                pieces.push(CastlePiece {
+                    kind: CastlePieceKind::Gate,
+                    model: self.gate_model,
+                    tile: [x, z],
+                    yaw,
+                    scale: self.gate_scale,
+                    texture: 47,
+                    footprint: 2.0,
+                    block: false,
+                });
+            }
+        }
+        if let Some(model) = self.platform_model {
+            for base in &self.bases {
+                pieces.push(CastlePiece {
+                    kind: CastlePieceKind::Platform,
+                    model,
+                    tile: [base.center.0, base.center.1],
+                    yaw: 0.0,
+                    scale: 1.0,
+                    texture: 44,
+                    footprint: 1.0,
+                    block: false,
+                });
+            }
+        }
+        if let Some(model) = self.statue_model {
+            for (x, z, yaw) in statues {
+                pieces.push(CastlePiece {
+                    kind: CastlePieceKind::Statue,
+                    model,
+                    tile: [x, z],
+                    yaw,
+                    scale: 1.0,
+                    texture: 46,
+                    footprint: 1.0,
+                    block: false,
+                });
+            }
+        }
+        pieces
+    }
+}
+
+fn point_in_tile_rects(rects: &[(f32, f32, f32, f32)], x: f32, z: f32) -> bool {
+    rects
+        .iter()
+        .any(|&(x0, z0, x1, z1)| x >= x0 && x <= x1 && z >= z0 && z <= z1)
 }
 
 impl MapLayout {
@@ -533,6 +856,7 @@ impl MapLayout {
         let to_spawn = |s: &StructureJson| StructureSpawn {
             team: s.team,
             kind: s.kind,
+            lane_index: None,
             tile: s.tile,
             model_id: s.model,
             pos: world_of(s.tile),
@@ -541,6 +865,7 @@ impl MapLayout {
             damage: s.damage,
             interval: s.interval,
             scale: s.scale,
+            aggro: s.aggro,
         };
 
         let mut lanes = Vec::with_capacity(map.lanes.len());
@@ -548,7 +873,7 @@ impl MapLayout {
         for s in &map.nexus {
             structures.push(to_spawn(s));
         }
-        for lane in &map.lanes {
+        for (lane_index, lane) in map.lanes.iter().enumerate() {
             if lane.waypoints.len() < 2 {
                 anyhow::bail!("lane {} needs at least two waypoints", lane.id);
             }
@@ -557,10 +882,19 @@ impl MapLayout {
                 waypoints: lane.waypoints.iter().map(|&tile| world_of(tile)).collect(),
             });
             for s in &lane.towers {
-                structures.push(to_spawn(s));
+                let mut spawn = to_spawn(s);
+                spawn.lane_index = Some(lane_index);
+                structures.push(spawn);
             }
             for s in &lane.inhibitors {
-                structures.push(to_spawn(s));
+                let mut spawn = to_spawn(s);
+                spawn.lane_index = Some(lane_index);
+                structures.push(spawn);
+            }
+            for s in &lane.watchtowers {
+                let mut spawn = to_spawn(s);
+                spawn.lane_index = Some(lane_index);
+                structures.push(spawn);
             }
         }
 
@@ -581,6 +915,12 @@ impl MapLayout {
                     CampBuff::Might
                 },
                 scale: camp.scale,
+                damage: camp.damage,
+                range: camp.range,
+                interval: camp.interval,
+                speed: camp.speed,
+                aggro: camp.aggro,
+                leash: camp.leash,
             })
             .collect();
 
@@ -597,14 +937,185 @@ impl MapLayout {
             })
             .collect();
 
+        let biomes = map
+            .biomes
+            .iter()
+            .map(|biome| {
+                let rect = biome.rect.unwrap_or([0, 0, 64, 64]);
+                BiomePocket {
+                    id: biome.id.clone(),
+                    side: biome.side.clone(),
+                    label: biome.label.clone(),
+                    region: (biome.region[0], biome.region[1]),
+                    rect: (rect[0], rect[1], rect[2], rect[3]),
+                    origin: (
+                        biome.origin[0].round() as i32,
+                        biome.origin[1].round() as i32,
+                    ),
+                    tint: biome.tint.unwrap_or([1.0, 1.0, 1.0]),
+                    grass_variant: biome
+                        .grass
+                        .unwrap_or_else(|| default_grass_variant(&biome.id)),
+                    budget: biome.budget,
+                }
+            })
+            .collect();
+
+        let river = map.river.as_ref().map(|river| RiverSpec {
+            points: river.points.iter().map(|p| (p[0], p[1])).collect(),
+            width: river.width,
+            depth: river.depth,
+            bridges: river.bridges.iter().map(|p| (p[0], p[1])).collect(),
+            levels: river.levels.map(|l| (l[0], l[1])),
+        });
+
+        let castle = map.castle.as_ref().map(|castle| CastleSpec {
+            bounds: (
+                castle.bounds[0],
+                castle.bounds[1],
+                castle.bounds[2],
+                castle.bounds[3],
+            ),
+            wall_model: castle.wall_model,
+            wall_scale: castle.wall_scale,
+            tower_model: castle.tower_model,
+            tower_scale: castle.tower_scale,
+            gate_model: castle.gate_model,
+            gate_scale: castle.gate_scale,
+            platform_model: castle.platform_model,
+            statue_model: castle.statue_model,
+            tower_spacing: castle.tower_spacing.clamp(0.05, 0.5),
+            bases: castle
+                .bases
+                .iter()
+                .map(|base| CastleBase {
+                    team: base.team,
+                    center: (base.center[0], base.center[1]),
+                    size: base.size.max(8.0),
+                    corner: if base.corner.eq_ignore_ascii_case("top_right") {
+                        CastleCorner::TopRight
+                    } else {
+                        CastleCorner::BottomLeft
+                    },
+                })
+                .collect(),
+        });
+
+        // Keep authored structures out of the lane driving surface. Towers,
+        // inhibitors, watchtowers and nexuses are all allowed to sit beside a
+        // lane, but a 3x3 collision footprint on the centre line traps waves
+        // and reads as an object dropped on the road.
+        let clearance = 5.0 * 128.0;
+        let mut occupied: Vec<Vec3> = Vec::with_capacity(structures.len());
+        for structure in &mut structures {
+            if structure.kind == StructureKind::Nexus {
+                occupied.push(structure.pos);
+                continue;
+            }
+            if distance_to_lanes(&lanes, structure.pos.x, structure.pos.z) >= clearance {
+                occupied.push(structure.pos);
+                continue;
+            }
+            let origin = structure.pos;
+            let mut best = None;
+            'rings: for ring in 1..=12 {
+                let radius = ring as f32 * 64.0;
+                let steps = 16 + ring * 4;
+                for step in 0..steps {
+                    let angle = step as f32 * std::f32::consts::TAU / steps as f32;
+                    let x = origin.x + angle.cos() * radius;
+                    let z = origin.z + angle.sin() * radius;
+                    if !height.contains(x, z)
+                        || distance_to_lanes(&lanes, x, z) < clearance
+                        || occupied
+                            .iter()
+                            .any(|p| p.distance(Vec3::new(x, p.y, z)) < 3.0 * 128.0)
+                    {
+                        continue;
+                    }
+                    best = Some(Vec3::new(x, height.height_at(x, z), z));
+                    break 'rings;
+                }
+            }
+            if let Some(pos) = best {
+                tracing::info!(
+                    "structure {:?} moved off lane: tile {:.1},{:.1} -> {:.1},{:.1}",
+                    structure.kind,
+                    origin.x / 128.0,
+                    origin.z / 128.0,
+                    pos.x / 128.0,
+                    pos.z / 128.0
+                );
+                structure.pos = pos;
+                structure.tile = [pos.x / 128.0 - 0.5, pos.z / 128.0 - 0.5];
+            }
+            occupied.push(structure.pos);
+        }
+
         Ok(Self {
             name: map.name,
             lanes,
             structures,
             camps,
             brush,
+            biomes,
+            river,
+            castle,
+            spawn: map.spawn.map(|s| (s[0], s[1])),
             wave_interval: map.wave_interval,
+            atmosphere: map.atmosphere,
         })
+    }
+
+    /// True when a map tile falls inside one of the biome pockets.
+    pub fn in_biome(&self, tile_x: i32, tile_y: i32) -> bool {
+        self.biomes.iter().any(|biome| {
+            tile_x >= biome.origin.0
+                && tile_y >= biome.origin.1
+                && tile_x < biome.origin.0 + biome.rect.2 as i32
+                && tile_y < biome.origin.1 + biome.rect.3 as i32
+        })
+    }
+
+    /// Which side of the river a tile sits on: negative is the dire half,
+    /// positive is the radiant half.
+    pub fn river_side(&self, tile_x: f32, tile_y: f32) -> f32 {
+        let Some(river) = &self.river else {
+            return 1.0;
+        };
+        if river.points.len() < 2 {
+            return 1.0;
+        }
+        let (_, segment, _) = nearest_on_polyline(&river.points, tile_x, tile_y);
+        let (ax, ay) = river.points[segment];
+        let (bx, by) = river.points[segment + 1];
+        let cross = (bx - ax) * (tile_y - ay) - (by - ay) * (tile_x - ax);
+        if cross < 0.0 { -1.0 } else { 1.0 }
+    }
+
+    /// Closest point on any lane centre line plus the distance to it.
+    pub fn nearest_lane_point(&self, x: f32, z: f32) -> (Vec2, f32) {
+        let p = Vec2::new(x, z);
+        let mut best = (p, f32::MAX);
+        for lane in &self.lanes {
+            for pair in lane.waypoints.windows(2) {
+                let a = Vec2::new(pair[0].x, pair[0].z);
+                let b = Vec2::new(pair[1].x, pair[1].z);
+                let ab = b - a;
+                let len2 = ab.length_squared();
+                let t = if len2 <= 1e-6 {
+                    0.0
+                } else {
+                    ((p - a).dot(ab) / len2).clamp(0.0, 1.0)
+                };
+                let closest = a + ab * t;
+                let d = closest.distance(p);
+                if d < best.1 {
+                    best = (closest, d);
+                }
+            }
+        }
+        best
     }
 
     pub fn distance_to_lane(&self, x: f32, z: f32) -> f32 {
@@ -631,70 +1142,44 @@ impl MapLayout {
             for pair in lane.waypoints.windows(2) {
                 let a = Vec2::new(pair[0].x, pair[0].z);
                 let b = Vec2::new(pair[1].x, pair[1].z);
-                let steps = ((a.distance(b) / 64.0).ceil() as i32).max(1);
+                let steps = ((a.distance(b) / 24.0).ceil() as i32).max(1);
                 for i in 0..=steps {
                     let p = a.lerp(b, i as f32 / steps as f32);
-                    mark_disc(
-                        grid,
-                        origin_tile_x,
-                        origin_tile_y,
-                        p.x,
-                        p.y,
-                        radius_tiles * 128.0,
-                        false,
-                    );
+                    let tx = (p.x / 128.0).floor() as i32 - origin_tile_x;
+                    let ty = (p.y / 128.0).floor() as i32 - origin_tile_y;
+                    let r = radius_tiles.ceil() as i32;
+                    for dy in -r..=r {
+                        for dx in -r..=r {
+                            if (dx * dx + dy * dy) as f32 <= radius_tiles * radius_tiles {
+                                grid.set_blocked(tx + dx, ty + dy, false);
+                            }
+                        }
+                    }
                 }
             }
         }
     }
 
-    /// The old road: a flat sheet drawn above the ground. No longer used; the
-    /// road is now coloured into the ground itself.
-    #[allow(dead_code)]
-    pub fn build_mesh(&self, mesh: &mut MeshData, height: &HeightGrid, width: f32) {
-        for lane in &self.lanes {
-            for pair in lane.waypoints.windows(2) {
-                let a = Vec2::new(pair[0].x, pair[0].z);
-                let b = Vec2::new(pair[1].x, pair[1].z);
-                let len = a.distance(b);
-                if len < 1.0 {
-                    continue;
-                }
-                let steps = ((len / 64.0).ceil() as usize).max(1);
-                let dir = (b - a) / len;
-                let perp = Vec2::new(-dir.y, dir.x) * (width * 0.5);
-                let color = [96, 91, 80];
-
-                for i in 0..steps {
-                    let t0 = i as f32 / steps as f32;
-                    let t1 = (i + 1) as f32 / steps as f32;
-                    let p0 = a.lerp(b, t0);
-                    let p1 = a.lerp(b, t1);
-                    let corners = [
-                        Vec2::new(p0.x + perp.x, p0.y + perp.y),
-                        Vec2::new(p1.x + perp.x, p1.y + perp.y),
-                        Vec2::new(p0.x - perp.x, p0.y - perp.y),
-                        Vec2::new(p1.x - perp.x, p1.y - perp.y),
-                    ];
-                    let ys = corners.map(|p| height.height_at(p.x, p.y) + 40.0);
-                    let v0 = Vec3::new(corners[0].x, ys[0], corners[0].y);
-                    let v1 = Vec3::new(corners[1].x, ys[1], corners[1].y);
-                    let v2 = Vec3::new(corners[2].x, ys[2], corners[2].y);
-                    let v3 = Vec3::new(corners[3].x, ys[3], corners[3].y);
-                    mesh.push_triangle(
-                        Vertex::new(v0, color),
-                        Vertex::new(v1, color),
-                        Vertex::new(v2, color),
-                    );
-                    mesh.push_triangle(
-                        Vertex::new(v2, color),
-                        Vertex::new(v1, color),
-                        Vertex::new(v3, color),
-                    );
-                }
-            }
+    pub fn block_structures(&self, grid: &mut Grid, origin_tile_x: i32, origin_tile_y: i32) {
+        for structure in &self.structures {
+            let tx = structure.tile[0].floor() as i32 - origin_tile_x;
+            let ty = structure.tile[1].floor() as i32 - origin_tile_y;
+            grid.block_rect(tx - 1, ty - 1, 3, 3);
         }
     }
+}
+
+fn distance_to_lanes(lanes: &[LaneSpawn], x: f32, z: f32) -> f32 {
+    let p = Vec2::new(x, z);
+    let mut best = f32::MAX;
+    for lane in lanes {
+        for pair in lane.waypoints.windows(2) {
+            let a = Vec2::new(pair[0].x, pair[0].z);
+            let b = Vec2::new(pair[1].x, pair[1].z);
+            best = best.min(point_segment_distance(p, a, b));
+        }
+    }
+    best
 }
 
 fn point_segment_distance(p: Vec2, a: Vec2, b: Vec2) -> f32 {
@@ -716,15 +1201,41 @@ pub struct NpcSpawn {
     pub scale: f32,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AmbientKind {
+    Butterfly,
+    Cow,
+    Crab,
+}
+
+/// Non-combat scenery creatures: they wander, cannot be selected or damaged,
+/// and never show health bars.
+#[derive(Debug, Clone)]
+pub struct AmbientSpawn {
+    pub kind: AmbientKind,
+    pub model_id: u32,
+    pub attachments: Vec<u32>,
+    pub idle_sequence: u32,
+    pub walk_sequence: u32,
+    pub pos: Vec3,
+    pub scale: f32,
+    pub recolors: Vec<(i16, i16)>,
+}
+
 pub struct SceneData {
     pub terrain: MeshData,
     pub models: MeshData,
+    pub water: MeshData,
+    pub shadows: MeshData,
+    pub shadow_casters: MeshData,
     pub placements: usize,
     pub height: HeightGrid,
     pub collision: WorldCollision,
     pub map: MapLayout,
     pub npc_spawns: Vec<NpcSpawn>,
+    pub ambient_spawns: Vec<AmbientSpawn>,
     pub player_spawn: Vec3,
+    pub atmosphere: Atmosphere,
 }
 
 pub fn build(
@@ -771,28 +1282,475 @@ pub fn build(
     let origin_tile_y = min_y as i32 * 64;
     let size = ((max_x - min_x + 1) * 64 + 1) as usize;
 
-    // The ground is one sheet with a corner at every tile corner. A corner's
-    // height is the average of the tiles that meet there.
     let mut heights = vec![0.0f32; size * size];
+    let mut colors = vec![[60u8, 90, 50]; size * size];
+    let mut grass_variant = vec![0u8; size * size];
+
     for gy in 0..size {
         for gx in 0..size {
             let mut sum = 0.0f32;
+            let mut color = [0u32; 3];
             let mut count = 0.0f32;
+
             for dy in -1..=0 {
                 for dx in -1..=0 {
                     let tx = origin_tile_x + gx as i32 + dx;
                     let ty = origin_tile_y + gy as i32 + dy;
-                    let Some(terrain) = terrains.get(&((tx >> 6) as u32, (ty >> 6) as u32)) else {
+                    let rx = (tx >> 6) as u32;
+                    let ry = (ty >> 6) as u32;
+                    let lx = (tx & 63) as usize;
+                    let ly = (ty & 63) as usize;
+                    let Some(terrain) = terrains.get(&(rx, ry)) else {
                         continue;
                     };
-                    let tile = terrain.tile(0, (tx & 63) as usize, (ty & 63) as usize);
+                    let tile = terrain.tile(0, lx, ly);
                     sum += tile.height as f32 * 8.0;
+                    let c = tile_color(terrain, &underlays, &overlays, lx, ly);
+                    color[0] += c[0] as u32;
+                    color[1] += c[1] as u32;
+                    color[2] += c[2] as u32;
                     count += 1.0;
                 }
             }
-            heights[gy * size + gx] = if count > 0.0 { sum / count } else { 0.0 };
+
+            let idx = gy * size + gx;
+            heights[idx] = if count > 0.0 { sum / count } else { 0.0 };
+            colors[idx] = if count > 0.0 {
+                [
+                    (color[0] as f32 / count) as u8,
+                    (color[1] as f32 / count) as u8,
+                    (color[2] as f32 / count) as u8,
+                ]
+            } else {
+                [60, 90, 50]
+            };
         }
     }
+
+    // The map layout defines the biome pockets and the river, so it has to
+    // be read before the terrain is finalised.
+    let provisional_height = HeightGrid {
+        origin_tile_x,
+        origin_tile_y,
+        size,
+        heights: heights.clone(),
+    };
+    let mut map = MapLayout::load(map_path, &provisional_height)?;
+    let castle_keep = map
+        .castle
+        .as_ref()
+        .map(|castle| castle.keep_clear())
+        .unwrap_or_default();
+    let castle_pieces = map
+        .castle
+        .as_ref()
+        .map(|castle| castle.layout())
+        .unwrap_or_default();
+
+    // ------------------------------------------------------------------
+    // Biome pockets: rectangles of real OSRS regions transplanted into the
+    // map so the radiant and dire halves carry their own scenery and
+    // ground palette. The dire pockets hold dark magic, vampires, ogres
+    // and goblins; the radiant pockets hold human cities, elven woods and
+    // the gnome stronghold.
+    // ------------------------------------------------------------------
+    let mut pocket_data: HashMap<String, (Terrain, Locations)> = HashMap::new();
+    for biome in &map.biomes {
+        let Some(locations_group) = keys.find_locations_group(biome.region.0, biome.region.1)
+        else {
+            tracing::warn!(
+                "biome {}: region {:?} missing from cache",
+                biome.id,
+                biome.region
+            );
+            continue;
+        };
+        let terrain_group = locations_group.saturating_sub(1);
+        let terrain = Terrain::load(
+            biome.region.0,
+            biome.region.1,
+            &cache.group(5, terrain_group)?.data,
+        )?;
+        let locations = Locations::load(
+            biome.region.0,
+            biome.region.1,
+            &cache.group(5, locations_group)?.data,
+        )?;
+        pocket_data.insert(biome.id.clone(), (terrain, locations));
+    }
+
+    let mut pocket_water: Vec<(i32, i32)> = Vec::new();
+    for biome in &map.biomes {
+        let Some((terrain, _)) = pocket_data.get(&biome.id) else {
+            continue;
+        };
+        let (rx, ry, pw, ph) = biome.rect;
+        for ly in 0..ph {
+            for lx in 0..pw {
+                let sx = rx + lx;
+                let sy = ry + ly;
+                if sx >= 64 || sy >= 64 {
+                    continue;
+                }
+                let map_tx = biome.origin.0 + lx as i32;
+                let map_ty = biome.origin.1 + ly as i32;
+                let gx = map_tx - origin_tile_x;
+                let gy = map_ty - origin_tile_y;
+                if gx < 0 || gy < 0 || gx >= size as i32 - 1 || gy >= size as i32 - 1 {
+                    continue;
+                }
+                let idx = gy as usize * size + gx as usize;
+                let tile = terrain.tile(0, sx as usize, sy as usize);
+                // Blend the pocket into the surrounding ground over the
+                // outer seven tiles so the seam is hidden.
+                let edge = lx
+                    .min(ly)
+                    .min(pw.saturating_sub(1).saturating_sub(lx))
+                    .min(ph.saturating_sub(1).saturating_sub(ly)) as f32;
+                let blend = (edge / 7.0).clamp(0.0, 1.0);
+                let blend = blend * blend * (3.0 - 2.0 * blend);
+                let pocket_h = tile.height as f32 * 8.0;
+                heights[idx] = heights[idx] * (1.0 - blend) + pocket_h * blend;
+                let c = tile_color(terrain, &underlays, &overlays, sx as usize, sy as usize);
+                let tinted = [
+                    (c[0] as f32 * biome.tint[0]).clamp(0.0, 255.0) as u8,
+                    (c[1] as f32 * biome.tint[1]).clamp(0.0, 255.0) as u8,
+                    (c[2] as f32 * biome.tint[2]).clamp(0.0, 255.0) as u8,
+                ];
+                for k in 0..3 {
+                    colors[idx][k] = (colors[idx][k] as f32 * (1.0 - blend)
+                        + tinted[k] as f32 * blend)
+                        .clamp(0.0, 255.0) as u8;
+                }
+                // Dither the grass variant across the pocket's soft edge so
+                // biome transitions read as a natural field change rather
+                // than a rectangular tile boundary.
+                let coverage = blend.clamp(0.0, 1.0);
+                if coverage >= 1.0
+                    || value_noise(map_tx as f32 * 0.55, map_ty as f32 * 0.55) < coverage
+                {
+                    grass_variant[idx] = biome.grass_variant;
+                }
+                if tile.underlay_id == 0 {
+                    pocket_water.push((gx, gy));
+                }
+            }
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // The river: a diagonal waterway that splits the rift into a radiant
+    // half and a dire half, with a walkable crossing in the centre.
+    // ------------------------------------------------------------------
+    let mut river_blocked: Vec<(i32, i32)> = Vec::new();
+    let mut water_mask = vec![0.0f32; size * size];
+    let mut water_level = vec![0.0f32; size * size];
+    if let Some(river) = &map.river {
+        let points = &river.points;
+        if points.len() >= 2 {
+            let mut levels: Vec<f32> = Vec::with_capacity(points.len());
+            for (index, point) in points.iter().enumerate() {
+                let gx = point.0.round() as i32 - origin_tile_x;
+                let gy = point.1.round() as i32 - origin_tile_y;
+                let sampled = if gx >= 0 && gy >= 0 && (gx as usize) < size && (gy as usize) < size
+                {
+                    heights[gy as usize * size + gx as usize]
+                } else {
+                    0.0
+                };
+                let level = match river.levels {
+                    Some((start, end)) => {
+                        let t = index as f32 / (points.len() - 1).max(1) as f32;
+                        start + (end - start) * t
+                    }
+                    None => sampled,
+                };
+                levels.push(level);
+            }
+            // Water always runs downhill.
+            for index in 1..levels.len() {
+                if levels[index] > levels[index - 1] - 0.5 {
+                    levels[index] = levels[index - 1] - 0.5;
+                }
+            }
+
+            for gy in 0..size - 1 {
+                for gx in 0..size - 1 {
+                    let tx = (origin_tile_x + gx as i32) as f32;
+                    let ty = (origin_tile_y + gy as i32) as f32;
+                    let (dist, segment, along) = nearest_on_polyline(points, tx, ty);
+                    if dist > river.width * 2.2 {
+                        continue;
+                    }
+                    let level = levels[segment] + (levels[segment + 1] - levels[segment]) * along;
+                    let k = 1.0 - smoothstep(river.width * 0.45, river.width * 1.9, dist);
+                    if k <= 0.001 {
+                        continue;
+                    }
+                    let bridge = river
+                        .bridges
+                        .iter()
+                        .any(|b| (b.0 - tx) * (b.0 - tx) + (b.1 - ty) * (b.1 - ty) < 30.0);
+                    let depth = if bridge {
+                        river.depth * 0.2
+                    } else {
+                        river.depth
+                    };
+                    let idx = gy * size + gx;
+                    if !bridge {
+                        water_mask[idx] = water_mask[idx].max(k);
+                        water_level[idx] = level;
+                    }
+                    let bed = (level - depth).min(heights[idx]);
+                    heights[idx] = heights[idx] * (1.0 - k) + bed * k;
+                    let water = [40u8, 84, 126];
+                    for c in 0..3 {
+                        colors[idx][c] = (colors[idx][c] as f32 * (1.0 - k) + water[c] as f32 * k)
+                            .clamp(0.0, 255.0) as u8;
+                    }
+                    if !bridge && k > 0.55 {
+                        river_blocked.push((gx as i32, gy as i32));
+                    }
+                }
+            }
+        }
+    }
+
+    // Terrain conditioning: the raw cache heightfield is spiky in places and
+    // dead flat in others. Relax single-tile spikes, add gentle rolling
+    // relief, and level the team courtyards so bases read as built plazas
+    // instead of rocky fields. Lanes are re-levelled by the pass below.
+    relax_heights(&mut heights, size, &water_mask, 2);
+    add_rolling_relief(
+        &mut heights,
+        size,
+        origin_tile_x,
+        origin_tile_y,
+        &water_mask,
+    );
+    flatten_bases(
+        &mut heights,
+        size,
+        origin_tile_x,
+        origin_tile_y,
+        map.castle.as_ref(),
+    );
+
+    // Smooth the per-tile color field before triangulating. Two box-blur
+    // passes remove the hard square boundaries between adjacent tiles; the
+    // resulting per-corner colors interpolate across the terrain mesh.
+    let mut smooth_colors = colors.clone();
+    for _ in 0..2 {
+        smooth_colors = box_blur_colors(&smooth_colors, size, 2);
+    }
+
+    // ------------------------------------------------------------------
+    // Lanes are baked into the terrain itself instead of being drawn as a
+    // ribbon on top of it: the mask lives in the terrain vertex alpha and
+    // the shader blends the OSRS path textures into the ground. That keeps
+    // the road seamless with the world and stops the overlay from
+    // z-fighting with the terrain.
+    // ------------------------------------------------------------------
+    const LANE_HALF_WIDTH: f32 = 235.0;
+    const LANE_PATH_COLOUR: [u8; 3] = [104, 86, 62];
+    let mut lane_mask = vec![0.0f32; size * size];
+    for gy in 0..size {
+        for gx in 0..size {
+            let wx = (origin_tile_x + gx as i32) as f32 * 128.0;
+            let wz = (origin_tile_y + gy as i32) as f32 * 128.0;
+            let (nearest, distance) = map.nearest_lane_point(wx, wz);
+            // A slow noise keeps the road edge from looking ruler straight.
+            let wobble = (value_noise(wx * 0.0035, wz * 0.0035) - 0.5) * 190.0;
+            let t = ((distance + wobble) / LANE_HALF_WIDTH).clamp(0.0, 2.0);
+            let mask = 1.0 - smoothstep(0.78, 1.22, t);
+            let idx = gy * size + gx;
+            lane_mask[idx] = mask;
+            if mask > 0.001 {
+                for c in 0..3 {
+                    smooth_colors[idx][c] = (smooth_colors[idx][c] as f32 * (1.0 - mask * 0.92)
+                        + LANE_PATH_COLOUR[c] as f32 * mask * 0.92)
+                        .clamp(0.0, 255.0) as u8;
+                }
+                // Level the road along the lane centre line.
+                let centre = heights[(nearest.y / 128.0 - origin_tile_y as f32)
+                    .clamp(0.0, size as f32 - 1.0) as usize
+                    * size
+                    + (nearest.x / 128.0 - origin_tile_x as f32).clamp(0.0, size as f32 - 1.0)
+                        as usize];
+                heights[idx] = heights[idx] * (1.0 - mask * 0.65) + centre * mask * 0.65;
+            }
+        }
+    }
+
+    let mut terrain_mesh = MeshData::new();
+    for gy in 0..size - 1 {
+        for gx in 0..size - 1 {
+            let idx = gy * size + gx;
+            let x0 = (origin_tile_x + gx as i32) as f32 * 128.0;
+            let z0 = (origin_tile_y + gy as i32) as f32 * 128.0;
+            let x1 = x0 + 128.0;
+            let z1 = z0 + 128.0;
+            let p00 = Vec3::new(x0, heights[idx], z0);
+            let p10 = Vec3::new(x1, heights[idx + 1], z0);
+            let p01 = Vec3::new(x0, heights[idx + size], z1);
+            let p11 = Vec3::new(x1, heights[idx + size + 1], z1);
+
+            let c00 = smooth_colors[idx];
+            let c10 = smooth_colors[idx + 1];
+            let c01 = smooth_colors[idx + size];
+            let c11 = smooth_colors[idx + size + 1];
+
+            let normal_at = |vx: usize, vy: usize| {
+                let i = vy * size + vx;
+                let h = heights[i];
+                let hl = if vx > 0 { heights[i - 1] } else { h };
+                let hr = if vx + 1 < size { heights[i + 1] } else { h };
+                let hd = if vy > 0 { heights[i - size] } else { h };
+                let hu = if vy + 1 < size { heights[i + size] } else { h };
+                Vec3::new(hl - hr, 2.0 * 128.0, hd - hu).normalize_or_zero()
+            };
+            let n00 = normal_at(gx, gy);
+            let n10 = normal_at(gx + 1, gy);
+            let n01 = normal_at(gx, gy + 1);
+            let n11 = normal_at(gx + 1, gy + 1);
+            let ao_at = |vx: usize, vy: usize| {
+                let i = vy * size + vx;
+                let h = heights[i];
+                let hl = if vx > 0 { heights[i - 1] } else { h };
+                let hr = if vx + 1 < size { heights[i + 1] } else { h };
+                let hd = if vy > 0 { heights[i - size] } else { h };
+                let hu = if vy + 1 < size { heights[i + size] } else { h };
+                let cavity = (((hl + hr + hd + hu) * 0.25 - h) / 96.0).clamp(-1.0, 1.0);
+                (0.82 - cavity * 0.22).clamp(0.58, 1.0)
+            };
+            let ao00 = ao_at(gx, gy);
+            let ao10 = ao_at(gx + 1, gy);
+            let ao01 = ao_at(gx, gy + 1);
+            let ao11 = ao_at(gx + 1, gy + 1);
+
+            let mut v00 = SceneVertex::new(p00, n00, c00);
+            let mut v10 = SceneVertex::new(p10, n10, c10);
+            let mut v01 = SceneVertex::new(p01, n01, c01);
+            let mut v11 = SceneVertex::new(p11, n11, c11);
+            // The lane mask rides in the vertex alpha for the terrain.
+            v00.color[3] = lane_mask[idx];
+            v10.color[3] = lane_mask[idx + 1];
+            v01.color[3] = lane_mask[idx + size];
+            v11.color[3] = lane_mask[idx + size + 1];
+            // uv.x carries the baked slope so the shader can add cliff
+            // detail without warping UVs from the per-fragment normal.
+            v00.uv[0] = (1.0 - n00.y).clamp(0.0, 1.0);
+            v10.uv[0] = (1.0 - n10.y).clamp(0.0, 1.0);
+            v01.uv[0] = (1.0 - n01.y).clamp(0.0, 1.0);
+            v11.uv[0] = (1.0 - n11.y).clamp(0.0, 1.0);
+            // uv.y carries the river mask so the road shader can stop the
+            // lane soil from painting the river bed.
+            v00.uv[1] = water_mask[idx];
+            v10.uv[1] = water_mask[idx + 1];
+            v01.uv[1] = water_mask[idx + size];
+            v11.uv[1] = water_mask[idx + size + 1];
+            v00.ao = ao00;
+            v10.ao = ao10;
+            v01.ao = ao01;
+            v11.ao = ao11;
+            v00.material = 4;
+            v10.material = 4;
+            v01.material = 4;
+            v11.material = 4;
+            v00.texture_id = grass_variant[idx] as u32;
+            v10.texture_id = grass_variant[idx + 1] as u32;
+            v01.texture_id = grass_variant[idx + size] as u32;
+            v11.texture_id = grass_variant[idx + size + 1] as u32;
+            terrain_mesh.push_triangle(v00, v01, v10);
+            terrain_mesh.push_triangle(v10, v01, v11);
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // River water surface. The terrain carves the bed and keeps the water
+    // colour; this mesh draws the actual reflective sheet on top. It is a
+    // separate blended draw so the shader can do fresnel, sky reflection and
+    // animated ripples without changing the opaque terrain path.
+    // ------------------------------------------------------------------
+    let mut water_mesh = MeshData::new();
+    for gy in 0..size - 1 {
+        for gx in 0..size - 1 {
+            let i00 = gy * size + gx;
+            let i10 = i00 + 1;
+            let i01 = i00 + size;
+            let i11 = i01 + 1;
+            let masks = [
+                water_mask[i00],
+                water_mask[i10],
+                water_mask[i01],
+                water_mask[i11],
+            ];
+            let max_mask = masks.iter().copied().fold(0.0f32, f32::max);
+            if max_mask < 0.03 {
+                continue;
+            }
+            let mut level_sum = 0.0;
+            let mut level_count = 0.0;
+            for (index, mask) in [i00, i10, i01, i11].iter().zip(masks) {
+                if mask > 0.001 {
+                    level_sum += water_level[*index];
+                    level_count += 1.0;
+                }
+            }
+            let fallback = if level_count > 0.0 {
+                level_sum / level_count
+            } else {
+                continue;
+            };
+            let level_at = |index: usize, mask: f32| {
+                if mask > 0.001 {
+                    water_level[index]
+                } else {
+                    fallback
+                }
+            };
+            let x0 = (origin_tile_x + gx as i32) as f32 * 128.0;
+            let z0 = (origin_tile_y + gy as i32) as f32 * 128.0;
+            let x1 = x0 + 128.0;
+            let z1 = z0 + 128.0;
+            let opacity = |mask: f32| (smoothstep(0.0, 0.35, mask) * 0.88).clamp(0.0, 0.88);
+            let mut v00 = SceneVertex::new(
+                Vec3::new(x0, level_at(i00, masks[0]), z0),
+                Vec3::Y,
+                [255, 255, 255],
+            );
+            let mut v10 = SceneVertex::new(
+                Vec3::new(x1, level_at(i10, masks[1]), z0),
+                Vec3::Y,
+                [255, 255, 255],
+            );
+            let mut v01 = SceneVertex::new(
+                Vec3::new(x0, level_at(i01, masks[2]), z1),
+                Vec3::Y,
+                [255, 255, 255],
+            );
+            let mut v11 = SceneVertex::new(
+                Vec3::new(x1, level_at(i11, masks[3]), z1),
+                Vec3::Y,
+                [255, 255, 255],
+            );
+            v00.color[3] = opacity(masks[0]);
+            v10.color[3] = opacity(masks[1]);
+            v01.color[3] = opacity(masks[2]);
+            v11.color[3] = opacity(masks[3]);
+            v00.material = 6;
+            v10.material = 6;
+            v01.material = 6;
+            v11.material = 6;
+            water_mesh.push_triangle(v00, v01, v10);
+            water_mesh.push_triangle(v10, v01, v11);
+        }
+    }
+    tracing::info!(
+        "water surface: {} verts, {} tris",
+        water_mesh.vertices.len(),
+        water_mesh.indices.len() / 3
+    );
 
     let height = HeightGrid {
         origin_tile_x,
@@ -800,152 +1758,33 @@ pub fn build(
         size,
         heights,
     };
-    let heights = &height.heights;
-    let map = MapLayout::load(map_path, &height)?;
 
-    // Colour, tile by tile. The natural ground (grass, earth, sand) is
-    // softened over its neighbours as the game does, so it has no hard
-    // patches. What is laid over it (paths, floors, water) keeps its own
-    // colour, so a lane still reads as a lane.
-    let tiles = size - 1;
-    let mut natural: Vec<Option<[f32; 3]>> = vec![None; tiles * tiles];
-    let mut laid: Vec<Option<[f32; 3]>> = vec![None; tiles * tiles];
-    for ty in 0..tiles {
-        for tx in 0..tiles {
-            let wx = origin_tile_x + tx as i32;
-            let wy = origin_tile_y + ty as i32;
-            let Some(terrain) = terrains.get(&((wx >> 6) as u32, (wy >> 6) as u32)) else {
-                continue;
-            };
-            let (under, over) = tile_paint(
-                terrain,
-                &underlays,
-                &overlays,
-                (wx & 63) as usize,
-                (wy & 63) as usize,
-            );
-            natural[ty * tiles + tx] = under;
-            laid[ty * tiles + tx] = over;
-        }
+    // Re-seat map features on the final terrain: pockets and the river can
+    // shift the ground under a lane or a camp.
+    for structure in &mut map.structures {
+        structure.pos.y = height.height_at(structure.pos.x, structure.pos.z);
     }
-    let natural = blend(&natural, tiles, tiles, GROUND_BLEND_RADIUS);
-
-    let mut terrain_mesh = MeshData::new();
-    for gy in 0..size {
-        for gx in 0..size {
-            // the colour at a corner: the average of the tiles that meet there
-            let mut sum = [0.0f32; 3];
-            let mut count = 0.0f32;
-            for (dx, dy) in [(0usize, 0usize), (1, 0), (0, 1), (1, 1)] {
-                let (Some(tx), Some(ty)) = (gx.checked_sub(dx), gy.checked_sub(dy)) else {
-                    continue;
-                };
-                if tx >= tiles || ty >= tiles {
-                    continue;
-                }
-                if let Some(c) = laid[ty * tiles + tx].or(natural[ty * tiles + tx]) {
-                    sum = [sum[0] + c[0], sum[1] + c[1], sum[2] + c[2]];
-                    count += 1.0;
-                }
-            }
-            let mut colour = if count > 0.0 {
-                sum.map(|v| v / count)
-            } else {
-                [60.0, 90.0, 50.0]
-            };
-
-            // A lane's road is part of the ground, not a sheet laid above
-            // it: the ground is coloured as road near a lane's line, fading
-            // out over the road's edge. Feet stand on it, hills in it are
-            // road too, and it takes the same light as the grass beside it.
-            let world_x = (origin_tile_x + gx as i32) as f32 * 128.0;
-            let world_z = (origin_tile_y + gy as i32) as f32 * 128.0;
-            let from_lane = map.distance_to_lane(world_x, world_z);
-            let road = 1.0
-                - ((from_lane - (ROAD_HALF_WIDTH - ROAD_EDGE)) / (2.0 * ROAD_EDGE)).clamp(0.0, 1.0);
-            let road = road * road * (3.0 - 2.0 * road);
-            for k in 0..3 {
-                colour[k] += (ROAD_COLOUR[k] - colour[k]) * road;
-            }
-
-            // the light at a corner: from the slope through its neighbours,
-            // under the same sun as the models
-            let at = |x: usize, y: usize| heights[y * size + x];
-            let (west, east) = (gx.saturating_sub(1), (gx + 1).min(size - 1));
-            let (south, north) = (gy.saturating_sub(1), (gy + 1).min(size - 1));
-            let run = |a: usize, b: usize| if b - a == 2 { 1.0 } else { 2.0 };
-            let h = at(gx, gy);
-            // at the rim of the map there is a neighbour on one side only;
-            // doubling that half-slope keeps the rim from looking flatter
-            let lightness = ground_lightness(
-                h + (at(west, gy) - h) * run(west, east),
-                h + (at(east, gy) - h) * run(west, east),
-                h + (at(gx, south) - h) * run(south, north),
-                h + (at(gx, north) - h) * run(south, north),
-                128.0,
-            );
-
-            terrain_mesh.vertices.push(Vertex::new(
-                Vec3::new(
-                    (origin_tile_x + gx as i32) as f32 * 128.0,
-                    h,
-                    (origin_tile_y + gy as i32) as f32 * 128.0,
-                ),
-                shade_rgb(colour, lightness),
-            ));
-        }
+    for camp in &mut map.camps {
+        camp.pos.y = height.height_at(camp.pos.x, camp.pos.z);
     }
-    for gy in 0..size - 1 {
-        for gx in 0..size - 1 {
-            let a = (gy * size + gx) as u32;
-            let b = a + 1;
-            let c = a + size as u32;
-            let d = c + 1;
-            terrain_mesh.indices.extend_from_slice(&[a, c, b, b, c, d]);
+    for lane in &mut map.lanes {
+        for waypoint in &mut lane.waypoints {
+            waypoint.y = height.height_at(waypoint.x, waypoint.z);
         }
     }
 
-    // Collision: water and blocking scenery footprints. This is deliberately
-    // conservative; the editor will replace it with authored collision later.
+    // Collision: blocking scenery footprints only. Water is traversable by
+    // design: heroes and lane units wade through the shallow river and ponds
+    // instead of treating every shoreline as an invisible wall.
     let tiles_x = ((max_x - min_x + 1) * 64) as usize;
     let tiles_y = ((max_y - min_y + 1) * 64) as usize;
-    let mut collision_grid = Grid::with_cell(
-        tiles_x * NAV_PER_TILE as usize,
-        tiles_y * NAV_PER_TILE as usize,
-        NAV_CELL,
-    );
-    let mut height_build = HeightBuild {
-        map: HeightMap::new(
-            tiles_x * NAV_PER_TILE as usize,
-            tiles_y * NAV_PER_TILE as usize,
-            NAV_CELL,
-        ),
-        shapes: 0,
-        found: Agreement::default(),
-        differing: Vec::new(),
-    };
-    for ((rx, ry), terrain) in &terrains {
-        for ty in 0..64 {
-            for tx in 0..64 {
-                let tile = terrain.tile(0, tx, ty);
-                // Ground blocks only where there is none: a tile with nothing
-                // on it at all. A hill, however steep, and the dips between
-                // hills can be walked. (Ground that is only laid over, with no
-                // natural ground beneath, used to count as water and walled
-                // off whole hillsides.)
-                if tile.underlay_id == 0 && tile.overlay_id == 0 {
-                    let gx = (*rx as i32 * 64 + tx as i32) - origin_tile_x;
-                    let gy = (*ry as i32 * 64 + ty as i32) - origin_tile_y;
-                    collision_grid.block_rect(
-                        gx * NAV_PER_TILE,
-                        gy * NAV_PER_TILE,
-                        NAV_PER_TILE,
-                        NAV_PER_TILE,
-                    );
-                }
-            }
-        }
-    }
+    let mut collision_grid = Grid::new(tiles_x, tiles_y);
+    let mut sight_grid = Grid::new(tiles_x, tiles_y);
+
+    // Collision is only added for objects that are actually rendered, so the
+    // player never walks into an invisible wall from one of the thousands of
+    // unrendered OSRS objects in the loaded block.
+    let mut def_cache: HashMap<u32, ObjectDefinition> = HashMap::new();
 
     let center = Vec3::new(
         (center_x as f32 * 64.0 + 32.0) * 128.0,
@@ -958,12 +1797,66 @@ pub fn build(
 
     // Sort scenery by distance to the player so the near field looks dense and
     // the 900-model budget is spent where it is visible.
+    let base_keep_clear: Vec<Vec3> = map
+        .camps
+        .iter()
+        .map(|camp| camp.pos)
+        .chain(map.structures.iter().map(|structure| structure.pos))
+        .collect();
     let mut candidates = Vec::new();
+    let mut decor_candidates = Vec::new();
     for (rx, ry, locations) in &all_locations {
         for loc in &locations.locations {
             let wx = ((*rx as f32 * 64.0) + loc.x as f32 + 0.5) * 128.0;
             let wz = ((*ry as f32 * 64.0) + loc.y as f32 + 0.5) * 128.0;
-            if map.distance_to_lane(wx, wz) < 5.0 * 128.0 {
+            let lane_distance = map.distance_to_lane(wx, wz);
+
+            // Ground clutter is selected independently of the tree budget
+            // and sorted by distance to a lane, so every lane gets the dense
+            // flower/fern/rock layer instead of only the map centre.
+            if loc.z == 0 && lane_distance >= DECOR_LANE_CLEAR {
+                let data = object_files.get(&loc.id);
+                if let Some(data) = data
+                    && let Ok(def) = ObjectDefinition::parse(loc.id, data)
+                    && def.size_x.max(def.size_y) <= 3
+                    && let Some(kind) = GroundDecor::from_definition(&def)
+                    && let Some(model_id) = def.first_model()
+                    && !DECOR_MODEL_BLOCKLIST.contains(&model_id)
+                    && !map.in_biome(
+                        *rx as i32 * 64 + loc.x as i32,
+                        *ry as i32 * 64 + loc.y as i32,
+                    )
+                    && !point_in_tile_rects(&castle_keep, wx / 128.0, wz / 128.0)
+                    && base_keep_clear
+                        .iter()
+                        .all(|p| p.distance(Vec3::new(wx, p.y, wz)) >= DECOR_STRUCTURE_CLEAR)
+                {
+                    let seed = loc
+                        .id
+                        .wrapping_mul(0x9E37_79B9)
+                        .wrapping_add((loc.x as u32) << 16)
+                        .wrapping_add(loc.y as u32);
+                    decor_candidates.push((
+                        lane_distance + hash01(seed) * 900.0,
+                        *rx,
+                        *ry,
+                        *loc,
+                        kind,
+                        model_id,
+                    ));
+                }
+            }
+
+            if lane_distance < 6.5 * 128.0 {
+                continue;
+            }
+            if point_in_tile_rects(&castle_keep, wx / 128.0, wz / 128.0) {
+                continue;
+            }
+            if base_keep_clear
+                .iter()
+                .any(|p| p.distance(Vec3::new(wx, p.y, wz)) < 6.0 * 128.0)
+            {
                 continue;
             }
             let dx = wx - center.x;
@@ -972,10 +1865,14 @@ pub fn build(
         }
     }
     candidates.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
+    decor_candidates.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
 
     let mut model_mesh = MeshData::new();
+    let mut shadow_mesh = MeshData::new();
+    let mut shadow_caster_mesh = MeshData::new();
     let mut model_cache: HashMap<u32, Model> = HashMap::new();
     let mut placements = 0usize;
+    let mut decor_placements = 0usize;
     const MODEL_LIMIT: usize = 900;
 
     for (_, rx, ry, loc) in candidates {
@@ -994,17 +1891,20 @@ pub fn build(
         if !is_scenery(&def) {
             continue;
         }
+        let gx = rx as i32 * 64 + loc.x as i32 - origin_tile_x;
+        let gy = ry as i32 * 64 + loc.y as i32 - origin_tile_y;
+        if gx >= 0
+            && gy >= 0
+            && (gx as usize) < size
+            && (gy as usize) < size
+            && water_mask[gy as usize * size + gx as usize] > 0.03
+        {
+            continue;
+        }
         let Some(model_id) = def.first_model() else {
             continue;
         };
-        let model = if let Some(model) = model_cache.get(&model_id) {
-            model
-        } else {
-            let group = cache.group(7, model_id)?;
-            let model = Model::load(model_id, &group.data)?;
-            model_cache.insert(model_id, model);
-            model_cache.get(&model_id).unwrap()
-        };
+        let model = cached_model(cache, &mut model_cache, model_id)?;
 
         let base = Vec3::new(
             ((rx as f32 * 64.0) + loc.x as f32 + 0.5) * 128.0,
@@ -1012,202 +1912,489 @@ pub fn build(
             ((ry as f32 * 64.0) + loc.y as f32 + 0.5) * 128.0,
         );
         let angle = loc.rotation as f32 * std::f32::consts::FRAC_PI_2;
-        append_model(&mut model_mesh, model, base, angle);
+        append_model_scaled_tinted(
+            &mut model_mesh,
+            model,
+            base,
+            angle,
+            NATURAL_SCENERY_SCALE,
+            [1.0, 1.0, 1.0],
+            scenery_texture_hint(&def, is_plant_object(&def)),
+            is_dead_tree(&def),
+        );
+        append_model_caster(
+            &mut shadow_caster_mesh,
+            model,
+            base,
+            angle,
+            NATURAL_SCENERY_SCALE,
+            CasterStyle::Tree,
+        );
+        let shadow_size =
+            (def.size_x.max(def.size_y) as f32 * 128.0 * 0.55 * NATURAL_SCENERY_SCALE)
+                .clamp(70.0, 440.0);
+        push_blob_quad(&mut shadow_mesh, base, shadow_size, 0.24);
+        // What you can see is what blocks: collide with the rendered prop.
+        let mut w = def.size_x.max(1) as i32;
+        let mut h = def.size_y.max(1) as i32;
+        if loc.rotation % 2 == 1 {
+            std::mem::swap(&mut w, &mut h);
+        }
+        let gx = (rx as i32 * 64 + loc.x as i32) - origin_tile_x;
+        let gy = (ry as i32 * 64 + loc.y as i32) - origin_tile_y;
+        collision_grid.block_rect(gx, gy, w, h);
+        sight_grid.block_rect(gx, gy, w, h);
         placements += 1;
+    }
 
-        // What stands in the way is what can be seen standing there, and
-        // nothing else: a piece of scenery blocks only if it was drawn, only
-        // on the ground floor, and only where its own shape stands between
-        // knee and head height. A tree blocks at its trunk, not under its
-        // leaves.
-        if loc.z == 0 && is_blocking_object(&def) {
-            block_model(
-                &mut collision_grid,
-                &mut height_build,
-                origin_tile_x,
-                origin_tile_y,
+    // ------------------------------------------------------------------
+    // Ground decoration: the cache's flower beds, ferns, grass tufts,
+    // mushrooms, loose rocks and twigs. These are rendered without collision
+    // or sight blocking, and the budget is sorted by distance to a lane so
+    // the detail follows the player.
+    // ------------------------------------------------------------------
+    for (_, rx, ry, loc, kind, model_id) in decor_candidates {
+        if decor_placements >= DECOR_LIMIT {
+            break;
+        }
+        let Some(terrain) = terrains.get(&(rx, ry)) else {
+            continue;
+        };
+        let tile = terrain.tile(0, loc.x as usize, loc.y as usize);
+        if tile.underlay_id == 0 {
+            continue;
+        }
+        let gx = rx as i32 * 64 + loc.x as i32 - origin_tile_x;
+        let gy = ry as i32 * 64 + loc.y as i32 - origin_tile_y;
+        if gx < 0 || gy < 0 || gx as usize >= size || gy as usize >= size {
+            continue;
+        }
+        if water_mask[gy as usize * size + gx as usize] > 0.03 {
+            continue;
+        }
+        let model = cached_model(cache, &mut model_cache, model_id)?;
+        let (model_min, model_max) = model.bounds();
+        let raw_height = (model_max[1] - model_min[1]).max(0) as f32;
+        let wx = ((rx as f32 * 64.0) + loc.x as f32 + 0.5) * 128.0;
+        let wz = ((ry as f32 * 64.0) + loc.y as f32 + 0.5) * 128.0;
+        let base = Vec3::new(wx, height.height_at(wx, wz), wz);
+        let seed = loc
+            .id
+            .wrapping_mul(0x9E37_79B9)
+            .wrapping_add((loc.x as u32) << 16)
+            .wrapping_add(loc.y as u32);
+        let scale = 0.9 + hash01(seed) * 0.5;
+        if raw_height * scale > 150.0 {
+            continue;
+        }
+        let angle = loc.rotation as f32 * std::f32::consts::FRAC_PI_2;
+        append_ground_decor(&mut model_mesh, model, base, angle, scale, kind, seed);
+        let shadow = kind.shadow_size() * scale;
+        if shadow > 0.0 {
+            push_blob_quad(&mut shadow_mesh, base, shadow, 0.16);
+        }
+        decor_placements += 1;
+
+        // A second, jittered copy of roughly half the props. Real object
+        // lists are sparse (about one decoration every sixty tiles), while
+        // the reference ground is carpeted. The clone is cheap: same decoded
+        // model, no collision, and skipped when it would land in water.
+        let clone_seed = seed.wrapping_mul(0x85EB_CA6B).wrapping_add(0x27D4_EB2F);
+        if hash01(clone_seed) < 0.55 {
+            let ox = (hash01(clone_seed << 1) - 0.5) * 2.1 * 128.0;
+            let oz = (hash01(clone_seed << 3) - 0.5) * 2.1 * 128.0;
+            let cx = wx + ox;
+            let cz = wz + oz;
+            let cgx = (cx / 128.0).floor() as i32 - origin_tile_x;
+            let cgy = (cz / 128.0).floor() as i32 - origin_tile_y;
+            if cgx >= 0
+                && cgy >= 0
+                && (cgx as usize) < size
+                && (cgy as usize) < size
+                && water_mask[cgy as usize * size + cgx as usize] <= 0.03
+            {
+                let cbase = Vec3::new(cx, height.height_at(cx, cz), cz);
+                let cscale = scale * (0.72 + hash01(clone_seed << 5) * 0.5);
+                let cangle = angle + (hash01(clone_seed << 7) - 0.5) * std::f32::consts::FRAC_PI_2;
+                append_ground_decor(
+                    &mut model_mesh,
+                    model,
+                    cbase,
+                    cangle,
+                    cscale,
+                    kind,
+                    clone_seed,
+                );
+                let cshadow = kind.shadow_size() * cscale;
+                if cshadow > 0.0 {
+                    push_blob_quad(&mut shadow_mesh, cbase, cshadow, 0.14);
+                }
+                decor_placements += 1;
+            }
+        }
+    }
+    tracing::info!("ground decor: {} props", decor_placements);
+
+    // ------------------------------------------------------------------
+    // Biome pocket scenery: real OSRS objects taken from each pocket's
+    // source region and transplanted into the map.
+    // ------------------------------------------------------------------
+    let keep_clear: Vec<Vec3> = map
+        .camps
+        .iter()
+        .map(|camp| camp.pos)
+        .chain(map.structures.iter().map(|structure| structure.pos))
+        .collect();
+    for biome in &map.biomes {
+        let Some((_, locations)) = pocket_data.get(&biome.id) else {
+            continue;
+        };
+        let (rx, ry, pw, ph) = biome.rect;
+        let center_x = biome.origin.0 as f32 + pw as f32 * 0.5;
+        let center_y = biome.origin.1 as f32 + ph as f32 * 0.5;
+        let mut candidates: Vec<(u8, f32, u32, u32, u32, u32, u8)> = Vec::new();
+        for loc in &locations.locations {
+            let loc_x = loc.x as u32;
+            let loc_y = loc.y as u32;
+            if loc_x < rx || loc_y < ry || loc_x >= rx + pw || loc_y >= ry + ph {
+                continue;
+            }
+            if let std::collections::hash_map::Entry::Vacant(entry) = def_cache.entry(loc.id) {
+                if let Some(data) = object_files.get(&loc.id) {
+                    if let Ok(def) = ObjectDefinition::parse(loc.id, data) {
+                        entry.insert(def);
+                    }
+                }
+            }
+            let Some(def) = def_cache.get(&loc.id) else {
+                continue;
+            };
+            if !is_pocket_scenery(def) {
+                continue;
+            }
+            let Some(model_id) = def.first_model() else {
+                continue;
+            };
+            let dx = loc.x as f32 + 0.5 - center_x;
+            let dy = loc.y as f32 + 0.5 - center_y;
+            candidates.push((
+                scenery_priority(def),
+                dx * dx + dy * dy,
+                loc.id,
+                loc_x,
+                loc_y,
+                model_id,
+                loc.rotation,
+            ));
+        }
+        candidates.sort_by(|a, b| {
+            a.0.cmp(&b.0)
+                .then(a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal))
+        });
+
+        let mut placed = 0usize;
+        for (_, _, object_id, sx, sy, model_id, rotation) in candidates {
+            if placed >= biome.budget {
+                break;
+            }
+            let Some(def) = def_cache.get(&object_id) else {
+                continue;
+            };
+            let model = if let Some(model) = model_cache.get(&model_id) {
+                model
+            } else {
+                let group = cache.group(7, model_id)?;
+                let model = Model::load(model_id, &group.data)?;
+                model_cache.insert(model_id, model);
+                model_cache.get(&model_id).unwrap()
+            };
+            let map_tx = biome.origin.0 + sx as i32 - rx as i32;
+            let map_ty = biome.origin.1 + sy as i32 - ry as i32;
+            let wx = (map_tx as f32 + 0.5) * 128.0;
+            let wz = (map_ty as f32 + 0.5) * 128.0;
+            if !height.contains(wx, wz) {
+                continue;
+            }
+            // Pockets can overlap a lane; never drop a door or a wall in the
+            // middle of the road, and keep camps/towers free of props so a
+            // chair never ends up glued to a jungle creature.
+            if map.distance_to_lane(wx, wz) < 6.5 * 128.0 {
+                continue;
+            }
+            if point_in_tile_rects(&castle_keep, wx / 128.0, wz / 128.0) {
+                continue;
+            }
+            if keep_clear
+                .iter()
+                .any(|p| p.distance(Vec3::new(wx, p.y, wz)) < 6.0 * 128.0)
+            {
+                continue;
+            }
+            let base = Vec3::new(wx, height.height_at(wx, wz), wz);
+            let angle = rotation as f32 * std::f32::consts::FRAC_PI_2;
+            append_model_scaled_tinted(
+                &mut model_mesh,
                 model,
                 base,
-                Mat3::from_rotation_y(angle),
-                1.0,
+                angle,
+                POCKET_SCENERY_SCALE,
+                biome.tint,
+                scenery_texture_hint(def, is_plant_object(def)),
+                is_dead_tree(def),
             );
+            append_model_caster(
+                &mut shadow_caster_mesh,
+                model,
+                base,
+                angle,
+                POCKET_SCENERY_SCALE,
+                if is_plant_object(def) {
+                    CasterStyle::Tree
+                } else {
+                    CasterStyle::Building
+                },
+            );
+            let shadow_size =
+                (def.size_x.max(def.size_y) as f32 * 128.0 * 0.55 * POCKET_SCENERY_SCALE)
+                    .clamp(65.0, 420.0);
+            push_blob_quad(&mut shadow_mesh, base, shadow_size, 0.24);
+
+            let mut w = def.size_x.max(1) as i32;
+            let mut h = def.size_y.max(1) as i32;
+            if rotation % 2 == 1 {
+                std::mem::swap(&mut w, &mut h);
+            }
+            collision_grid.block_rect(map_tx - origin_tile_x, map_ty - origin_tile_y, w, h);
+            sight_grid.block_rect(map_tx - origin_tile_x, map_ty - origin_tile_y, w, h);
+            placed += 1;
         }
+        placements += placed;
+        tracing::info!(
+            "biome {} ({}): {} models from region {:?}",
+            biome.id,
+            biome.side,
+            placed,
+            biome.region
+        );
     }
 
+    // Lanes stay walkable even where a biome pocket overlaps them, and the
+    // river is only fordable where a lane crosses it.
     map.clear_collision(&mut collision_grid, origin_tile_x, origin_tile_y, 4.5);
-    // Each structure blocks the ground its own model stands on, for as long
-    // as it stands. It is drawn unturned but for the half turn every unit's
-    // model gets. The cells are kept per structure, apart from the rest of
-    // the map, so they can be given back when it falls.
-    let mut structure_ground = Vec::new();
-    for structure in &map.structures {
-        let ground = cache
-            .group(7, structure.model_id)
-            .ok()
-            .and_then(|group| Model::load(structure.model_id, &group.data).ok())
-            .map(|model| {
-                model_ground(
-                    &collision_grid,
-                    &mut height_build,
-                    origin_tile_x,
-                    origin_tile_y,
-                    &model,
-                    structure.pos,
-                    Mat3::from_rotation_y(MODEL_FORWARD_TURN),
-                    structure.scale,
-                )
-            });
-        let cells = match ground {
-            Some((cells, covered)) => {
-                tracing::info!(
-                    "blocks: {:?} model {} stands on {} cells of the map ({:.1} tiles of ground)",
-                    structure.kind,
-                    structure.model_id,
-                    covered,
-                    covered as f32 / (NAV_PER_TILE * NAV_PER_TILE) as f32
-                );
-                cells
-            }
-            None => {
-                // its model could not be read: block a plain disc so it is
-                // at least not walked through
-                tracing::warn!(
-                    "blocks: {:?} model {} could not be read; blocking a plain disc",
-                    structure.kind,
-                    structure.model_id
-                );
-                let mut alone = Grid::with_cell(
-                    collision_grid.width() as usize,
-                    collision_grid.height() as usize,
-                    collision_grid.cell(),
-                );
-                mark_disc(
-                    &mut alone,
-                    origin_tile_x,
-                    origin_tile_y,
-                    structure.pos.x,
-                    structure.pos.z,
-                    90.0 + BODY_RADIUS,
-                    true,
-                );
-                (0..alone.height())
-                    .flat_map(|cy| (0..alone.width()).map(move |cx| (cx, cy)))
-                    .filter(|&(cx, cy)| alone.is_blocked(cx, cy))
-                    .collect()
-            }
-        };
-        structure_ground.push(StructureGround {
-            pos: structure.pos,
-            cells,
-            standing: true,
-        });
+    map.block_structures(&mut collision_grid, origin_tile_x, origin_tile_y);
+    map.block_structures(&mut sight_grid, origin_tile_x, origin_tile_y);
+
+    // Castle walls, towers and gatehouses. Collision is applied after the
+    // lane clearing pass so the walls always win, while gate pieces stay
+    // walkable and the lanes can pass through them.
+    for piece in &castle_pieces {
+        if !piece.block {
+            continue;
+        }
+        let gx = piece.tile[0].round() as i32 - origin_tile_x;
+        let gy = piece.tile[1].round() as i32 - origin_tile_y;
+        let footprint = piece.footprint.round().max(1.0) as i32;
+        let half = footprint / 2;
+        collision_grid.block_rect(gx - half, gy - half, footprint, footprint);
+        sight_grid.block_rect(gx - half, gy - half, footprint, footprint);
     }
-    let mut collision = WorldCollision::new(
-        collision_grid,
-        origin_tile_x,
-        origin_tile_y,
-        structure_ground,
+    let castle_count = append_castle_mesh(
+        &castle_pieces,
+        &height,
+        &mut model_mesh,
+        &mut shadow_caster_mesh,
+    );
+    placements += castle_count;
+    tracing::info!(
+        "castle: {} wall/tower/platform pieces ({} blocked footprints)",
+        castle_count,
+        castle_pieces.iter().filter(|piece| piece.block).count()
+    );
+    tracing::info!(
+        "river tiles blocked: {}, pocket tiles: {}",
+        river_blocked.len(),
+        pocket_water.len()
     );
 
-    // Rough ground, stage 1: keep the height data and say how it compares
-    // with the walkable map. The ground's corner heights are handed over as
-    // whole numbers, in sixteenths of a unit.
-    let found = height_build.found;
-    if found.agrees() {
-        tracing::info!(
-            "height data: {} shapes over {} cells; it blocks the same {} cells as the walkable map",
-            height_build.shapes,
-            height_build.map.len(),
-            found.both
-        );
-    } else {
-        tracing::warn!(
-            "height data: {} shapes over {} cells; it DISAGREES with the walkable map: {} cells the same, {} only in the walkable map, {} only in the height data",
-            height_build.shapes,
-            height_build.map.len(),
-            found.both,
-            found.only_map,
-            found.only_heights
-        );
-        for line in &height_build.differing {
-            tracing::warn!("height data: {line}");
+    // ------------------------------------------------------------------
+    // Tree lines: OSRS tree models form a natural barrier along both sides
+    // of every lane. Spacing, distance, scale and species are seeded from a
+    // fixed RNG so the forest looks hand scattered but every match is the
+    // same world.
+    // ------------------------------------------------------------------
+    let structure_positions: Vec<Vec3> = map.structures.iter().map(|s| s.pos).collect();
+    let tree_context = TreeContext {
+        cache,
+        map: &map,
+        height: &height,
+        structures: &structure_positions,
+        river_blocked: &river_blocked,
+        origin: (origin_tile_x, origin_tile_y),
+    };
+    let mut tree_count = 0usize;
+    let mut prop_count = 0usize;
+    let mut rng = Rng::new(0x5EED_9E37_79B9_7F4A);
+    {
+        let mut sink = ScenerySink {
+            model_cache: &mut model_cache,
+            model_mesh: &mut model_mesh,
+            shadow_mesh: &mut shadow_mesh,
+            shadow_caster_mesh: &mut shadow_caster_mesh,
+            collision_grid: &mut collision_grid,
+        };
+        for lane in &map.lanes {
+            for pair in lane.waypoints.windows(2) {
+                let a = pair[0];
+                let b = pair[1];
+                let delta = b - a;
+                let length = delta.length();
+                if length < 1.0 {
+                    continue;
+                }
+                let dir = delta / length;
+                let perp = Vec3::new(-dir.z, 0.0, dir.x);
+                let mut travelled = rng.range(0.0, 220.0);
+                while travelled < length {
+                    let point = a + dir * travelled;
+                    for side in [-1.0f32, 1.0] {
+                        // Leave occasional gaps so the tree wall is not a
+                        // perfect hedge.
+                        if rng.chance(0.12) {
+                            continue;
+                        }
+                        let offset = rng.range(5.4, 10.5) * 128.0;
+                        let along = rng.range(-1.4, 1.4) * 128.0;
+                        let pos = point + perp * (offset * side) + dir * along;
+                        let seed = rng.next_u32();
+                        if rng.chance(0.30) {
+                            place_lane_prop(&tree_context, &mut sink, pos, seed, &mut prop_count);
+                        } else {
+                            place_tree(&tree_context, &mut sink, pos, seed, &mut tree_count);
+                        }
+                        // Occasional cluster behind the first tree.
+                        if rng.chance(0.10) {
+                            let extra = point
+                                + perp * (rng.range(6.5, 12.0) * 128.0 * side)
+                                + dir * rng.range(-1.6, 1.6) * 128.0;
+                            let extra_seed = rng.next_u32();
+                            if rng.chance(0.30) {
+                                place_lane_prop(
+                                    &tree_context,
+                                    &mut sink,
+                                    extra,
+                                    extra_seed,
+                                    &mut prop_count,
+                                );
+                            } else {
+                                place_tree(
+                                    &tree_context,
+                                    &mut sink,
+                                    extra,
+                                    extra_seed,
+                                    &mut tree_count,
+                                );
+                            }
+                        }
+                    }
+                    travelled += rng.range(380.0, 880.0);
+                }
+            }
         }
     }
-    // Measured only, before any climbing is built: what a champion with a
-    // step of 96 could get onto that one with today's step of 48 cannot,
-    // with room for a body. Nothing that moves reads this.
-    {
-        let q = |v: f32| (v * rift_sim::heights::Q as f32) as i32;
-        let (kerb, tall, body) = (q(SOLID_FROM), q(SOLID_TO), BODY_RADIUS.round() as i32);
-        let walker = height_build.map.reach(kerb - 1, tall, body, kerb, 1);
-        let next_cell_only: usize = height_build
-            .map
-            .reach(q(CLIMB_STEP), tall, body, kerb, 0)
-            .beyond(&walker)
-            .iter()
-            .map(|patch| patch.0.len())
-            .sum();
-        let patches = height_build
-            .map
-            .reach(q(CLIMB_STEP), tall, body, kerb, 1)
-            .beyond(&walker);
-        let cells: usize = patches.iter().map(|patch| patch.0.len()).sum();
-        let biggest: Vec<String> = patches
-            .iter()
-            .take(8)
-            .map(|(cells, top)| {
-                let (cx, cy) = cells[cells.len() / 2];
-                format!(
-                    "{} cells up to {} high at tile {},{}",
-                    cells.len(),
-                    top / rift_sim::heights::Q,
-                    origin_tile_x + cx.div_euclid(NAV_PER_TILE),
-                    origin_tile_y + cy.div_euclid(NAV_PER_TILE)
-                )
-            })
-            .collect();
-        tracing::info!(
-            "climbing, measured only: a step of {} reaches {} cells in {} patches that a step of {} does not, {} of the patches 4 cells or more ({} cells if a change of level may not cross a cell); the biggest: {}",
-            CLIMB_STEP,
-            cells,
-            patches.len(),
-            SOLID_FROM,
-            patches.iter().filter(|patch| patch.0.len() >= 4).count(),
-            next_cell_only,
-            if biggest.is_empty() {
-                "none".to_string()
-            } else {
-                biggest.join("; ")
-            }
-        );
-    }
-
-    let ground = Ground::new(
-        size,
-        128,
-        height
-            .heights
-            .iter()
-            .map(|h| (h * rift_sim::heights::Q as f32).round() as i32)
-            .collect(),
+    tracing::info!(
+        "tree lines: {} trees, {} boulders/bushes",
+        tree_count,
+        prop_count
     );
-    collision.heights = Some(std::sync::Arc::new((height_build.map, ground)));
+
+    // ------------------------------------------------------------------
+    // Castle wall ruins: broken OSRS walls and ruin clusters ring the
+    // outside of every lane, scattered with the same fixed seed.
+    // ------------------------------------------------------------------
+    const RUIN_MODELS: &[(u32, i32)] = &[(16918, 2), (16918, 2), (9233, 2), (9625, 3)];
+    let mut ruin_count = 0usize;
+    {
+        let mut sink = ScenerySink {
+            model_cache: &mut model_cache,
+            model_mesh: &mut model_mesh,
+            shadow_mesh: &mut shadow_mesh,
+            shadow_caster_mesh: &mut shadow_caster_mesh,
+            collision_grid: &mut collision_grid,
+        };
+        for (lane_index, lane) in map.lanes.iter().enumerate() {
+            for pair in lane.waypoints.windows(2) {
+                let a = pair[0];
+                let b = pair[1];
+                let delta = b - a;
+                let length = delta.length();
+                if length < 1.0 {
+                    continue;
+                }
+                let dir = delta / length;
+                let perp = Vec3::new(-dir.z, 0.0, dir.x);
+                let mut travelled = rng.range(0.0, 900.0);
+                while travelled < length {
+                    let point = a + dir * travelled;
+                    if rng.chance(0.28) {
+                        travelled += rng.range(700.0, 1800.0);
+                        continue;
+                    }
+                    let side = if (rng.next_u32() as usize + lane_index) % 2 == 0 {
+                        -1.0
+                    } else {
+                        1.0
+                    };
+                    let offset = rng.range(10.5, 15.0) * 128.0;
+                    let along = rng.range(-2.0, 2.0) * 128.0;
+                    let (model_id, footprint) =
+                        RUIN_MODELS[rng.next_u32() as usize % RUIN_MODELS.len()];
+                    place_ruin(
+                        &tree_context,
+                        &mut sink,
+                        point + perp * (offset * side) + dir * along,
+                        rng.next_u32(),
+                        model_id,
+                        footprint,
+                        &mut ruin_count,
+                    );
+                    travelled += rng.range(650.0, 1900.0);
+                }
+            }
+        }
+    }
+    tracing::info!("castle ruins: {} pieces", ruin_count);
+
+    let collision = WorldCollision::new(collision_grid, sight_grid, origin_tile_x, origin_tile_y);
 
     let spawn_hint = map
-        .lanes
-        .first()
-        .and_then(|lane| lane.waypoints.get(1))
-        .copied()
+        .spawn
+        .map(|(x, z)| Vec3::new((x + 0.5) * 128.0, 0.0, (z + 0.5) * 128.0))
+        .or_else(|| {
+            map.lanes
+                .first()
+                .and_then(|lane| lane.waypoints.get(1))
+                .copied()
+        })
         .unwrap_or(center);
     let player_spawn = find_walkable_spawn(&height, &collision, spawn_hint, &terrains)?;
     let npc_spawns = build_npc_spawns(&height, &collision, center, player_spawn, &terrains);
+    let ambient_spawns = build_ambient_spawns(
+        cache,
+        &height,
+        &collision,
+        &map,
+        &colors,
+        size,
+        (origin_tile_x, origin_tile_y),
+    );
 
     tracing::info!(
-        "scene: {} regions, {} terrain verts, {} model verts, {} placements, {} npcs, map {:?} lanes {:?}, center {:?}",
+        "scene: {} regions, {} terrain verts, {} model verts, {} placements ({} ground decor), {} npcs, map {:?} lanes {:?}, center {:?}",
         terrains.len(),
         terrain_mesh.vertices.len(),
         model_mesh.vertices.len(),
         placements,
+        decor_placements,
         npc_spawns.len(),
         map.name,
         map.lanes
@@ -1217,14 +2404,39 @@ pub fn build(
         center
     );
 
+    // A distant ground plane hides the loaded-block edge and gives the sky a
+    // horizon to meet. It sits below the terrain and fades into fog.
+    let backdrop_y = -24.0;
+    let backdrop = 220_000.0;
+    let bx0 = center.x - backdrop;
+    let bx1 = center.x + backdrop;
+    let bz0 = center.z - backdrop;
+    let bz1 = center.z + backdrop;
+    let bc = [44, 62, 40];
+    model_mesh.push_triangle(
+        SceneVertex::new(Vec3::new(bx0, backdrop_y, bz0), Vec3::Y, bc),
+        SceneVertex::new(Vec3::new(bx1, backdrop_y, bz0), Vec3::Y, bc),
+        SceneVertex::new(Vec3::new(bx0, backdrop_y, bz1), Vec3::Y, bc),
+    );
+    model_mesh.push_triangle(
+        SceneVertex::new(Vec3::new(bx1, backdrop_y, bz0), Vec3::Y, bc),
+        SceneVertex::new(Vec3::new(bx1, backdrop_y, bz1), Vec3::Y, bc),
+        SceneVertex::new(Vec3::new(bx0, backdrop_y, bz1), Vec3::Y, bc),
+    );
+
     Ok(SceneData {
         terrain: terrain_mesh,
         models: model_mesh,
+        water: water_mesh,
+        shadows: shadow_mesh,
+        shadow_casters: shadow_caster_mesh,
         placements,
         height,
         collision,
+        atmosphere: map.atmosphere.clone(),
         map,
         npc_spawns,
+        ambient_spawns,
         player_spawn,
     })
 }
@@ -1339,62 +2551,443 @@ fn build_npc_spawns(
     }
 
     let mut spawns = Vec::new();
-    for (i, pos) in spots.iter().enumerate() {
-        if i % 4 == 3 {
-            spawns.push(NpcSpawn {
-                model_id: 10413,
-                idle_sequence: 1721,
-                walk_sequence: Some(2405),
-                pos: *pos,
-                scale: 1.6,
-            });
-        } else {
-            spawns.push(NpcSpawn {
-                model_id: 7744,
-                idle_sequence: 222,
-                walk_sequence: Some(219),
-                pos: *pos,
-                scale: 2.2,
-            });
-        }
+    for pos in &spots {
+        spawns.push(NpcSpawn {
+            model_id: 10413,
+            idle_sequence: 1721,
+            walk_sequence: Some(2405),
+            pos: *pos,
+            scale: 1.6,
+        });
     }
     spawns
 }
 
-fn is_blocking_object(def: &ObjectDefinition) -> bool {
-    let name = def.name.to_lowercase();
-    if name.contains("plant")
-        || name.contains("flower")
-        || name.contains("grass")
-        || name.contains("fern")
-        || name.contains("vine")
-        || name.contains("reed")
-    {
-        return false;
+struct AmbientTemplate {
+    models: Vec<u32>,
+    idle_sequence: u32,
+    walk_sequence: u32,
+    scale: f32,
+    recolors: Vec<(i16, i16)>,
+}
+
+fn ambient_template(cache: &Cache, npc_id: u32, scale: f32) -> Option<AmbientTemplate> {
+    let data = cache.file(2, 9, npc_id).ok()?;
+    let def = NpcDefinition::parse(npc_id, &data).ok()?;
+    if def.models.is_empty() {
+        return None;
     }
-    if def.wall_or_door != 0 {
-        return true;
+    let models = def.models.clone();
+    let idle_sequence = u32::try_from(def.standing_animation).ok()?;
+    let walk_sequence = u32::try_from(def.walking_animation).unwrap_or(idle_sequence);
+    let recolors = def
+        .recolor_to_find
+        .iter()
+        .copied()
+        .zip(def.recolor_to_replace.iter().copied())
+        .collect();
+    Some(AmbientTemplate {
+        models,
+        idle_sequence,
+        walk_sequence,
+        scale,
+        recolors,
+    })
+}
+
+fn ground_color_at(
+    colors: &[[u8; 3]],
+    size: usize,
+    origin: (i32, i32),
+    x: f32,
+    z: f32,
+) -> Option<[u8; 3]> {
+    let gx = (x / 128.0 - origin.0 as f32).floor() as isize;
+    let gy = (z / 128.0 - origin.1 as f32).floor() as isize;
+    if gx < 0 || gy < 0 || gx >= size as isize || gy >= size as isize {
+        return None;
     }
-    if def.size_x > 1 || def.size_y > 1 {
-        return true;
+    Some(colors[gy as usize * size + gx as usize])
+}
+
+fn ground_is_green(colors: &[[u8; 3]], size: usize, origin: (i32, i32), x: f32, z: f32) -> bool {
+    ground_color_at(colors, size, origin, x, z).is_some_and(|color| {
+        color[1] > color[0].saturating_add(6) && color[1] > color[2].saturating_add(6)
+    })
+}
+
+fn ground_is_land(colors: &[[u8; 3]], size: usize, origin: (i32, i32), x: f32, z: f32) -> bool {
+    ground_color_at(colors, size, origin, x, z)
+        .is_some_and(|color| color[2] <= color[1].saturating_add(8))
+}
+
+/// Butterflies across the natural ground and a slow herd of monkey-riding
+/// cows in the grass ring around the map edge.
+fn build_ambient_spawns(
+    cache: &Cache,
+    height: &HeightGrid,
+    collision: &WorldCollision,
+    map: &MapLayout,
+    colors: &[[u8; 3]],
+    size: usize,
+    origin: (i32, i32),
+) -> Vec<AmbientSpawn> {
+    const BUTTERFLY_NPCS: &[u32] = &[234, 235, 236, 237, 238, 1854, 1855, 3923];
+    const COW_NPC: u32 = 10598;
+
+    let butterflies = BUTTERFLY_NPCS
+        .iter()
+        .filter_map(|&npc_id| ambient_template(cache, npc_id, 5.0))
+        .collect::<Vec<_>>();
+    let cow = ambient_template(cache, COW_NPC, 1.7);
+
+    let mut rng = Rng::new(0xA3B1_7F2D_9C4E_51B7);
+    let mut spawns = Vec::new();
+    let mut butterfly_count = 0usize;
+    let butterfly_target = butterflies.len() * 5;
+    let mut butterfly_attempts = 0usize;
+    while butterfly_count < butterfly_target && butterfly_attempts < 12_000 {
+        butterfly_attempts += 1;
+        let tile_x = rng.range(5.0, size as f32 - 6.0);
+        let tile_y = rng.range(5.0, size as f32 - 6.0);
+        let x = (origin.0 as f32 + tile_x) * 128.0 + 64.0;
+        let z = (origin.1 as f32 + tile_y) * 128.0 + 64.0;
+        if !height.contains(x, z)
+            || !ground_is_green(colors, size, origin, x, z)
+            || !collision.is_walkable_world(x, z)
+            || map.distance_to_lane(x, z) < 1.5 * 128.0
+        {
+            continue;
+        }
+        let pos = Vec3::new(x, height.height_at(x, z), z);
+        if spawns
+            .iter()
+            .any(|spawn: &AmbientSpawn| spawn.pos.distance(pos) < 2.5 * 128.0)
+        {
+            continue;
+        }
+        let template = &butterflies[butterfly_count % butterflies.len()];
+        spawns.push(AmbientSpawn {
+            kind: AmbientKind::Butterfly,
+            model_id: template.models[0],
+            attachments: template.models[1..].to_vec(),
+            idle_sequence: template.idle_sequence,
+            walk_sequence: template.walk_sequence,
+            pos,
+            scale: template.scale,
+            recolors: template.recolors.clone(),
+        });
+        butterfly_count += 1;
     }
-    [
-        "tree", "rock", "wall", "fence", "ruin", "pillar", "statue", "crate", "barrel", "table",
-        "altar", "door", "gate", "bank", "chest", "stump",
-    ]
-    .iter()
-    .any(|needle| name.contains(needle))
+
+    // A few butterflies near each nexus guarantee the coloured variants are
+    // seen without hunting the whole map.
+    if !butterflies.is_empty() {
+        let mut bases = Vec::new();
+        for lane in &map.lanes {
+            for end in [lane.waypoints.first(), lane.waypoints.last()]
+                .into_iter()
+                .flatten()
+            {
+                if !bases
+                    .iter()
+                    .any(|base: &Vec3| base.distance(*end) < 8.0 * 128.0)
+                {
+                    bases.push(*end);
+                }
+            }
+        }
+        let mut placed = 0usize;
+        for base in bases {
+            let mut attempts = 0usize;
+            let mut here = 0usize;
+            while here < 4 && attempts < 120 {
+                attempts += 1;
+                let angle = (here as f32 / 4.0) * std::f32::consts::TAU + rng.range(-0.45, 0.45);
+                let radius = rng.range(6.0, 15.0) * 128.0;
+                let x = base.x + angle.cos() * radius;
+                let z = base.z + angle.sin() * radius;
+                if !height.contains(x, z)
+                    || !ground_is_green(colors, size, origin, x, z)
+                    || !collision.is_walkable_world(x, z)
+                    || map.distance_to_lane(x, z) < 2.0 * 128.0
+                {
+                    continue;
+                }
+                let pos = Vec3::new(x, height.height_at(x, z), z);
+                if spawns
+                    .iter()
+                    .any(|spawn: &AmbientSpawn| spawn.pos.distance(pos) < 4.0 * 128.0)
+                {
+                    continue;
+                }
+                let template = &butterflies[placed % butterflies.len()];
+                spawns.push(AmbientSpawn {
+                    kind: AmbientKind::Butterfly,
+                    model_id: template.models[0],
+                    attachments: template.models[1..].to_vec(),
+                    idle_sequence: template.idle_sequence,
+                    walk_sequence: template.walk_sequence,
+                    pos,
+                    scale: template.scale,
+                    recolors: template.recolors.clone(),
+                });
+                butterfly_count += 1;
+                placed += 1;
+                here += 1;
+            }
+        }
+    }
+
+    let mut cow_count = 0usize;
+    if let Some(template) = cow {
+        let min_x = origin.0 as f32 + 5.0;
+        let max_x = origin.0 as f32 + size as f32 - 6.0;
+        let min_y = origin.1 as f32 + 5.0;
+        let max_y = origin.1 as f32 + size as f32 - 6.0;
+        for side in 0..4 {
+            let mut placed = 0usize;
+            let mut attempts = 0usize;
+            while placed < 4 && attempts < 800 {
+                attempts += 1;
+                let depth = rng.range(5.0, 24.0);
+                let (tile_x, tile_y) = match side {
+                    0 => (rng.range(min_x + 3.0, max_x - 3.0), min_y + depth),
+                    1 => (rng.range(min_x + 3.0, max_x - 3.0), max_y - depth),
+                    2 => (min_x + depth, rng.range(min_y + 3.0, max_y - 3.0)),
+                    _ => (max_x - depth, rng.range(min_y + 3.0, max_y - 3.0)),
+                };
+                let x = tile_x * 128.0 + 64.0;
+                let z = tile_y * 128.0 + 64.0;
+                if !height.contains(x, z)
+                    || !ground_is_green(colors, size, origin, x, z)
+                    || !collision.is_walkable_world(x, z)
+                    || map.distance_to_lane(x, z) < 7.0 * 128.0
+                    || map.in_biome(tile_x as i32, tile_y as i32)
+                    || map
+                        .structures
+                        .iter()
+                        .any(|structure| structure.pos.distance(Vec3::new(x, 0.0, z)) < 6.0 * 128.0)
+                {
+                    continue;
+                }
+                let pos = Vec3::new(x, height.height_at(x, z), z);
+                if spawns.iter().any(|spawn| {
+                    spawn.kind == AmbientKind::Cow && spawn.pos.distance(pos) < 10.0 * 128.0
+                }) {
+                    continue;
+                }
+                spawns.push(AmbientSpawn {
+                    kind: AmbientKind::Cow,
+                    model_id: template.models[0],
+                    attachments: template.models[1..].to_vec(),
+                    idle_sequence: template.idle_sequence,
+                    walk_sequence: template.walk_sequence,
+                    pos,
+                    scale: template.scale,
+                    recolors: template.recolors.clone(),
+                });
+                placed += 1;
+                cow_count += 1;
+            }
+        }
+    }
+
+    let mut crab_count = 0usize;
+    if let (Some(template), Some(river)) = (ambient_template(cache, 1553, 2.0), &map.river) {
+        if river.points.len() >= 2 {
+            for pair in river.points.windows(2) {
+                let (ax, ay) = pair[0];
+                let (bx, by) = pair[1];
+                let dx = bx - ax;
+                let dy = by - ay;
+                let len = (dx * dx + dy * dy).sqrt().max(0.001);
+                let nx = -dy / len;
+                let ny = dx / len;
+                let steps = ((len / 4.0).ceil() as usize).max(1);
+                for step in 0..steps {
+                    if crab_count >= 28 {
+                        break;
+                    }
+                    let t = (step as f32 + 0.5) / steps as f32;
+                    let cx = ax + dx * t;
+                    let cy = ay + dy * t;
+                    for side in [-1.0f32, 1.0] {
+                        if rng.chance(0.45) {
+                            continue;
+                        }
+                        let offset = river.width + 1.6 + (step % 3) as f32 * 0.55;
+                        let tile_x = cx + nx * offset * side;
+                        let tile_y = cy + ny * offset * side;
+                        let x = tile_x * 128.0 + 64.0;
+                        let z = tile_y * 128.0 + 64.0;
+                        if !height.contains(x, z)
+                            || !ground_is_land(colors, size, origin, x, z)
+                            || !collision.is_walkable_world(x, z)
+                            || map.distance_to_lane(x, z) < 2.5 * 128.0
+                            || spawns.iter().any(|spawn: &AmbientSpawn| {
+                                spawn.kind == AmbientKind::Crab
+                                    && spawn.pos.distance(Vec3::new(x, 0.0, z)) < 2.5 * 128.0
+                            })
+                        {
+                            continue;
+                        }
+                        let pos = Vec3::new(x, height.height_at(x, z), z);
+                        spawns.push(AmbientSpawn {
+                            kind: AmbientKind::Crab,
+                            model_id: template.models[0],
+                            attachments: template.models[1..].to_vec(),
+                            idle_sequence: template.idle_sequence,
+                            walk_sequence: template.walk_sequence,
+                            pos,
+                            scale: template.scale,
+                            recolors: template.recolors.clone(),
+                        });
+                        crab_count += 1;
+                    }
+                }
+            }
+        }
+    }
+
+    tracing::info!(
+        "ambient creatures: {} butterflies ({} variants, {} attempts), {} pasture cows, {} shore crabs",
+        butterfly_count,
+        butterflies.len(),
+        butterfly_attempts,
+        cow_count,
+        crab_count
+    );
+    spawns
 }
 
 fn is_scenery(def: &ObjectDefinition) -> bool {
     let name = def.name.to_lowercase();
+    // Palms and jungle trees use tall bare trunks that read as green pillars
+    // at MOBA scale. The lane bands use broadleaf trees, bushes, boulders and
+    // ruins instead.
+    if name.contains("palm") || name.contains("jungle") || name.contains("tropical tree") {
+        return false;
+    }
+    // Several cache revisions reuse bare stems, dead branches and palm
+    // models under generic "Tree" names. With a leaf hint those become solid
+    // green columns. Keep them only when the object is explicitly a dead
+    // tree (which is rendered with bark on every face).
+    // Stumps, logs and young cuttings are trunk-only meshes; tinting them
+    // with a leaf texture produces the tall green columns this pass removed.
+    if ["stump", "fallen", "hollow", "sapling", "log"]
+        .iter()
+        .any(|needle| name.contains(needle))
+    {
+        return false;
+    }
+    const BARE_TREE_MODELS: &[u32] = &[1605, 1621, 1681, 1682, 1683, 1687, 1701, 1702, 1715, 1716];
+    if !name.contains("dead")
+        && def
+            .models
+            .iter()
+            .any(|model| BARE_TREE_MODELS.contains(model))
+    {
+        return false;
+    }
     name.contains("tree")
-        || name.contains("palm")
-        || name.contains("jungle")
         || name.contains("plant")
         || name.contains("bush")
         || name.contains("fern")
         || name.contains("cactus")
+}
+
+fn cached_model<'a>(
+    cache: &Cache,
+    model_cache: &'a mut HashMap<u32, Model>,
+    model_id: u32,
+) -> Result<&'a Model> {
+    if let std::collections::hash_map::Entry::Vacant(entry) = model_cache.entry(model_id) {
+        let group = cache.group(7, model_id)?;
+        let model = Model::load(model_id, &group.data)?;
+        entry.insert(model);
+    }
+    Ok(model_cache.get(&model_id).expect("model inserted"))
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum GroundDecor {
+    Flower,
+    Grass,
+    Fern,
+    Mushroom,
+    Rock,
+    Twig,
+    Plant,
+}
+
+impl GroundDecor {
+    /// Ground clutter is deliberately non-blocking. Only objects that look
+    /// like a low plant, loose stone or broken wood qualify.
+    fn from_definition(def: &ObjectDefinition) -> Option<Self> {
+        let name = def.name.to_lowercase();
+        if name.is_empty()
+            || name.contains("potted")
+            || [
+                "chair", "table", "bench", "crate", "chest", "bank", "counter", "shelf", "bed",
+                "fire", "portal", "fountain", "well", "altar", "statue", "wall", "door", "gate",
+                "ladder", "stair", "furnace", "anvil", "range", "spinning", "loom", "barrel",
+                "sack", "coffin", "grave", "sign", "flag", "banner", "lantern", "candle", "torch",
+                "cage", "rack", "display", "machine", "pump", "pipe", "wheel", "cart", "boat",
+                "canoe", "target", "dummy",
+            ]
+            .iter()
+            .any(|needle| name.contains(needle))
+        {
+            return None;
+        }
+        if name.contains("flower")
+            || name.contains("rose")
+            || name.contains("tulip")
+            || name.contains("thistle")
+            || name.contains("nettle")
+            || name.contains("herb")
+        {
+            return Some(Self::Flower);
+        }
+        if name.contains("mushroom") || name.contains("toadstool") {
+            return Some(Self::Mushroom);
+        }
+        if name.contains("fern") {
+            return Some(Self::Fern);
+        }
+        if name.contains("grass") || name.contains("reed") || name.contains("weed") {
+            return Some(Self::Grass);
+        }
+        if name.contains("twig") || name.contains("branch") {
+            return Some(Self::Twig);
+        }
+        if name.contains("rock") || name.contains("boulder") || name.contains("stone") {
+            return Some(Self::Rock);
+        }
+        if name.contains("plant")
+            || name.contains("vine")
+            || name.contains("leaf")
+            || name.contains("leaves")
+            || name.contains("bush")
+            || name.contains("shrub")
+            || name.contains("coral")
+            || name.contains("shell")
+        {
+            return Some(Self::Plant);
+        }
+        // Roots and stumps are left to the full scenery pass; they are too
+        // large and structural for the low ground-cover layer.
+        None
+    }
+
+    fn shadow_size(self) -> f32 {
+        match self {
+            Self::Rock => 62.0,
+            Self::Mushroom => 26.0,
+            _ => 0.0,
+        }
+    }
 }
 
 fn load_underlays(cache: &Cache) -> Result<HashMap<u32, UnderlayDefinition>> {
@@ -1419,99 +3012,1342 @@ fn load_overlays(cache: &Cache) -> Result<HashMap<u32, OverlayDefinition>> {
     Ok(out)
 }
 
-/// Half the width of a lane's road, in world units.
-const ROAD_HALF_WIDTH: f32 = 1.5 * 128.0;
-/// How far either side of the road's edge its colour fades into the ground.
-const ROAD_EDGE: f32 = 56.0;
-/// The road's own colour, before light: a worn grey-brown.
-const ROAD_COLOUR: [f32; 3] = [128.0, 120.0, 104.0];
+/// Gaussian-relax the heightfield to remove single-tile rock spikes while
+/// keeping broad hills. River cells are left untouched so the carved bed and
+/// banks stay exactly where the water mesh expects them.
+fn relax_heights(heights: &mut [f32], size: usize, water: &[f32], passes: usize) {
+    const NEIGHBOURS: [(i32, i32, f32); 8] = [
+        (-1, 0, 2.0),
+        (1, 0, 2.0),
+        (0, -1, 2.0),
+        (0, 1, 2.0),
+        (-1, -1, 1.0),
+        (1, -1, 1.0),
+        (-1, 1, 1.0),
+        (1, 1, 1.0),
+    ];
+    for _ in 0..passes {
+        let src = heights.to_vec();
+        for gy in 1..size - 1 {
+            for gx in 1..size - 1 {
+                let i = gy * size + gx;
+                if water[i] > 0.05 {
+                    continue;
+                }
+                let mut sum = src[i] * 4.0;
+                let mut weight = 4.0;
+                for (dx, dy, w) in NEIGHBOURS {
+                    let j = (gy as i32 + dy) as usize * size + (gx as i32 + dx) as usize;
+                    if water[j] > 0.05 {
+                        continue;
+                    }
+                    sum += src[j] * w;
+                    weight += w;
+                }
+                heights[i] = sum / weight;
+            }
+        }
+    }
+}
 
-/// How far the natural ground's colour is softened, in tiles each way. The
-/// game's own figure.
-const GROUND_BLEND_RADIUS: usize = 5;
+/// Add two octaves of very low frequency relief so large flat fields read as
+/// rolling ground instead of a tabletop. Amplitudes stay well under a tile so
+/// pathing, collision and the lane levelling pass are unaffected.
+fn add_rolling_relief(
+    heights: &mut [f32],
+    size: usize,
+    origin_tile_x: i32,
+    origin_tile_y: i32,
+    water: &[f32],
+) {
+    for gy in 0..size {
+        for gx in 0..size {
+            let i = gy * size + gx;
+            if water[i] > 0.05 {
+                continue;
+            }
+            let wx = (origin_tile_x + gx as i32) as f32 * 128.0;
+            let wz = (origin_tile_y + gy as i32) as f32 * 128.0;
+            let broad = (value_noise(wx * 0.00042, wz * 0.00042) - 0.5) * 52.0;
+            let medium = (value_noise(wx * 0.0011 + 31.0, wz * 0.0011 + 7.0) - 0.5) * 18.0;
+            heights[i] += broad + medium;
+        }
+    }
+}
 
-/// The two colours of one tile: its natural ground, which is softened over
-/// its neighbours, and whatever is laid over that (a path, a floor, water),
-/// which is not. Either may be absent.
-fn tile_paint(
+/// Level each team courtyard to its centre height with a soft skirt at the
+/// walls. The cache ground under a base is uneven; a built plaza should be
+/// flat so structures, the fountain and future paving sit flush.
+fn flatten_bases(
+    heights: &mut [f32],
+    size: usize,
+    origin_tile_x: i32,
+    origin_tile_y: i32,
+    castle: Option<&CastleSpec>,
+) {
+    let Some(castle) = castle else { return };
+    for base in &castle.bases {
+        let half = base.size * 0.5;
+        let cx = base.center.0;
+        let cz = base.center.1;
+        let ci = ((cz - origin_tile_y as f32).clamp(0.0, size as f32 - 1.0) as usize) * size
+            + (cx - origin_tile_x as f32).clamp(0.0, size as f32 - 1.0) as usize;
+        let target = heights[ci];
+        let x0 = cx - half;
+        let x1 = cx + half;
+        let z0 = cz - half;
+        let z1 = cz + half;
+        let gx0 = (x0 - origin_tile_x as f32 - 3.0).floor().max(0.0) as usize;
+        let gx1 = (x1 - origin_tile_x as f32 + 3.0)
+            .ceil()
+            .min(size as f32 - 1.0) as usize;
+        let gy0 = (z0 - origin_tile_y as f32 - 3.0).floor().max(0.0) as usize;
+        let gy1 = (z1 - origin_tile_y as f32 + 3.0)
+            .ceil()
+            .min(size as f32 - 1.0) as usize;
+        for gy in gy0..=gy1 {
+            for gx in gx0..=gx1 {
+                let tx = (origin_tile_x + gx as i32) as f32;
+                let tz = (origin_tile_y + gy as i32) as f32;
+                // Depth inside the courtyard rectangle, in tiles. Negative
+                // outside; the skirt blends over three tiles at the wall.
+                let depth = (tx - x0).min(x1 - tx).min(tz - z0).min(z1 - tz);
+                let t = smoothstep(-1.0, 2.0, depth);
+                if t <= 0.0 {
+                    continue;
+                }
+                let i = gy * size + gx;
+                heights[i] = heights[i] * (1.0 - t) + target * t;
+            }
+        }
+    }
+}
+
+fn box_blur_colors(colors: &[[u8; 3]], size: usize, radius: i32) -> Vec<[u8; 3]> {
+    let mut horizontal = vec![[0u8; 3]; colors.len()];
+    for y in 0..size {
+        for x in 0..size {
+            let mut sum = [0u32; 3];
+            let mut count = 0u32;
+            for dx in -radius..=radius {
+                let sx = x as i32 + dx;
+                if sx < 0 || sx >= size as i32 {
+                    continue;
+                }
+                let c = colors[y * size + sx as usize];
+                sum[0] += c[0] as u32;
+                sum[1] += c[1] as u32;
+                sum[2] += c[2] as u32;
+                count += 1;
+            }
+            horizontal[y * size + x] = [
+                (sum[0] / count) as u8,
+                (sum[1] / count) as u8,
+                (sum[2] / count) as u8,
+            ];
+        }
+    }
+    let mut out = vec![[0u8; 3]; colors.len()];
+    for y in 0..size {
+        for x in 0..size {
+            let mut sum = [0u32; 3];
+            let mut count = 0u32;
+            for dy in -radius..=radius {
+                let sy = y as i32 + dy;
+                if sy < 0 || sy >= size as i32 {
+                    continue;
+                }
+                let c = horizontal[sy as usize * size + x];
+                sum[0] += c[0] as u32;
+                sum[1] += c[1] as u32;
+                sum[2] += c[2] as u32;
+                count += 1;
+            }
+            out[y * size + x] = [
+                (sum[0] / count) as u8,
+                (sum[1] / count) as u8,
+                (sum[2] / count) as u8,
+            ];
+        }
+    }
+    out
+}
+
+fn tile_color(
     terrain: &Terrain,
     underlays: &HashMap<u32, UnderlayDefinition>,
     overlays: &HashMap<u32, OverlayDefinition>,
     x: usize,
     y: usize,
-) -> (Option<[f32; 3]>, Option<[f32; 3]>) {
+) -> [u8; 3] {
     let tile = terrain.tile(0, x, y);
-    let float = |c: [u8; 3]| c.map(|v| v as f32);
 
-    let under = (tile.underlay_id > 0)
-        .then(|| underlays.get(&(tile.underlay_id as u32)))
-        .flatten()
-        .map(|underlay| float(underlay.color()));
-
-    // 0xff00ff is a sentinel for "texture-only" ground overlays. Until
-    // textures are sampled, such a tile shows its natural ground.
-    let over = (tile.overlay_id > 0)
-        .then(|| overlays.get(&(tile.overlay_id as u32)))
-        .flatten()
-        .map(|overlay| overlay.color())
-        .filter(|&c| c != [255, 0, 255])
-        .map(float);
-
-    if under.is_some() || over.is_some() {
-        return (under, over);
+    if tile.overlay_id > 0 {
+        if let Some(overlay) = overlays.get(&(tile.overlay_id as u32)) {
+            let color = overlay.color();
+            // 0xff00ff is a sentinel for "texture-only" ground overlays. Until
+            // textures are sampled, fall through to the underlay colour.
+            if color != [255, 0, 255] {
+                return color;
+            }
+        }
+    }
+    if tile.underlay_id > 0 {
+        if let Some(underlay) = underlays.get(&(tile.underlay_id as u32)) {
+            return underlay.color();
+        }
     }
 
-    // nothing defined: water at the bottom, bare ground above it
-    let bare = if tile.height == 0 {
+    if tile.height == 0 {
         [31, 70, 105]
     } else if tile.height < 8 {
         [72, 112, 55]
     } else {
         [90, 105, 62]
+    }
+}
+
+/// Small deterministic xorshift RNG. The map is generated from a fixed seed
+/// so every match starts from the same world.
+struct Rng(u64);
+
+impl Rng {
+    fn new(seed: u64) -> Self {
+        Self(seed | 1)
+    }
+
+    fn next_u32(&mut self) -> u32 {
+        let mut x = self.0;
+        x ^= x >> 12;
+        x ^= x << 25;
+        x ^= x >> 27;
+        self.0 = x;
+        (x.wrapping_mul(0x2545_F491_4F6C_DD1D) >> 32) as u32
+    }
+
+    fn f32(&mut self) -> f32 {
+        self.next_u32() as f32 / u32::MAX as f32
+    }
+
+    fn range(&mut self, lo: f32, hi: f32) -> f32 {
+        lo + (hi - lo) * self.f32()
+    }
+
+    fn chance(&mut self, p: f32) -> bool {
+        self.f32() < p
+    }
+}
+
+/// Smooth value noise used to wobble the lane edges.
+fn value_noise(x: f32, z: f32) -> f32 {
+    let ix = x.floor();
+    let iz = z.floor();
+    let fx = x - ix;
+    let fz = z - iz;
+    let ux = fx * fx * (3.0 - 2.0 * fx);
+    let uz = fz * fz * (3.0 - 2.0 * fz);
+    let h = |dx: u32, dz: u32| {
+        let mut seed = (ix as i32 as u32).wrapping_mul(73856093);
+        seed ^= (iz as i32 as u32).wrapping_mul(19349663);
+        seed ^= dx << 8;
+        seed ^= dz;
+        hash01(seed)
     };
-    (None, Some(float(bare)))
+    let a = h(0, 0);
+    let b = h(1, 0);
+    let c = h(0, 1);
+    let d = h(1, 1);
+    let top = a + (b - a) * ux;
+    let bottom = c + (d - c) * ux;
+    top + (bottom - top) * uz
 }
 
-fn append_model(mesh: &mut MeshData, model: &Model, base: Vec3, angle: f32) {
-    append_model_scaled(mesh, model, base, angle, 1.0);
+/// Deterministic 0..1 hash used for scenery jitter.
+fn hash01(seed: u32) -> f32 {
+    let mut h = seed ^ 0x9E37_79B9;
+    h = h.wrapping_mul(0x85EB_CA6B);
+    h ^= h >> 13;
+    h = h.wrapping_mul(0xC2B2_AE35);
+    h ^= h >> 16;
+    (h & 0x00FF_FFFF) as f32 / 0x0100_0000 as f32
 }
 
-fn append_model_scaled(mesh: &mut MeshData, model: &Model, base: Vec3, angle: f32, scale: f32) {
+fn smoothstep(edge0: f32, edge1: f32, x: f32) -> f32 {
+    let t = ((x - edge0) / (edge1 - edge0)).clamp(0.0, 1.0);
+    t * t * (3.0 - 2.0 * t)
+}
+
+/// Distance to a polyline plus the index of the closest segment and how far
+/// along that segment the closest point sits.
+fn nearest_on_polyline(points: &[(f32, f32)], x: f32, y: f32) -> (f32, usize, f32) {
+    let mut best = (f32::MAX, 0usize, 0.0f32);
+    for (index, pair) in points.windows(2).enumerate() {
+        let (ax, ay) = pair[0];
+        let (bx, by) = pair[1];
+        let abx = bx - ax;
+        let aby = by - ay;
+        let len2 = abx * abx + aby * aby;
+        if len2 <= 1e-6 {
+            continue;
+        }
+        let t = (((x - ax) * abx + (y - ay) * aby) / len2).clamp(0.0, 1.0);
+        let px = ax + abx * t;
+        let py = ay + aby * t;
+        let d = ((x - px) * (x - px) + (y - py) * (y - py)).sqrt();
+        if d < best.0 {
+            best = (d, index, t);
+        }
+    }
+    best
+}
+
+/// True for the OSRS objects that are plants, so their flat coloured faces
+/// can be replaced with foliage green.
+fn is_plant_object(def: &ObjectDefinition) -> bool {
+    let name = def.name.to_lowercase();
+    [
+        "tree", "palm", "jungle", "bush", "plant", "leaves", "sapling",
+    ]
+    .iter()
+    .any(|needle| name.contains(needle))
+}
+
+/// Scenery that is worth the draw call inside a biome pocket.
+fn is_pocket_scenery(def: &ObjectDefinition) -> bool {
+    let name = def.name.to_lowercase();
+    if name.is_empty() {
+        return false;
+    }
+    ![
+        "flower", "daisies", "grass", "fern", "plant", "weed", "herb", "sapling", "mushroom",
+        "palm", "jungle",
+    ]
+    .iter()
+    .any(|needle| name.contains(needle))
+}
+
+/// Order pocket scenery so landmark objects are placed before clutter.
+fn scenery_priority(def: &ObjectDefinition) -> u8 {
+    let name = def.name.to_lowercase();
+    if name.contains("tree") || name.contains("palm") || name.contains("jungle") {
+        return 0;
+    }
+    if [
+        "pillar", "statue", "ruin", "castle", "bank", "shop", "door", "wall", "fence", "grave",
+        "tent", "altar", "monument", "cauldron", "fountain", "banner", "hut", "village", "tower",
+    ]
+    .iter()
+    .any(|needle| name.contains(needle))
+    {
+        return 1;
+    }
+    2
+}
+
+struct ScenerySink<'a> {
+    model_cache: &'a mut HashMap<u32, Model>,
+    model_mesh: &'a mut MeshData,
+    shadow_mesh: &'a mut MeshData,
+    shadow_caster_mesh: &'a mut MeshData,
+    collision_grid: &'a mut Grid,
+}
+
+struct TreeContext<'a> {
+    cache: &'a Cache,
+    map: &'a MapLayout,
+    height: &'a HeightGrid,
+    structures: &'a [Vec3],
+    river_blocked: &'a [(i32, i32)],
+    origin: (i32, i32),
+}
+
+/// Place one broken castle wall or ruin cluster. Ruins sit behind the tree
+/// line so they never block a lane.
+#[allow(clippy::too_many_arguments)]
+fn place_ruin(
+    ctx: &TreeContext<'_>,
+    sink: &mut ScenerySink<'_>,
+    pos: Vec3,
+    seed: u32,
+    model_id: u32,
+    footprint: i32,
+    count: &mut usize,
+) {
+    let tile_x = (pos.x / 128.0).floor() as i32;
+    let tile_y = (pos.z / 128.0).floor() as i32;
+    if !ctx.height.contains(pos.x, pos.z) {
+        return;
+    }
+    if ctx
+        .structures
+        .iter()
+        .any(|s| s.distance(pos) < 10.0 * 128.0)
+    {
+        return;
+    }
+    if ctx.map.distance_to_lane(pos.x, pos.z) < 8.0 * 128.0 {
+        return;
+    }
+    if ctx.map.in_biome(tile_x, tile_y) {
+        return;
+    }
+    let gx = tile_x - ctx.origin.0;
+    let gy = tile_y - ctx.origin.1;
+    if ctx.river_blocked.contains(&(gx, gy)) {
+        return;
+    }
+
+    let model = if let Some(model) = sink.model_cache.get(&model_id) {
+        model
+    } else {
+        let Ok(group) = ctx.cache.group(7, model_id) else {
+            return;
+        };
+        let Ok(model) = Model::load(model_id, &group.data) else {
+            return;
+        };
+        sink.model_cache.insert(model_id, model);
+        sink.model_cache.get(&model_id).unwrap()
+    };
+
+    let base = Vec3::new(pos.x, ctx.height.height_at(pos.x, pos.z), pos.z);
+    let angle = (hash01(seed ^ 0x1234_5678) * 4.0).floor() * std::f32::consts::FRAC_PI_2;
+    let scale = RUIN_SCALE_MIN + hash01(seed.wrapping_add(3)) * (RUIN_SCALE_MAX - RUIN_SCALE_MIN);
+    append_model_scaled_tinted(
+        sink.model_mesh,
+        model,
+        base,
+        angle,
+        scale,
+        [0.92, 0.9, 0.86],
+        pick_texture(TEX_STONE, seed),
+        false,
+    );
+    append_model_caster(
+        sink.shadow_caster_mesh,
+        model,
+        base,
+        angle,
+        scale,
+        CasterStyle::Building,
+    );
+    push_blob_quad(
+        sink.shadow_mesh,
+        base,
+        (165.0 * scale).clamp(180.0, 340.0),
+        0.22,
+    );
+    sink.collision_grid
+        .block_rect(gx - footprint / 2, gy - footprint / 2, footprint, footprint);
+    *count += 1;
+}
+
+/// Larger thematic props that break up the tree line without bringing back
+/// the tall palm/jungle pillars: mossy boulders, low bushes and ferns.
+fn place_lane_prop(
+    ctx: &TreeContext<'_>,
+    sink: &mut ScenerySink<'_>,
+    pos: Vec3,
+    seed: u32,
+    count: &mut usize,
+) {
+    let tile_x = (pos.x / 128.0).floor() as i32;
+    let tile_y = (pos.z / 128.0).floor() as i32;
+    if !ctx.height.contains(pos.x, pos.z)
+        || ctx.structures.iter().any(|s| s.distance(pos) < 9.0 * 128.0)
+        || ctx.map.distance_to_lane(pos.x, pos.z) < 5.2 * 128.0
+        || ctx.map.in_biome(tile_x, tile_y)
+    {
+        return;
+    }
+    let gx = tile_x - ctx.origin.0;
+    let gy = tile_y - ctx.origin.1;
+    if ctx.river_blocked.contains(&(gx, gy)) {
+        return;
+    }
+
+    // Boulders use stone; bushes and ferns use foliage.
+    let props: &[(u32, bool)] = &[
+        (1669, true),
+        (1670, true),
+        (1671, true),
+        (1672, true),
+        (1773, false),
+        (1805, false),
+        (1391, false),
+    ];
+    let (model_id, leafy) = props[(seed as usize) % props.len()];
+    let model = if let Some(model) = sink.model_cache.get(&model_id) {
+        model
+    } else {
+        let Ok(group) = ctx.cache.group(7, model_id) else {
+            return;
+        };
+        let Ok(model) = Model::load(model_id, &group.data) else {
+            return;
+        };
+        sink.model_cache.insert(model_id, model);
+        sink.model_cache.get(&model_id).unwrap()
+    };
+    let base = Vec3::new(pos.x, ctx.height.height_at(pos.x, pos.z), pos.z);
+    let angle = hash01(seed ^ 0x7a3d_2b19) * std::f32::consts::TAU;
+    let scale = 0.75 + hash01(seed.wrapping_add(9)) * 0.45;
+    append_model_scaled_tinted(
+        sink.model_mesh,
+        model,
+        base,
+        angle,
+        scale,
+        if leafy {
+            [0.92, 1.0, 0.88]
+        } else {
+            [0.96, 0.94, 0.88]
+        },
+        pick_texture(if leafy { TEX_LEAVES } else { TEX_STONE }, seed),
+        false,
+    );
+    push_blob_quad(sink.shadow_mesh, base, 110.0 * scale, 0.2);
+    if !leafy {
+        sink.collision_grid.block_rect(gx, gy, 1, 1);
+    }
+    *count += 1;
+}
+
+/// Plant one OSRS tree model. Trees skirt the lanes, avoid structures and
+/// pockets, and tint themselves by the side of the river they stand on.
+fn place_tree(
+    ctx: &TreeContext<'_>,
+    sink: &mut ScenerySink<'_>,
+    pos: Vec3,
+    seed: u32,
+    count: &mut usize,
+) {
+    let tile_x = (pos.x / 128.0).floor() as i32;
+    let tile_y = (pos.z / 128.0).floor() as i32;
+    if !ctx.height.contains(pos.x, pos.z) {
+        return;
+    }
+    if ctx.structures.iter().any(|s| s.distance(pos) < 9.0 * 128.0) {
+        return;
+    }
+    if ctx.map.distance_to_lane(pos.x, pos.z) < 5.2 * 128.0 {
+        return;
+    }
+    if ctx.map.in_biome(tile_x, tile_y) {
+        return;
+    }
+    let gx = tile_x - ctx.origin.0;
+    let gy = tile_y - ctx.origin.1;
+    if ctx.river_blocked.contains(&(gx, gy)) {
+        return;
+    }
+
+    // Dire side gets dead and dark species, the radiant side keeps the lush
+    // green canopy.
+    let side = ctx.map.river_side(tile_x as f32, tile_y as f32);
+    // Only models with a real brown trunk and a full canopy belong in the
+    // lane tree line. The older pool mixed in bare tropical stems and dead
+    // trunks, which rendered as tall green pillars when given a leaf texture.
+    let pool: &[u32] = if side < 0.0 {
+        &[1570, 1611, 1637, 1650, 1614]
+    } else {
+        &[1570, 1637, 1611, 1650, 1614]
+    };
+    let model_id = pool[(seed as usize) % pool.len()];
+    let model = if let Some(model) = sink.model_cache.get(&model_id) {
+        model
+    } else {
+        let Ok(group) = ctx.cache.group(7, model_id) else {
+            return;
+        };
+        let Ok(model) = Model::load(model_id, &group.data) else {
+            return;
+        };
+        sink.model_cache.insert(model_id, model);
+        sink.model_cache.get(&model_id).unwrap()
+    };
+
+    let base = Vec3::new(pos.x, ctx.height.height_at(pos.x, pos.z), pos.z);
+    let angle = hash01(seed ^ 0x5bf0_3635) * std::f32::consts::TAU;
+    let scale = TREE_LINE_SCALE_MIN
+        + hash01(seed.wrapping_add(7)) * (TREE_LINE_SCALE_MAX - TREE_LINE_SCALE_MIN);
+    let tint = if side < 0.0 {
+        [0.86f32, 0.84, 0.76]
+    } else {
+        [0.78, 1.06, 0.94]
+    };
+    append_model_scaled_tinted(
+        sink.model_mesh,
+        model,
+        base,
+        angle,
+        scale,
+        tint,
+        pick_texture(TEX_LEAVES, seed),
+        side < 0.0,
+    );
+    append_model_caster(
+        sink.shadow_caster_mesh,
+        model,
+        base,
+        angle,
+        scale,
+        CasterStyle::Tree,
+    );
+    push_blob_quad(
+        sink.shadow_mesh,
+        base,
+        (150.0 * scale).clamp(180.0, 350.0),
+        0.22,
+    );
+    sink.collision_grid.block_rect(gx, gy, 2, 2);
+    *count += 1;
+}
+
+fn push_blob_quad(mesh: &mut MeshData, center: Vec3, size: f32, alpha: f32) {
+    let y = center.y + 4.0;
+    let base = mesh.vertices.len() as u32;
+    mesh.vertices.push(SceneVertex::blob(
+        Vec3::new(center.x - size, y, center.z - size),
+        alpha,
+        [0.0, 0.0],
+    ));
+    mesh.vertices.push(SceneVertex::blob(
+        Vec3::new(center.x + size, y, center.z - size),
+        alpha,
+        [1.0, 0.0],
+    ));
+    mesh.vertices.push(SceneVertex::blob(
+        Vec3::new(center.x - size, y, center.z + size),
+        alpha,
+        [0.0, 1.0],
+    ));
+    mesh.vertices.push(SceneVertex::blob(
+        Vec3::new(center.x + size, y, center.z + size),
+        alpha,
+        [1.0, 1.0],
+    ));
+    mesh.indices
+        .extend_from_slice(&[base, base + 1, base + 2, base + 2, base + 1, base + 3]);
+}
+
+#[derive(Debug, Clone, Copy)]
+enum ModelStyle {
+    Scenery {
+        tint: [f32; 3],
+        texture_hint: u32,
+        /// Dead, snowy and bare-branch trees use bark on every face.
+        wood_only: bool,
+    },
+    Decor {
+        kind: GroundDecor,
+        seed: u32,
+    },
+    /// Castle pieces force one bright stone texture across every face so the
+    /// cache wall mesh reads as the white fortress in the reference.
+    #[allow(dead_code)]
+    Castle {
+        tint: [f32; 3],
+        texture: u32,
+    },
+}
+
+/// A small palette of real cache texture IDs used when a model has no texture
+/// reference of its own. Keeping every face on a cache texture prevents the
+/// flat-colour triangles that used to clash with the sampled foliage and stone.
+const TEX_LEAVES: &[u32] = &[8, 28, 30, 41, 60];
+const TEX_STONE: &[u32] = &[2, 10, 44, 45, 46, 47];
+const TEX_WOOD: &[u32] = &[5, 16, 22, 23];
+const TEX_BARK: &[u32] = &[5, 23];
+const TEX_FLOWERS: &[u32] = &[31, 40, 56];
+const TEX_ROOF: &[u32] = &[6, 50];
+
+fn pick_texture(pool: &[u32], seed: u32) -> u32 {
+    let index = (hash01(seed) * pool.len() as f32) as usize;
+    pool[index.min(pool.len() - 1)]
+}
+
+fn is_dead_tree(def: &ObjectDefinition) -> bool {
+    let name = def.name.to_lowercase();
+    [
+        "dead", "dying", "burnt", "charred", "bare", "snow", "winter",
+    ]
+    .iter()
+    .any(|needle| name.contains(needle))
+}
+
+fn scenery_texture_hint(def: &ObjectDefinition, foliage: bool) -> u32 {
+    let name = def.name.to_lowercase();
+    let seed = def
+        .id
+        .wrapping_mul(0x9E37_79B9)
+        .wrapping_add(def.size_x as u32);
+    if foliage {
+        return pick_texture(TEX_LEAVES, seed);
+    }
+    if name.contains("roof") || name.contains("thatch") {
+        return pick_texture(TEX_ROOF, seed);
+    }
+    if name.contains("door")
+        || name.contains("hut")
+        || name.contains("tent")
+        || name.contains("table")
+        || name.contains("chair")
+        || name.contains("sign")
+        || name.contains("bank")
+        || name.contains("stall")
+    {
+        return pick_texture(TEX_WOOD, seed);
+    }
+    pick_texture(TEX_STONE, seed)
+}
+
+fn decor_texture_hint(kind: GroundDecor, seed: u32) -> u32 {
+    match kind {
+        GroundDecor::Flower | GroundDecor::Mushroom => pick_texture(TEX_FLOWERS, seed),
+        GroundDecor::Grass | GroundDecor::Fern | GroundDecor::Plant => {
+            pick_texture(TEX_LEAVES, seed)
+        }
+        GroundDecor::Rock => pick_texture(TEX_STONE, seed),
+        GroundDecor::Twig => pick_texture(TEX_WOOD, seed),
+    }
+}
+
+/// Most frequent valid face texture, used to fill in untextured faces on an
+/// otherwise textured model so the model does not show flat-colour patches.
+pub fn model_dominant_texture(model: &Model) -> Option<u32> {
+    let textures = model.face_textures.as_ref()?;
+    let mut counts = [0u16; 256];
+    for &texture in textures {
+        if (0..256).contains(&texture) {
+            counts[texture as usize] = counts[texture as usize].saturating_add(1);
+        }
+    }
+    counts
+        .iter()
+        .enumerate()
+        .max_by_key(|(_, count)| **count)
+        .filter(|(_, count)| **count > 0)
+        .map(|(id, _)| id as u32)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn append_castle_mesh(
+    pieces: &[CastlePiece],
+    height: &HeightGrid,
+    model_mesh: &mut MeshData,
+    shadow_caster_mesh: &mut MeshData,
+) -> usize {
+    let mut placed = 0usize;
+    for piece in pieces {
+        let wx = (piece.tile[0] + 0.5) * 128.0;
+        let wz = (piece.tile[1] + 0.5) * 128.0;
+        let base = Vec3::new(wx, height.height_at(wx, wz), wz);
+        let rot = Mat3::from_rotation_y(piece.yaw);
+        tracing::trace!(
+            "castle {:?} model {} texture {}",
+            piece.kind,
+            piece.model,
+            piece.texture
+        );
+        match piece.kind {
+            CastlePieceKind::Wall => {
+                append_castle_wall(model_mesh, base, rot, piece.scale);
+                append_box(
+                    shadow_caster_mesh,
+                    rot,
+                    base,
+                    Vec3::new(-64.0, 0.0, -42.0) * piece.scale,
+                    Vec3::new(64.0, 270.0, 42.0) * piece.scale,
+                );
+            }
+            CastlePieceKind::Tower => {
+                append_castle_tower(model_mesh, base, rot, piece.scale);
+                append_box(
+                    shadow_caster_mesh,
+                    rot,
+                    base,
+                    Vec3::new(-96.0, 0.0, -96.0) * piece.scale,
+                    Vec3::new(96.0, 480.0, 96.0) * piece.scale,
+                );
+            }
+            CastlePieceKind::Gate => {
+                append_castle_gate(model_mesh, base, rot, piece.scale);
+                append_box(
+                    shadow_caster_mesh,
+                    rot,
+                    base,
+                    Vec3::new(-560.0, 0.0, -50.0) * piece.scale,
+                    Vec3::new(560.0, 420.0, 50.0) * piece.scale,
+                );
+            }
+            CastlePieceKind::Platform => {
+                append_castle_platform(model_mesh, base, piece.scale);
+            }
+            CastlePieceKind::Statue => {
+                append_castle_statue(model_mesh, base, rot, piece.scale);
+            }
+        }
+        placed += 1;
+    }
+    placed
+}
+
+const CASTLE_TOP: [u8; 3] = [234, 232, 223];
+const CASTLE_SIDE: [u8; 3] = [222, 219, 209];
+const CASTLE_DARK: [u8; 3] = [188, 185, 176];
+const CASTLE_BLUE: [u8; 3] = [92, 146, 214];
+
+fn push_stone_quad(mesh: &mut MeshData, a: Vec3, b: Vec3, c: Vec3, d: Vec3, color: [u8; 3]) {
+    let base = mesh.vertices.len() as u32;
+    let normal = (b - a).cross(c - a).normalize_or_zero();
+    for p in [a, b, c, d] {
+        mesh.vertices.push(SceneVertex::stone(p, normal, color));
+    }
+    mesh.indices
+        .extend_from_slice(&[base, base + 1, base + 2, base + 2, base + 1, base + 3]);
+}
+
+fn push_stone_tri(mesh: &mut MeshData, a: Vec3, b: Vec3, c: Vec3, color: [u8; 3]) {
+    let base = mesh.vertices.len() as u32;
+    let normal = (b - a).cross(c - a).normalize_or_zero();
+    for p in [a, b, c] {
+        mesh.vertices.push(SceneVertex::stone(p, normal, color));
+    }
+    mesh.indices.extend_from_slice(&[base, base + 1, base + 2]);
+}
+
+#[allow(clippy::too_many_arguments)]
+fn append_castle_box(
+    mesh: &mut MeshData,
+    base: Vec3,
+    rot: Mat3,
+    center: Vec3,
+    half: Vec3,
+    top: [u8; 3],
+    side: [u8; 3],
+    bottom: [u8; 3],
+) {
+    let p = |x: f32, y: f32, z: f32| {
+        base + rot * (center + Vec3::new(x * half.x, y * half.y, z * half.z))
+    };
+    // Top and bottom.
+    push_stone_quad(
+        mesh,
+        p(-1.0, 1.0, -1.0),
+        p(1.0, 1.0, -1.0),
+        p(1.0, 1.0, 1.0),
+        p(-1.0, 1.0, 1.0),
+        top,
+    );
+    push_stone_quad(
+        mesh,
+        p(-1.0, -1.0, -1.0),
+        p(1.0, -1.0, -1.0),
+        p(1.0, -1.0, 1.0),
+        p(-1.0, -1.0, 1.0),
+        bottom,
+    );
+    // Four sides.
+    push_stone_quad(
+        mesh,
+        p(-1.0, -1.0, -1.0),
+        p(1.0, -1.0, -1.0),
+        p(1.0, 1.0, -1.0),
+        p(-1.0, 1.0, -1.0),
+        side,
+    );
+    push_stone_quad(
+        mesh,
+        p(-1.0, -1.0, 1.0),
+        p(1.0, -1.0, 1.0),
+        p(1.0, 1.0, 1.0),
+        p(-1.0, 1.0, 1.0),
+        side,
+    );
+    push_stone_quad(
+        mesh,
+        p(-1.0, -1.0, -1.0),
+        p(-1.0, -1.0, 1.0),
+        p(-1.0, 1.0, 1.0),
+        p(-1.0, 1.0, -1.0),
+        side,
+    );
+    push_stone_quad(
+        mesh,
+        p(1.0, -1.0, -1.0),
+        p(1.0, -1.0, 1.0),
+        p(1.0, 1.0, 1.0),
+        p(1.0, 1.0, -1.0),
+        side,
+    );
+}
+
+fn append_castle_wall(mesh: &mut MeshData, base: Vec3, rot: Mat3, scale: f32) {
+    let s = scale;
+    let half_w = 64.0 * s;
+    let half_d = 42.0 * s;
+    let height = 270.0 * s;
+    // Plinth.
+    append_castle_box(
+        mesh,
+        base,
+        rot,
+        Vec3::new(0.0, 18.0 * s, 0.0),
+        Vec3::new(half_w + 4.0 * s, 18.0 * s, half_d + 6.0 * s),
+        CASTLE_SIDE,
+        CASTLE_SIDE,
+        CASTLE_DARK,
+    );
+    // Body.
+    append_castle_box(
+        mesh,
+        base,
+        rot,
+        Vec3::new(0.0, height * 0.5, 0.0),
+        Vec3::new(half_w, height * 0.5, half_d),
+        CASTLE_TOP,
+        CASTLE_SIDE,
+        CASTLE_DARK,
+    );
+    // Walkway cap.
+    append_castle_box(
+        mesh,
+        base,
+        rot,
+        Vec3::new(0.0, height + 5.0 * s, 0.0),
+        Vec3::new(half_w + 5.0 * s, 5.0 * s, half_d + 5.0 * s),
+        CASTLE_TOP,
+        CASTLE_SIDE,
+        CASTLE_DARK,
+    );
+    // Merlon.
+    append_castle_box(
+        mesh,
+        base,
+        rot,
+        Vec3::new(0.0, height + 10.0 * s + 26.0 * s, 0.0),
+        Vec3::new(22.0 * s, 26.0 * s, half_d * 0.78),
+        CASTLE_TOP,
+        CASTLE_SIDE,
+        CASTLE_DARK,
+    );
+}
+
+fn append_castle_tower(mesh: &mut MeshData, base: Vec3, rot: Mat3, scale: f32) {
+    let s = scale;
+    let height = 480.0 * s;
+    append_castle_box(
+        mesh,
+        base,
+        rot,
+        Vec3::new(0.0, 18.0 * s, 0.0),
+        Vec3::new(110.0 * s, 18.0 * s, 110.0 * s),
+        CASTLE_SIDE,
+        CASTLE_SIDE,
+        CASTLE_DARK,
+    );
+    append_castle_box(
+        mesh,
+        base,
+        rot,
+        Vec3::new(0.0, height * 0.5, 0.0),
+        Vec3::new(96.0 * s, height * 0.5, 96.0 * s),
+        CASTLE_TOP,
+        CASTLE_SIDE,
+        CASTLE_DARK,
+    );
+    append_castle_box(
+        mesh,
+        base,
+        rot,
+        Vec3::new(0.0, height + 8.0 * s, 0.0),
+        Vec3::new(116.0 * s, 8.0 * s, 116.0 * s),
+        CASTLE_TOP,
+        CASTLE_SIDE,
+        CASTLE_DARK,
+    );
+    for (x, z) in [(-82.0, -82.0), (82.0, -82.0), (-82.0, 82.0), (82.0, 82.0)] {
+        append_castle_box(
+            mesh,
+            base,
+            rot,
+            Vec3::new(x * s, height + 16.0 * s + 28.0 * s, z * s),
+            Vec3::new(26.0 * s, 28.0 * s, 26.0 * s),
+            CASTLE_TOP,
+            CASTLE_SIDE,
+            CASTLE_DARK,
+        );
+    }
+}
+
+fn append_castle_gate(mesh: &mut MeshData, base: Vec3, rot: Mat3, scale: f32) {
+    let s = scale;
+    let span = 512.0 * s;
+    let pillar_h = 380.0 * s;
+    for side in [-1.0, 1.0] {
+        append_castle_box(
+            mesh,
+            base,
+            rot,
+            Vec3::new(side * (span + 30.0 * s), pillar_h * 0.5, 0.0),
+            Vec3::new(34.0 * s, pillar_h * 0.5, 48.0 * s),
+            CASTLE_TOP,
+            CASTLE_SIDE,
+            CASTLE_DARK,
+        );
+    }
+    append_castle_box(
+        mesh,
+        base,
+        rot,
+        Vec3::new(0.0, pillar_h + 30.0 * s, 0.0),
+        Vec3::new(span + 64.0 * s, 30.0 * s, 48.0 * s),
+        CASTLE_TOP,
+        CASTLE_SIDE,
+        CASTLE_DARK,
+    );
+    for x in [-span * 0.6, 0.0, span * 0.6] {
+        append_castle_box(
+            mesh,
+            base,
+            rot,
+            Vec3::new(x, pillar_h + 60.0 * s + 26.0 * s, 0.0),
+            Vec3::new(30.0 * s, 26.0 * s, 40.0 * s),
+            CASTLE_TOP,
+            CASTLE_SIDE,
+            CASTLE_DARK,
+        );
+    }
+}
+
+fn append_castle_platform(mesh: &mut MeshData, base: Vec3, scale: f32) {
+    let s = scale;
+    let outer = 680.0 * s;
+    let inner = 540.0 * s;
+    let height = 10.0 * s;
+    let segments = 24u32;
+    let center = base + Vec3::Y * height;
+    let inner_center = base + Vec3::Y * (height + 4.0 * s);
+    for i in 0..segments {
+        let a = i as f32 / segments as f32 * std::f32::consts::TAU;
+        let b = (i + 1) as f32 / segments as f32 * std::f32::consts::TAU;
+        let outer_a = center + Vec3::new(a.cos() * outer, 0.0, a.sin() * outer);
+        let outer_b = center + Vec3::new(b.cos() * outer, 0.0, b.sin() * outer);
+        let inner_a = inner_center + Vec3::new(a.cos() * inner, 0.0, a.sin() * inner);
+        let inner_b = inner_center + Vec3::new(b.cos() * inner, 0.0, b.sin() * inner);
+        push_stone_tri(mesh, center, outer_a, outer_b, CASTLE_TOP);
+        push_stone_tri(mesh, inner_center, inner_a, inner_b, CASTLE_BLUE);
+        // Side skirt.
+        let foot_a = base + Vec3::new(a.cos() * outer, 0.0, a.sin() * outer);
+        let foot_b = base + Vec3::new(b.cos() * outer, 0.0, b.sin() * outer);
+        push_stone_quad(mesh, foot_a, outer_a, outer_b, foot_b, CASTLE_SIDE);
+    }
+}
+
+fn append_castle_statue(mesh: &mut MeshData, base: Vec3, rot: Mat3, scale: f32) {
+    let s = scale;
+    append_castle_box(
+        mesh,
+        base,
+        rot,
+        Vec3::new(0.0, 20.0 * s, 0.0),
+        Vec3::new(44.0 * s, 20.0 * s, 44.0 * s),
+        CASTLE_TOP,
+        CASTLE_SIDE,
+        CASTLE_DARK,
+    );
+    append_castle_box(
+        mesh,
+        base,
+        rot,
+        Vec3::new(0.0, 105.0 * s, 0.0),
+        Vec3::new(24.0 * s, 85.0 * s, 24.0 * s),
+        CASTLE_TOP,
+        CASTLE_SIDE,
+        CASTLE_DARK,
+    );
+    append_castle_box(
+        mesh,
+        base,
+        rot,
+        Vec3::new(0.0, 205.0 * s, 0.0),
+        Vec3::new(38.0 * s, 18.0 * s, 38.0 * s),
+        CASTLE_TOP,
+        CASTLE_SIDE,
+        CASTLE_DARK,
+    );
+}
+
+#[allow(clippy::too_many_arguments)]
+fn append_model_scaled_tinted(
+    mesh: &mut MeshData,
+    model: &Model,
+    base: Vec3,
+    angle: f32,
+    scale: f32,
+    tint: [f32; 3],
+    texture_hint: u32,
+    wood_only: bool,
+) {
+    append_model_styled(
+        mesh,
+        model,
+        base,
+        angle,
+        scale,
+        ModelStyle::Scenery {
+            tint,
+            texture_hint,
+            wood_only,
+        },
+    );
+}
+
+fn append_ground_decor(
+    mesh: &mut MeshData,
+    model: &Model,
+    base: Vec3,
+    angle: f32,
+    scale: f32,
+    kind: GroundDecor,
+    seed: u32,
+) {
+    append_model_styled(
+        mesh,
+        model,
+        base,
+        angle,
+        scale,
+        ModelStyle::Decor { kind, seed },
+    );
+}
+
+#[derive(Clone, Copy)]
+enum CasterStyle {
+    Tree,
+    Building,
+}
+
+/// Low-poly proxy for the sun shadow map. Re-rendering every static tree and
+/// ruin face into a 1024px map was the largest remaining renderer cost; a
+/// trunk/canopy box pair preserves the silhouette at shadow-map resolution
+/// for a fraction of the triangles.
+fn append_model_caster(
+    mesh: &mut MeshData,
+    model: &Model,
+    base: Vec3,
+    angle: f32,
+    scale: f32,
+    style: CasterStyle,
+) {
     let rot = Mat3::from_rotation_y(angle);
+    let (bounds_min, bounds_max) = model.bounds();
+    let min = Vec3::new(
+        bounds_min[0] as f32,
+        -(bounds_max[1] as f32),
+        bounds_min[2] as f32,
+    ) * scale;
+    let max = Vec3::new(
+        bounds_max[0] as f32,
+        -(bounds_min[1] as f32),
+        bounds_max[2] as f32,
+    ) * scale;
+    match style {
+        CasterStyle::Tree => {
+            let height = (max.y - min.y).max(1.0);
+            let center = (min + max) * 0.5;
+            let half_w = (max.x - min.x).max(1.0) * 0.5;
+            let half_d = (max.z - min.z).max(1.0) * 0.5;
+            // Trunk: narrow column from the ground to the lower canopy.
+            append_box(
+                mesh,
+                rot,
+                base,
+                Vec3::new(center.x - half_w * 0.22, min.y, center.z - half_d * 0.22),
+                Vec3::new(
+                    center.x + half_w * 0.22,
+                    min.y + height * 0.42,
+                    center.z + half_d * 0.22,
+                ),
+            );
+            // Canopy: broad box from the lower branches to the crown.
+            append_box(
+                mesh,
+                rot,
+                base,
+                Vec3::new(min.x, min.y + height * 0.28, min.z),
+                max,
+            );
+        }
+        CasterStyle::Building => append_box(mesh, rot, base, min, max),
+    }
+}
 
-    // every corner once, turned and scaled but not yet moved into place: light
-    // depends on which way a surface faces, not on where it is
-    let local: Vec<Vec3> = (0..model.vertex_count)
-        .map(|i| model_vertex_scaled(model, i, Vec3::ZERO, rot, scale))
-        .collect();
-    let points: Vec<[f32; 3]> = local.iter().map(|p| p.to_array()).collect();
-    let lit = light(&points, &model.faces);
-    let corner = |i: u32| base + local.get(i as usize).copied().unwrap_or(Vec3::ZERO);
+fn append_box(mesh: &mut MeshData, rot: Mat3, base: Vec3, min: Vec3, max: Vec3) {
+    let corners = [
+        Vec3::new(min.x, min.y, min.z),
+        Vec3::new(max.x, min.y, min.z),
+        Vec3::new(min.x, min.y, max.z),
+        Vec3::new(max.x, min.y, max.z),
+        Vec3::new(min.x, max.y, min.z),
+        Vec3::new(max.x, max.y, min.z),
+        Vec3::new(min.x, max.y, max.z),
+        Vec3::new(max.x, max.y, max.z),
+    ];
+    let corner = |index: usize| base + rot * corners[index];
+    for [a, b, c] in [
+        [0, 2, 1],
+        [1, 2, 3],
+        [4, 5, 6],
+        [5, 7, 6],
+        [0, 1, 4],
+        [1, 5, 4],
+        [2, 6, 3],
+        [3, 6, 7],
+        [0, 4, 2],
+        [2, 4, 6],
+        [1, 3, 5],
+        [3, 7, 5],
+    ] {
+        mesh.push_triangle(
+            SceneVertex::new(corner(a), Vec3::Y, [0, 0, 0]),
+            SceneVertex::new(corner(b), Vec3::Y, [0, 0, 0]),
+            SceneVertex::new(corner(c), Vec3::Y, [0, 0, 0]),
+        );
+    }
+}
 
-    for (face_idx, &face) in model.faces.iter().enumerate() {
-        let [a, b, c] = face;
-        let render_type = model.face_render_types.get(face_idx).copied().unwrap_or(0);
-        let lightness = lit.corners(face_idx, face, render_type);
+fn append_model_styled(
+    mesh: &mut MeshData,
+    model: &Model,
+    base: Vec3,
+    angle: f32,
+    scale: f32,
+    style: ModelStyle,
+) {
+    let rot = Mat3::from_rotation_y(angle);
+    let dominant = model_dominant_texture(model);
+    let (bounds_min, bounds_max) = model.bounds();
+    let model_height = ((bounds_max[1] - bounds_min[1]).max(1) as f32 * scale).max(1.0);
+    let wood_hint = pick_texture(
+        TEX_BARK,
+        (base.x as u32)
+            .wrapping_mul(0x9E37_79B9)
+            .wrapping_add(base.z as u32),
+    );
+    let wood_only = matches!(
+        style,
+        ModelStyle::Scenery {
+            wood_only: true,
+            ..
+        }
+    );
 
-        let textured = model
-            .face_textures
-            .as_ref()
-            .and_then(|t| t.get(face_idx))
-            .is_some_and(|&t| t >= 0);
-        let paint = |lightness: f32| -> [u8; 3] {
-            if textured || model.face_colors[face_idx] == 127 {
-                // a stand-in leaf green until textures are drawn
-                tint([46.0, 93.0, 34.0], lightness)
+    for (face_idx, &[a, b, c]) in model.faces.iter().enumerate() {
+        let pa = model_vertex_scaled(model, a as usize, base, rot, scale);
+        let pb = model_vertex_scaled(model, b as usize, base, rot, scale);
+        let pc = model_vertex_scaled(model, c as usize, base, rot, scale);
+
+        let mut normal = (pb - pa).cross(pc - pa).normalize_or_zero();
+        if normal.length_squared() < 1e-8 {
+            normal = rot
+                * Vec3::from_array(
+                    model
+                        .face_normals
+                        .get(face_idx)
+                        .copied()
+                        .unwrap_or([0.0, 1.0, 0.0]),
+                );
+        }
+
+        let mut texture_id = match style {
+            ModelStyle::Castle { texture, .. } => texture,
+            _ if wood_only => wood_hint,
+            _ => model
+                .face_textures
+                .as_ref()
+                .and_then(|t| t.get(face_idx))
+                .copied()
+                .map(|t| t as u32)
+                .filter(|&t| t < 256)
+                .or(dominant)
+                .unwrap_or_else(|| match style {
+                    ModelStyle::Scenery { texture_hint, .. } => texture_hint,
+                    ModelStyle::Decor { kind, seed } => decor_texture_hint(kind, seed),
+                    ModelStyle::Castle { texture, .. } => texture,
+                }),
+        };
+        let leaf_based = !wood_only
+            && !matches!(style, ModelStyle::Castle { .. })
+            && (dominant.is_some_and(|id| TEX_LEAVES.contains(&id))
+                || matches!(style, ModelStyle::Scenery { texture_hint, .. } if TEX_LEAVES.contains(&texture_hint)));
+        if leaf_based {
+            let centroid = (pa + pb + pc) / 3.0;
+            let top = (centroid.y - base.y) / model_height;
+            let radial = Vec2::new(centroid.x - base.x, centroid.z - base.z).length();
+            let trunk_radius =
+                (((bounds_max[0] - bounds_min[0]).max(bounds_max[2] - bounds_min[2])) as f32
+                    * scale
+                    * 0.20)
+                    .max(28.0);
+            // Some broadleaf cache models carry their trunk almost to the
+            // crown; only the outer canopy should receive leaf texture.
+            if top < 0.85 && radial < trunk_radius {
+                texture_id = wood_hint;
+            }
+        }
+        let rgb = match style {
+            ModelStyle::Scenery { tint, .. } => [
+                (tint[0] * 255.0).clamp(0.0, 255.0) as u8,
+                (tint[1] * 255.0).clamp(0.0, 255.0) as u8,
+                (tint[2] * 255.0).clamp(0.0, 255.0) as u8,
+            ],
+            ModelStyle::Decor { .. } => [255, 255, 255],
+            ModelStyle::Castle { tint, .. } => [
+                (tint[0] * 255.0).clamp(0.0, 255.0) as u8,
+                (tint[1] * 255.0).clamp(0.0, 255.0) as u8,
+                (tint[2] * 255.0).clamp(0.0, 255.0) as u8,
+            ],
+        };
+
+        // One planar projection per face, chosen from the face normal. This
+        // is the OSRS texture-plane model in miniature: large cone and roof
+        // triangles stay coherent instead of smearing a triplanar blend.
+        let abs_normal = normal.abs();
+        let uv_for = |p: Vec3| {
+            let local = p - base;
+            if abs_normal.y >= abs_normal.x && abs_normal.y >= abs_normal.z {
+                [local.x / 128.0, local.z / 128.0]
+            } else if abs_normal.x >= abs_normal.z {
+                [local.z / 128.0, local.y / 128.0]
             } else {
-                shade(model.face_colors[face_idx], lightness)
+                [local.x / 128.0, local.y / 128.0]
             }
         };
 
-        mesh.push_triangle(
-            Vertex::new(corner(a), paint(lightness[0])),
-            Vertex::new(corner(b), paint(lightness[1])),
-            Vertex::new(corner(c), paint(lightness[2])),
-        );
+        let ao_at = |p: Vec3| {
+            (0.78 + 0.22 * ((p.y - base.y).max(0.0) / 400.0).clamp(0.0, 1.0)).clamp(0.70, 1.0)
+        };
+        let mut va = SceneVertex::new(pa, normal, rgb);
+        let mut vb = SceneVertex::new(pb, normal, rgb);
+        let mut vc = SceneVertex::new(pc, normal, rgb);
+        // Material 7 = static cache-textured scenery. It samples textures and
+        // lighting but does not receive the coarse static shadow proxies, which
+        // otherwise paint box-shaped self-shadow patches across tree canopies.
+        va.material = 7;
+        vb.material = 7;
+        vc.material = 7;
+        va.texture_id = texture_id;
+        vb.texture_id = texture_id;
+        vc.texture_id = texture_id;
+        va.uv = uv_for(pa);
+        vb.uv = uv_for(pb);
+        vc.uv = uv_for(pc);
+        va.ao = ao_at(pa);
+        vb.ao = ao_at(pb);
+        vc.ao = ao_at(pc);
+        mesh.push_triangle(va, vb, vc);
     }
 }
 
@@ -1534,4 +4370,127 @@ pub fn model_vertex_animated(
     let p = positions.get(i).copied().unwrap_or([0.0; 3]);
     let local = Vec3::new(p[0], -p[1], p[2]) * scale;
     base + rot * local
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn srgb_endpoints_are_stable() {
+        assert_eq!(srgb_to_linear(0.0), 0.0);
+        assert!((srgb_to_linear(1.0) - 1.0).abs() < 1e-6);
+        let mid = srgb_to_linear(0.5);
+        assert!(mid > 0.2 && mid < 0.25);
+    }
+
+    #[test]
+    fn scene_vertex_converts_colour_and_normalizes_normal() {
+        let vertex = SceneVertex::new(
+            Vec3::new(1.0, 2.0, 3.0),
+            Vec3::new(0.0, 2.0, 0.0),
+            [255, 0, 0],
+        );
+        assert!((vertex.normal[1] - 1.0).abs() < 1e-6);
+        assert!((vertex.color[0] - 1.0).abs() < 1e-6);
+        assert_eq!(vertex.color[1], 0.0);
+        assert_eq!(vertex.material, 0);
+    }
+
+    #[test]
+    fn unlit_and_blob_materials_are_tagged() {
+        let unlit = SceneVertex::unlit(Vec3::ZERO, [10, 20, 30]);
+        assert_eq!(unlit.material, 1);
+        let blob = SceneVertex::blob(Vec3::ZERO, 0.4, [0.0, 0.0]);
+        assert_eq!(blob.material, 2);
+        assert!((blob.color[3] - 0.4).abs() < 1e-6);
+    }
+
+    #[test]
+    fn atmosphere_defaults_are_sane() {
+        let atmosphere = Atmosphere::default();
+        assert!(atmosphere.fog_density > 0.0);
+        assert!(atmosphere.fog_height > 0.0);
+        assert!(atmosphere.sun_dir[1] > 0.0);
+        assert!(atmosphere.sun_color.iter().all(|c| (0.0..=1.0).contains(c)));
+    }
+
+    #[test]
+    fn castle_layout_has_gates_towers_and_blocked_walls() {
+        let castle = CastleSpec {
+            bounds: (0.0, 0.0, 120.0, 120.0),
+            wall_model: 16918,
+            wall_scale: 1.0,
+            tower_model: 1412,
+            tower_scale: 1.0,
+            gate_model: 3996,
+            gate_scale: 1.0,
+            platform_model: Some(15082),
+            statue_model: Some(1527),
+            tower_spacing: 0.25,
+            bases: vec![
+                CastleBase {
+                    team: 0,
+                    center: (18.0, 102.0),
+                    size: 28.0,
+                    corner: CastleCorner::BottomLeft,
+                },
+                CastleBase {
+                    team: 1,
+                    center: (102.0, 18.0),
+                    size: 28.0,
+                    corner: CastleCorner::TopRight,
+                },
+            ],
+        };
+        let pieces = castle.layout();
+        assert!(
+            pieces
+                .iter()
+                .filter(|p| p.kind == CastlePieceKind::Wall)
+                .count()
+                > 300
+        );
+        assert!(
+            pieces
+                .iter()
+                .filter(|p| p.kind == CastlePieceKind::Tower)
+                .count()
+                >= 12
+        );
+        assert_eq!(
+            pieces
+                .iter()
+                .filter(|p| p.kind == CastlePieceKind::Gate)
+                .count(),
+            4
+        );
+        assert_eq!(
+            pieces
+                .iter()
+                .filter(|p| p.kind == CastlePieceKind::Platform)
+                .count(),
+            2
+        );
+        assert_eq!(
+            pieces
+                .iter()
+                .filter(|p| p.kind == CastlePieceKind::Statue)
+                .count(),
+            8
+        );
+        assert!(pieces.iter().any(|p| p.block));
+
+        // The bottom-left courtyard's north and east gates must be open.
+        for (x, z) in [(32.0, 102.0), (18.0, 88.0)] {
+            assert!(
+                !pieces.iter().any(|p| {
+                    p.kind == CastlePieceKind::Wall
+                        && (p.tile[0] - x).abs() < 0.1
+                        && (p.tile[1] - z).abs() < 0.1
+                }),
+                "wall blocks gate at {x},{z}"
+            );
+        }
+    }
 }

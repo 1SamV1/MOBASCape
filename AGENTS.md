@@ -156,37 +156,113 @@ Cache location: `.cache/osrs-235/cache` by default. Pass `--cache` and
 - Renderer changes: include a headless screenshot or a manual visual check note.
 - Performance: 1080p/60 target on the AMD 680M iGPU. Profile before optimizing.
 
-## 8. Known M4.0 limitations
+## 8. Known M5.4 limitations
 
 - Client renders a 3×3 region block (192×192 tiles); there is no terrain skirt
   or streaming beyond it, and the collision grid is approximate (water + object
   footprints, no cliffs/bridges).
 - Three lanes with two towers and one inhibitor per lane, plus one shielded
-  nexus per team. Four jungle camps grant Might (+25% damage) or Swift (+20%
+  nexus per team. The lanes run diagonally between 28-tile castle courtyards
+  in the bottom-left and top-right corners, inside a 282×282 crenellated
+  perimeter wall with towers and gatehouses. The diagonal river has three
+  bridge crossings. Inhibitors respawn after 120 s; while an enemy inhibitor
+  is down, that lane's waves include a super minion (2.5x health, 2x damage,
+  1.6x scale). Four jungle camps grant Might (+25% damage) or Swift (+20%
   speed) for 60 s. Brush and client-side fog of war are implemented.
 - Nexus is damageable only after at least one enemy inhibitor falls.
-- The HUD is geometry only (bars, four ability boxes, six inventory slots,
-  shop rows, crosshair, nexus/wave bars, minimap, buff bar); all numbers live in
-  the window title. No text renderer yet.
-- Three data-driven champions (`monkey`, `jad`, `kree`) with distinct models,
-  stats, and ability numbers. They share the Q/W/E/R shape; Kree has ranged
-  auto-attacks. No champion-select UI or passive.
+- The HUD is geometry plus a built-in 5x7 bitmap font (`crates/client/src/
+  font.rs`). HP/MP/XP/gold, nexus values, wave timer, ability labels/cooldowns,
+  shop names/costs/tooltips, and match result are on-screen. This is a
+  code-defined font, not a cache-native OSRS font atlas.
+- **117HD Core** rendering is in: `SceneVertex` carries position, normal,
+  colour, UV, AO, material, and texture ID; terrain uses smooth heightfield
+  normals, models use flat per-face normals; the scene shader does sun +
+  hemispheric ambient, height fog, sky/clouds, blob shadows, and up to 16 point
+  lights. Model faces sample cache-native textures from index 9/8 with per-face
+  planar UVs and nearest filtering.
+- **M5.1 shadows**: a 1024px sun shadow map covers 60x60 tiles around the
+  camera with PCF. Player, towers, inhibitors, nexuses, camps, and large static
+  props are casters; small ground decor still uses blob shadows. The map
+  updates every other frame and can be toggled with
+  `--shadows off|blob|map`. Terrain and model vertices carry baked contact AO.
+  Full screen-space SSAO and draw-distance streaming are not implemented yet.
+- **M5.21/M5.22 presentation**: walkable river with a blended HD water surface
+  (animated ripples, fresnel, sun specular), 4x MSAA resolved before post/bloom,
+  static sun casters, cache model textures, imp/fairy lanes, cache-soil roads,
+  red/wider jungle-camp bars, and camera-offset unit bars to prevent depth
+  flicker. Static meshes are split into 16-tile AABB chunks and frustum-culled;
+  static sun casters use low-poly trunk/canopy proxies. `--msaa 1|4`,
+  `--present-mode fifo|immediate|mailbox` and `--benchmark <seconds>` support
+  performance work. The engine backlog lives in `docs/ENGINE_ROADMAP.md`.
+- `--graphics classic` preserves a flat baseline; `--debug-view albedo|normal|
+  lighting|fog|lights|shadow|ao` helps tune the renderer.
+- **UI pass**: the Fountain Shop is a centered OSRS-style window with category
+  tabs, item-card grid, detail pane, Buy/Sell buttons, inventory row, and real
+  item icons/tab sprites from the gitignored `assets/osrs-ui` tree. The HUD has
+  resource, team, objectives, event-log, compact health/mana, inventory, and
+  shop-button panels. `crates/client/src/ui_assets.rs` builds a 1024×1024 atlas;
+  `ui.wgsl` samples it with nearest filtering. Missing assets fall back to
+  procedural icons. See `docs/UI_ASSETS.md`; never commit `assets/`.
+- **Match flow**: hero select -> LOCK IN -> 5v5 lobby -> match. The hero-select
+  screen is the reference layout (filter tabs ALL/MELEE/RANGED/MAGIC, roster
+  grid, side rosters, ability detail panel). The lobby shows both lineups as
+  two rows of five hero cards with RADIANT/DIRE side tabs and the red
+  "LOADING - PLEASE WAIT..." button; it auto-starts after eight seconds of
+  wall-clock time, or the player can click the button or press Enter.
+- Four data-driven champions (`monkey`, `jad`, `kree`, `ranger`) with distinct
+  models, stats, and ability numbers. A hero-select screen chooses among them
+  and bakes cache-model portraits. King Awowogei uses Bananarang (Q) and Trial
+  by Combat (R); the Blowpipe Ranger uses Toxic Dart, Dart Volley, Footwork and
+  Deadshot; Jad and Kree keep the shared Q bolt and R meteor. Kree has ranged
+  auto-attacks. No passives yet. Champion files also carry a real `armor` stat
+  and movement weight:
+  `weight`, optional `turn_time` / `accel_time` / `stop_time`, `stride`, and
+  `bounce`. The player turns and accelerates with weight, coasts to a stop,
+  and drives its walk cycle from distance covered. `walk_sway` scales torso
+  side rotation and `walk_arm` scales local arm transforms; King Awowogei's
+  current baseline is 0 for both. `attack_windup` adds committed attack timing
+  with an orange charge ring during the wind-up.
+- Ambient, non-combat scenery creatures (butterflies, monkey-riding pasture
+  cows, shore crabs) share the unit renderer but use `UnitKind::Ambient`, team
+  2, no health bars, and no targeting or attacks.
 - Six data-driven items in `data/items/items.json`, six inventory slots, gold
-  spending, and a fountain-range shop (`B`, then `1`–`6`). Purchases are
-  client-side in this prototype; no selling, combining, or passives yet.
+  spending, hover tooltips, and a fountain-range shop (`B`, then `1`–`6`).
+  Passive gold is 8/s and the fountain heals 6% max HP/MP per second within
+  900 units. Purchases are client-side in this prototype; no selling,
+  combining, or passives yet.
 - Fog/brush is **client-side** in this prototype. A 192×192 visibility grid is
   computed from allied units/structures, enemy/neutral units outside vision are
   hidden, brush rectangles hide units unless the player is close, and a dark fog
-  mesh covers unseen tiles. Server-authoritative fog is still required.
+  mesh covers unseen tiles. The minimap draws 8×8-tile fog blocks and supports
+  click-to-pan. Server-authoritative fog is still required.
 - Model formats 1 and old-format models are not implemented yet.
-- Textures are not sampled; textured faces and the `0xff00ff` overlay sentinel
-  use flat fallback colours. Dead-tree trunks read as pale spikes.
+- Model textures are sampled, but texture alpha cut-outs are not: leaf and
+  flower sprites are drawn opaque. The `0xff00ff` terrain overlay sentinel
+  still uses a flat fallback colour. Dead-tree trunks read as pale spikes.
 - Animaya is not applied; only classic frame/framemap animation works.
-- No lobby, netcode, audio, or map editor. Ambient NPCs idle only.
+- No netcode, audio, or map editor. Ambient NPCs idle only.
+- The UI atlas depends on external PNGs in `assets/osrs-ui`; without them the
+  shop uses procedural fallback icons and no OSRS tab sprites. The bronze sword
+  icon is a trimmed detail render because the plain inventory icon file was not
+  available under the expected wiki name.
+- Baked numbers/icons in the tab sprites are covered by dark overlays; faint
+  traces can still show through at some scales.
+- Terrain color is blurred per vertex (two separable box-blur passes) and the
+  scene shader samples pre-baked OSRS ground sprites plus procedural detail.
+  Terrain is **not** cache-native per-tile texture blending yet; ground-layer
+  decoding and anisotropic blending remain M5.3b.
+- M5.4 currently ships an offscreen post pass with FXAA, cheap bloom, color
+  grading, and dithering. Full SSAO, anisotropic filtering, and chunked
+  draw-distance/LOD are still pending. The post pass samples the scene with corrected NDC UVs and the
+  HUD is rendered after post so text/icons stay crisp.
 - LZMA groups are implemented but not exercised by the pinned cache.
 - Config archives use real file IDs from the reference table; keep it that way.
-- The viewer follows the player by default. `WASD` disables follow; `F` toggles.
+- The viewer follows the player by default. Arrow keys pan; `F` toggles follow.
 - Use ASCII in window/UI strings until fonts are wired.
+- 117HD Core is still a 3x3 region block; the distant ground plane and fog hide
+  the edge from the default camera, but low pitch views still show the block
+  boundary and the hard fog-of-war mesh. A chunked draw-distance/LOD milestone
+  is required for true 117HD range.
 
 ## 9. Commit / PR style
 

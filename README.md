@@ -1,27 +1,48 @@
 # MobaScape
 
-A 5v5 MOBA built on a custom Rust engine, using modern Old School RuneScape
-cache assets for its visual identity. Server-authoritative, data-driven, and
+A 5v5 MOBA built on a custom Rust engine, inspired by modern Old School RuneScape
+for its visual identity. Server-authoritative, data-driven, and
 designed for fast-paced low-team-count matches.
 
-> Status: **M4.0 item shop, interface stage 3 steps A, B and 1 through 15**. The cache
-> reader, terrain/location/model/sequence decoders, animated NPCs, a 3x3
-> Karamja block, A* pathfinding with collision, hold-to-steer, a screen-space
-> HUD, auto-attacks, a Q/W/E/R kit with mana/cooldowns/XP/gold, three
-> data-driven champions, a six-item shop with six inventory slots, three lanes
-> with towers/inhibitors/shielded nexus, minion waves, jungle camps with team
-> buffs, brush/fog of war, a live minimap, and a win condition are working.
-> The stage 2 drawing layer is frozen, and stage 3 now has a cache-backed
-> theme sheet, the pure placing/collapse pass, and drawn score strip,
-> ability bar, minimap, objectives, team frames, target panel, unit plates,
-> inventory, chat, kill feed, announcements, tooltip, shop and death
-> overlay, assembled whole; the old HUD remains the default and the review
-> sheet is waiting for the reviewer's eye. There is no networking yet.
-> See [docs/STATUS.md](docs/STATUS.md).
+> Status: **M5.6 Biome map + Dota style presentation, plus interface stage 3
+> steps A, B and 1 through 15 assembled for review**. The cache reader,
+> terrain/location/model/sequence decoders, animated NPCs, a 5x5 Karamja block,
+> A* pathfinding with collision, hold-to-steer, a bitmap-font HUD, auto-attacks,
+> a Q/W/E/R kit with mana/cooldowns/XP/gold, three data-driven champions, a
+> six-item shop with tooltips and six inventory slots, passive gold and
+> fountain healing, three lanes with towers/inhibitors/shielded nexus,
+> inhibitor respawn and super minions, minion waves, jungle camps with team
+> buffs, brush/fog of war, a fogged minimap with click-to-pan, and a win
+> condition are working. **117HD Core** adds sRGB-correct sun/ambient
+> lighting, per-face model normals, smooth terrain lighting, a sky with
+> clouds, height fog, static and unit blob shadows, and dynamic
+> ability/fountain point lights. **M5.1** adds a 1024px sun shadow map with
+> PCF, dynamic player/structure/camp casters, alternating shadow updates, and
+> baked contact AO. The **UI pass** adds an OSRS-style Fountain Shop window
+> with categories, item cards, detail/buy/sell panes, real item icons and tab
+> sprites, plus HUD objectives, team, resource, event-log, inventory, and
+> shop-button panels. **M5.3/M5.4** adds seamless terrain color smoothing,
+> procedural ground detail, and an offscreen post pass with FXAA, color
+> grading, and dithering. **M5.5** replaces the cheap glow with a full HDR
+> bloom chain (Rgba16Float scene target, bright pass, separable Gaussian,
+> ACES tonemap) and samples real OSRS ground sprites from a mipmapped texture
+> array. **M5.6** rebuilds the map as a two-sided rift: eight regional biome
+> pockets inspired from OSRS regions (dark magic, vampires, ogres, goblins on
+> the dire side; human cities, elven lands, gnome stronghold on the radiant
+> side), a diagonal river with three bridge crossings, a 282x282 white castle
+> perimeter wall with corner bases in the bottom-left and top-right, three
+> diagonal lanes, tree lines down every lane, a shadow (not tinted) fog of war,
+> and a Dota style scoreboard, unit tooltip, minimap viewport and biome label.
+> The interface branch adds stage 3 in `crates/ui`: a cache-backed theme,
+> scale by fit, the placing/collapse pass, and every component through the
+> assembled whole, waiting for the reviewer's eye in `--ui-layout`. The old
+> HUD remains the default until then. See [docs/STATUS.md](docs/STATUS.md),
+> [docs/UI_ASSETS.md](docs/UI_ASSETS.md) and
+> [docs/INTERFACE_STAGE3_REVIEW.md](docs/INTERFACE_STAGE3_REVIEW.md).
 
 ## What exists
 
-- `crates/cache` — read-only OSRS cache reader:
+- `crates/cache` — read-only cache reader:
   - 520-byte sector store, 6-byte index entries, XTEA, gzip/bzip2/LZMA
   - index reference tables, archive splitting with real file IDs
   - terrain (64×64×4), locations, object/NPC/underlay/overlay configs
@@ -34,11 +55,14 @@ designed for fast-paced low-team-count matches.
   scaling, `HudState`, scale by fit, the collapse order, the score strip,
   ability bar, minimap, objectives, team frames, target panel, unit plates,
   inventory, chat, kill feed, announcements, tooltip, shop and death overlay
-- `crates/client` — native wgpu client: 3x3 Karamja, animated NPCs, three lanes,
-  towers/inhibitors/nexus, minion waves, jungle camps/buffs, brush/fog of war,
-  item shop/inventory, live minimap, click-to-move + hold-to-steer, HUD,
-  auto-attacks, Q
-- `data/maps/karamja_rift/map.json` — lanes, structures, camps, wave timing
+- `crates/client` — native wgpu client: 5x5 Karamja with regional biome
+  pockets and a river, animated NPCs, three lanes, towers/inhibitors/nexus,
+  minion waves, jungle camps/buffs with aggro and leash, brush/fog of war,
+  item shop/inventory, bitmap-font HUD, 117HD Core lighting/atmosphere, HDR
+  bloom, cache-native ground textures, fogged minimap, click-to-move +
+  hold-to-steer, auto-attacks, Q, and the stage 3 interface dev screen
+- `data/maps/karamja_rift/map.json` — lanes, structures, camps, biome pockets,
+  river and wave timing
 - `docs/INTERFACE_STAGE3_REVIEW.md` — the assembled interface's anchors and
   differences for the reviewer
 - `docs/reference` — archived Java-era experiments (not built)
@@ -64,12 +88,29 @@ cargo run -p rift-tools -- find-npc monkey --limit 5
 cargo run -p rift-tools -- sequence 222
 cargo run -p rift-tools -- animate 7744 222
 cargo run -p rift-tools -- model 1715
+cargo run -p rift-tools -- sprite 447 /tmp/wood.png
+cargo run -p rift-tools -- texture 60 /tmp/leaves.png
 
-# Render the 3x3 block and play
+# Render the 5x5 block and open the hero-select screen
 cargo run -p rift-client
+
+# Skip hero select with an explicit champion
+cargo run -p rift-client -- --champion monkey
+
+# Loop King Awowogei through idle, walk, turn, stop and attack animations
+cargo run -p rift-client -- --demo-anim
+
+# Tune the Monkey walk baseline live (0 = frozen arms / no torso strafe)
+cargo run -p rift-client -- --demo-anim --walk-arm 0.25 --walk-sway 0.1
 
 # Deterministic combat check: target a dummy and fire Q
 cargo run -p rift-client -- --demo-combat
+
+# Spawn a rival champion for manual Bananarang / Trial by Combat testing
+cargo run -p rift-client -- --champion monkey --demo-duel
+
+# Automated Trial by Combat check: R -> Q -> duel result and permanent bonus
+cargo run -p rift-client -- --champion monkey --demo-trial --timescale 4
 
 # Fast-forward the lane for tower/minion/nexus verification
 cargo run -p rift-client -- --timescale 20
@@ -82,14 +123,51 @@ cargo run -p rift-client -- --demo-kit --timescale 4
 
 # Play a different champion
 cargo run -p rift-client -- --champion jad
+
+# Blowpipe Ranger: ranged ADC with venom, kiting and a piercing execute
+cargo run -p rift-client -- --champion ranger
 cargo run -p rift-client -- --champion kree
+
+# Zoom the camera in on the hero (the default distance is 2750 world units)
+cargo run -p rift-client -- --distance 1800
+
+# Spawn at a specific map tile (handy for inspecting a watchtower)
+cargo run -p rift-client -- --spawn 2911 3032
+
+# Verify watchtower aggro, lock range and target reset
+cargo run -p rift-client -- --demo-watchtower
+
+# 117HD Core lighting (default) or the flat classic baseline
+cargo run -p rift-client -- --graphics 117hd
+cargo run -p rift-client -- --graphics classic
+
+# Benchmark/quality overrides
+cargo run --release -p rift-client -- --present-mode immediate --benchmark 8
+cargo run --release -p rift-client -- --present-mode immediate --msaa 1
+
+# Inspect lighting, normals, albedo, fog, shadows, or AO
+cargo run -p rift-client -- --graphics 117hd --debug-view lighting
+cargo run -p rift-client -- --graphics 117hd --debug-view normal
+cargo run -p rift-client -- --graphics 117hd --debug-view shadow
+cargo run -p rift-client -- --graphics 117hd --debug-view ao
+cargo run -p rift-client -- --graphics 117hd --shadows off|blob|map
+cargo run -p rift-client -- --graphics 117hd --pitch 0.22
+
+# Optional: populate the gitignored UI asset tree (see docs/UI_ASSETS.md)
+# assets/osrs-ui/items/*.png + assets/osrs-ui/ui/tab.png
 
 # Grant gold, open the shop, and buy all six items
 cargo run -p rift-client -- --demo-shop --timescale 4
 
-# Interface stage 3: the theme sheet, then the labelled placing rectangles
+# Interface stage 3: the theme sheet, then the assembled interface
 cargo run -p rift-client -- --ui-theme-sheet
 cargo run -p rift-client -- --ui-layout
+
+# Verify fountain healing and passive gold
+cargo run -p rift-client -- --demo-base --timescale 4
+
+# Destroy an inhibitor, verify super minions and respawn
+cargo run -p rift-client -- --demo-inhibitor --timescale 20
 ```
 
 The cache download is not automated yet; see
@@ -98,15 +176,19 @@ Put `keys.json` next to `main_file_cache.dat2`, or pass `--keys`.
 
 ## Controls (viewer)
 
+- **Hero select**: click a card or press **1-3**; **Enter**/click **Play** to lock in
 - **LMB ground tap**: pathfind to the point
 - **LMB hold**: steer directly toward the cursor with collision sliding
 - **LMB on an enemy**: auto-attack it
-- **Q**: fire blast projectile (5 s)
+- **Q**: fire blast projectile (5 s); King Awowogei throws **Bananarang** (8 s)
 - **W**: blink/dash toward the cursor (8 s)
 - **E**: heal + shield (12 s)
-- **R**: meteor AoE at the cursor (45 s)
-- **B**: toggle the fountain shop
-- **1–6**: buy the matching shop item while the shop is open
+- **R**: meteor AoE at the cursor (45 s); King Awowogei starts **Trial by Combat** on an enemy champion (90 s)
+- **B**: toggle the Fountain Shop
+- **Click a category**: filter shop items
+- **Click an item card**: select it; use **Buy** or **Sell** in the detail pane
+- **1–6**: quick-buy the matching shop item while the shop is open
+- **Click the minimap**: pan the camera to that point (disables follow)
 - **Arrow keys**: pan the camera (disables follow)
 - **Z / X**: rotate camera
 - **Space**: recenter/follow
@@ -134,11 +216,13 @@ commands, and how to contribute without breaking determinism or leaking assets.
 - [docs/ASSET_PIPELINE.md](docs/ASSET_PIPELINE.md)
 - [docs/ROADMAP.md](docs/ROADMAP.md)
 - [docs/STATUS.md](docs/STATUS.md)
+- [docs/ENGINE_ROADMAP.md](docs/ENGINE_ROADMAP.md)
 - [docs/MAP_FORMAT.md](docs/MAP_FORMAT.md)
 - [docs/NETCODE.md](docs/NETCODE.md)
 - [docs/SPECTATING.md](docs/SPECTATING.md)
 - [docs/MOVEMENT.md](docs/MOVEMENT.md)
 - [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md)
+- [docs/UI_ASSETS.md](docs/UI_ASSETS.md)
 - [docs/DECISIONS.md](docs/DECISIONS.md)
 
 ## License

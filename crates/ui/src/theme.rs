@@ -100,6 +100,7 @@ pub struct ThemeBuilder {
     missing: usize,
     sprites: Vec<(String, usize)>,
     panels: Vec<(String, usize, [u32; 4])>,
+    #[allow(clippy::type_complexity)]
     fonts: Vec<(String, Vec<(char, Option<usize>, i32, i32, i32)>, i32, i32)>,
     colours: BTreeMap<String, Colour>,
 }

@@ -100,7 +100,7 @@ impl UiPass {
         });
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("interface shader"),
-            source: wgpu::ShaderSource::Wgsl(include_str!("ui.wgsl").into()),
+            source: wgpu::ShaderSource::Wgsl(include_str!("ui_overlay.wgsl").into()),
         });
 
         const ATTRS: [wgpu::VertexAttribute; 3] =

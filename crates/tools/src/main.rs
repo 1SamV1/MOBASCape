@@ -1,11 +1,14 @@
 use std::io::Write;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
 use clap::{Parser, Subcommand};
 use rift_cache::font::FONT_INDEX;
 use rift_cache::sprite::SPRITE_INDEX;
-use rift_cache::{Cache, Font, Model, ObjectDefinition, SpriteSheet, Terrain};
+use rift_cache::{
+    Cache, Font, Model, ObjectDefinition, SpriteDefinition, SpriteSheet, Terrain, TextureDefinition,
+};
+use rift_sim::Match as BattleMatch;
 
 mod interface_dump;
 mod picture;
@@ -37,6 +40,11 @@ enum Command {
     ScanColors,
     /// Print an underlay definition.
     Underlay { id: u32 },
+    /// Dump the raw bytes of the material definitions in the config archive.
+    Materials {
+        #[arg(long, default_value_t = 8)]
+        limit: u32,
+    },
     /// Print an overlay definition.
     Overlay { id: u32 },
     /// Print an NPC definition.
@@ -63,6 +71,18 @@ enum Command {
     Model { id: u32 },
     /// Export a model as a Wavefront OBJ.
     ExportObj { id: u32, out: PathBuf },
+    /// Export a sprite from index 8 as a PNG.
+    Sprite { id: u32, out: PathBuf },
+    /// Export the sprite behind a texture definition from index 9 as a PNG.
+    Texture { id: u32, out: PathBuf },
+    /// Scrape index 9 textures (and optionally every index 8 sprite) to a folder.
+    DumpTextures {
+        #[arg(long, default_value = "assets/cache-scrape")]
+        out: PathBuf,
+        /// Also write every index-8 sprite group.
+        #[arg(long)]
+        sprites: bool,
+    },
     /// Export terrain height/colour data as an OBJ for quick inspection.
     TerrainObj {
         region_x: u32,
@@ -91,6 +111,21 @@ enum Command {
         /// Folder to write into.
         out: PathBuf,
     },
+    /// Run a deterministic headless 5v5 bot match and print its state hash.
+    Match {
+        #[arg(long, default_value_t = 1)]
+        seed: u32,
+        #[arg(long, default_value_t = 12000)]
+        ticks: u64,
+        #[arg(long, default_value_t = 64)]
+        size: usize,
+        /// Print every entity, not just the team summary.
+        #[arg(long)]
+        verbose: bool,
+        /// Print `tick hash` every N ticks (0 = off).
+        #[arg(long, default_value_t = 0)]
+        trace_every: u64,
+    },
 }
 
 fn main() -> Result<()> {
@@ -102,6 +137,19 @@ fn main() -> Result<()> {
         .init();
 
     let cli = Cli::parse();
+    // The headless match is pure simulation and deliberately does not touch
+    // the cache: it must be runnable in CI without game assets.
+    if let Command::Match {
+        seed,
+        ticks,
+        size,
+        verbose,
+        trace_every,
+    } = &cli.command
+    {
+        headless_match(*seed, *ticks, *size, *verbose, *trace_every)?;
+        return Ok(());
+    }
     let cache = Cache::open_with_keys(&cli.cache, cli.keys.as_ref())
         .with_context(|| format!("opening cache at {}", cli.cache.display()))?;
 
@@ -111,6 +159,7 @@ fn main() -> Result<()> {
         Command::Locations { region_x, region_y } => locations(&cache, region_x, region_y)?,
         Command::ScanColors => scan_colors(&cache)?,
         Command::Underlay { id } => underlay(&cache, id)?,
+        Command::Materials { limit } => materials(&cache, limit)?,
         Command::Overlay { id } => overlay(&cache, id)?,
         Command::Npc { id } => npc(&cache, id)?,
         Command::FindNpc { query, limit } => find_npc(&cache, &query, limit)?,
@@ -120,11 +169,7 @@ fn main() -> Result<()> {
         Command::Animate { model, sequence } => animate(&cache, model, sequence)?,
         Command::Model { id } => model(&cache, id)?,
         Command::ExportObj { id, out } => export_obj(&cache, id, &out)?,
-        Command::TerrainObj {
-            region_x,
-            region_y,
-            out,
-        } => terrain_obj(&cache, region_x, region_y, &out)?,
+        Command::Sprite { id, out } => sprite(&cache, id, &out)?,
         Command::DumpSprites {
             out,
             from,
@@ -132,8 +177,117 @@ fn main() -> Result<()> {
             overview_only,
         } => dump_sprites(&cache, &out, from, to, overview_only)?,
         Command::DumpFonts { out } => dump_fonts(&cache, &out)?,
+        Command::Texture { id, out } => texture(&cache, id, &out)?,
+        Command::DumpTextures { out, sprites } => dump_textures(&cache, &out, sprites)?,
+        Command::TerrainObj {
+            region_x,
+            region_y,
+            out,
+        } => terrain_obj(&cache, region_x, region_y, &out)?,
+        Command::Match { .. } => unreachable!("handled before opening the cache"),
     }
 
+    Ok(())
+}
+
+fn headless_match(
+    seed: u32,
+    ticks: u64,
+    size: usize,
+    verbose: bool,
+    trace_every: u64,
+) -> Result<()> {
+    let mut game = BattleMatch::new(seed, size);
+    if trace_every > 0 {
+        for _ in 0..ticks {
+            if game.winner.is_some() {
+                break;
+            }
+            game.step();
+            if game.tick % trace_every == 0 {
+                println!("trace tick={} hash={:016x}", game.tick, game.last_tick_hash);
+            }
+        }
+    } else {
+        game.run(ticks);
+    }
+    println!(
+        "match seed={seed} size={size} ticks={} winner={:?} hash={:016x}",
+        game.tick,
+        game.winner,
+        game.state_hash()
+    );
+    println!(
+        "stats attacks={} crits={} deaths={} commands={} waves={}",
+        game.stats.attacks,
+        game.stats.crits,
+        game.stats.deaths,
+        game.stats.commands,
+        game.stats.waves
+    );
+    for team in 0u8..2 {
+        let nexus = game.nexus(team);
+        let towers = game
+            .entities
+            .iter()
+            .filter(|entity| {
+                entity.team == team
+                    && entity.kind == rift_sim::battle::EntityKind::Tower
+                    && entity.alive
+            })
+            .count();
+        let inhibitors = game
+            .entities
+            .iter()
+            .filter(|entity| {
+                entity.team == team
+                    && entity.kind == rift_sim::battle::EntityKind::Inhibitor
+                    && entity.alive
+            })
+            .count();
+        let minions = game
+            .entities
+            .iter()
+            .filter(|entity| {
+                entity.team == team
+                    && entity.kind == rift_sim::battle::EntityKind::Minion
+                    && entity.alive
+            })
+            .count();
+        let gold = game
+            .entities
+            .iter()
+            .filter(|entity| entity.team == team)
+            .map(|entity| entity.gold)
+            .sum::<u32>();
+        println!(
+            "team {team}: heroes={}/5 towers={towers}/3 inhibitors={inhibitors}/3 minions={minions} gold={gold} nexus={}/{} vulnerable={}",
+            game.alive_on(team),
+            nexus.map(|entity| entity.hp.max(0)).unwrap_or(0),
+            nexus.map(|entity| entity.max_hp).unwrap_or(0),
+            game.nexus_vulnerable(team)
+        );
+    }
+    if verbose {
+        for entity in &game.entities {
+            println!(
+                "entity {:03} {:?} team {} lane {} pos=({},{}) tile=({},{}) hp={}/{} lvl={} gold={} {}",
+                entity.id,
+                entity.kind,
+                entity.team,
+                entity.lane,
+                entity.x,
+                entity.z,
+                entity.tile().0,
+                entity.tile().1,
+                entity.hp.max(0),
+                entity.max_hp,
+                entity.level,
+                entity.gold,
+                if entity.alive { "alive" } else { "dead" }
+            );
+        }
+    }
     Ok(())
 }
 
@@ -236,6 +390,131 @@ fn locations(cache: &Cache, region_x: u32, region_y: u32) -> Result<()> {
             .map(|def| def.name)
             .unwrap_or_default();
         println!("  object {id:6} x{count:<4} {name}");
+    }
+    Ok(())
+}
+
+fn fnv1a(text: &str) -> i32 {
+    let mut hash: u32 = 0x811c9dc5;
+    for byte in text.as_bytes() {
+        hash ^= u32::from(*byte);
+        hash = hash.wrapping_mul(0x0100_0193);
+    }
+    hash as i32
+}
+
+fn materials(cache: &Cache, limit: u32) -> Result<()> {
+    let reference = cache.reference(2)?;
+    let names = [
+        "materials",
+        "material",
+        "underlay",
+        "overlay",
+        "object",
+        "npc",
+        "variance",
+        "item",
+        "particle",
+        "skeleton",
+        "sound",
+        "spell",
+        "textures",
+        "animation",
+        "graphic",
+        "sound_effect",
+    ];
+    for archive in &reference.archives {
+        let matched = names
+            .iter()
+            .find(|name| fnv1a(name) == archive.name_hash)
+            .copied()
+            .unwrap_or("?");
+        println!(
+            "archive {:2} files={:5} hash={:11} name={matched}",
+            archive.id,
+            archive.files.len(),
+            archive.name_hash
+        );
+    }
+    for archive in [1u32, 4u32] {
+        let files = cache.archive_files_with_ids(2, archive)?;
+        let mut ok = 0usize;
+        let mut bad = Vec::new();
+        for (id, data) in &files {
+            let parsed = if archive == 1 {
+                rift_cache::UnderlayDefinition::parse(*id, data).is_ok()
+            } else {
+                rift_cache::OverlayDefinition::parse(*id, data).is_ok()
+            };
+            if parsed {
+                ok += 1;
+            } else {
+                bad.push((
+                    *id,
+                    data.len(),
+                    data.iter().take(20).copied().collect::<Vec<u8>>(),
+                ));
+            }
+        }
+        println!("archive {archive}: {ok} parsed, {} failed", bad.len());
+        for (id, len, bytes) in bad.iter().take(3) {
+            let hex: Vec<String> = bytes.iter().map(|b| format!("{b:02x}")).collect();
+            println!("  id {id} len {len}: {}", hex.join(" "));
+        }
+    }
+    for archive in [3u32] {
+        let Ok(files) = cache.archive_files_with_ids(2, archive) else {
+            continue;
+        };
+        let lens: Vec<usize> = files.iter().map(|(_, d)| d.len()).collect();
+        let min_len = lens.iter().min().copied().unwrap_or(0);
+        let max_len = lens.iter().max().copied().unwrap_or(0);
+        let uniform = min_len == max_len;
+        println!(
+            "probe archive {archive}: files={} len={min_len}..{max_len} uniform={uniform}",
+            files.len()
+        );
+        if files.len() < 400 || uniform {
+            let mut parsed = 0usize;
+            let mut histogram: std::collections::BTreeMap<u16, usize> = Default::default();
+            for (_id, data) in &files {
+                if data.len() >= 10 {
+                    let texture = u16::from_le_bytes([data[8], data[9]]);
+                    histogram
+                        .entry(texture)
+                        .and_modify(|c| *c += 1)
+                        .or_insert(1);
+                    parsed += 1;
+                }
+            }
+            println!("   parsed {parsed}/{} u16-texture histogram", files.len());
+            let top: Vec<(u16, usize)> = histogram.iter().take(12).map(|(k, v)| (*k, *v)).collect();
+            println!("   histogram {top:?}");
+
+            for (id, data) in files.iter().take(6) {
+                let ints: Vec<i32> = data
+                    .chunks_exact(4)
+                    .map(|c| i32::from_le_bytes([c[0], c[1], c[2], c[3]]))
+                    .collect();
+                let bytes: Vec<String> = data.iter().map(|b| format!("{b:02x}")).collect();
+                println!("   id {id}: bytes={} ints={ints:?}", bytes.join(" "));
+            }
+        }
+    }
+    let files = cache.archive_files_with_ids(2, 0)?;
+    println!("material files: {}", files.len());
+    for (id, data) in files.iter().take(limit as usize) {
+        let head: Vec<String> = data.iter().take(24).map(|b| format!("{b:02x}")).collect();
+        let ints: Vec<i32> = data
+            .chunks_exact(4)
+            .take(6)
+            .map(|c| i32::from_le_bytes([c[0], c[1], c[2], c[3]]))
+            .collect();
+        println!(
+            "material {id:5} len={:3} head={} ints={ints:?}",
+            data.len(),
+            head.join(" ")
+        );
     }
     Ok(())
 }
@@ -486,36 +765,8 @@ fn export_obj(cache: &Cache, id: u32, out: &PathBuf) -> Result<()> {
     Ok(())
 }
 
-fn terrain_obj(cache: &Cache, region_x: u32, region_y: u32, out: &PathBuf) -> Result<()> {
-    let (terrain_group, _) = map_groups(cache, region_x, region_y)?;
-    let group = cache.group(5, terrain_group)?;
-    let terrain = Terrain::load(region_x, region_y, &group.data)?;
-    let mut f = std::fs::File::create(out)?;
-
-    writeln!(f, "# rift terrain {region_x},{region_y}")?;
-    for y in 0..64 {
-        for x in 0..64 {
-            let wx = x as i32 * 128;
-            let wz = y as i32 * 128;
-            let h = terrain.height(0, x, y) as i32 * 8;
-            writeln!(f, "v {wx} {h} {wz}")?;
-        }
-    }
-    for y in 0..63 {
-        for x in 0..63 {
-            let a = y * 64 + x + 1;
-            let b = a + 1;
-            let c = a + 64;
-            let d = c + 1;
-            writeln!(f, "f {a} {c} {b}")?;
-            writeln!(f, "f {b} {c} {d}")?;
-        }
-    }
-    println!("wrote {} ({} tiles)", out.display(), terrain.tiles().len());
-    Ok(())
-}
-
 fn save_all(out: &std::path::Path, files: Vec<(String, picture::Picture)>) -> Result<usize> {
+    std::fs::create_dir_all(out)?;
     let count = files.len();
     for (path, picture) in files {
         let path = out.join(path);
@@ -655,5 +906,180 @@ fn dump_fonts(cache: &Cache, out: &std::path::Path) -> Result<()> {
         "fonts: {read} read, {failed} not read; pictures in {}",
         out.join("fonts").display()
     );
+    Ok(())
+}
+
+fn sprite(cache: &Cache, id: u32, out: &PathBuf) -> Result<()> {
+    let group = cache.group(8, id)?;
+    let sprite = SpriteDefinition::load(id, &group.data)?;
+    let Some(frame) = sprite.frames.first() else {
+        bail!("sprite {id} has no frames");
+    };
+    let image = image::RgbaImage::from_raw(frame.width, frame.height, frame.pixels.clone())
+        .context("sprite frame buffer does not match its dimensions")?;
+    image.save(out)?;
+    println!(
+        "sprite {id}: {} frame(s), first {}x{} -> {}",
+        sprite.frames.len(),
+        frame.width,
+        frame.height,
+        out.display()
+    );
+    Ok(())
+}
+
+fn dump_textures(cache: &Cache, out: &Path, dump_sprites: bool) -> Result<()> {
+    let texture_dir = out.join("textures");
+    std::fs::create_dir_all(&texture_dir)?;
+    let files = cache.archive_files_with_ids(9, 0)?;
+    let mut csv = String::from(
+        "texture,sprite,animation_direction,animation_speed,width,height,frames,path\n",
+    );
+    let mut written = 0usize;
+    for (id, data) in &files {
+        let definition = match TextureDefinition::load(*id, data) {
+            Ok(definition) => definition,
+            Err(err) => {
+                tracing::warn!("texture {id}: {err:#}");
+                continue;
+            }
+        };
+        let group = match cache.group(8, definition.sprite_id) {
+            Ok(group) => group,
+            Err(err) => {
+                tracing::warn!("texture {id}: sprite {}: {err:#}", definition.sprite_id);
+                continue;
+            }
+        };
+        let sprite = match SpriteDefinition::load(definition.sprite_id, &group.data) {
+            Ok(sprite) => sprite,
+            Err(err) => {
+                tracing::warn!("texture {id}: {err:#}");
+                continue;
+            }
+        };
+        let Some(frame) = sprite.frames.first() else {
+            continue;
+        };
+        let path = texture_dir.join(format!("texture_{id:04}.png"));
+        let image = image::RgbaImage::from_raw(frame.width, frame.height, frame.pixels.clone())
+            .context("texture frame buffer does not match its dimensions")?;
+        image.save(&path)?;
+        csv.push_str(&format!(
+            "{id},{},{},{},{},{},{},{}\n",
+            definition.sprite_id,
+            definition.animation_direction,
+            definition.animation_speed,
+            frame.width,
+            frame.height,
+            sprite.frames.len(),
+            path.display()
+        ));
+        written += 1;
+    }
+    std::fs::write(out.join("textures.csv"), csv)?;
+    println!(
+        "textures: {written}/{} definitions -> {}",
+        files.len(),
+        texture_dir.display()
+    );
+
+    if dump_sprites {
+        let sprite_dir = out.join("sprites");
+        std::fs::create_dir_all(&sprite_dir)?;
+        let mut sprite_csv = String::from("sprite,frames,width,height,path\n");
+        let mut sprite_count = 0usize;
+        for id in 0..cache.group_count(8) {
+            let Ok(group) = cache.group(8, id) else {
+                continue;
+            };
+            let Ok(sprite) = SpriteDefinition::load(id, &group.data) else {
+                continue;
+            };
+            let Some(frame) = sprite.frames.first() else {
+                continue;
+            };
+            if frame.width == 0 || frame.height == 0 {
+                continue;
+            }
+            let path = sprite_dir.join(format!("sprite_{id:05}.png"));
+            let Some(image) =
+                image::RgbaImage::from_raw(frame.width, frame.height, frame.pixels.clone())
+            else {
+                continue;
+            };
+            image.save(&path)?;
+            sprite_csv.push_str(&format!(
+                "{id},{},{},{},{}\n",
+                sprite.frames.len(),
+                frame.width,
+                frame.height,
+                path.display()
+            ));
+            sprite_count += 1;
+        }
+        std::fs::write(out.join("sprites.csv"), sprite_csv)?;
+        println!(
+            "sprites: {sprite_count}/{} groups -> {}",
+            cache.group_count(8),
+            sprite_dir.display()
+        );
+    }
+    Ok(())
+}
+
+fn texture(cache: &Cache, id: u32, out: &PathBuf) -> Result<()> {
+    let files = cache.archive_files_with_ids(9, 0)?;
+    let Some((_, data)) = files.iter().find(|(file_id, _)| *file_id == id) else {
+        bail!("texture {id} not found in index 9 archive 0");
+    };
+    let definition = TextureDefinition::load(id, data)?;
+    let group = cache.group(8, definition.sprite_id)?;
+    let sprite = SpriteDefinition::load(definition.sprite_id, &group.data)?;
+    let Some(frame) = sprite.frames.first() else {
+        bail!(
+            "texture {id}: sprite {} has no frames",
+            definition.sprite_id
+        );
+    };
+    let image = image::RgbaImage::from_raw(frame.width, frame.height, frame.pixels.clone())
+        .context("texture frame buffer does not match its dimensions")?;
+    image.save(out)?;
+    println!(
+        "texture {id}: sprite {} {}x{} -> {}",
+        definition.sprite_id,
+        frame.width,
+        frame.height,
+        out.display()
+    );
+    Ok(())
+}
+
+fn terrain_obj(cache: &Cache, region_x: u32, region_y: u32, out: &PathBuf) -> Result<()> {
+    let (terrain_group, _) = map_groups(cache, region_x, region_y)?;
+    let group = cache.group(5, terrain_group)?;
+    let terrain = Terrain::load(region_x, region_y, &group.data)?;
+    let mut f = std::fs::File::create(out)?;
+
+    writeln!(f, "# rift terrain {region_x},{region_y}")?;
+    for y in 0..64 {
+        for x in 0..64 {
+            let wx = x as i32 * 128;
+            let wz = y as i32 * 128;
+            let h = terrain.height(0, x, y) as i32 * 8;
+            writeln!(f, "v {wx} {h} {wz}")?;
+        }
+    }
+    for y in 0..63 {
+        for x in 0..63 {
+            let a = y * 64 + x + 1;
+            let b = a + 1;
+            let c = a + 64;
+            let d = c + 1;
+            writeln!(f, "f {a} {c} {b}")?;
+            writeln!(f, "f {b} {c} {d}")?;
+        }
+    }
+    println!("wrote {} ({} tiles)", out.display(), terrain.tiles().len());
     Ok(())
 }

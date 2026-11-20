@@ -7,7 +7,7 @@ pub const LARGEST: u32 = 4;
 /// needs `need` pixels at its own size fits in `window`. Never less than 1:
 /// a window too small for scale 1 is the layout's problem, not the scale's.
 pub fn choose(window: (u32, u32), need: (u32, u32)) -> u32 {
-    let fit = |have: u32, need: u32| if need == 0 { LARGEST } else { have / need };
+    let fit = |have: u32, need: u32| have.checked_div(need).unwrap_or(LARGEST);
     fit(window.0, need.0)
         .min(fit(window.1, need.1))
         .clamp(1, LARGEST)

@@ -94,18 +94,51 @@ Done:
   zones, and a dark fog mesh over unseen tiles.
 - Three data-driven champions: Monkey, JalRek-Jad, Kree'arra Jr.; distinct
   models, stats, and ability numbers; Kree has ranged auto-attacks.
-- Six data-driven items, six inventory slots, fountain-range shop, gold
-  spending, and stat/ability-power application (`B`, `1`–`6`).
+- Six data-driven items, six inventory slots, fountain-range shop, hover
+  tooltips, gold spending, and stat/ability-power application (`B`, `1`–`6`).
+- Passive gold (8/s) and fountain healing (6% max HP/MP/s within 900 units).
+- Built-in 5x7 bitmap-font HUD: HP/MP/XP/gold, nexus/wave values, ability
+  labels/cooldowns, shop names/costs/tooltips, victory/defeat.
+- Inhibitor respawn (120 s) and lane super minions while an enemy inhibitor is
+  down.
+- Fogged minimap (8×8-tile blocks) with click-to-pan.
 - HUD nexus health bars, wave timer, buff bar, inventory slots, shop rows;
-  title shows full match state.
-- `--timescale`, `--demo-camp`, `--demo-kit`, `--demo-shop`, and `--champion`
-  for verification.
+  title retains the full debug state.
+- `--timescale`, `--demo-camp`, `--demo-kit`, `--demo-shop`, `--demo-base`,
+  `--demo-inhibitor`, and `--champion` for verification.
+
+### M5 — 117HD-style renderer (in progress)
+
+Done:
+
+- **M5.0 117HD Core**: sRGB-correct scene pipeline, per-face model normals,
+  smooth terrain normals, sun + hemispheric ambient lighting, optional light
+  banding, sky gradient/clouds, height fog, static + unit blob shadows, and up
+  to 16 dynamic ability/fountain lights.
+- **M5.1 Shadows + contact AO**: 1024px sun shadow map, PCF, dynamic
+  player/structure/camp casters, alternating shadow updates, baked terrain and
+  model contact AO. `--shadows off|blob|map`, `--debug-view shadow|ao`.
+- **UI pass**: OSRS-style Fountain Shop window (categories, item cards, detail
+  pane, Buy/Sell, inventory row), HUD resource/team/objectives/event-log/
+  inventory/shop panels, real item icons and tab sprites from the gitignored
+  asset pack. See `docs/UI_ASSETS.md`.
+- `--graphics 117hd|classic`, `--debug-view albedo|normal|lighting|fog|lights`,
+  and `--pitch` for verification.
 
 Remaining:
 
-- Server-authoritative fog, minimap click-to-pan, and brush visuals.
+- **M5.2 117HD Water**: water mesh, fresnel, sky reflection, specular, caustics.
+- **M5.3 117HD Textures**: texture decoding, atlas, model/ground textures,
+  ground blending, anisotropic filtering. *Partial:* seamless terrain color
+  smoothing + procedural ground detail shipped; cache-native textures pending.
+- **M5.4 117HD Post + Draw Distance**: full SSAO, MSAA/FXAA, bloom, color
+  grading, chunked streaming/LOD, model batching. *Partial:* offscreen post
+  pass with FXAA, cheap bloom, color grading, dithering shipped; MSAA, full
+  SSAO, and draw-distance streaming pending.
+- Static scenery shadow caching for the sun shadow map.
+- Server-authoritative fog and brush visuals.
 - Item selling/combining/passives and five champions with distinct kits.
-- HUD text/font atlas so shop names, gold, and stats are on-screen.
+- Cache-native font atlas and richer shop/scoreboard screens.
 - Deterministic 10-bot match at 20× speed with a state hash.
 - Data hot reload for champions/abilities/items/waves.
 - Balance pass v0.

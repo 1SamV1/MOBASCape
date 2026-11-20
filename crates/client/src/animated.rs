@@ -1,22 +1,44 @@
+use std::collections::HashMap;
+use std::sync::Arc;
+
 use anyhow::Result;
 use glam::{Mat3, Vec3};
-use rift_cache::{
-    AnimationClip, Cache, Model,
-    light::{light, shade, tint},
-};
+use rift_cache::{AnimationClip, Cache, Model, model::hsl_to_rgb};
 
 use crate::champion::ChampionConfig;
 use crate::items::ItemConfig;
-use crate::movement::{ChampionMotion, Driven, Wish};
+use crate::motion::PlayerMotion;
 use crate::scene::{
-    CampBuff, HeightGrid, MODEL_FORWARD_TURN, SceneData, StructureKind, Vertex, WorldCollision,
-    model_vertex_animated,
+    AmbientKind, CampBuff, HeightGrid, SceneData, SceneVertex, StructureKind, WorldCollision,
+    model_dominant_texture, model_vertex_animated,
 };
 
 const Q_COOLDOWN: f32 = 5.0;
+/// King Awowogei's Bananarang replaces the shared Q bolt.
+const BANANARANG_COOLDOWN: f32 = 8.0;
+/// King Awowogei's Trial by Combat replaces the shared R meteor.
+const TRIAL_COOLDOWN: f32 = 90.0;
 const PLAYER_RESPAWN: f32 = 5.0;
+/// Half-width of the Bananarang's start/end hands.
+const BANANARANG_HAND: f32 = 28.0;
+/// Forward depth of the trapezoid's long top face. The previous 1,733-unit
+/// oval reach is pulled in a little; the furthest top corner is ~1,516 units.
+const BANANARANG_DEPTH: f32 = 1_300.0;
+/// The launch leg leaves the facing direction 30 degrees to the left.
+const BANANARANG_SPLAY: f32 = std::f32::consts::PI / 6.0;
+/// Flight time. The original 1.0 s arc is slowed to 30% speed, so it takes
+/// about 3.33x longer to complete.
+const BANANARANG_DURATION: f32 = 1.0 / 0.3;
+/// Cache model 2387 is the banana NPC/item mesh. Scaling it 6.25x makes the
+/// 3D banana roughly three times the length of the old billboard fruit.
+const BANANARANG_MODEL_SCALE: f32 = 6.25;
+/// Trial by Combat unit-target range: 5x the original 15-tile range.
+const TRIAL_RANGE: f32 = 75.0 * 128.0;
 const MINION_AGGRO: f32 = 520.0;
 const MAX_MINIONS_PER_TEAM: usize = 36;
+const DEATH_SINK_TIME: f32 = 0.45;
+/// Model vertex groups used by King Awowogei's arms and hands.
+const MONKEY_ARM_GROUPS: &[u8] = &[11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 37];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum UnitKind {
@@ -29,6 +51,34 @@ pub enum UnitKind {
     Inhibitor,
     Nexus,
     Camp,
+    Watchtower,
+    /// Enemy champion controlled by the duel/demo AI.
+    EnemyChampion,
+    /// Non-combat monkey watching a Trial by Combat.
+    Spectator,
+    /// Chest near the team spawn that holds remotely purchased items.
+    StorageChest,
+    /// Flying Armadylean courier that delivers stored purchases.
+    DeliveryGuard,
+}
+
+/// Short display name used by kill announcements and the kill feed.
+fn short_unit_name(kind: UnitKind) -> &'static str {
+    match kind {
+        UnitKind::Player => "YOUR CHAMPION",
+        UnitKind::EnemyChampion => "A RIVAL CHAMPION",
+        UnitKind::MeleeMinion | UnitKind::RangedMinion => "A MINION",
+        UnitKind::Tower => "A TOWER",
+        UnitKind::Inhibitor => "AN INHIBITOR",
+        UnitKind::Nexus => "A NEXUS",
+        UnitKind::Camp => "A CAMP",
+        UnitKind::Watchtower => "A WATCHTOWER",
+        UnitKind::Dummy => "A DUMMY",
+        UnitKind::Ambient => "SCENERY",
+        UnitKind::Spectator => "A MONKEY",
+        UnitKind::StorageChest => "THE CHEST",
+        UnitKind::DeliveryGuard => "THE GUARD",
+    }
 }
 
 impl UnitKind {
@@ -39,14 +89,30 @@ impl UnitKind {
     pub fn is_structure(self) -> bool {
         matches!(self, Self::Tower | Self::Inhibitor | Self::Nexus)
     }
+
+    pub fn is_champion(self) -> bool {
+        matches!(self, Self::Player | Self::EnemyChampion)
+    }
 }
 
 pub struct AnimatedUnit {
-    pub model: Model,
-    pub idle: AnimationClip,
-    pub walk: Option<AnimationClip>,
+    pub model: Arc<Model>,
+    pub idle: Arc<AnimationClip>,
+    pub walk: Option<Arc<AnimationClip>>,
     pub pos: Vec3,
     pub yaw: f32,
+    /// Model-space forward correction (usually 0 or PI).
+    pub model_yaw_offset: f32,
+    /// Weighty locomotion for the player's champion; `None` for everything
+    /// else, which keeps minion movement cheap and predictable.
+    pub motion: Option<PlayerMotion>,
+    /// 0 = idle pose, 1 = walk pose. Player only; smooths the clip change.
+    pub walk_blend: f32,
+    /// Per-champion multiplier for local arm transforms while walking.
+    pub walk_arm: f32,
+    /// One pass of this unit's walk clip, and the distance one pass covers.
+    pub walk_loop_ms: f32,
+    pub walk_stride: f32,
     pub scale: f32,
     pub anim_time_ms: f32,
     pub moving: bool,
@@ -55,16 +121,44 @@ pub struct AnimatedUnit {
     pub health: f32,
     pub max_health: f32,
     pub hit_flash: f32,
+    /// Counts down while a fresh corpse sinks and shrinks away.
+    pub death_anim: f32,
     pub dead_timer: f32,
     pub target: Option<Vec3>,
     pub path: Vec<Vec3>,
     pub path_index: usize,
     pub attack_target: Option<usize>,
     pub attack_cooldown: f32,
+    /// Time left before a committed player attack lands.
+    pub attack_windup_timer: f32,
+    pub attack_windup: f32,
+    pub attack_pending: bool,
     pub attack_range: f32,
     pub attack_damage: f32,
+    /// Permanent Trial by Combat bonus to basic melee damage.
+    pub min_base_damage_bonus: f32,
     pub attack_interval: f32,
     pub speed: f32,
+    /// Real armor: physical damage multiplier is 100 / (100 + armor).
+    pub armor: f32,
+    /// Positive stacks of armor reduction (banana peels during a duel).
+    pub armor_reduction: f32,
+    pub armor_reduction_timer: f32,
+    pub stun_timer: f32,
+    /// Venom: damage per tick while the timer runs.
+    pub venom_timer: f32,
+    pub venom_damage: f32,
+    pub venom_tick: f32,
+    pub venom_team: u8,
+    /// Attack speed multiplier from Footwork; 1.0 is the base rate.
+    pub attack_speed_mult: f32,
+    pub attack_speed_timer: f32,
+    /// Ranged level, used to scale ranged damage.
+    pub ranged: f32,
+    pub is_champion: bool,
+    /// Seconds before this unit becomes visible and starts acting. Used to
+    /// stagger the members of a minion wave without changing the sim tick.
+    pub spawn_delay: f32,
     pub hit_radius: f32,
     pub bar_height: f32,
     pub lane: Vec<Vec3>,
@@ -87,9 +181,34 @@ pub struct AnimatedUnit {
     pub e_shield: f32,
     pub w_distance: f32,
     pub ability_power: f32,
-    /// How far above the ground the body is drawn. Drawing only: nothing in
-    /// the match reads it.
-    pub lift: f32,
+    pub structure_lane: Option<usize>,
+    pub super_minion: bool,
+    pub home: Vec3,
+    pub aggro_range: f32,
+    pub leash_range: f32,
+    pub camp_aggro: bool,
+    pub camp_wander_timer: f32,
+    /// Scenery-creature variant and deterministic wander phase.
+    pub ambient_kind: Option<AmbientKind>,
+    pub ambient_seed: u32,
+    /// Range at which a watchtower acquires its first target.
+    pub lock_range: f32,
+}
+
+/// What the shop does with a purchase.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BuyOutcome {
+    /// The hero was at the fountain, so the item went straight to the bag.
+    Delivered,
+    /// The hero was away from base, so the item is waiting in the chest.
+    Stored,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DeliveryState {
+    Idle,
+    FlyingToHero,
+    Returning,
 }
 
 #[derive(Clone, Copy)]
@@ -106,8 +225,21 @@ pub struct PlayerStats {
     pub shield: f32,
     pub shield_timer: f32,
     pub attack_damage: f32,
+    pub armor: f32,
+    /// Ranged level, shown in the OSRS-style stats panel.
+    pub ranged: f32,
+    /// Seconds between basic attacks, shown as Run-Attack.
+    pub attack_interval: f32,
+    /// Maximum cooldown per ability slot, used by the HUD fill bars.
+    pub cooldown_maxima: [f32; 4],
     pub speed: f32,
     pub ability_power: f32,
+    /// Personal match line for the scoreboard strip.
+    pub kills: u32,
+    pub deaths: u32,
+    pub assists: u32,
+    /// Creep score (lane minions last-hit by the player).
+    pub cs: u32,
 }
 
 pub struct Effect {
@@ -118,12 +250,47 @@ pub struct Effect {
     pub color: [u8; 3],
 }
 
-/// Whether a team sees only what its own units are near. Off for now: the
-/// whole map and every unit on it are shown. The rule underneath is kept, but
-/// it hid the map behind black slabs and gave no sign of where sight ended or
-/// where the brush was, so it read as things popping in. It comes back on when
-/// vision is built as a system of its own, with a picture to go with the rule.
-const FOG_OF_WAR: bool = false;
+/// A short-lived billboard spark. Particles are cosmetic and deterministic:
+/// they use the scene RNG and never touch combat state.
+pub struct Particle {
+    pub pos: Vec3,
+    pub vel: Vec3,
+    pub color: [u8; 3],
+    pub size: f32,
+    pub remaining: f32,
+    pub duration: f32,
+    pub gravity: f32,
+    pub drag: f32,
+}
+
+/// A ground scorch or lingering ability stain.
+pub struct Decal {
+    pub pos: Vec3,
+    pub radius: f32,
+    pub remaining: f32,
+    pub duration: f32,
+    pub color: [u8; 3],
+}
+
+/// A delayed ground impact with a visible telegraph. Meteor and similar
+/// abilities land after `delay`, so opponents get a chance to step out.
+pub struct PendingImpact {
+    pub pos: Vec3,
+    pub radius: f32,
+    pub delay: f32,
+    pub duration: f32,
+    pub damage: f32,
+    pub team: u8,
+    pub color: [u8; 3],
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct SceneLight {
+    pub pos: Vec3,
+    pub color: [f32; 3],
+    pub radius: f32,
+    pub intensity: f32,
+}
 
 pub struct VisibilityGrid {
     pub width: usize,
@@ -150,6 +317,59 @@ pub struct TeamBuff {
     pub kind: CampBuff,
 }
 
+pub struct Bananarang {
+    /// World-space XZ samples of the rounded trapezoid. Y is filled from the
+    /// terrain every frame.
+    pub path: Vec<Vec3>,
+    /// Cumulative arc length at each path sample.
+    pub path_lengths: Vec<f32>,
+    pub path_length: f32,
+    pub t: f32,
+    pub duration: f32,
+    pub physical: f32,
+    pub pure: f32,
+    pub crit_chance: f32,
+    pub stun: f32,
+    pub hit: Vec<usize>,
+}
+
+/// A number that pops over a unit when it is hit, like the reference client.
+pub struct FloatText {
+    pub pos: Vec3,
+    pub text: String,
+    pub color: [u8; 3],
+    pub life: f32,
+    /// Text scale. Bigger hits pop larger, like the reference client.
+    pub scale: f32,
+}
+
+pub struct DuelState {
+    pub target: usize,
+    pub center: Vec3,
+    pub radius: f32,
+    pub remaining: f32,
+    pub duration: f32,
+    pub peel_timer: f32,
+    pub peel_stacks: u32,
+    pub spectator_cursor: usize,
+}
+
+pub struct DuelPeel {
+    pub from: Vec3,
+    pub target: usize,
+    pub t: f32,
+    pub duration: f32,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Default)]
+pub enum ProjectileStyle {
+    /// The chunky orange orb used by mage spells and tower bolts.
+    #[default]
+    Bolt,
+    /// A small pale blowpipe dart.
+    Dart,
+}
+
 pub struct Projectile {
     pub pos: Vec3,
     pub dir: Vec3,
@@ -157,12 +377,25 @@ pub struct Projectile {
     pub life: f32,
     pub damage: f32,
     pub team: u8,
+    /// The unit that fired the projectile, so kills and camp aggro can be
+    /// attributed correctly.
+    pub attacker: Option<usize>,
+    /// Tower and watchtower bolts cannot reach Trial by Combat participants.
+    pub tower_shot: bool,
+    pub style: ProjectileStyle,
+    /// Piercing shots fly on and can hit each unit only once.
+    pub pierce: bool,
+    pub hit: Vec<usize>,
+    /// Venom damage per tick applied to whatever the shot hits.
+    pub venom: f32,
+    /// Extra damage against targets under the execute threshold.
+    pub execute: f32,
 }
 
 struct MinionTemplate {
-    model: Model,
-    idle: AnimationClip,
-    walk: AnimationClip,
+    model: Arc<Model>,
+    idle: Arc<AnimationClip>,
+    walk: Arc<AnimationClip>,
     health: f32,
     range: f32,
     damage: f32,
@@ -174,60 +407,166 @@ struct MinionTemplate {
 pub struct AnimatedScene {
     pub units: Vec<AnimatedUnit>,
     pub player_index: usize,
-    pub vertices: Vec<Vertex>,
+    pub vertices: Vec<SceneVertex>,
     pub indices: Vec<u32>,
+    pub caster_vertices: Vec<SceneVertex>,
+    pub caster_indices: Vec<u32>,
+    pub shadow_vertices: Vec<SceneVertex>,
+    pub shadow_indices: Vec<u32>,
     pub marker: Option<(Vec3, f32)>,
     pub projectiles: Vec<Projectile>,
+    pub bananarangs: Vec<Bananarang>,
+    /// Cache-native banana mesh used by the Bananarang; billboard fallback if
+    /// the cache revision lacks model 2387.
+    banana_model: Option<Arc<Model>>,
+    pub duel: Option<DuelState>,
+    pub duel_peels: Vec<DuelPeel>,
+    pub duel_wins: u32,
+    spectator_indices: Vec<usize>,
+    rng_state: u32,
     pub effects: Vec<Effect>,
+    /// Billboard sparks emitted by abilities, impacts and deaths.
+    pub particles: Vec<Particle>,
+    /// Ground stains that fade over several seconds.
+    pub decals: Vec<Decal>,
+    /// Telegraphed ground impacts waiting to land.
+    pub pending_impacts: Vec<PendingImpact>,
+    /// Floating damage numbers currently in the world.
+    pub floats: Vec<FloatText>,
+    /// Centre-screen announcement, e.g. "YOU HAVE SLAIN A MINION!".
+    pub announcement: Option<(String, f32)>,
+    /// Keeps the announcement on screen instead of replacing it with kills.
+    pub announcement_pinned: bool,
+    /// Recent kill messages, newest last.
+    pub kill_feed: Vec<(String, f32)>,
+    /// Minimap ping on the last enemy the player hit.
+    pub ping: Option<(Vec3, f32)>,
     pub wave_timer: f32,
+    /// Monotonic wave counter used to stagger formation jitter deterministically.
+    pub wave_serial: u32,
+    /// Team scoreboard counters.
+    pub kills: [u32; 2],
+    pub deaths: [u32; 2],
+    /// The local player's own match line, shown in the scoreboard strip.
+    pub player_kills: u32,
+    pub player_deaths: u32,
+    pub player_assists: u32,
+    /// Creep score: enemy lane minions last-hit by the player.
+    pub player_cs: u32,
     pub wave_interval: f32,
+    pub gold_income: f32,
     pub lanes: Vec<Vec<Vec3>>,
     pub nexus_positions: [Vec3; 2],
     pub player_spawn: Vec3,
     pub match_over: Option<u8>,
     pub minimap_bounds: (glam::Vec2, glam::Vec2),
     pub visibility: VisibilityGrid,
+    pub visibility_timer: f32,
+    pub visibility_dirty: bool,
     pub brush: Vec<(f32, f32, f32, f32)>,
+    /// Biome pockets the map is built from, used for the HUD label.
+    pub biomes: Vec<crate::scene::BiomePocket>,
+    /// Items bought away from base, waiting in the chest.
+    pub delivery_pending: Vec<(usize, ItemConfig)>,
+    pub delivery_state: DeliveryState,
+    delivery_guard: Option<usize>,
+    delivery_chest: Option<usize>,
+    delivery_home: Vec3,
+    delivered_queue: Vec<usize>,
     pub vision_origin: (i32, i32),
     pub team_buffs: [Option<TeamBuff>; 2],
     pub champion_name: String,
-    /// The player's champion, moved by the simulation (docs/MOVEMENT.md).
-    player_motion: ChampionMotion,
-    /// The direction held this frame, if any. `steer_player` sets it and the
-    /// player update spends it, so the champion is moved once a frame.
-    steer: Option<Vec3>,
+    /// File stem from `data/champions`; gates champion-specific kit pieces.
+    champion_id: String,
+    /// Direction requested by hold-to-steer this frame. Consumed by
+    /// `update_player` so both movement modes share the same weighted model.
+    steer_wish: Option<Vec3>,
     melee_template: MinionTemplate,
     ranged_template: MinionTemplate,
 }
 
 impl AnimatedScene {
     pub fn new(cache: &Cache, scene: &SceneData, champion: &ChampionConfig) -> Result<Self> {
+        let mut assets = UnitAssets::new(cache);
         let mut units = Vec::new();
 
+        // The scattered critters are weak neutral jungle camps: they aggro
+        // when a hero walks into their patch instead of standing there as
+        // decoration.
         for spawn in &scene.npc_spawns {
-            units.push(load_unit(
-                cache,
+            let mut unit = load_unit(
+                &mut assets,
                 spawn.model_id,
                 Some(spawn.idle_sequence),
                 spawn.walk_sequence,
                 spawn.pos,
                 spawn.scale,
+                UnitKind::Camp,
+                2,
+                150.0,
+                150.0,
+                9.0,
+                1.7,
+                260.0,
+                160.0,
+                260.0,
+                Vec::new(),
+            )?;
+            unit.respawn_time = 60.0;
+            unit.home = spawn.pos;
+            unit.aggro_range = 420.0;
+            unit.leash_range = 760.0;
+            unit.camp_buff = None;
+            tracing::info!("critter camp at {:?}", spawn.pos);
+            units.push(unit);
+        }
+
+        // Non-combat scenery creatures. They use team 2 so every targeting
+        // path treats them as neutral, and the health-bar pass explicitly
+        // skips UnitKind::Ambient.
+        for spawn in &scene.ambient_spawns {
+            let speed = match spawn.kind {
+                AmbientKind::Butterfly => 92.0,
+                AmbientKind::Cow => 46.0,
+                AmbientKind::Crab => 26.0,
+            };
+            let mut unit = load_unit(
+                &mut assets,
+                spawn.model_id,
+                Some(spawn.idle_sequence),
+                Some(spawn.walk_sequence),
+                spawn.pos,
+                spawn.scale,
                 UnitKind::Ambient,
                 2,
-                100.0,
+                1.0,
                 0.0,
                 0.0,
                 0.0,
+                speed,
                 0.0,
-                90.0,
-                150.0,
+                0.0,
                 Vec::new(),
-            )?);
+            )?;
+            if !spawn.attachments.is_empty() {
+                let parts = assets.merged_parts(spawn.model_id, &spawn.attachments)?;
+                unit.model = Arc::new(Model::merge(&parts));
+            }
+            for &(find, replace) in &spawn.recolors {
+                Arc::make_mut(&mut unit.model).recolor(&[find], &[replace]);
+            }
+            unit.home = spawn.pos;
+            unit.ambient_kind = Some(spawn.kind);
+            unit.ambient_seed = spawn.pos.x.to_bits()
+                ^ spawn.pos.z.to_bits().rotate_left(13)
+                ^ (units.len() as u32).wrapping_mul(0x9E37_79B9);
+            unit.anim_time_ms = (unit.ambient_seed % 4_000) as f32;
+            units.push(unit);
         }
 
         let player_index = units.len();
         units.push(load_unit(
-            cache,
+            &mut assets,
             champion.model,
             Some(champion.idle),
             Some(champion.walk),
@@ -245,17 +584,43 @@ impl AnimatedScene {
             Vec::new(),
         )?);
         {
+            if !champion.attachments.is_empty() {
+                let parts = assets.merged_parts(champion.model, &champion.attachments)?;
+                units[player_index].model = Arc::new(Model::merge(&parts));
+            }
             let player = &mut units[player_index];
             player.mana = champion.mana;
             player.max_mana = champion.mana;
             player.level = 1;
             player.ranged_auto = champion.ranged_auto;
+            player.ranged = champion.ranged;
+            player.model_yaw_offset = champion.model_yaw;
+            player.armor = champion.armor;
+            player.walk_arm = champion.walk_arm;
+            player.attack_windup = champion.attack_windup;
             player.q_damage = champion.q_damage;
             player.r_damage = champion.r_damage;
             player.e_heal = champion.e_heal;
             player.e_shield = champion.e_shield;
             player.w_distance = champion.w_distance;
         }
+        if champion.walk_sway < 1.0 {
+            if let Some(walk) = units[player_index].walk.as_mut() {
+                Arc::make_mut(walk).damp_side_rotation(champion.walk_sway);
+            }
+        }
+        let walk_loop_ms = units[player_index]
+            .walk
+            .as_ref()
+            .map_or(1000.0, |walk| walk.loop_ms());
+        let walk_stride = if champion.stride > 0.0 {
+            champion.stride
+        } else {
+            champion.speed * walk_loop_ms / 1000.0
+        };
+        units[player_index].walk_loop_ms = walk_loop_ms;
+        units[player_index].walk_stride = walk_stride;
+        units[player_index].motion = Some(PlayerMotion::new(champion, walk_loop_ms));
 
         // A training dummy next to the spawn keeps combat testable without
         // waiting for the first wave to meet in the middle.
@@ -264,9 +629,9 @@ impl AnimatedScene {
             .collision
             .nearest_walkable_world(dummy_world.x, dummy_world.z)
         {
-            let dummy_pos = scene.collision.world_of_cell(tx, ty, &scene.height);
+            let dummy_pos = scene.collision.world_of_tile(tx, ty, &scene.height);
             units.push(load_unit(
-                cache,
+                &mut assets,
                 7744,
                 Some(222),
                 Some(219),
@@ -297,15 +662,17 @@ impl AnimatedScene {
                 StructureKind::Tower => UnitKind::Tower,
                 StructureKind::Inhibitor => UnitKind::Inhibitor,
                 StructureKind::Nexus => UnitKind::Nexus,
+                StructureKind::Watchtower => UnitKind::Watchtower,
             };
             let (hit_radius, bar_height) = match kind {
                 UnitKind::Tower => (230.0, 500.0),
                 UnitKind::Inhibitor => (230.0, 430.0),
-                UnitKind::Nexus => (300.0, 400.0),
+                UnitKind::Nexus => (340.0, 575.0),
+                UnitKind::Watchtower => (210.0, 720.0),
                 _ => (150.0, 200.0),
             };
-            units.push(load_unit(
-                cache,
+            let mut unit = load_unit(
+                &mut assets,
                 structure.model_id,
                 None,
                 None,
@@ -321,7 +688,14 @@ impl AnimatedScene {
                 hit_radius,
                 bar_height,
                 Vec::new(),
-            )?);
+            )?;
+            unit.structure_lane = structure.lane_index;
+            if kind == UnitKind::Watchtower {
+                // The lock range is the long one, the aggro radius is where
+                // the tower first picks a target up.
+                unit.lock_range = structure.aggro.max(1.0);
+            }
+            units.push(unit);
         }
 
         for camp in &scene.map.camps {
@@ -332,7 +706,7 @@ impl AnimatedScene {
                 camp.pos
             );
             let mut unit = load_unit(
-                cache,
+                &mut assets,
                 camp.model_id,
                 camp.idle_sequence,
                 camp.walk_sequence,
@@ -341,17 +715,95 @@ impl AnimatedScene {
                 UnitKind::Camp,
                 2,
                 camp.health,
-                0.0,
-                0.0,
-                0.0,
-                0.0,
+                camp.range,
+                camp.damage,
+                camp.interval,
+                camp.speed,
                 180.0,
                 350.0,
                 Vec::new(),
             )?;
             unit.respawn_time = camp.respawn;
             unit.camp_buff = Some(camp.buff);
+            unit.home = camp.pos;
+            unit.aggro_range = camp.aggro;
+            unit.leash_range = camp.leash;
             units.push(unit);
+        }
+
+        // Storage chest and the flying Armadylean courier at the team base.
+        let chest_hint = scene.player_spawn + Vec3::new(4.0 * 128.0, 0.0, 13.0 * 128.0);
+        let chest_pos = Vec3::new(
+            chest_hint.x,
+            scene.height.height_at(chest_hint.x, chest_hint.z),
+            chest_hint.z,
+        );
+        let chest_index = units.len();
+        units.push(load_unit(
+            &mut assets,
+            1249,
+            None,
+            None,
+            chest_pos,
+            1.3,
+            UnitKind::StorageChest,
+            0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            90.0,
+            180.0,
+            Vec::new(),
+        )?);
+        tracing::info!("delivery: chest at {:?}", chest_pos);
+        let guard_home = chest_pos + Vec3::new(2.6 * 128.0, 0.0, 0.0);
+        let guard_index = units.len();
+        units.push(load_unit(
+            &mut assets,
+            28019,
+            Some(7166),
+            Some(7167),
+            guard_home,
+            0.85,
+            UnitKind::DeliveryGuard,
+            0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1100.0,
+            80.0,
+            240.0,
+            Vec::new(),
+        )?);
+
+        let mut spectator_indices = Vec::new();
+        for _ in 0..8 {
+            if let Ok(mut spectator) = load_unit(
+                &mut assets,
+                4818,
+                Some(1386),
+                None,
+                Vec3::ZERO,
+                2.0,
+                UnitKind::Spectator,
+                2,
+                1.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                Vec::new(),
+            ) {
+                spectator.health = 0.0;
+                spectator.visible = false;
+                units.push(spectator);
+                spectator_indices.push(units.len() - 1);
+            }
         }
 
         let nexus_positions = [
@@ -359,21 +811,23 @@ impl AnimatedScene {
             find_nexus(&units, 1).unwrap_or(scene.player_spawn),
         ];
 
+        // OSRS imp (melee) and fairy (ranged). The smaller imp models need a
+        // larger scale to read at MOBA camera distance; fairies are taller.
         let melee_template = MinionTemplate {
-            model: load_model(cache, 2944)?,
-            idle: AnimationClip::load(cache, 262)?,
-            walk: AnimationClip::load(cache, 259)?,
+            model: assets.model(19982)?,
+            idle: assets.clip(171)?,
+            walk: assets.clip(168)?,
             health: 90.0,
             range: 100.0,
             damage: 7.0,
             interval: 1.0,
             speed: 400.0,
-            scale: 1.15,
+            scale: 3.6,
         };
         let ranged_template = MinionTemplate {
-            model: load_model(cache, 21193)?,
-            idle: AnimationClip::load(cache, 5483)?,
-            walk: AnimationClip::load(cache, 5479)?,
+            model: assets.model(2857)?,
+            idle: assets.clip(112)?,
+            walk: assets.clip(106)?,
             health: 65.0,
             range: 380.0,
             damage: 9.0,
@@ -405,31 +859,51 @@ impl AnimatedScene {
             height: scene.collision.height() as usize,
             tiles: vec![false; (scene.collision.width() * scene.collision.height()) as usize],
         };
+        let banana_model = match assets.model(2387) {
+            Ok(model) => Some(model),
+            Err(err) => {
+                tracing::warn!("bananarang model 2387 unavailable; using billboard: {err:#}");
+                None
+            }
+        };
 
-        let walk_loop_ms = units[player_index]
-            .walk
-            .as_ref()
-            .map(|clip| {
-                clip.sequence
-                    .frame_lengths
-                    .iter()
-                    .map(|&l| l.max(1) as u32)
-                    .sum::<u32>() as f32
-                    * 20.0
-            })
-            .unwrap_or(0.0);
-        let player_motion =
-            ChampionMotion::new(champion, walk_loop_ms, scene.player_spawn, &scene.collision);
         let mut animated = Self {
             units,
             player_index,
             vertices: Vec::new(),
             indices: Vec::new(),
+            caster_vertices: Vec::new(),
+            caster_indices: Vec::new(),
+            shadow_vertices: Vec::new(),
+            shadow_indices: Vec::new(),
             marker: None,
             projectiles: Vec::new(),
+            bananarangs: Vec::new(),
+            banana_model,
+            duel: None,
+            duel_peels: Vec::new(),
+            duel_wins: 0,
+            spectator_indices,
+            rng_state: 0x9E37_79B9,
             effects: Vec::new(),
+            particles: Vec::new(),
+            decals: Vec::new(),
+            pending_impacts: Vec::new(),
+            floats: Vec::new(),
+            announcement: None,
+            announcement_pinned: false,
+            kill_feed: Vec::new(),
+            ping: None,
             wave_timer: 0.0,
+            wave_serial: 0,
+            kills: [0, 0],
+            deaths: [0, 0],
+            player_kills: 0,
+            player_deaths: 0,
+            player_assists: 0,
+            player_cs: 0,
             wave_interval: scene.map.wave_interval,
+            gold_income: 0.0,
             lanes: scene
                 .map
                 .lanes
@@ -441,21 +915,112 @@ impl AnimatedScene {
             match_over: None,
             minimap_bounds,
             visibility,
+            visibility_timer: 0.0,
+            visibility_dirty: true,
             brush: scene.map.brush.clone(),
+            biomes: scene.map.biomes.clone(),
+            delivery_pending: Vec::new(),
+            delivery_state: DeliveryState::Idle,
+            delivery_guard: Some(guard_index),
+            delivery_chest: Some(chest_index),
+            delivery_home: guard_home,
+            delivered_queue: Vec::new(),
             vision_origin: (vision_origin_x, vision_origin_y),
             team_buffs: [None, None],
             champion_name: champion.name.clone(),
-            player_motion,
-            steer: None,
+            champion_id: champion.id.clone(),
+            steer_wish: None,
             melee_template,
             ranged_template,
         };
+        // Persistent fountain rings mark the heal/shop area at spawn.
+        animated.effects.push(Effect {
+            pos: scene.player_spawn,
+            radius: 240.0,
+            remaining: 1.0e9,
+            duration: 1.0e9,
+            color: [70, 210, 130],
+        });
+        animated.effects.push(Effect {
+            pos: scene.player_spawn,
+            radius: 140.0,
+            remaining: 1.0e9,
+            duration: 1.0e9,
+            color: [120, 255, 170],
+        });
+        // Blue rings around each castle dais, matching the reference base.
+        for pos in animated.nexus_positions {
+            animated.effects.push(Effect {
+                pos,
+                radius: 760.0,
+                remaining: 1.0e9,
+                duration: 1.0e9,
+                color: [80, 165, 255],
+            });
+        }
         for lane_index in 0..animated.lanes.len() {
-            animated.spawn_wave(0, lane_index);
-            animated.spawn_wave(1, lane_index);
+            animated.spawn_wave(0, lane_index, &scene.height);
+            animated.spawn_wave(1, lane_index, &scene.height);
         }
         animated.wave_timer = animated.wave_interval;
         Ok(animated)
+    }
+
+    /// Dev hook: kill the local player so the respawn HUD can be inspected.
+    pub fn demo_kill_player(&mut self) {
+        let pi = self.player_index;
+        let player = &mut self.units[pi];
+        player.health = 0.0;
+        player.dead_timer = PLAYER_RESPAWN;
+        player.path.clear();
+        player.path_index = 0;
+        player.attack_pending = false;
+        player.attack_target = None;
+        self.announcement = Some(("YOU HAVE BEEN SLAIN".to_string(), 3.0));
+    }
+
+    /// Pop the reference client's combat feedback: floating numbers, a kill
+    /// announcement, a kill feed and a minimap ping. Used by `--demo-fx`.
+    pub fn demo_fx(&mut self) {
+        let pi = self.player_index;
+        self.floats.clear();
+        let pos = self.units[pi].pos;
+        self.floats.push(FloatText {
+            pos: pos + Vec3::Y * 150.0,
+            text: "1,502".to_string(),
+            color: [255, 225, 120],
+            life: 9999.0,
+            scale: 1.7,
+        });
+        self.floats.push(FloatText {
+            pos: pos + Vec3::Y * 240.0,
+            text: "330".to_string(),
+            color: [235, 235, 235],
+            life: 9999.0,
+            scale: 1.15,
+        });
+        self.announcement = Some(("YOU HAVE SLAIN A MINION!".to_string(), 9999.0));
+        self.announcement_pinned = true;
+        self.kill_feed
+            .push(("YOU SLAIN A MINION".to_string(), 9999.0));
+        self.kill_feed
+            .push(("BLOWPIPE RANGER HAS SLAIN A MINION".to_string(), 9999.0));
+        self.ping = Some((pos + Vec3::new(600.0, 0.0, 300.0), 9999.0));
+        // Also show the attack range and target rings.
+        let pi = self.player_index;
+        let mut best: Option<(usize, f32)> = None;
+        for (index, unit) in self.units.iter().enumerate() {
+            if index == pi || unit.team != 1 || unit.health <= 0.0 {
+                continue;
+            }
+            let distance = unit.pos.distance(pos);
+            if best.is_none_or(|(_, best)| distance < best) {
+                best = Some((index, distance));
+            }
+        }
+        if let Some((index, _)) = best {
+            self.units[pi].attack_target = Some(index);
+        }
     }
 
     pub fn champion_name(&self) -> &str {
@@ -480,15 +1045,43 @@ impl AnimatedScene {
             cooldowns: p.cooldowns,
             shield: p.shield,
             shield_timer: p.shield_timer,
-            attack_damage: p.attack_damage,
+            attack_damage: p.attack_damage + p.min_base_damage_bonus,
+            armor: p.armor,
+            ranged: p.ranged,
+            attack_interval: p.attack_interval,
+            cooldown_maxima: if self.champion_id == "monkey" {
+                [BANANARANG_COOLDOWN, 8.0, 12.0, TRIAL_COOLDOWN]
+            } else {
+                [Q_COOLDOWN, 8.0, 12.0, 45.0]
+            },
             speed: p.speed,
             ability_power: p.ability_power,
+            kills: self.player_kills,
+            deaths: self.player_deaths,
+            assists: self.player_assists,
+            cs: self.player_cs,
         }
     }
 
-    pub fn in_fountain_range(&self) -> bool {
-        let player = &self.units[self.player_index];
-        player.health > 0.0 && player.pos.distance(self.player_spawn) <= 900.0
+    pub fn sell_item(&mut self, item: &ItemConfig) -> Result<(), &'static str> {
+        let pi = self.player_index;
+        let player = &mut self.units[pi];
+        if player.health <= 0.0 {
+            return Err("dead");
+        }
+        player.gold = player.gold.saturating_add(item.cost / 2);
+        player.attack_damage = (player.attack_damage - item.damage).max(1.0);
+        if item.health > 0.0 {
+            player.max_health = (player.max_health - item.health).max(100.0);
+            player.health = player.health.min(player.max_health);
+        }
+        if item.mana > 0.0 {
+            player.max_mana = (player.max_mana - item.mana).max(50.0);
+            player.mana = player.mana.min(player.max_mana);
+        }
+        player.speed = (player.speed - item.speed).max(100.0);
+        player.ability_power = (player.ability_power - item.ability).max(0.0);
+        Ok(())
     }
 
     pub fn debug_grant_gold(&mut self, amount: u32) {
@@ -496,21 +1089,72 @@ impl AnimatedScene {
         player.gold = player.gold.saturating_add(amount);
     }
 
+    pub fn debug_destroy_inhibitor(&mut self, team: u8, lane_index: usize, respawn: f32) -> bool {
+        if let Some(unit) = self.units.iter_mut().find(|u| {
+            u.kind == UnitKind::Inhibitor && u.team == team && u.structure_lane == Some(lane_index)
+        }) {
+            unit.health = 0.0;
+            unit.dead_timer = respawn;
+            unit.attack_target = None;
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn debug_inhibitor_state(&self, team: u8, lane_index: usize) -> Option<(f32, f32, f32)> {
+        self.units
+            .iter()
+            .find(|u| {
+                u.kind == UnitKind::Inhibitor
+                    && u.team == team
+                    && u.structure_lane == Some(lane_index)
+            })
+            .map(|u| (u.health, u.max_health, u.dead_timer))
+    }
+
+    pub fn super_minion_count(&self) -> usize {
+        self.units
+            .iter()
+            .filter(|u| u.super_minion && u.health > 0.0)
+            .count()
+    }
+
+    pub fn debug_damage_player(&mut self, amount: f32) {
+        let player = &mut self.units[self.player_index];
+        player.health = (player.health - amount).max(1.0);
+    }
+
     /// Buy an item at the fountain. The client applies stats locally for the
     /// prototype; the authoritative server will own this transaction later.
-    pub fn buy_item(&mut self, item: &ItemConfig) -> Result<(), &'static str> {
+    /// Buy an item. At the fountain it goes straight into the bag; anywhere
+    /// else it is stored in the chest and must be delivered by the guard.
+    pub fn buy_item(
+        &mut self,
+        shop_index: usize,
+        item: &ItemConfig,
+    ) -> Result<BuyOutcome, &'static str> {
         let pi = self.player_index;
         let player = &mut self.units[pi];
         if player.health <= 0.0 {
             return Err("dead");
         }
-        if player.pos.distance(self.player_spawn) > 900.0 {
-            return Err("out of fountain range");
-        }
         if player.gold < item.cost {
             return Err("not enough gold");
         }
         player.gold -= item.cost;
+        let at_base = player.pos.distance(self.player_spawn) <= 900.0;
+        if at_base {
+            self.apply_item(item);
+            Ok(BuyOutcome::Delivered)
+        } else {
+            self.delivery_pending.push((shop_index, item.clone()));
+            Ok(BuyOutcome::Stored)
+        }
+    }
+
+    fn apply_item(&mut self, item: &ItemConfig) {
+        let player = &mut self.units[self.player_index];
         player.attack_damage += item.damage;
         if item.health > 0.0 {
             player.max_health += item.health;
@@ -522,7 +1166,101 @@ impl AnimatedScene {
         }
         player.speed += item.speed;
         player.ability_power += item.ability;
-        Ok(())
+    }
+
+    /// Send the guard to fetch the stored items.
+    pub fn call_delivery(&mut self) -> bool {
+        if self.delivery_pending.is_empty() || self.delivery_state != DeliveryState::Idle {
+            return false;
+        }
+        self.delivery_state = DeliveryState::FlyingToHero;
+        true
+    }
+
+    /// Shop indices of items the guard has just handed over.
+    pub fn take_delivered(&mut self) -> Vec<usize> {
+        std::mem::take(&mut self.delivered_queue)
+    }
+
+    pub fn delivery_count(&self) -> usize {
+        self.delivery_pending.len()
+    }
+
+    fn deliver_pending(&mut self) {
+        let pending = std::mem::take(&mut self.delivery_pending);
+        if pending.is_empty() {
+            return;
+        }
+        for (index, item) in pending {
+            self.apply_item(&item);
+            self.delivered_queue.push(index);
+        }
+        let pos = self.player_pos();
+        self.effects.push(Effect {
+            pos,
+            radius: 240.0,
+            remaining: 1.2,
+            duration: 1.2,
+            color: [255, 220, 90],
+        });
+    }
+
+    fn update_delivery(&mut self, dt: f32, height: &HeightGrid) {
+        let Some(guard_index) = self.delivery_guard else {
+            return;
+        };
+        let player_pos = self.player_pos();
+        let home = self.delivery_home;
+        match self.delivery_state {
+            DeliveryState::Idle => {
+                let ground = height.height_at(home.x, home.z);
+                let guard = &mut self.units[guard_index];
+                guard.pos = Vec3::new(home.x, ground + 190.0, home.z);
+                guard.moving = false;
+            }
+            DeliveryState::FlyingToHero => {
+                let target = Vec3::new(player_pos.x, player_pos.y + 150.0, player_pos.z);
+                let guard_pos = self.units[guard_index].pos;
+                let delta = target - guard_pos;
+                let distance = delta.length();
+                let step = 1100.0 * dt;
+                if distance <= step.max(170.0) {
+                    self.units[guard_index].pos = target;
+                    self.units[guard_index].moving = false;
+                    self.deliver_pending();
+                    self.delivery_state = DeliveryState::Returning;
+                } else {
+                    let dir = delta / distance;
+                    let guard = &mut self.units[guard_index];
+                    guard.pos += dir * step;
+                    guard.yaw = dir.x.atan2(dir.z);
+                    guard.moving = true;
+                }
+                let guard = &mut self.units[guard_index];
+                let floor = height.height_at(guard.pos.x, guard.pos.z) + 190.0;
+                guard.pos.y = guard.pos.y.max(floor);
+            }
+            DeliveryState::Returning => {
+                let ground = height.height_at(home.x, home.z);
+                let target = Vec3::new(home.x, ground + 190.0, home.z);
+                let guard_pos = self.units[guard_index].pos;
+                let delta = target - guard_pos;
+                let distance = delta.length();
+                let step = 1100.0 * dt;
+                if distance <= step.max(40.0) {
+                    let guard = &mut self.units[guard_index];
+                    guard.pos = target;
+                    guard.moving = false;
+                    self.delivery_state = DeliveryState::Idle;
+                } else {
+                    let dir = delta / distance;
+                    let guard = &mut self.units[guard_index];
+                    guard.pos += dir * step;
+                    guard.yaw = dir.x.atan2(dir.z);
+                    guard.moving = true;
+                }
+            }
+        }
     }
 
     pub fn nexus_health(&self, team: u8) -> Option<(f32, f32)> {
@@ -530,6 +1268,34 @@ impl AnimatedScene {
             .iter()
             .find(|u| u.kind == UnitKind::Nexus && u.team == team)
             .map(|u| (u.health, u.max_health))
+    }
+
+    /// Diagnostic snapshot used during lane-pathing investigations.
+    pub fn debug_minion_states(&self) -> Vec<String> {
+        self.units
+            .iter()
+            .filter(|unit| unit.kind.is_minion() && unit.health > 0.0)
+            .map(|unit| {
+                let dist = unit
+                    .lane
+                    .get(unit.lane_index)
+                    .map(|waypoint| unit.pos.distance(*waypoint))
+                    .unwrap_or(0.0);
+                format!(
+                    "t{} wp{}/{} pos({:.0},{:.0}) spd{:.0} d{:.0} moving={} target={:?} delay={:.1}",
+                    unit.team,
+                    unit.lane_index,
+                    unit.lane.len(),
+                    unit.pos.x / 128.0,
+                    unit.pos.z / 128.0,
+                    unit.speed,
+                    dist,
+                    unit.moving,
+                    unit.attack_target,
+                    unit.spawn_delay
+                )
+            })
+            .collect()
     }
 
     pub fn minion_count(&self) -> usize {
@@ -570,6 +1336,7 @@ impl AnimatedScene {
         collision: &WorldCollision,
         height: &HeightGrid,
     ) -> usize {
+        self.steer_wish = None;
         let start = self.player_pos();
         let path = collision.path_world(start, target, height);
         let unit = &mut self.units[self.player_index];
@@ -577,6 +1344,8 @@ impl AnimatedScene {
         unit.path_index = 0;
         unit.target = Some(target);
         unit.attack_target = None;
+        unit.attack_pending = false;
+        unit.attack_windup_timer = 0.0;
         self.marker = Some((target, 1.1));
         unit.path.len()
     }
@@ -599,8 +1368,11 @@ impl AnimatedScene {
             return false;
         }
         let target_pos = target.pos;
+        self.steer_wish = None;
         let player = &mut self.units[self.player_index];
         player.attack_target = Some(index);
+        player.attack_pending = false;
+        player.attack_windup_timer = 0.0;
         player.target = Some(target_pos);
         let distance = player.pos.distance(target_pos);
         if distance > player.attack_range {
@@ -614,117 +1386,426 @@ impl AnimatedScene {
         true
     }
 
-    pub fn steer_player(
-        &mut self,
-        direction: Vec3,
-        _dt: f32,
-        _height: &HeightGrid,
-        _collision: &WorldCollision,
-    ) {
+    /// Drop paths, steering and attack orders. Used by the animation demo
+    /// and whenever the player should come to a clean stop.
+    pub fn clear_player_orders(&mut self) {
+        self.steer_wish = None;
         let unit = &mut self.units[self.player_index];
         unit.path.clear();
         unit.path_index = 0;
         unit.target = None;
         unit.attack_target = None;
-        let flat = Vec3::new(direction.x, 0.0, direction.z);
-        // the player update moves the champion, once, with this direction
-        self.steer = (flat.length_squared() >= 1e-6).then_some(flat);
+        unit.attack_pending = false;
+        unit.attack_windup_timer = 0.0;
     }
 
-    /// Move the player's champion one frame toward `wish` and put the result
-    /// on its unit.
+    pub fn steer_player(&mut self, direction: Vec3) {
+        let flat = Vec3::new(direction.x, 0.0, direction.z);
+        if flat.length_squared() < 1e-6 {
+            self.steer_wish = None;
+            return;
+        }
+        self.steer_wish = Some(flat.normalize());
+        let unit = &mut self.units[self.player_index];
+        unit.attack_pending = false;
+        unit.attack_windup_timer = 0.0;
+        unit.path.clear();
+        unit.path_index = 0;
+        unit.target = None;
+        unit.attack_target = None;
+        unit.attack_pending = false;
+        unit.attack_windup_timer = 0.0;
+    }
+
+    /// Move the player with weight. Shared by tap-to-move, hold-to-steer and
+    /// turning to attack so every mode feels the same.
     fn drive_player(
         &mut self,
         dt: f32,
-        wish: Wish,
-        speed_mult: f32,
         height: &HeightGrid,
         collision: &WorldCollision,
-    ) -> Driven {
+        desired: Option<Vec3>,
+        top_speed: f32,
+        speed_mult: f32,
+    ) -> Option<crate::motion::StepResult> {
         let unit = &mut self.units[self.player_index];
-        let out = self.player_motion.drive(
-            dt, wish, unit.speed, speed_mult, unit.pos, unit.yaw, collision,
+        let mut motion = unit.motion.take()?;
+        let result = motion.step(
+            unit.pos, unit.yaw, desired, top_speed, speed_mult, dt, height, collision,
         );
-        unit.pos = Vec3::new(out.x, height.height_at(out.x, out.z), out.z);
-        unit.yaw = out.yaw;
-        unit.moving = out.moving;
-        unit.lift = out.lift;
-        if out.moving {
-            // the walk cycle follows the ground covered, not the clock; the
-            // unit loop adds the clock's share to every unit, so take it back
-            if let Some(ms) = self.player_motion.walk_ms_for(out.moved) {
-                unit.anim_time_ms += ms - dt * 1000.0;
-            }
-        }
-        out
+        unit.pos = result.pos;
+        unit.yaw = result.yaw;
+        unit.moving = result.moving;
+        unit.motion = Some(motion);
+        Some(result)
     }
 
-    /// Follow the player's path: pass its middle waypoints at speed, stop on
-    /// its last, and ask for a new path if the way is lost.
+    /// Follow the player's A* path with the weighted motor. Waypoints are
+    /// consumed at a radius instead of teleporting the champion onto them, so
+    /// a heavy turn keeps its arc.
     fn drive_player_path(
         &mut self,
         dt: f32,
-        speed_mult: f32,
         height: &HeightGrid,
         collision: &WorldCollision,
+        speed_mult: f32,
     ) {
-        const REACH: f32 = 56.0;
-        // close enough to a waypoint to count as standing on it
-        const ON_WAYPOINT: f32 = 6.0;
         let pi = self.player_index;
-        let (next, last) = {
-            let unit = &mut self.units[pi];
-            while unit.path_index + 1 < unit.path.len() {
-                let waypoint = unit.path[unit.path_index];
-                let flat = Vec3::new(waypoint.x - unit.pos.x, 0.0, waypoint.z - unit.pos.z);
-                if flat.length() > REACH {
-                    break;
-                }
-                // Turn for the next waypoint early only if the way to it is
-                // clear from here. Cutting the corner blind sent a champion
-                // into the side of whatever the corner went round.
-                let next = unit.path[unit.path_index + 1];
-                if flat.length() > ON_WAYPOINT && !collision.clear_line(unit.pos, next) {
-                    break;
-                }
-                unit.path_index += 1;
+        loop {
+            if self.units[pi].path.is_empty() {
+                return;
             }
-            (
-                unit.path.get(unit.path_index).copied(),
-                unit.path_index + 1 >= unit.path.len(),
-            )
-        };
-        let Some(target) = next else {
-            self.drive_player(dt, Wish::Rest, speed_mult, height, collision);
+            let index = self.units[pi].path_index;
+            let waypoint = self.units[pi].path[index];
+            let delta = planar_delta(self.units[pi].pos, waypoint);
+            let distance = delta.length();
+            if distance < 24.0 {
+                self.units[pi].path_index += 1;
+                if self.units[pi].path_index >= self.units[pi].path.len() {
+                    self.units[pi].path.clear();
+                    self.units[pi].path_index = 0;
+                    self.units[pi].target = None;
+                }
+                continue;
+            }
+            let dir = delta / distance;
+            let speed = self.units[pi].speed;
+            self.drive_player(dt, height, collision, Some(dir), speed, speed_mult);
             return;
-        };
-        let out = self.drive_player(
-            dt,
-            Wish::Seek {
-                target,
-                arrive: last,
-            },
-            speed_mult,
-            height,
-            collision,
-        );
+        }
+    }
+
+    fn player_land_attack(&mut self, target: usize) {
+        let pi = self.player_index;
         let unit = &mut self.units[pi];
-        if out.arrived {
-            unit.path.clear();
-            unit.path_index = 0;
-            unit.target = None;
-        } else if out.stuck {
-            if let Some(goal) = unit.path.last().copied() {
-                unit.path = collision.path_world(unit.pos, goal, height);
-                unit.path_index = 0;
+        unit.attack_cooldown = unit.attack_interval / unit.attack_speed_mult.max(0.1);
+        let mut damage = unit.attack_damage + unit.min_base_damage_bonus;
+        if unit.ranged_auto {
+            damage *= unit.ranged_scale();
+        }
+        let ranged = unit.ranged_auto;
+        let from = unit.pos + Vec3::Y * (unit.scale * 80.0);
+        let team = unit.team;
+        let target_pos = self.units[target].pos;
+        if ranged {
+            let dir = (target_pos - from).normalize_or_zero();
+            self.projectiles.push(Projectile {
+                pos: from,
+                dir,
+                speed: 1400.0,
+                life: 1.2,
+                damage,
+                team,
+                attacker: None,
+                tower_shot: false,
+                style: if self.champion_id == "ranger" {
+                    ProjectileStyle::Dart
+                } else {
+                    ProjectileStyle::Bolt
+                },
+                pierce: false,
+                hit: Vec::new(),
+                venom: 0.0,
+                execute: 0.0,
+            });
+        } else {
+            self.damage_unit(target, damage, 0);
+            if self.units[target].health <= 0.0 {
+                self.units[pi].attack_target = None;
             }
         }
     }
 
+    fn next_random(&mut self) -> f32 {
+        let mut x = self.rng_state;
+        x ^= x << 13;
+        x ^= x >> 17;
+        x ^= x << 5;
+        self.rng_state = x;
+        (x >> 8) as f32 / 16_777_216.0
+    }
+
+    /// Emit a deterministic burst of billboard sparks. Kept under a hard cap
+    /// so a teamfight cannot grow the cosmetic buffer without bound.
+    fn emit_burst(
+        &mut self,
+        pos: Vec3,
+        color: [u8; 3],
+        count: usize,
+        speed: f32,
+        size: f32,
+        life: f32,
+    ) {
+        for _ in 0..count {
+            if self.particles.len() >= 320 {
+                break;
+            }
+            let angle = self.next_random() * std::f32::consts::TAU;
+            let radial = speed * (0.30 + self.next_random() * 0.70);
+            let upward = speed * (0.25 + self.next_random() * 0.95);
+            let particle_size = size * (0.55 + self.next_random() * 0.85);
+            let duration = life * (0.55 + self.next_random() * 0.75);
+            self.particles.push(Particle {
+                pos: pos + Vec3::Y * (size * 0.35),
+                vel: Vec3::new(angle.cos() * radial, upward, angle.sin() * radial),
+                color,
+                size: particle_size,
+                remaining: duration,
+                duration,
+                gravity: -520.0,
+                drag: 1.4,
+            });
+        }
+    }
+
+    fn add_decal(&mut self, pos: Vec3, radius: f32, color: [u8; 3], duration: f32) {
+        if self.decals.len() >= 48 {
+            self.decals.remove(0);
+        }
+        self.decals.push(Decal {
+            pos,
+            radius,
+            remaining: duration,
+            duration,
+            color,
+        });
+    }
+
+    /// Cast the Q slot. King Awowogei throws his Bananarang, the Blowpipe
+    /// Ranger looses a poisoned dart, and everyone else keeps the shared
+    /// arcane bolt aimed at the cursor.
     pub fn cast_q(&mut self, target: Vec3) -> bool {
+        match self.champion_id.as_str() {
+            "monkey" => self.cast_bananarang(),
+            "ranger" => self.cast_toxic_dart(target),
+            _ => self.cast_arcane_bolt(target),
+        }
+    }
+
+    fn cast_bananarang(&mut self) -> bool {
         let pi = self.player_index;
         let player = &mut self.units[pi];
-        if player.health <= 0.0 || player.cooldowns[0] > 0.0 || player.mana < 25.0 {
+        if player.health <= 0.0
+            || player.stun_timer > 0.0
+            || player.cooldowns[0] > 0.0
+            || player.mana < 40.0
+        {
+            return false;
+        }
+        let rank = player.q_rank();
+        let rank_scale = 1.0 + 0.35 * (rank.saturating_sub(1)) as f32;
+        let base = player.q_damage * (1.0 + player.ability_power / 100.0) * rank_scale;
+        let forward = Vec3::new(player.yaw.sin(), 0.0, player.yaw.cos());
+        let right = Vec3::Y.cross(forward);
+        // The path is authored in local XZ space: +X right, +Z forward. It
+        // starts at the left hand, leaves 30 degrees left of facing, runs a
+        // long rounded top face, and closes back into the right hand.
+        let origin = Vec3::new(player.pos.x, 0.0, player.pos.z);
+        let path = bananarang_local_path()
+            .into_iter()
+            .map(|p| origin + right * p.x + forward * p.z)
+            .collect::<Vec<_>>();
+        let (path_lengths, path_length) = path_length_table(&path);
+        let start = player.pos + Vec3::Y * (player.scale * 55.0);
+        player.mana -= 40.0;
+        player.cooldowns[0] = BANANARANG_COOLDOWN;
+        self.bananarangs.push(Bananarang {
+            path,
+            path_lengths,
+            path_length,
+            t: 0.0,
+            duration: BANANARANG_DURATION,
+            physical: base * 0.6,
+            pure: base * 0.4,
+            crit_chance: 0.10 + 0.04 * (rank.saturating_sub(1)) as f32,
+            stun: 0.10 + 0.05 * (rank.saturating_sub(1)) as f32,
+            hit: Vec::new(),
+        });
+        self.effects.push(Effect {
+            pos: start,
+            radius: 90.0,
+            remaining: 0.18,
+            duration: 0.18,
+            color: [255, 220, 60],
+        });
+        self.emit_burst(start, [255, 220, 60], 12, 230.0, 18.0, 0.45);
+        true
+    }
+
+    /// Blowpipe Ranger Q: a fast poisoned dart that stacks venom.
+    fn cast_toxic_dart(&mut self, target: Vec3) -> bool {
+        let pi = self.player_index;
+        let player = &mut self.units[pi];
+        if player.health <= 0.0
+            || player.stun_timer > 0.0
+            || player.cooldowns[0] > 0.0
+            || player.mana < 30.0
+        {
+            return false;
+        }
+        let flat = Vec3::new(target.x - player.pos.x, 0.0, target.z - player.pos.z);
+        if flat.length_squared() < 1.0 {
+            return false;
+        }
+        let dir = flat.normalize();
+        let damage = player.q_damage * player.ranged_scale() * (1.0 + player.ability_power / 100.0);
+        let pos = player.pos + Vec3::Y * (player.scale * 80.0) + dir * 40.0;
+        let team = player.team;
+        player.mana -= 30.0;
+        player.cooldowns[0] = 5.0;
+        self.projectiles.push(Projectile {
+            pos,
+            dir,
+            speed: 1500.0,
+            life: 1.2,
+            damage,
+            team,
+            attacker: Some(pi),
+            tower_shot: false,
+            style: ProjectileStyle::Dart,
+            pierce: false,
+            hit: Vec::new(),
+            venom: 4.0,
+            execute: 0.0,
+        });
+        self.emit_burst(pos, [120, 255, 120], 8, 190.0, 14.0, 0.4);
+        true
+    }
+
+    /// Blowpipe Ranger W: a fan of darts that poisons everything it hits.
+    fn cast_dart_volley(&mut self, target: Vec3) -> bool {
+        let pi = self.player_index;
+        let player = &mut self.units[pi];
+        if player.health <= 0.0
+            || player.stun_timer > 0.0
+            || player.cooldowns[1] > 0.0
+            || player.mana < 50.0
+        {
+            return false;
+        }
+        let flat = Vec3::new(target.x - player.pos.x, 0.0, target.z - player.pos.z);
+        if flat.length_squared() < 1.0 {
+            return false;
+        }
+        let dir = flat.normalize();
+        let damage =
+            player.q_damage * 0.55 * player.ranged_scale() * (1.0 + player.ability_power / 100.0);
+        let team = player.team;
+        let origin = player.pos + Vec3::Y * (player.scale * 80.0);
+        player.mana -= 50.0;
+        player.cooldowns[1] = 12.0;
+        for index in -2..=2 {
+            let angle = index as f32 * 0.22;
+            let (sin, cos) = angle.sin_cos();
+            let rotated = Vec3::new(dir.x * cos - dir.z * sin, 0.0, dir.x * sin + dir.z * cos);
+            self.projectiles.push(Projectile {
+                pos: origin + rotated * 40.0,
+                dir: rotated,
+                speed: 1400.0,
+                life: 1.1,
+                damage,
+                team,
+                attacker: Some(pi),
+                tower_shot: false,
+                style: ProjectileStyle::Dart,
+                pierce: false,
+                hit: Vec::new(),
+                venom: 3.0,
+                execute: 0.0,
+            });
+        }
+        true
+    }
+
+    /// Blowpipe Ranger E: a backwards hop that speeds up attacks, the way an
+    /// OSRS ranger kites with a blowpipe.
+    fn cast_footwork(&mut self, collision: &WorldCollision, height: &HeightGrid) -> bool {
+        let pi = self.player_index;
+        let player = &mut self.units[pi];
+        if player.health <= 0.0
+            || player.stun_timer > 0.0
+            || player.cooldowns[2] > 0.0
+            || player.mana < 25.0
+        {
+            return false;
+        }
+        let forward = Vec3::new(player.yaw.sin(), 0.0, player.yaw.cos());
+        let mut destination = player.pos;
+        for step in (1..=4).rev() {
+            let p = player.pos - forward * (step as f32 * 128.0);
+            if collision.is_walkable_world(p.x, p.z) {
+                destination = Vec3::new(p.x, height.height_at(p.x, p.z), p.z);
+                break;
+            }
+        }
+        player.pos = destination;
+        player.attack_speed_mult = 1.4;
+        player.attack_speed_timer = 5.0;
+        player.mana -= 25.0;
+        player.cooldowns[2] = 14.0;
+        player.path.clear();
+        player.path_index = 0;
+        let pos = player.pos;
+        self.effects.push(Effect {
+            pos,
+            radius: 140.0,
+            remaining: 0.35,
+            duration: 0.35,
+            color: [120, 255, 170],
+        });
+        self.emit_burst(pos, [140, 255, 170], 16, 260.0, 18.0, 0.55);
+        self.add_decal(pos, 90.0, [40, 82, 52], 1.6);
+        true
+    }
+
+    /// Blowpipe Ranger R: a piercing shot that executes wounded targets.
+    fn cast_deadshot(&mut self, target: Vec3) -> bool {
+        let pi = self.player_index;
+        let player = &mut self.units[pi];
+        if player.health <= 0.0
+            || player.stun_timer > 0.0
+            || player.cooldowns[3] > 0.0
+            || player.mana < 80.0
+        {
+            return false;
+        }
+        let flat = Vec3::new(target.x - player.pos.x, 0.0, target.z - player.pos.z);
+        if flat.length_squared() < 1.0 {
+            return false;
+        }
+        let dir = flat.normalize();
+        let damage = player.r_damage * player.ranged_scale() * (1.0 + player.ability_power / 100.0);
+        let pos = player.pos + Vec3::Y * (player.scale * 80.0) + dir * 40.0;
+        let team = player.team;
+        player.mana -= 80.0;
+        player.cooldowns[3] = 75.0;
+        self.projectiles.push(Projectile {
+            pos,
+            dir,
+            speed: 1800.0,
+            life: 1.6,
+            damage,
+            team,
+            attacker: Some(pi),
+            tower_shot: false,
+            style: ProjectileStyle::Dart,
+            pierce: true,
+            hit: Vec::new(),
+            venom: 2.0,
+            execute: 0.35,
+        });
+        self.emit_burst(pos, [255, 90, 70], 14, 260.0, 16.0, 0.5);
+        true
+    }
+
+    fn cast_arcane_bolt(&mut self, target: Vec3) -> bool {
+        let pi = self.player_index;
+        let player = &mut self.units[pi];
+        if player.health <= 0.0
+            || player.stun_timer > 0.0
+            || player.cooldowns[0] > 0.0
+            || player.mana < 25.0
+        {
             return false;
         }
         let flat = Vec3::new(target.x - player.pos.x, 0.0, target.z - player.pos.z);
@@ -744,7 +1825,22 @@ impl AnimatedScene {
             life: 1.4,
             damage,
             team,
+            attacker: None,
+            tower_shot: false,
+            style: ProjectileStyle::Bolt,
+            pierce: false,
+            hit: Vec::new(),
+            venom: 0.0,
+            execute: 0.0,
         });
+        self.effects.push(Effect {
+            pos,
+            radius: 110.0,
+            remaining: 0.22,
+            duration: 0.22,
+            color: [255, 120, 40],
+        });
+        self.emit_burst(pos, [255, 150, 60], 10, 210.0, 15.0, 0.4);
         true
     }
 
@@ -754,9 +1850,16 @@ impl AnimatedScene {
         collision: &WorldCollision,
         height: &HeightGrid,
     ) -> bool {
+        if self.champion_id == "ranger" {
+            return self.cast_dart_volley(target);
+        }
         let pi = self.player_index;
         let player = &mut self.units[pi];
-        if player.health <= 0.0 || player.cooldowns[1] > 0.0 || player.mana < 30.0 {
+        if player.health <= 0.0
+            || player.stun_timer > 0.0
+            || player.cooldowns[1] > 0.0
+            || player.mana < 30.0
+        {
             return false;
         }
         let flat = Vec3::new(target.x - player.pos.x, 0.0, target.z - player.pos.z);
@@ -789,13 +1892,29 @@ impl AnimatedScene {
             duration: 0.35,
             color: [90, 220, 255],
         });
+        self.effects.push(Effect {
+            pos: destination,
+            radius: 170.0,
+            remaining: 0.42,
+            duration: 0.42,
+            color: [120, 235, 255],
+        });
+        self.emit_burst(start, [120, 225, 255], 18, 300.0, 18.0, 0.55);
+        self.emit_burst(destination, [170, 245, 255], 20, 320.0, 18.0, 0.6);
         true
     }
 
-    pub fn cast_e(&mut self) -> bool {
+    pub fn cast_e(&mut self, collision: &WorldCollision, height: &HeightGrid) -> bool {
+        if self.champion_id == "ranger" {
+            return self.cast_footwork(collision, height);
+        }
         let pi = self.player_index;
         let player = &mut self.units[pi];
-        if player.health <= 0.0 || player.cooldowns[2] > 0.0 || player.mana < 40.0 {
+        if player.health <= 0.0
+            || player.stun_timer > 0.0
+            || player.cooldowns[2] > 0.0
+            || player.mana < 40.0
+        {
             return false;
         }
         player.mana -= 40.0;
@@ -812,36 +1931,321 @@ impl AnimatedScene {
             duration: 0.5,
             color: [90, 255, 140],
         });
+        self.emit_burst(pos, [120, 255, 160], 26, 170.0, 16.0, 0.9);
+        self.add_decal(pos, 130.0, [36, 90, 52], 2.6);
         true
     }
 
-    pub fn cast_r(&mut self, target: Vec3) -> bool {
+    /// Cast the R slot. King Awowogei challenges an enemy champion to Trial
+    /// by Combat; other champions keep the shared ground-targeted meteor.
+    pub fn cast_r(
+        &mut self,
+        target: Vec3,
+        target_index: Option<usize>,
+        height: &HeightGrid,
+    ) -> bool {
+        match self.champion_id.as_str() {
+            "monkey" => self.cast_trial(target_index, height),
+            "ranger" => self.cast_deadshot(target),
+            _ => self.cast_meteor(target),
+        }
+    }
+
+    fn cast_trial(&mut self, target_index: Option<usize>, height: &HeightGrid) -> bool {
+        let Some(target_index) = target_index else {
+            return false;
+        };
+        let pi = self.player_index;
+        if self.duel.is_some() || target_index == pi || target_index >= self.units.len() {
+            return false;
+        }
+        let player = &self.units[pi];
+        let target = &self.units[target_index];
+        if player.health <= 0.0
+            || player.stun_timer > 0.0
+            || player.cooldowns[3] > 0.0
+            || player.mana < 100.0
+            || target.health <= 0.0
+            || !target.is_champion
+            || target.team == player.team
+            || !target.visible
+            || player.pos.distance(target.pos) > TRIAL_RANGE
+        {
+            return false;
+        }
+        let center = (player.pos + target.pos) * 0.5;
+        let distance = player.pos.distance(target.pos);
+        // The barrier forms where the fighters stand, so at maximum cast
+        // range it has to be wide enough to contain both of them.
+        let radius = (distance * 0.5 + 200.0).clamp(320.0, TRIAL_RANGE * 0.5 + 200.0);
+        {
+            let player = &mut self.units[pi];
+            player.mana -= 100.0;
+            player.cooldowns[3] = TRIAL_COOLDOWN;
+            player.path.clear();
+            player.path_index = 0;
+            player.target = None;
+            player.attack_pending = false;
+            player.attack_windup_timer = 0.0;
+            player.attack_target = Some(target_index);
+        }
+        {
+            let target = &mut self.units[target_index];
+            target.path.clear();
+            target.path_index = 0;
+            target.attack_target = Some(pi);
+        }
+        self.duel_peels.clear();
+        let spectator_count = self.spectator_indices.len();
+        for (index, &spectator_index) in self.spectator_indices.iter().enumerate() {
+            let angle = index as f32 / spectator_count.max(1) as f32 * std::f32::consts::TAU;
+            let mut pos = center + Vec3::new(angle.cos(), 0.0, angle.sin()) * (radius + 110.0);
+            pos.y = height.height_at(pos.x, pos.z);
+            let spectator = &mut self.units[spectator_index];
+            spectator.pos = pos;
+            spectator.health = 1.0;
+            spectator.max_health = 1.0;
+            spectator.visible = true;
+            spectator.death_anim = 0.0;
+            spectator.moving = false;
+            spectator.yaw = (center.x - pos.x).atan2(center.z - pos.z);
+            spectator.anim_time_ms = (index as f32 * 311.0) % 1400.0;
+        }
+        self.duel = Some(DuelState {
+            target: target_index,
+            center,
+            radius,
+            remaining: 10.0,
+            duration: 10.0,
+            peel_timer: 0.8,
+            peel_stacks: 0,
+            spectator_cursor: 0,
+        });
+        self.effects.push(Effect {
+            pos: center,
+            radius,
+            remaining: 0.6,
+            duration: 0.6,
+            color: [80, 220, 255],
+        });
+        self.emit_burst(center, [90, 220, 255], 34, 520.0, 22.0, 0.8);
+        tracing::info!(
+            "trial by combat: target {} arena radius {radius:.0}",
+            target_index
+        );
+        true
+    }
+
+    fn cast_meteor(&mut self, target: Vec3) -> bool {
         let pi = self.player_index;
         let player = &mut self.units[pi];
-        if player.health <= 0.0 || player.cooldowns[3] > 0.0 || player.mana < 80.0 {
+        if player.health <= 0.0
+            || player.stun_timer > 0.0
+            || player.cooldowns[3] > 0.0
+            || player.mana < 80.0
+        {
             return false;
         }
         player.mana -= 80.0;
         player.cooldowns[3] = 45.0;
-        self.effects.push(Effect {
-            pos: target,
-            radius: 384.0,
-            remaining: 0.6,
-            duration: 0.6,
-            color: [255, 110, 50],
-        });
         let radius = 384.0;
         let damage = player.r_damage * (1.0 + player.ability_power / 100.0);
-        for i in 0..self.units.len() {
-            let unit = &self.units[i];
-            if unit.health <= 0.0 || unit.team == 0 || unit.team == 2 {
+        // Telegraph first, damage later. The rock is visible falling for the
+        // whole delay, so a mobile target can walk out of the circle.
+        self.pending_impacts.push(PendingImpact {
+            pos: target,
+            radius,
+            delay: 0.9,
+            duration: 0.9,
+            damage,
+            team: 0,
+            color: [255, 110, 50],
+        });
+        self.effects.push(Effect {
+            pos: target,
+            radius: radius * 0.35,
+            remaining: 0.3,
+            duration: 0.3,
+            color: [255, 190, 80],
+        });
+        true
+    }
+
+    fn end_duel(&mut self, won: bool) {
+        let Some(target) = self.duel.take().map(|duel| duel.target) else {
+            return;
+        };
+        self.duel_peels.clear();
+        for &index in &self.spectator_indices {
+            let spectator = &mut self.units[index];
+            spectator.health = 0.0;
+            spectator.visible = false;
+        }
+        if let Some(unit) = self.units.get_mut(target) {
+            unit.attack_target = None;
+            unit.path.clear();
+            unit.path_index = 0;
+        }
+        let pi = self.player_index;
+        if won {
+            let player = &mut self.units[pi];
+            player.min_base_damage_bonus += 4.0;
+            self.duel_wins += 1;
+            tracing::info!(
+                "trial by combat won: {} wins, +{:.0} base melee damage",
+                self.duel_wins,
+                player.min_base_damage_bonus
+            );
+        }
+    }
+
+    fn apply_duel_bounds(&mut self, height: &HeightGrid) {
+        let Some(duel) = self.duel.as_ref() else {
+            return;
+        };
+        let center = duel.center;
+        let radius = duel.radius;
+        let target = duel.target;
+        let player = self.player_index;
+        for (index, unit) in self.units.iter_mut().enumerate() {
+            if unit.health <= 0.0 || unit.kind.is_structure() || unit.kind == UnitKind::Spectator {
                 continue;
             }
-            if unit.pos.distance(target) <= radius + unit.hit_radius {
-                self.damage_unit(i, damage, 0);
+            let dx = unit.pos.x - center.x;
+            let dz = unit.pos.z - center.z;
+            let distance = (dx * dx + dz * dz).sqrt();
+            let participant = index == player || index == target;
+            if participant {
+                if distance > radius - 24.0 {
+                    let scale = (radius - 24.0) / distance.max(0.001);
+                    unit.pos.x = center.x + dx * scale;
+                    unit.pos.z = center.z + dz * scale;
+                    unit.pos.y = height.height_at(unit.pos.x, unit.pos.z);
+                    unit.path.clear();
+                    unit.path_index = 0;
+                }
+            } else {
+                if distance < radius + 24.0 {
+                    let scale = (radius + 24.0) / distance.max(0.001);
+                    unit.pos.x = center.x + dx * scale;
+                    unit.pos.z = center.z + dz * scale;
+                    unit.pos.y = height.height_at(unit.pos.x, unit.pos.z);
+                    unit.path.clear();
+                    unit.path_index = 0;
+                }
             }
         }
-        true
+    }
+
+    fn update_duel(&mut self, dt: f32) {
+        let Some(duel) = self.duel.as_ref() else {
+            return;
+        };
+        let target_index = duel.target;
+        let player_alive = self.units[self.player_index].health > 0.0;
+        let target_alive = self
+            .units
+            .get(target_index)
+            .is_some_and(|unit| unit.health > 0.0);
+        if !player_alive {
+            self.end_duel(false);
+            return;
+        }
+        if !target_alive {
+            self.end_duel(true);
+            return;
+        }
+        let remaining = duel.remaining - dt;
+        if remaining <= 0.0 {
+            let player_fraction =
+                self.units[self.player_index].health / self.units[self.player_index].max_health;
+            let target_fraction =
+                self.units[target_index].health / self.units[target_index].max_health.max(1.0);
+            self.end_duel(player_fraction > target_fraction);
+            return;
+        }
+        let peel_due = {
+            let duel = self.duel.as_mut().expect("duel exists");
+            duel.remaining = remaining;
+            duel.peel_timer -= dt;
+            if duel.peel_timer <= 0.0 {
+                duel.peel_timer = 0.9;
+                true
+            } else {
+                false
+            }
+        };
+        if peel_due {
+            let (from, cursor) = {
+                let duel = self.duel.as_ref().expect("duel exists");
+                let cursor = duel.spectator_cursor;
+                let from = self
+                    .spectator_indices
+                    .get(cursor % self.spectator_indices.len().max(1))
+                    .and_then(|&index| self.units.get(index))
+                    .map_or(duel.center + Vec3::Y * 140.0, |unit| {
+                        unit.pos + Vec3::Y * 120.0
+                    });
+                (from, cursor + 1)
+            };
+            if let Some(duel) = self.duel.as_mut() {
+                duel.spectator_cursor = cursor;
+            }
+            self.duel_peels.push(DuelPeel {
+                from,
+                target: target_index,
+                t: 0.0,
+                duration: 0.45,
+            });
+        }
+        let mut peels = std::mem::take(&mut self.duel_peels);
+        peels.retain_mut(|peel| {
+            peel.t += dt / peel.duration.max(0.01);
+            if peel.t < 1.0 {
+                return true;
+            }
+            if let Some(unit) = self.units.get_mut(peel.target) {
+                unit.armor_reduction = (unit.armor_reduction + 2.0).min(16.0);
+                unit.armor_reduction_timer = 4.0;
+            }
+            if let Some(duel) = self.duel.as_mut() {
+                duel.peel_stacks = duel.peel_stacks.saturating_add(1);
+            }
+            self.effects.push(Effect {
+                pos: self.units[peel.target].pos,
+                radius: 90.0,
+                remaining: 0.3,
+                duration: 0.3,
+                color: [220, 180, 40],
+            });
+            false
+        });
+        self.duel_peels = peels;
+    }
+
+    pub fn pick_enemy_champion(&self, origin: Vec3, dir: Vec3) -> Option<usize> {
+        let mut best: Option<(usize, f32)> = None;
+        for (i, unit) in self.units.iter().enumerate() {
+            if !unit.is_champion
+                || unit.team == self.units[self.player_index].team
+                || unit.health <= 0.0
+                || !unit.visible
+            {
+                continue;
+            }
+            let center = unit.pos + Vec3::Y * (unit.bar_height * 0.45);
+            let radius = unit.hit_radius.max(80.0);
+            let oc = center - origin;
+            let t = oc.dot(dir);
+            if t < 0.0 {
+                continue;
+            }
+            let closest = origin + dir * t;
+            if closest.distance(center) <= radius && best.is_none_or(|(_, best_t)| t < best_t) {
+                best = Some((i, t));
+            }
+        }
+        best.map(|(i, _)| i)
     }
 
     pub fn pick_unit(&self, origin: Vec3, dir: Vec3) -> Option<usize> {
@@ -885,6 +2289,25 @@ impl AnimatedScene {
         best.map(|(i, _)| i)
     }
 
+    /// Closest watchtower of the given team, used by the verification demo.
+    pub fn nearest_watchtower(&self, team: u8, pos: Vec3) -> Option<usize> {
+        let mut best: Option<(usize, f32)> = None;
+        for (i, unit) in self.units.iter().enumerate() {
+            if unit.kind != UnitKind::Watchtower || unit.team != team || unit.health <= 0.0 {
+                continue;
+            }
+            let d = unit.pos.distance_squared(pos);
+            if best.is_none_or(|(_, bd)| d < bd) {
+                best = Some((i, d));
+            }
+        }
+        best.map(|(i, _)| i)
+    }
+
+    pub fn unit_attack_target(&self, index: usize) -> Option<usize> {
+        self.units.get(index).and_then(|unit| unit.attack_target)
+    }
+
     pub fn nearest_camp(&self, pos: Vec3) -> Option<usize> {
         let mut best: Option<(usize, f32)> = None;
         for (i, unit) in self.units.iter().enumerate() {
@@ -899,38 +2322,231 @@ impl AnimatedScene {
         best.map(|(i, _)| i)
     }
 
+    /// Spawn a sparring enemy champion, used by `--demo-duel` until bots own
+    /// the enemy team slot.
+    pub fn spawn_enemy_champion(
+        &mut self,
+        cache: &Cache,
+        champion: &ChampionConfig,
+        pos: Vec3,
+    ) -> Result<usize> {
+        let mut assets = UnitAssets::new(cache);
+        let mut unit = load_unit(
+            &mut assets,
+            champion.model,
+            Some(champion.idle),
+            Some(champion.walk),
+            pos,
+            champion.scale,
+            UnitKind::EnemyChampion,
+            1,
+            champion.health,
+            champion.attack_range,
+            champion.damage,
+            champion.attack_interval,
+            champion.speed,
+            240.0,
+            380.0,
+            Vec::new(),
+        )?;
+        if !champion.attachments.is_empty() {
+            let parts = assets.merged_parts(champion.model, &champion.attachments)?;
+            unit.model = Arc::new(Model::merge(&parts));
+        }
+        unit.armor = champion.armor;
+        unit.is_champion = true;
+        unit.home = pos;
+        unit.level = 1;
+        unit.model_yaw_offset = champion.model_yaw;
+        unit.walk_arm = champion.walk_arm;
+        unit.attack_windup = champion.attack_windup;
+        if champion.walk_sway < 1.0 {
+            if let Some(walk) = unit.walk.as_mut() {
+                Arc::make_mut(walk).damp_side_rotation(champion.walk_sway);
+            }
+        }
+        self.units.push(unit);
+        Ok(self.units.len() - 1)
+    }
+
     pub fn teleport_player(&mut self, pos: Vec3) {
         let unit = &mut self.units[self.player_index];
         unit.pos = pos;
         unit.path.clear();
         unit.path_index = 0;
         unit.moving = false;
+        unit.attack_pending = false;
+        unit.attack_windup_timer = 0.0;
+        if let Some(motion) = unit.motion.as_mut() {
+            motion.reset();
+        }
+    }
+
+    /// Name of the biome pocket the hero is standing in.
+    pub fn current_biome(&self) -> Option<String> {
+        let pos = self.player_pos();
+        let tile_x = (pos.x / 128.0).floor() as i32;
+        let tile_y = (pos.z / 128.0).floor() as i32;
+        self.biomes
+            .iter()
+            .find(|biome| {
+                tile_x >= biome.origin.0
+                    && tile_y >= biome.origin.1
+                    && tile_x < biome.origin.0 + biome.rect.2 as i32
+                    && tile_y < biome.origin.1 + biome.rect.3 as i32
+            })
+            .map(|biome| biome.label.clone())
+    }
+
+    /// Team scoreboard: (kills, deaths) per team.
+    pub fn team_scores(&self) -> ((u32, u32), (u32, u32)) {
+        (
+            (self.kills[0], self.deaths[0]),
+            (self.kills[1], self.deaths[1]),
+        )
+    }
+
+    /// Display name, level and a Dota style flavour line for a unit, used by
+    /// the hover tooltip.
+    pub fn unit_info(&self, index: usize) -> Option<(String, u32, &'static str)> {
+        let unit = self.units.get(index)?;
+        let name = match unit.kind {
+            UnitKind::Player => self.champion_name.clone(),
+            UnitKind::Camp => {
+                let buff = match unit.camp_buff {
+                    Some(CampBuff::Might) => "MIGHT",
+                    Some(CampBuff::Swift) => "SWIFT",
+                    None => "NEUTRAL",
+                };
+                format!("{buff} JUNGLE CREATURE")
+            }
+            UnitKind::Tower => {
+                if unit.team == 0 {
+                    "BLUE TOWER".to_string()
+                } else {
+                    "RED TOWER".to_string()
+                }
+            }
+            UnitKind::Inhibitor => {
+                if unit.team == 0 {
+                    "BLUE INHIBITOR".to_string()
+                } else {
+                    "RED INHIBITOR".to_string()
+                }
+            }
+            UnitKind::Nexus => {
+                if unit.team == 0 {
+                    "BLUE NEXUS".to_string()
+                } else {
+                    "RED NEXUS".to_string()
+                }
+            }
+            UnitKind::MeleeMinion => "IMP".to_string(),
+            UnitKind::RangedMinion => "FAIRY".to_string(),
+            UnitKind::Dummy => "TRAINING DUMMY".to_string(),
+            UnitKind::Ambient => "AMBIENT NPC".to_string(),
+            UnitKind::Watchtower => {
+                if unit.team == 0 {
+                    "BLUE WATCHTOWER".to_string()
+                } else {
+                    "RED WATCHTOWER".to_string()
+                }
+            }
+            UnitKind::EnemyChampion => "RIVAL CHAMPION".to_string(),
+            UnitKind::Spectator => "MONKEY SUBJECT".to_string(),
+            UnitKind::StorageChest => "ITEM STORAGE".to_string(),
+            UnitKind::DeliveryGuard => "ARMADYLEAN GUARD".to_string(),
+        };
+        let level = match unit.kind {
+            UnitKind::Player | UnitKind::EnemyChampion => unit.level,
+            UnitKind::Camp => 2,
+            _ => 1,
+        };
+        let description = match unit.kind {
+            UnitKind::Player => "YOUR CHAMPION. CLICK TO TARGET, HOLD TO STEER.",
+            UnitKind::Camp => "CLEAR IT FOR GOLD, XP AND A TEAM BUFF.",
+            UnitKind::Tower => "STANDS IN THE LANE. FALLS BEFORE THE NEXUS.",
+            UnitKind::Inhibitor => "THE NEXUS SHIELD FALLS WHILE IT LIVES.",
+            UnitKind::Nexus => "DESTROY IT TO END THE MATCH.",
+            UnitKind::MeleeMinion | UnitKind::RangedMinion => {
+                "LANE MINION. KILL IT FOR GOLD AND EXPERIENCE."
+            }
+            UnitKind::Dummy => "TRAINING DUMMY. PRACTISE YOUR COMBOS HERE.",
+            UnitKind::Ambient => "A PASSER BY OF THE RIFT.",
+            UnitKind::Watchtower => {
+                "FIRES A SLOW BOLT AT THE FIRST ENEMY IN RANGE AND KEEPS FIRING UNTIL IT LEAVES."
+            }
+            UnitKind::EnemyChampion => "AN ENEMY CHAMPION. TRIAL BY COMBAT CAN TARGET IT.",
+            UnitKind::Spectator => "A LOYAL SUBJECT WATCHING THE KING'S TRIAL.",
+            UnitKind::StorageChest => "REMOTE PURCHASES WAIT HERE. CALL THE GUARD TO DELIVER THEM.",
+            UnitKind::DeliveryGuard => {
+                "FLIES YOUR STORED ITEMS OUT TO YOU, THEN RETURNS TO THE CHEST."
+            }
+        };
+        Some((name, level, description))
+    }
+
+    /// Health, max health, team and kind of a unit for the hover tooltip.
+    pub fn unit_status(&self, index: usize) -> (f32, f32, u8, UnitKind) {
+        match self.units.get(index) {
+            Some(unit) => (unit.health, unit.max_health, unit.team, unit.kind),
+            None => (0.0, 1.0, 2, UnitKind::Ambient),
+        }
     }
 
     pub fn unit_pos(&self, index: usize) -> Option<Vec3> {
         self.units.get(index).map(|u| u.pos)
     }
 
+    pub fn unit_home(&self, index: usize) -> Option<Vec3> {
+        self.units.get(index).map(|u| u.home)
+    }
+
+    pub fn unit_camp_aggro(&self, index: usize) -> Option<bool> {
+        self.units.get(index).map(|u| u.camp_aggro)
+    }
+
     pub fn unit_health(&self, index: usize) -> Option<f32> {
         self.units.get(index).map(|u| u.health)
     }
 
-    pub fn update(
-        &mut self,
-        dt: f32,
-        height: &HeightGrid,
-        collision: &WorldCollision,
-        camera_right: Vec3,
-        camera_up: Vec3,
-        camera_forward: Vec3,
-    ) {
+    pub fn update(&mut self, dt: f32, height: &HeightGrid, collision: &WorldCollision) {
+        // Floating numbers drift up and fade, announcements and the kill feed
+        // time out, and the minimap ping decays.
+        self.floats.retain_mut(|float| {
+            float.life -= dt;
+            float.pos.y += dt * 46.0;
+            float.life > 0.0
+        });
+        if let Some((_, timer)) = &mut self.announcement {
+            *timer -= dt;
+            if *timer <= 0.0 {
+                self.announcement = None;
+            }
+        }
+        self.kill_feed.retain_mut(|(_, timer)| {
+            *timer -= dt;
+            *timer > 0.0
+        });
+        if let Some((_, timer)) = &mut self.ping {
+            *timer -= dt;
+            if *timer <= 0.0 {
+                self.ping = None;
+            }
+        }
         let pi = self.player_index;
+        let player_spawn = self.player_spawn;
         {
             let player = &mut self.units[pi];
             for cd in &mut player.cooldowns {
                 *cd = (*cd - dt).max(0.0);
             }
             player.mana = (player.mana + 8.0 * dt).min(player.max_mana);
+            if player.health > 0.0 && player.pos.distance(player_spawn) <= 900.0 {
+                player.health =
+                    (player.health + player.max_health * 0.06 * dt).min(player.max_health);
+                player.mana = (player.mana + player.max_mana * 0.06 * dt).min(player.max_mana);
+            }
             if player.shield_timer > 0.0 {
                 player.shield_timer -= dt;
                 if player.shield_timer <= 0.0 {
@@ -938,10 +2554,75 @@ impl AnimatedScene {
                 }
             }
         }
+        self.gold_income += 8.0 * dt;
+        if self.gold_income >= 1.0 {
+            let amount = self.gold_income.floor() as u32;
+            self.gold_income -= amount as f32;
+            let player = &mut self.units[pi];
+            if player.health > 0.0 {
+                player.gold = player.gold.saturating_add(amount);
+            }
+        }
         for effect in &mut self.effects {
             effect.remaining -= dt;
         }
         self.effects.retain(|effect| effect.remaining > 0.0);
+
+        for particle in &mut self.particles {
+            particle.remaining -= dt;
+            particle.vel.y += particle.gravity * dt;
+            particle.vel *= (1.0 - particle.drag * dt).max(0.0);
+            particle.pos += particle.vel * dt;
+            let floor = height.height_at(particle.pos.x, particle.pos.z) + 2.0;
+            if particle.pos.y < floor {
+                particle.pos.y = floor;
+                particle.vel.y *= -0.25;
+                particle.vel.x *= 0.55;
+                particle.vel.z *= 0.55;
+            }
+        }
+        self.particles.retain(|particle| particle.remaining > 0.0);
+
+        for decal in &mut self.decals {
+            decal.remaining -= dt;
+        }
+        self.decals.retain(|decal| decal.remaining > 0.0);
+
+        let impacts = std::mem::take(&mut self.pending_impacts);
+        let mut surviving_impacts = Vec::with_capacity(impacts.len());
+        for mut impact in impacts {
+            impact.delay -= dt;
+            if impact.delay > 0.0 {
+                surviving_impacts.push(impact);
+                continue;
+            }
+            let hits = self
+                .units
+                .iter()
+                .enumerate()
+                .filter(|(_, unit)| {
+                    unit.health > 0.0
+                        && unit.team != impact.team
+                        && unit.team != 2
+                        && unit.pos.distance(impact.pos)
+                            <= impact.radius + unit.hit_radius.max(40.0)
+                })
+                .map(|(index, _)| index)
+                .collect::<Vec<_>>();
+            for index in hits {
+                self.damage_unit_by(index, impact.damage, impact.team, Some(self.player_index));
+            }
+            self.effects.push(Effect {
+                pos: impact.pos,
+                radius: impact.radius,
+                remaining: 0.65,
+                duration: 0.65,
+                color: impact.color,
+            });
+            self.emit_burst(impact.pos, impact.color, 40, 620.0, 34.0, 0.95);
+            self.add_decal(impact.pos, impact.radius * 0.72, [54, 30, 20], 9.0);
+        }
+        self.pending_impacts = surviving_impacts;
         if let Some((_, ref mut remaining)) = self.marker {
             *remaining -= dt;
             if *remaining <= 0.0 {
@@ -953,8 +2634,8 @@ impl AnimatedScene {
             self.wave_timer -= dt;
             if self.wave_timer <= 0.0 {
                 for lane_index in 0..self.lanes.len() {
-                    self.spawn_wave(0, lane_index);
-                    self.spawn_wave(1, lane_index);
+                    self.spawn_wave(0, lane_index, height);
+                    self.spawn_wave(1, lane_index, height);
                 }
                 self.wave_timer = self.wave_interval;
             }
@@ -969,23 +2650,74 @@ impl AnimatedScene {
             }
         }
 
-        for unit in &mut self.units {
+        let mut venom_ticks: Vec<(usize, f32, u8)> = Vec::new();
+        for (unit_index, unit) in self.units.iter_mut().enumerate() {
             unit.hit_flash = (unit.hit_flash - dt).max(0.0);
+            unit.death_anim = (unit.death_anim - dt).max(0.0);
             unit.attack_cooldown = (unit.attack_cooldown - dt).max(0.0);
+            unit.attack_windup_timer = (unit.attack_windup_timer - dt).max(0.0);
+            unit.stun_timer = (unit.stun_timer - dt).max(0.0);
+            if unit.attack_speed_timer > 0.0 {
+                unit.attack_speed_timer -= dt;
+                if unit.attack_speed_timer <= 0.0 {
+                    unit.attack_speed_mult = 1.0;
+                }
+            }
+            if unit.venom_timer > 0.0 {
+                unit.venom_timer -= dt;
+                unit.venom_tick -= dt;
+                if unit.venom_tick <= 0.0 {
+                    unit.venom_tick = 2.0;
+                    venom_ticks.push((unit_index, unit.venom_damage, unit.venom_team));
+                }
+                if unit.venom_timer <= 0.0 {
+                    unit.venom_damage = 0.0;
+                }
+            }
+            if unit.armor_reduction_timer > 0.0 {
+                unit.armor_reduction_timer -= dt;
+                if unit.armor_reduction_timer <= 0.0 {
+                    unit.armor_reduction = 0.0;
+                }
+            }
             unit.anim_time_ms += dt * 1000.0;
-            if unit.health <= 0.0 && matches!(unit.kind, UnitKind::Dummy | UnitKind::Camp) {
+            if unit.kind == UnitKind::Player {
+                let target = if unit.moving { 1.0 } else { 0.0 };
+                let rate = if target > unit.walk_blend { 9.0 } else { 6.0 };
+                unit.walk_blend += (target - unit.walk_blend) * (1.0 - (-rate * dt).exp());
+                unit.walk_blend = unit.walk_blend.clamp(0.0, 1.0);
+            }
+            if unit.health <= 0.0
+                && matches!(
+                    unit.kind,
+                    UnitKind::Dummy
+                        | UnitKind::Camp
+                        | UnitKind::Inhibitor
+                        | UnitKind::EnemyChampion
+                )
+                && unit.dead_timer > 0.0
+            {
                 unit.dead_timer -= dt;
                 if unit.dead_timer <= 0.0 {
                     unit.health = unit.max_health;
                     unit.dead_timer = 0.0;
+                    unit.death_anim = 0.0;
                     unit.attack_target = None;
                     unit.path.clear();
                     unit.path_index = 0;
+                    if matches!(unit.kind, UnitKind::Camp | UnitKind::EnemyChampion) {
+                        unit.pos = unit.home;
+                        unit.camp_aggro = false;
+                        unit.target = None;
+                        unit.camp_wander_timer = 2.0;
+                    }
                 }
             }
         }
 
+        let start_positions: Vec<Vec3> = self.units.iter().map(|unit| unit.pos).collect();
         self.update_player(dt, height, collision);
+        self.update_delivery(dt, height);
 
         let unit_count = self.units.len();
         for i in 0..unit_count {
@@ -993,22 +2725,58 @@ impl AnimatedScene {
             if self.units[i].health <= 0.0 {
                 continue;
             }
+            if self.units[i].spawn_delay > 0.0 {
+                self.units[i].spawn_delay = (self.units[i].spawn_delay - dt).max(0.0);
+                continue;
+            }
+            if self.units[i].stun_timer > 0.0 {
+                self.units[i].moving = false;
+                continue;
+            }
             if kind.is_minion() {
                 self.update_minion(i, dt, height);
             } else if kind == UnitKind::Tower {
                 self.update_tower(i);
+            } else if kind == UnitKind::Camp {
+                self.update_camp(i, dt, height);
+            } else if kind == UnitKind::Ambient {
+                self.update_ambient(i, dt, height);
+            } else if kind == UnitKind::Watchtower {
+                self.update_watchtower(i);
+            } else if kind == UnitKind::EnemyChampion {
+                self.update_enemy_champion(i, dt, height, collision);
             }
         }
 
+        self.apply_duel_bounds(height);
+        self.update_duel(dt);
+        self.update_bananarangs(dt, height);
         self.update_projectiles(dt, height);
-        self.update_visibility();
-        self.rebuild_mesh(camera_right, camera_up, camera_forward);
+
+        for (index, damage, team) in venom_ticks {
+            self.damage_unit(index, damage, team);
+        }
+
+        // Replace the clock's share of every moving unit's animation time
+        // with the distance it actually covered. This fixes foot sliding for
+        // minions, camps and ambient creatures as well as the player.
+        for (index, unit) in self.units.iter_mut().enumerate() {
+            let moved = planar_delta(start_positions[index], unit.pos).length();
+            let limit = unit.speed * dt * 4.0 + 64.0;
+            if moved > 0.01 && moved <= limit && unit.walk_loop_ms > 0.0 && unit.walk_stride > 0.0 {
+                unit.anim_time_ms += moved / unit.walk_stride * unit.walk_loop_ms - dt * 1000.0;
+            }
+        }
     }
 
     fn update_player(&mut self, dt: f32, height: &HeightGrid, collision: &WorldCollision) {
         let pi = self.player_index;
         let speed_mult = self.team_speed_mult(0);
-        let steer = self.steer.take();
+        let steer = self.steer_wish.take();
+        if self.units[pi].stun_timer > 0.0 {
+            self.units[pi].moving = false;
+            return;
+        }
         if self.units[pi].health <= 0.0 {
             self.units[pi].dead_timer -= dt;
             if self.units[pi].dead_timer <= 0.0 {
@@ -1017,16 +2785,25 @@ impl AnimatedScene {
                 unit.pos = spawn;
                 unit.health = unit.max_health;
                 unit.dead_timer = 0.0;
+                unit.death_anim = 0.0;
                 unit.attack_target = None;
+                unit.attack_pending = false;
+                unit.attack_windup_timer = 0.0;
                 unit.path.clear();
                 unit.path_index = 0;
                 unit.moving = false;
+                unit.anim_time_ms = 0.0;
+                if let Some(motion) = unit.motion.as_mut() {
+                    motion.reset();
+                }
             }
             return;
         }
 
+        // Hold-to-steer and tap-to-move share the same weighted motor.
         if let Some(direction) = steer {
-            self.drive_player(dt, Wish::Steer(direction), speed_mult, height, collision);
+            let speed = self.units[pi].speed;
+            self.drive_player(dt, height, collision, Some(direction), speed, speed_mult);
             return;
         }
 
@@ -1041,6 +2818,8 @@ impl AnimatedScene {
                 let distance = player_pos.distance(target_pos);
                 if distance > self.units[pi].attack_range {
                     let unit = &mut self.units[pi];
+                    unit.attack_pending = false;
+                    unit.attack_windup_timer = 0.0;
                     if unit.path.is_empty()
                         || unit
                             .path
@@ -1050,55 +2829,96 @@ impl AnimatedScene {
                         unit.path = collision.path_world(player_pos, target_pos, height);
                         unit.path_index = 0;
                     }
-                    self.drive_player_path(dt, speed_mult, height, collision);
+                    self.drive_player_path(dt, height, collision, speed_mult);
                 } else {
-                    // stop and turn to face the target; the blow waits until
-                    // the champion has come round to it
                     let dir = target_pos - player_pos;
-                    let wish = if dir.length_squared() > 1e-6 {
-                        Wish::Face(dir.x.atan2(dir.z))
-                    } else {
-                        Wish::Rest
-                    };
-                    let facing = self.drive_player(dt, wish, speed_mult, height, collision);
-                    let unit = &mut self.units[pi];
-                    unit.path.clear();
-                    unit.path_index = 0;
-                    if facing.facing_error < 0.35 && unit.attack_cooldown <= 0.0 {
-                        unit.attack_cooldown = unit.attack_interval;
-                        let damage = unit.attack_damage;
-                        let ranged = unit.ranged_auto;
-                        let from = unit.pos + Vec3::Y * (unit.scale * 80.0);
-                        let team = unit.team;
-                        if ranged {
-                            let dir = (target_pos - from).normalize_or_zero();
-                            self.projectiles.push(Projectile {
-                                pos: from,
-                                dir,
-                                speed: 900.0,
-                                life: 1.4,
-                                damage,
-                                team,
-                            });
+                    let desired = (dir.length_squared() > 1e-6).then_some(dir);
+                    let facing = self
+                        .drive_player(dt, height, collision, desired, 0.0, speed_mult)
+                        .map_or(0.0, |step| step.facing_error);
+                    self.units[pi].path.clear();
+                    self.units[pi].path_index = 0;
+                    let pending = self.units[pi].attack_pending;
+                    let timer = self.units[pi].attack_windup_timer;
+                    let cooldown = self.units[pi].attack_cooldown;
+                    let windup = self.units[pi].attack_windup;
+                    if pending {
+                        if timer <= 0.0 && facing < 0.35 {
+                            self.player_land_attack(ti);
+                            self.units[pi].attack_pending = false;
+                        }
+                    } else if cooldown <= 0.0 && facing < 0.35 {
+                        if windup > 0.0 {
+                            self.units[pi].attack_pending = true;
+                            self.units[pi].attack_windup_timer = windup;
                         } else {
-                            self.damage_unit(ti, damage, 0);
-                            if self.units[ti].health <= 0.0 {
-                                self.units[pi].attack_target = None;
-                            }
+                            self.player_land_attack(ti);
                         }
                     }
                 }
                 return;
             } else {
                 self.units[pi].attack_target = None;
+                self.units[pi].attack_pending = false;
+                self.units[pi].attack_windup_timer = 0.0;
             }
         }
 
-        if self.units[pi].path.is_empty() {
-            self.drive_player(dt, Wish::Rest, speed_mult, height, collision);
+        if !self.units[pi].path.is_empty() {
+            self.drive_player_path(dt, height, collision, speed_mult);
         } else {
-            self.drive_player_path(dt, speed_mult, height, collision);
+            // No command: coast to a stop in the current facing.
+            let speed = self.units[pi].speed;
+            self.drive_player(dt, height, collision, None, speed, speed_mult);
         }
+    }
+
+    fn update_ambient(&mut self, index: usize, dt: f32, height: &HeightGrid) {
+        let unit = &mut self.units[index];
+        let kind = unit.ambient_kind.unwrap_or(AmbientKind::Butterfly);
+        let time = unit.anim_time_ms * 0.001;
+        let phase = (unit.ambient_seed % 4096) as f32 * 0.0015;
+        let home = unit.home;
+
+        // Cows graze for roughly half of their cycle and only amble between
+        // nearby patches. Butterflies stay in constant fluttering motion.
+        if kind == AmbientKind::Cow && (time * 0.45 + phase).sin() < 0.1 {
+            unit.moving = false;
+            return;
+        }
+
+        let (radius, speed, hover) = match kind {
+            AmbientKind::Butterfly => (55.0 + (unit.ambient_seed % 5) as f32 * 22.0, 92.0, 30.0),
+            AmbientKind::Cow => (4.5 * 128.0, 46.0, 0.0),
+            AmbientKind::Crab => (1.2 * 128.0, 26.0, 0.0),
+        };
+        let target = home
+            + Vec3::new(
+                (time * 0.73 + phase).sin() * radius,
+                0.0,
+                (time * 0.51 + phase * 1.7).cos() * radius,
+            );
+        let delta = planar_delta(unit.pos, target);
+        let distance = delta.length();
+        if distance > 8.0 {
+            let dir = delta / distance;
+            unit.pos += dir * (speed * dt).min(distance);
+            unit.yaw = if kind == AmbientKind::Crab {
+                // Crabs scuttle sideways.
+                dir.x.atan2(dir.z) + std::f32::consts::FRAC_PI_2
+            } else {
+                dir.x.atan2(dir.z)
+            };
+            unit.moving = true;
+        } else {
+            unit.moving = false;
+        }
+        let flutter = if kind == AmbientKind::Butterfly {
+            hover + (time * 5.1 + phase).sin() * 9.0
+        } else {
+            0.0
+        };
+        unit.pos.y = height.height_at(unit.pos.x, unit.pos.z) + flutter;
     }
 
     fn update_minion(&mut self, index: usize, dt: f32, height: &HeightGrid) {
@@ -1116,7 +2936,7 @@ impl AnimatedScene {
                 unit.attack_target = Some(target);
                 let dir = target_pos - unit.pos;
                 if dir.length_squared() > 1e-6 {
-                    unit.yaw = dir.x.atan2(dir.z);
+                    turn_toward(unit, dir.x.atan2(dir.z), dt);
                 }
                 if unit.attack_cooldown <= 0.0 {
                     unit.attack_cooldown = unit.attack_interval;
@@ -1130,6 +2950,13 @@ impl AnimatedScene {
                             life: 1.4,
                             damage,
                             team: unit.team,
+                            attacker: None,
+                            tower_shot: false,
+                            style: ProjectileStyle::Bolt,
+                            pierce: false,
+                            hit: Vec::new(),
+                            venom: 0.0,
+                            execute: 0.0,
                         });
                     } else {
                         self.damage_unit(target, damage, team);
@@ -1143,6 +2970,280 @@ impl AnimatedScene {
             self.units[index].attack_target = None;
             self.follow_lane(index, dt, height, speed_mult);
         }
+    }
+
+    fn update_enemy_champion(
+        &mut self,
+        index: usize,
+        dt: f32,
+        height: &HeightGrid,
+        _collision: &WorldCollision,
+    ) {
+        let duel_target = self
+            .duel
+            .as_ref()
+            .filter(|duel| duel.target == index)
+            .map(|_| self.player_index);
+        let team = self.units[index].team;
+        let target =
+            duel_target.filter(|&ti| self.units.get(ti).is_some_and(|unit| unit.health > 0.0));
+        let target = target.or_else(|| self.find_target(index, team, 600.0));
+        let Some(target) = target else {
+            self.units[index].moving = false;
+            self.units[index].attack_target = None;
+            return;
+        };
+        let target_pos = self.units[target].pos;
+        let (distance, attack_range, cooldown_ready, damage, interval) = {
+            let unit = &self.units[index];
+            (
+                unit.pos.distance(target_pos),
+                unit.attack_range,
+                unit.attack_cooldown <= 0.0,
+                unit.attack_damage,
+                unit.attack_interval,
+            )
+        };
+        if distance <= attack_range {
+            let unit = &mut self.units[index];
+            unit.moving = false;
+            unit.attack_target = Some(target);
+            let dir = target_pos - unit.pos;
+            if dir.length_squared() > 1e-6 {
+                turn_toward(unit, dir.x.atan2(dir.z), dt);
+            }
+            if cooldown_ready {
+                unit.attack_cooldown = interval / unit.attack_speed_mult.max(0.1);
+                self.damage_unit_by(target, damage, team, Some(index));
+            }
+        } else {
+            self.units[index].attack_target = Some(target);
+            self.move_unit_toward(index, target_pos, dt, height, 1.0);
+        }
+    }
+
+    fn update_camp(&mut self, index: usize, dt: f32, height: &HeightGrid) {
+        let home = self.units[index].home;
+        let leash = self.units[index].leash_range.max(1.0);
+
+        if self.units[index].camp_aggro {
+            let target = self.units[index]
+                .attack_target
+                .filter(|&ti| {
+                    self.units
+                        .get(ti)
+                        .is_some_and(|u| u.kind == UnitKind::Player && u.health > 0.0)
+                })
+                .or_else(|| self.find_camp_target(index));
+            let Some(ti) = target else {
+                self.units[index].camp_aggro = false;
+                self.units[index].attack_target = None;
+                self.units[index].target = Some(home);
+                return;
+            };
+
+            let target_pos = self.units[ti].pos;
+            if self.units[index].pos.distance(home) > leash {
+                // Pulled too far: drop the hero and walk home to reset.
+                self.units[index].camp_aggro = false;
+                self.units[index].attack_target = None;
+                self.units[index].target = Some(home);
+                return;
+            }
+
+            let distance = self.units[index].pos.distance(target_pos);
+            if distance <= self.units[index].attack_range {
+                self.units[index].attack_target = Some(ti);
+                self.units[index].moving = false;
+                let dir = target_pos - self.units[index].pos;
+                if dir.length_squared() > 1e-6 {
+                    let yaw = dir.x.atan2(dir.z);
+                    turn_toward(&mut self.units[index], yaw, dt);
+                }
+                if self.units[index].attack_cooldown <= 0.0 {
+                    self.units[index].attack_cooldown = self.units[index].attack_interval;
+                    let damage = self.units[index].attack_damage;
+                    if self.units[index].attack_range > 300.0 {
+                        let dir = (target_pos - self.units[index].pos).normalize_or_zero();
+                        self.projectiles.push(Projectile {
+                            pos: self.units[index].pos + Vec3::Y * 140.0 + dir * 20.0,
+                            dir,
+                            speed: 620.0,
+                            life: 1.6,
+                            damage,
+                            team: 2,
+                            attacker: None,
+                            tower_shot: false,
+                            style: ProjectileStyle::Bolt,
+                            pierce: false,
+                            hit: Vec::new(),
+                            venom: 0.0,
+                            execute: 0.0,
+                        });
+                    } else {
+                        self.damage_unit(ti, damage, 2);
+                    }
+                }
+            } else {
+                self.units[index].attack_target = Some(ti);
+                self.move_unit_toward(index, target_pos, dt, height, 1.0);
+            }
+            return;
+        }
+
+        // Return to the spawn area after a leash reset, then heal to full.
+        if self.units[index].pos.distance(home) > 10.0 {
+            self.move_unit_toward(index, home, dt, height, 1.0);
+            if self.units[index].pos.distance(home) <= 10.0 {
+                let unit = &mut self.units[index];
+                unit.pos = home;
+                unit.health = unit.max_health;
+                unit.target = None;
+                unit.moving = false;
+                unit.camp_wander_timer = 2.0;
+            }
+            return;
+        }
+
+        // Heroes walking into the camp's aggro radius pull it.
+        if let Some(ti) = self.find_camp_target(index) {
+            self.units[index].camp_aggro = true;
+            self.units[index].attack_target = Some(ti);
+            self.units[index].target = None;
+            return;
+        }
+
+        // Small idle wander inside the spawn area, Dota-style.
+        if self.units[index].camp_wander_timer > 0.0 {
+            self.units[index].camp_wander_timer -= dt;
+        }
+        let wander = self.units[index].target;
+        if let Some(target) = wander {
+            if self.units[index].pos.distance(target) > 6.0 {
+                self.move_unit_toward(index, target, dt, height, 1.0);
+            } else {
+                self.units[index].target = None;
+                self.units[index].moving = false;
+                self.units[index].camp_wander_timer = 2.0;
+            }
+        } else if self.units[index].camp_wander_timer <= 0.0 {
+            let phase = self.units[index].anim_time_ms * 0.001 + index as f32 * 1.7;
+            let offset = Vec3::new(phase.sin() * 72.0, 0.0, phase.cos() * 72.0);
+            self.units[index].target = Some(home + offset);
+            self.units[index].camp_wander_timer = 2.5;
+        }
+    }
+
+    fn find_camp_target(&self, index: usize) -> Option<usize> {
+        let camp = &self.units[index];
+        let mut best: Option<(usize, f32)> = None;
+        for (i, unit) in self.units.iter().enumerate() {
+            if unit.kind != UnitKind::Player || unit.health <= 0.0 {
+                continue;
+            }
+            let d = camp.pos.distance_squared(unit.pos);
+            if d <= camp.aggro_range * camp.aggro_range && best.is_none_or(|(_, bd)| d < bd) {
+                best = Some((i, d));
+            }
+        }
+        best.map(|(i, _)| i)
+    }
+
+    /// Watchtower behaviour: it picks up the first enemy inside its short
+    /// aggro radius, then keeps firing slow bolts at that target until the
+    /// target dies or walks out of the longer lock range.
+    fn update_watchtower(&mut self, index: usize) {
+        let team = self.units[index].team;
+        let lock_range = self.units[index].attack_range;
+        let aggro_range = self.units[index].lock_range.max(1.0);
+        let tower_pos = self.units[index].pos;
+
+        let mut target = self.units[index].attack_target.filter(|&ti| {
+            let unit = &self.units[ti];
+            unit.health > 0.0
+                && unit.team != team
+                && unit.pos.distance(tower_pos) <= lock_range
+                && !self
+                    .duel
+                    .as_ref()
+                    .is_some_and(|duel| ti == self.player_index || ti == duel.target)
+        });
+        if target.is_none() {
+            target = self.find_watchtower_target(index, aggro_range);
+        }
+
+        let Some(ti) = target else {
+            self.units[index].attack_target = None;
+            return;
+        };
+        self.units[index].attack_target = Some(ti);
+        let target_pos = self.units[ti].pos;
+        let dir = target_pos - tower_pos;
+        if dir.length_squared() > 1e-6 {
+            self.units[index].yaw = dir.x.atan2(dir.z);
+        }
+        if self.units[index].attack_cooldown > 0.0 {
+            return;
+        }
+        self.units[index].attack_cooldown = self.units[index].attack_interval;
+        let damage = self.units[index].attack_damage;
+        let from = tower_pos + Vec3::Y * 240.0;
+        let shot_dir = (target_pos - from).normalize_or_zero();
+        self.projectiles.push(Projectile {
+            pos: from,
+            dir: shot_dir,
+            speed: 280.0,
+            life: 3.5,
+            damage,
+            team,
+            attacker: Some(index),
+            tower_shot: true,
+            style: ProjectileStyle::Bolt,
+            pierce: false,
+            hit: Vec::new(),
+            venom: 0.0,
+            execute: 0.0,
+        });
+    }
+
+    /// Watchtowers prefer heroes, then lane minions, then jungle camps.
+    fn find_watchtower_target(&self, index: usize, range: f32) -> Option<usize> {
+        let tower = &self.units[index];
+        let mut best: Option<(usize, u8, f32)> = None;
+        for (i, unit) in self.units.iter().enumerate() {
+            if i == index
+                || unit.health <= 0.0
+                || unit.team == tower.team
+                || self
+                    .duel
+                    .as_ref()
+                    .is_some_and(|duel| i == self.player_index || i == duel.target)
+            {
+                continue;
+            }
+            if unit.kind == UnitKind::Nexus || unit.kind == UnitKind::Inhibitor {
+                continue;
+            }
+            let priority = match unit.kind {
+                UnitKind::Player => 0u8,
+                UnitKind::MeleeMinion | UnitKind::RangedMinion => 1,
+                UnitKind::Camp => 2,
+                _ => 3,
+            };
+            if priority == 3 {
+                continue;
+            }
+            let d = tower.pos.distance_squared(unit.pos);
+            if d > range * range {
+                continue;
+            }
+            match best {
+                Some((_, best_priority, best_d))
+                    if best_priority < priority || (best_priority == priority && best_d <= d) => {}
+                _ => best = Some((i, priority, d)),
+            }
+        }
+        best.map(|(i, _, _)| i)
     }
 
     fn update_tower(&mut self, index: usize) {
@@ -1163,6 +3264,13 @@ impl AnimatedScene {
                     life: 1.6,
                     damage,
                     team,
+                    attacker: None,
+                    tower_shot: true,
+                    style: ProjectileStyle::Bolt,
+                    pierce: false,
+                    hit: Vec::new(),
+                    venom: 0.0,
+                    execute: 0.0,
                 });
             }
         }
@@ -1172,7 +3280,16 @@ impl AnimatedScene {
         let pos = self.units[index].pos;
         let mut best: Option<(usize, f32)> = None;
         for (i, unit) in self.units.iter().enumerate() {
-            if i == index || unit.team == team || unit.team == 2 || unit.health <= 0.0 {
+            if i == index
+                || unit.team == team
+                || unit.team == 2
+                || unit.health <= 0.0
+                || self
+                    .duel
+                    .as_ref()
+                    .is_some_and(|duel| i == self.player_index || i == duel.target)
+                || matches!(unit.kind, UnitKind::DeliveryGuard | UnitKind::StorageChest)
+            {
                 continue;
             }
             if unit.kind == UnitKind::Nexus && !self.nexus_vulnerable(unit.team) {
@@ -1195,7 +3312,10 @@ impl AnimatedScene {
         speed_mult: f32,
     ) {
         let unit = &mut self.units[index];
-        let delta = target - unit.pos;
+        // Lateral lane offsets sit at different terrain heights from the
+        // original waypoint; always move in the XZ plane and let the height
+        // grid place the unit afterwards.
+        let delta = planar_delta(unit.pos, target);
         let distance = delta.length();
         if distance < 4.0 {
             unit.moving = false;
@@ -1205,7 +3325,7 @@ impl AnimatedScene {
         let step = (unit.speed * speed_mult * dt).min(distance);
         unit.pos += dir * step;
         unit.pos.y = height.height_at(unit.pos.x, unit.pos.z);
-        unit.yaw = dir.x.atan2(dir.z);
+        turn_toward(unit, dir.x.atan2(dir.z), dt);
         unit.moving = true;
     }
 
@@ -1225,7 +3345,7 @@ impl AnimatedScene {
             return;
         }
         let waypoint = unit.lane[unit.lane_index];
-        let delta = waypoint - unit.pos;
+        let delta = planar_delta(unit.pos, waypoint);
         let distance = delta.length();
         if distance < 10.0 {
             unit.lane_index += 1;
@@ -1240,7 +3360,38 @@ impl AnimatedScene {
     }
 
     fn damage_unit(&mut self, index: usize, amount: f32, attacker_team: u8) {
+        self.damage_unit_mixed(index, amount, 0.0, attacker_team, None);
+    }
+
+    /// Apply damage and attribute it to a specific attacker. The aggressor
+    /// matters for jungle camps: only a hero pulls a camp, a watchtower
+    /// bolt just hurts it.
+    fn damage_unit_by(
+        &mut self,
+        index: usize,
+        amount: f32,
+        attacker_team: u8,
+        aggressor: Option<usize>,
+    ) {
+        self.damage_unit_mixed(index, amount, 0.0, attacker_team, aggressor);
+    }
+
+    /// Physical damage is reduced by armor; pure damage bypasses it.
+    fn damage_unit_mixed(
+        &mut self,
+        index: usize,
+        physical: f32,
+        pure: f32,
+        attacker_team: u8,
+        aggressor: Option<usize>,
+    ) {
         if index >= self.units.len() {
+            return;
+        }
+        if matches!(
+            self.units[index].kind,
+            UnitKind::DeliveryGuard | UnitKind::StorageChest
+        ) {
             return;
         }
         if self.units[index].kind == UnitKind::Nexus
@@ -1248,32 +3399,122 @@ impl AnimatedScene {
         {
             return;
         }
-        let amount = amount * self.team_damage_mult(attacker_team);
-        let (target_kind, camp_buff, respawn_time, killed) = {
+        let mut team_mult = self.team_damage_mult(attacker_team);
+        if self.duel.as_ref().is_some_and(|duel| {
+            duel.target == index || duel.target == aggressor.unwrap_or(usize::MAX)
+        }) {
+            // A Trial is a fight to the finish: both combatants take
+            // amplified damage, so it cannot stall for the whole timer.
+            team_mult *= 3.0;
+        }
+        let (target_kind, camp_buff, respawn_time, killed, amount) = {
             let unit = &mut self.units[index];
             if unit.health <= 0.0 {
                 return;
             }
-            let mut amount = amount;
-            if unit.kind == UnitKind::Player && unit.shield > 0.0 {
+            let armor = (unit.armor - unit.armor_reduction).clamp(-80.0, 500.0);
+            let multiplier = armor_damage_multiplier(armor);
+            let mut amount = (physical * multiplier + pure) * team_mult;
+            if unit.shield > 0.0 {
                 let absorbed = unit.shield.min(amount);
                 unit.shield -= absorbed;
                 amount -= absorbed;
             }
             unit.health = (unit.health - amount).max(0.0);
             unit.hit_flash = 0.2;
+            if unit.health <= 0.0 && !unit.kind.is_structure() {
+                unit.death_anim = DEATH_SINK_TIME;
+                unit.visible = true;
+            }
             (
                 unit.kind,
                 unit.camp_buff,
                 unit.respawn_time,
                 unit.health <= 0.0,
+                amount,
             )
         };
+        let hero_aggressor = match aggressor {
+            Some(aggressor) => self.units[aggressor].kind == UnitKind::Player,
+            None => attacker_team == 0,
+        };
+        if amount > 0.0 {
+            let color = if index == self.player_index {
+                [255, 110, 100]
+            } else if hero_aggressor {
+                [255, 225, 120]
+            } else {
+                [235, 235, 235]
+            };
+            let pos = self.units[index].pos + Vec3::Y * (self.units[index].bar_height + 40.0);
+            self.floats.push(FloatText {
+                pos,
+                text: format!("{amount:.0}"),
+                color,
+                life: 1.2,
+                scale: (0.9 + amount / 260.0).clamp(0.9, 1.8),
+            });
+            if hero_aggressor || index == self.player_index {
+                self.emit_burst(pos, color, 3, 130.0, 7.0, 0.3);
+            }
+        }
+        if index != self.player_index && self.units[index].team == 1 && hero_aggressor {
+            // Ping the target on the minimap, like the reference client.
+            self.ping = Some((self.units[index].pos, 6.0));
+        }
         if !killed {
+            if target_kind == UnitKind::Camp && attacker_team < 2 && hero_aggressor {
+                let pi = self.player_index;
+                if self.units[pi].health > 0.0 {
+                    self.units[index].camp_aggro = true;
+                    self.units[index].attack_target = Some(pi);
+                    self.units[index].target = None;
+                }
+            }
             return;
         }
-        if attacker_team == 0 {
+        if attacker_team == 0 && hero_aggressor {
             self.grant_reward(target_kind);
+        }
+        if target_kind != UnitKind::Camp {
+            let victim = short_unit_name(target_kind);
+            let killer = aggressor
+                .filter(|&a| a != index)
+                .map(|a| short_unit_name(self.units[a].kind))
+                .unwrap_or("THE RIFT");
+            if index == self.player_index {
+                if !self.announcement_pinned {
+                    self.announcement = Some((format!("YOU HAVE BEEN SLAIN BY {killer}"), 4.0));
+                }
+            } else if hero_aggressor {
+                if !self.announcement_pinned {
+                    self.announcement = Some((format!("YOU HAVE SLAIN {victim}!"), 4.0));
+                }
+                self.kill_feed.push((format!("YOU SLAIN {victim}"), 8.0));
+            } else if attacker_team == 0 {
+                self.kill_feed
+                    .push((format!("{killer} HAS SLAIN {victim}"), 8.0));
+            }
+        }
+        // Personal scoreboard line. Only damage attributed directly to the
+        // player counts, so allied minions do not feed the player's CS.
+        if aggressor == Some(self.player_index) {
+            if matches!(target_kind, UnitKind::MeleeMinion | UnitKind::RangedMinion) {
+                self.player_cs += 1;
+            }
+            if matches!(target_kind, UnitKind::Player | UnitKind::EnemyChampion) {
+                self.player_kills += 1;
+            }
+        }
+        if index == self.player_index {
+            self.player_deaths += 1;
+        }
+        if attacker_team < 2 && target_kind != UnitKind::Camp {
+            self.kills[attacker_team as usize] += 1;
+            let victim_team = self.units[index].team;
+            if victim_team < 2 {
+                self.deaths[victim_team as usize] += 1;
+            }
         }
         match target_kind {
             UnitKind::Nexus => {
@@ -1289,11 +3530,27 @@ impl AnimatedScene {
             UnitKind::Tower => {
                 self.units[index].dead_timer = 0.0;
             }
+            UnitKind::Inhibitor => {
+                self.units[index].dead_timer = 120.0;
+            }
             UnitKind::Dummy => {
                 self.units[index].dead_timer = 4.0;
             }
+            UnitKind::EnemyChampion => {
+                let unit = &mut self.units[index];
+                unit.dead_timer = 8.0;
+                unit.attack_target = None;
+                unit.path.clear();
+                unit.path_index = 0;
+            }
             UnitKind::Camp => {
-                self.units[index].dead_timer = respawn_time;
+                let unit = &mut self.units[index];
+                unit.dead_timer = respawn_time;
+                unit.camp_aggro = false;
+                unit.attack_target = None;
+                unit.target = None;
+                unit.path.clear();
+                unit.path_index = 0;
                 if let Some(kind) = camp_buff {
                     let (damage_mult, speed_mult) = match kind {
                         CampBuff::Might => (1.25, 1.0),
@@ -1341,15 +3598,17 @@ impl AnimatedScene {
         }
     }
 
-    fn update_visibility(&mut self) {
-        if !FOG_OF_WAR {
-            self.visibility.tiles.fill(true);
-            for unit in &mut self.units {
-                unit.visible = true;
-            }
+    pub fn refresh_visibility(&mut self, dt: f32, collision: &WorldCollision) {
+        self.visibility_timer += dt;
+        if self.visibility_timer < 0.15 {
             return;
         }
+        self.visibility_timer = 0.0;
+        self.update_visibility(collision);
+        self.visibility_dirty = true;
+    }
 
+    fn update_visibility(&mut self, collision: &WorldCollision) {
         self.visibility.tiles.fill(false);
         for unit in &mut self.units {
             unit.visible = unit.team == 0;
@@ -1362,8 +3621,9 @@ impl AnimatedScene {
             .map(|u| {
                 let radius: f32 = match u.kind {
                     UnitKind::Player => 1500.0,
-                    UnitKind::MeleeMinion | UnitKind::RangedMinion => 700.0,
-                    _ => 1000.0,
+                    UnitKind::MeleeMinion | UnitKind::RangedMinion => 900.0,
+                    UnitKind::Tower | UnitKind::Inhibitor | UnitKind::Nexus => 1100.0,
+                    _ => 800.0,
                 };
                 (u.pos, radius)
             })
@@ -1381,14 +3641,17 @@ impl AnimatedScene {
                     }
                     let tx = ctx + dx;
                     let ty = cty + dy;
-                    if tx >= 0
-                        && ty >= 0
-                        && (tx as usize) < self.visibility.width
-                        && (ty as usize) < self.visibility.height
+                    if tx < 0
+                        || ty < 0
+                        || (tx as usize) >= self.visibility.width
+                        || (ty as usize) >= self.visibility.height
                     {
-                        self.visibility.tiles[ty as usize * self.visibility.width + tx as usize] =
-                            true;
+                        continue;
                     }
+                    if !los_clear(collision, ctx, cty, tx, ty) {
+                        continue;
+                    }
+                    self.visibility.tiles[ty as usize * self.visibility.width + tx as usize] = true;
                 }
             }
         }
@@ -1404,17 +3667,83 @@ impl AnimatedScene {
             if !self.visibility.is_visible(tx, ty) {
                 continue;
             }
-            if point_in_brush(&brush, unit.pos) && player_pos.distance(unit.pos) > 500.0 {
+            // Neutral jungle camps are never hidden by brush: they are
+            // stationary objectives, not ambushers, and should be visible as
+            // soon as the team has line of sight to their camp.
+            if unit.team != 2
+                && point_in_brush(&brush, unit.pos)
+                && player_pos.distance(unit.pos) > 500.0
+            {
                 continue;
             }
             unit.visible = true;
         }
+        // Neutral camps are revealed by proximity alone: they are static
+        // objectives, so trees or brush should not make them invisible until
+        // the hero is standing on top of them.
+        let player_pos = self.player_pos();
+        for unit in &mut self.units {
+            if unit.team == 2
+                && unit.kind == UnitKind::Camp
+                && unit.health > 0.0
+                && player_pos.distance(unit.pos) <= 1500.0
+            {
+                unit.visible = true;
+            }
+        }
+        for unit in &mut self.units {
+            if unit.kind == UnitKind::Spectator && self.duel.is_some() {
+                unit.visible = true;
+            }
+        }
+        // Structures are permanent map features: the player always knows
+        // where the towers, inhibitors, nexus and watchtowers stand, even
+        // when they sit outside the current line of sight.
+        for unit in &mut self.units {
+            if unit.kind.is_structure() || unit.kind == UnitKind::Watchtower {
+                unit.visible = true;
+            }
+        }
+        // The training dummy is a dev-only target; keep it visible so the
+        // deterministic combat demo is not blocked by LOS.
+        for unit in &mut self.units {
+            if unit.kind == UnitKind::Dummy && unit.health > 0.0 {
+                unit.visible = true;
+            }
+        }
+    }
+
+    pub fn prepare_render(
+        &mut self,
+        height: &HeightGrid,
+        camera_right: Vec3,
+        camera_up: Vec3,
+        camera_forward: Vec3,
+    ) {
+        self.rebuild_shadows(height);
+        self.rebuild_mesh(height, camera_right, camera_up, camera_forward);
+    }
+
+    /// True when a world position is inside the team's line of sight.
+    pub fn in_team_vision(&self, pos: Vec3) -> bool {
+        let tx = (pos.x / 128.0).floor() as i32 - self.vision_origin.0;
+        let ty = (pos.z / 128.0).floor() as i32 - self.vision_origin.1;
+        self.visibility.is_visible(tx, ty)
     }
 
     pub fn visible_enemy_count(&self) -> usize {
+        // Structures are always visible, so only count mobile enemies here.
         self.units
             .iter()
-            .filter(|u| u.team != 0 && u.health > 0.0 && u.visible)
+            .filter(|u| {
+                u.team != 0
+                    && u.health > 0.0
+                    && u.visible
+                    && !u.kind.is_structure()
+                    && u.kind != UnitKind::Watchtower
+                    && u.kind != UnitKind::Ambient
+                    && u.kind != UnitKind::Spectator
+            })
             .count()
     }
 
@@ -1441,11 +3770,104 @@ impl AnimatedScene {
             .map(|b| (b.remaining, b.duration, b.kind))
     }
 
+    fn update_bananarangs(&mut self, dt: f32, height: &HeightGrid) {
+        let mut active = std::mem::take(&mut self.bananarangs);
+        let pi = self.player_index;
+        let player_pos = self.units[pi].pos;
+        let player_right = Vec3::Y.cross(Vec3::new(
+            self.units[pi].yaw.sin(),
+            0.0,
+            self.units[pi].yaw.cos(),
+        ));
+        let return_target = player_pos + player_right * BANANARANG_HAND;
+        active.retain_mut(|banana| {
+            let previous = bananarang_position(banana, height, return_target);
+            banana.t += dt / banana.duration.max(0.01);
+            let pos = bananarang_position(banana, height, return_target);
+            if self.particles.len() < 300 {
+                self.particles.push(Particle {
+                    pos,
+                    vel: Vec3::new(0.0, 30.0, 0.0),
+                    color: [255, 225, 80],
+                    size: 9.0,
+                    remaining: 0.28,
+                    duration: 0.28,
+                    gravity: -20.0,
+                    drag: 1.0,
+                });
+            }
+            for index in 0..self.units.len() {
+                if banana.hit.contains(&index) {
+                    continue;
+                }
+                let unit = &self.units[index];
+                if unit.health <= 0.0
+                    || unit.team == 0
+                    || unit.kind.is_structure()
+                    || matches!(
+                        unit.kind,
+                        UnitKind::DeliveryGuard
+                            | UnitKind::StorageChest
+                            | UnitKind::Spectator
+                            | UnitKind::Ambient
+                    )
+                {
+                    continue;
+                }
+                if segment_distance_xz(unit.pos, previous, pos) > 80.0 + unit.hit_radius {
+                    continue;
+                }
+                banana.hit.push(index);
+                let crit = self.next_random() < banana.crit_chance;
+                let multiplier = if crit { 1.5 } else { 1.0 };
+                let stun = if crit { banana.stun } else { 0.0 };
+                self.damage_unit_mixed(
+                    index,
+                    banana.physical * multiplier,
+                    banana.pure * multiplier,
+                    0,
+                    Some(pi),
+                );
+                if stun > 0.0 {
+                    self.units[index].stun_timer = self.units[index].stun_timer.max(stun);
+                }
+                let hit_color = if crit { [255, 90, 40] } else { [255, 220, 60] };
+                self.effects.push(Effect {
+                    pos,
+                    radius: if crit { 150.0 } else { 90.0 },
+                    remaining: 0.25,
+                    duration: 0.25,
+                    color: hit_color,
+                });
+                self.emit_burst(pos, hit_color, if crit { 14 } else { 8 }, 260.0, 15.0, 0.45);
+            }
+            banana.t < 1.0
+        });
+        self.bananarangs = active;
+    }
+
     fn update_projectiles(&mut self, dt: f32, height: &HeightGrid) {
         let projectiles = std::mem::take(&mut self.projectiles);
         let mut survivors = Vec::with_capacity(projectiles.len());
 
         for mut projectile in projectiles {
+            // Trail: a couple of soft sparks behind every player projectile.
+            if projectile.team == 0 && self.particles.len() < 280 {
+                let (trail_color, trail_size) = match projectile.style {
+                    ProjectileStyle::Dart => ([120, 255, 140], 7.0),
+                    ProjectileStyle::Bolt => ([255, 170, 70], 10.0),
+                };
+                self.particles.push(Particle {
+                    pos: projectile.pos,
+                    vel: -projectile.dir * 40.0 + Vec3::Y * 18.0,
+                    color: trail_color,
+                    size: trail_size,
+                    remaining: 0.22,
+                    duration: 0.22,
+                    gravity: 0.0,
+                    drag: 2.0,
+                });
+            }
             projectile.life -= dt;
             projectile.pos += projectile.dir * projectile.speed * dt;
 
@@ -1455,31 +3877,71 @@ impl AnimatedScene {
                 continue;
             }
 
-            let mut hit = None;
+            let mut hits: Vec<(usize, f32)> = Vec::new();
             for (i, unit) in self.units.iter().enumerate() {
                 if unit.team == projectile.team
                     || unit.health <= 0.0
                     || (unit.team == 2 && unit.kind != UnitKind::Camp)
+                    || projectile.hit.contains(&i)
+                    || (projectile.tower_shot
+                        && self
+                            .duel
+                            .as_ref()
+                            .is_some_and(|duel| i == self.player_index || i == duel.target))
                 {
                     continue;
                 }
                 let radius = unit.hit_radius.max(70.0);
                 let center = unit.pos + Vec3::Y * (unit.bar_height * 0.35);
-                if projectile.pos.distance(center) <= radius {
-                    hit = Some(i);
+                if projectile.pos.distance(center) > radius {
+                    continue;
+                }
+                projectile.hit.push(i);
+                let mut damage = projectile.damage;
+                if projectile.execute > 0.0 && unit.health < unit.max_health * 0.25 {
+                    damage *= 1.0 + projectile.execute;
+                }
+                hits.push((i, damage));
+                if !projectile.pierce {
                     break;
                 }
             }
-            if let Some(index) = hit {
-                self.damage_unit(index, projectile.damage, projectile.team);
-            } else {
+            let hit_count = hits.len();
+            for (index, damage) in hits {
+                if projectile.venom > 0.0 {
+                    let poisoned = &mut self.units[index];
+                    if poisoned.venom_timer <= 0.0 {
+                        poisoned.venom_tick = 1.0;
+                    }
+                    poisoned.venom_timer = 6.0;
+                    poisoned.venom_damage = poisoned.venom_damage.max(projectile.venom);
+                    poisoned.venom_team = projectile.team;
+                }
+                self.damage_unit_by(index, damage, projectile.team, projectile.attacker);
+                let (hit_color, hit_radius) = match projectile.style {
+                    ProjectileStyle::Dart => ([120, 255, 150], 120.0),
+                    ProjectileStyle::Bolt => ([255, 140, 50], 180.0),
+                };
+                self.effects.push(Effect {
+                    pos: projectile.pos,
+                    radius: hit_radius,
+                    remaining: 0.7,
+                    duration: 0.7,
+                    color: hit_color,
+                });
+                self.emit_burst(projectile.pos, hit_color, 10, 240.0, 14.0, 0.45);
+                if projectile.venom > 0.0 {
+                    self.add_decal(projectile.pos, 70.0, [34, 78, 44], 3.2);
+                }
+            }
+            if hit_count == 0 {
                 survivors.push(projectile);
             }
         }
         self.projectiles = survivors;
     }
 
-    fn spawn_wave(&mut self, team: u8, lane_index: usize) {
+    fn spawn_wave(&mut self, team: u8, lane_index: usize, height: &HeightGrid) {
         if self.match_over.is_some() {
             return;
         }
@@ -1498,33 +3960,77 @@ impl AnimatedScene {
             reversed.reverse();
             reversed
         };
-        let offsets = [
-            Vec3::new(70.0, 0.0, 0.0),
-            Vec3::new(-70.0, 0.0, 0.0),
-            Vec3::new(0.0, 0.0, 70.0),
-        ];
+        // Spawns follow the first lane segment so the three lanes leave the
+        // nexus in different directions instead of all stacking on the same
+        // tile. Units are then arranged in a loose wedge: two melee in front,
+        // the ranged minion behind, and a super minion ahead of the formation.
+        let first = lane.first().copied().unwrap_or(nexus);
+        let next = lane.get(1).copied().unwrap_or(first + Vec3::Z);
+        let mut forward = Vec3::new(next.x - first.x, 0.0, next.z - first.z);
+        if forward.length_squared() < 1.0 {
+            forward = Vec3::Z;
+        } else {
+            forward = forward.normalize();
+        }
+        let across = Vec3::new(-forward.z, 0.0, forward.x);
+        let serial = self.wave_serial;
+        self.wave_serial = self.wave_serial.wrapping_add(1);
 
-        for (i, offset) in offsets.iter().enumerate() {
-            let ranged = i == 2;
+        let enemy_team = 1 - team;
+        let super_lane = self.units.iter().any(|u| {
+            u.kind == UnitKind::Inhibitor
+                && u.team == enemy_team
+                && u.structure_lane == Some(lane_index)
+                && u.health <= 0.0
+        });
+        let formation = wave_formation_positions(nexus, forward, across, serial, super_lane);
+
+        for (index, (mut pos, lane_offset, ranged, super_minion)) in
+            formation.into_iter().enumerate()
+        {
+            let spawn_delay = index as f32 * 0.35;
+            let unit_lane = offset_lane(&lane, lane_offset * 128.0);
             let template = if ranged {
                 &self.ranged_template
             } else {
                 &self.melee_template
             };
-            let mut pos = nexus + *offset;
-            pos.y = self
-                .units
-                .iter()
-                .find(|u| u.kind == UnitKind::Nexus && u.team == team)
-                .map(|u| u.pos.y)
-                .unwrap_or(0.0);
+            let health = if super_minion {
+                template.health * 2.5
+            } else {
+                template.health
+            };
+            let damage = if super_minion {
+                template.damage * 2.0
+            } else {
+                template.damage
+            };
+            let scale = if super_minion {
+                template.scale * 1.6
+            } else {
+                template.scale
+            };
+            let speed = if super_minion {
+                template.speed * 0.9
+            } else {
+                template.speed
+            };
+            pos.y = height.height_at(pos.x, pos.z);
+            let walk_loop_ms = template.walk.loop_ms();
+            let walk_stride = speed * walk_loop_ms / 1000.0;
             let unit = AnimatedUnit {
                 model: template.model.clone(),
                 idle: template.idle.clone(),
                 walk: Some(template.walk.clone()),
                 pos,
                 yaw: if team == 0 { 0.0 } else { std::f32::consts::PI },
-                scale: template.scale,
+                model_yaw_offset: 0.0,
+                motion: None,
+                walk_blend: 0.0,
+                walk_arm: 1.0,
+                walk_loop_ms,
+                walk_stride,
+                scale,
                 anim_time_ms: 0.0,
                 moving: false,
                 kind: if ranged {
@@ -1533,23 +4039,47 @@ impl AnimatedScene {
                     UnitKind::MeleeMinion
                 },
                 team,
-                health: template.health,
-                max_health: template.health,
+                health,
+                max_health: health,
                 hit_flash: 0.0,
+                death_anim: 0.0,
                 dead_timer: 0.0,
                 target: None,
                 path: Vec::new(),
                 path_index: 0,
                 attack_target: None,
                 attack_cooldown: 0.0,
+                attack_windup_timer: 0.0,
+                attack_windup: 0.0,
+                attack_pending: false,
                 attack_range: template.range,
-                attack_damage: template.damage,
+                attack_damage: damage,
+                min_base_damage_bonus: 0.0,
                 attack_interval: template.interval,
-                speed: template.speed,
-                hit_radius: 90.0,
-                bar_height: 170.0,
-                lane: lane.clone(),
-                lane_index: 1.min(lane.len()),
+                speed,
+                armor: 0.0,
+                armor_reduction: 0.0,
+                armor_reduction_timer: 0.0,
+                stun_timer: 0.0,
+                venom_timer: 0.0,
+                venom_damage: 0.0,
+                venom_tick: 0.0,
+                venom_team: 0,
+                attack_speed_mult: 1.0,
+                attack_speed_timer: 0.0,
+                ranged: 0.0,
+                is_champion: false,
+                spawn_delay,
+                hit_radius: if super_minion {
+                    140.0
+                } else if ranged {
+                    90.0
+                } else {
+                    105.0
+                },
+                bar_height: if super_minion { 450.0 } else { 330.0 },
+                lane: unit_lane.clone(),
+                lane_index: 1.min(unit_lane.len()),
                 respawn_time: 0.0,
                 camp_buff: None,
                 mana: 0.0,
@@ -1568,61 +4098,238 @@ impl AnimatedScene {
                 e_shield: 0.0,
                 w_distance: 0.0,
                 ability_power: 0.0,
-                lift: 0.0,
+                structure_lane: None,
+                super_minion,
+                home: pos,
+                aggro_range: 0.0,
+                leash_range: 0.0,
+                camp_aggro: false,
+                camp_wander_timer: 0.0,
+                ambient_kind: None,
+                ambient_seed: 0,
+                lock_range: 0.0,
             };
             self.units.push(unit);
         }
     }
 
-    fn rebuild_mesh(&mut self, camera_right: Vec3, camera_up: Vec3, camera_forward: Vec3) {
+    fn rebuild_shadows(&mut self, height: &HeightGrid) {
+        self.shadow_vertices.clear();
+        self.shadow_indices.clear();
+        for unit in &self.units {
+            if unit.health <= 0.0 || !unit.visible || unit.spawn_delay > 0.0 {
+                continue;
+            }
+            let size = (unit.hit_radius * 1.15).clamp(55.0, 480.0);
+            let y = height.height_at(unit.pos.x, unit.pos.z) + 4.0;
+            let base = self.shadow_vertices.len() as u32;
+            let p = |x: f32, z: f32, uv: [f32; 2]| SceneVertex::blob(Vec3::new(x, y, z), 0.38, uv);
+            self.shadow_vertices
+                .push(p(unit.pos.x - size, unit.pos.z - size, [0.0, 0.0]));
+            self.shadow_vertices
+                .push(p(unit.pos.x + size, unit.pos.z - size, [1.0, 0.0]));
+            self.shadow_vertices
+                .push(p(unit.pos.x - size, unit.pos.z + size, [0.0, 1.0]));
+            self.shadow_vertices
+                .push(p(unit.pos.x + size, unit.pos.z + size, [1.0, 1.0]));
+            self.shadow_indices.extend_from_slice(&[
+                base,
+                base + 1,
+                base + 2,
+                base + 2,
+                base + 1,
+                base + 3,
+            ]);
+        }
+    }
+
+    pub fn lights(&self) -> Vec<SceneLight> {
+        let mut lights = Vec::new();
+        lights.push(SceneLight {
+            pos: self.player_spawn + Vec3::Y * 60.0,
+            color: [0.25, 1.0, 0.45],
+            radius: 800.0,
+            intensity: 0.35,
+        });
+        for effect in &self.effects {
+            let color = [
+                effect.color[0] as f32 / 255.0,
+                effect.color[1] as f32 / 255.0,
+                effect.color[2] as f32 / 255.0,
+            ];
+            let fade = (effect.remaining / effect.duration.max(0.01)).clamp(0.0, 1.0);
+            lights.push(SceneLight {
+                pos: effect.pos + Vec3::Y * 40.0,
+                color,
+                radius: (effect.radius * 3.0).max(220.0),
+                intensity: 1.2 * fade,
+            });
+        }
+        for projectile in &self.projectiles {
+            if !self.in_team_vision(projectile.pos) {
+                continue;
+            }
+            lights.push(SceneLight {
+                pos: projectile.pos + Vec3::Y * 30.0,
+                color: [1.0, 0.45, 0.12],
+                radius: 520.0,
+                intensity: 1.6,
+            });
+        }
+        for impact in &self.pending_impacts {
+            let progress = 1.0 - (impact.delay / impact.duration.max(0.01)).clamp(0.0, 1.0);
+            lights.push(SceneLight {
+                pos: impact.pos + Vec3::Y * 80.0,
+                color: [
+                    impact.color[0] as f32 / 255.0,
+                    impact.color[1] as f32 / 255.0,
+                    impact.color[2] as f32 / 255.0,
+                ],
+                radius: impact.radius * 3.0,
+                intensity: 0.5 + progress * 2.4,
+            });
+        }
+        lights
+    }
+
+    fn rebuild_mesh(
+        &mut self,
+        height: &HeightGrid,
+        camera_right: Vec3,
+        camera_up: Vec3,
+        camera_forward: Vec3,
+    ) {
         self.vertices.clear();
         self.indices.clear();
+        // The sun-shadow caster mesh is rebuilt every frame as well. Without
+        // this reset the shadow map kept every previous position of every
+        // unit, which stacked shadows into a trail and grew the draw call
+        // without bound.
+        self.caster_vertices.clear();
+        self.caster_indices.clear();
 
         let units = std::mem::take(&mut self.units);
         for unit in &units {
-            if unit.health > 0.0 && unit.visible {
-                let clip = if unit.moving {
-                    unit.walk.as_ref().unwrap_or(&unit.idle)
+            let alive = unit.health > 0.0;
+            if (alive || unit.death_anim > 0.0)
+                && (unit.visible || unit.death_anim > 0.0)
+                && unit.spawn_delay <= 0.0
+            {
+                let positions = if !alive {
+                    unit.model.animated_positions(&unit.idle, unit.anim_time_ms)
+                } else if let Some(walk) = unit.walk.as_ref() {
+                    if unit.kind == UnitKind::Player && unit.walk_arm < 0.999 {
+                        let idle = unit.model.animated_positions(&unit.idle, unit.anim_time_ms);
+                        let normal = unit.model.animated_positions(walk, unit.anim_time_ms);
+                        let masked = unit.model.animated_positions_masked(
+                            walk,
+                            unit.anim_time_ms,
+                            MONKEY_ARM_GROUPS,
+                        );
+                        let arm = unit.walk_arm.clamp(0.0, 1.0);
+                        let mut walking = normal.clone();
+                        for ((out, normal_pose), masked) in
+                            walking.iter_mut().zip(&normal).zip(&masked)
+                        {
+                            for axis in 0..3 {
+                                let rigid = normal_pose[axis]
+                                    + (masked[axis] - normal_pose[axis]) * (1.0 - arm);
+                                out[axis] = rigid;
+                            }
+                        }
+                        if unit.walk_blend >= 0.999 {
+                            walking
+                        } else {
+                            let blend = unit.walk_blend.clamp(0.0, 1.0);
+                            let mut out = idle.clone();
+                            for ((out, idle_pose), walking) in
+                                out.iter_mut().zip(&idle).zip(&walking)
+                            {
+                                for axis in 0..3 {
+                                    out[axis] =
+                                        idle_pose[axis] + (walking[axis] - idle_pose[axis]) * blend;
+                                }
+                            }
+                            out
+                        }
+                    } else {
+                        let clip = if unit.moving { walk } else { &unit.idle };
+                        let mut positions = unit.model.animated_positions(clip, unit.anim_time_ms);
+                        if unit.walk_blend > 0.001 && unit.walk_blend < 0.999 {
+                            let idle = unit.model.animated_positions(&unit.idle, unit.anim_time_ms);
+                            let walking = unit.model.animated_positions(walk, unit.anim_time_ms);
+                            let blend = unit.walk_blend;
+                            for ((out, idle), walking) in
+                                positions.iter_mut().zip(&idle).zip(&walking)
+                            {
+                                for axis in 0..3 {
+                                    out[axis] = idle[axis] + (walking[axis] - idle[axis]) * blend;
+                                }
+                            }
+                        }
+                        positions
+                    }
                 } else {
-                    &unit.idle
+                    unit.model.animated_positions(&unit.idle, unit.anim_time_ms)
                 };
-                let positions = unit.model.animated_positions(clip, unit.anim_time_ms);
                 append_unit(self, unit, &positions);
             }
         }
         self.units = units;
 
+        // Minions and camps keep cheap world-space bars. Champions,
+        // structures and dummies use the readable screen-space plates built
+        // by the client, so drawing both would double up the health bars.
+        let player_damage = self.units[self.player_index].attack_damage;
+        let player_bar_pos = self.units[self.player_index].pos;
         let bars = self
             .units
             .iter()
-            .filter(|unit| unit.health > 0.0 && (unit.team != 2 || unit.kind == UnitKind::Camp))
+            .filter(|unit| {
+                unit.health > 0.0
+                    && unit.spawn_delay <= 0.0
+                    && matches!(
+                        unit.kind,
+                        UnitKind::MeleeMinion | UnitKind::RangedMinion | UnitKind::Camp
+                    )
+            })
             .map(|unit| {
-                let width = match unit.kind {
-                    UnitKind::Nexus => 190.0,
-                    UnitKind::Tower => 150.0,
-                    UnitKind::Player => 150.0,
-                    _ => 55.0,
-                } * (unit.scale / 2.8).clamp(0.7, 1.5);
+                let (width, height) = match unit.kind {
+                    UnitKind::Nexus => (190.0 * (unit.scale / 2.8).clamp(0.7, 1.5), 14.0),
+                    UnitKind::Tower => (150.0 * (unit.scale / 2.8).clamp(0.7, 1.5), 14.0),
+                    UnitKind::Player | UnitKind::EnemyChampion => (160.0, 16.0),
+                    UnitKind::Camp => (145.0 * (unit.scale / 1.4).clamp(0.9, 1.3), 20.0),
+                    _ => (55.0, 12.0),
+                };
                 (
                     unit.pos + Vec3::Y * unit.bar_height,
                     width,
+                    height,
                     (unit.health / unit.max_health).clamp(0.0, 1.0),
-                    if unit.team == 0 {
-                        [80u8, 150, 255]
+                    if unit.team == 1
+                        && unit.kind.is_minion()
+                        && unit.health <= player_damage
+                        && unit.pos.distance(player_bar_pos) < 1400.0
+                    {
+                        // Last-hit window: the bar turns white when one
+                        // auto-attack would secure the minion.
+                        [255, 255, 255]
+                    } else if unit.team == 0 {
+                        [95u8, 225, 120]
                     } else if unit.team == 2 {
-                        [220u8, 180, 70]
+                        [242u8, 64, 52]
                     } else {
-                        [220u8, 65, 60]
+                        [235u8, 70, 60]
                     },
                 )
             })
             .collect::<Vec<_>>();
-        for (center, width, fill, color) in bars {
+        for (center, width, height, fill, color) in bars {
             append_bar(
                 self,
                 center,
                 width,
-                14.0,
+                height,
                 fill,
                 color,
                 camera_right,
@@ -1631,18 +4338,179 @@ impl AnimatedScene {
             );
         }
 
-        let projectile_positions = self
+        // Attacks are only drawn inside the team's line of sight, so enemy
+        // tower bolts do not reveal themselves through the fog of war.
+        let projectile_visuals = self
             .projectiles
             .iter()
-            .map(|projectile| projectile.pos)
+            .filter(|projectile| self.in_team_vision(projectile.pos))
+            .map(|projectile| (projectile.pos, projectile.style))
             .collect::<Vec<_>>();
-        for pos in projectile_positions {
-            append_billboard(self, pos, 22.0, [255, 150, 40], camera_right, camera_up);
+        for (pos, style) in projectile_visuals {
+            let (size, color) = match style {
+                ProjectileStyle::Dart => (13.0, [226, 240, 255]),
+                ProjectileStyle::Bolt => (22.0, [255, 150, 40]),
+            };
+            append_billboard(self, pos, size, color, camera_right, camera_up);
+        }
+
+        // Ability sparks. They fade by dimming toward black because the
+        // opaque scene pipeline has no per-vertex alpha.
+        let particles = self
+            .particles
+            .iter()
+            .filter(|p| self.in_team_vision(p.pos))
+            .map(|p| {
+                let t = (p.remaining / p.duration.max(0.01)).clamp(0.0, 1.0);
+                (
+                    p.pos,
+                    p.size * (0.45 + 0.55 * t),
+                    [
+                        (p.color[0] as f32 * (0.30 + 0.70 * t)) as u8,
+                        (p.color[1] as f32 * (0.30 + 0.70 * t)) as u8,
+                        (p.color[2] as f32 * (0.30 + 0.70 * t)) as u8,
+                    ],
+                )
+            })
+            .collect::<Vec<_>>();
+        for (pos, size, color) in particles {
+            append_billboard(self, pos, size, color, camera_right, camera_up);
+        }
+
+        let player_pos = self.units[self.player_index].pos;
+        let player_right = Vec3::Y.cross(Vec3::new(
+            self.units[self.player_index].yaw.sin(),
+            0.0,
+            self.units[self.player_index].yaw.cos(),
+        ));
+        let return_target = player_pos + player_right * BANANARANG_HAND;
+        let bananas = self
+            .bananarangs
+            .iter()
+            .map(|banana| {
+                (
+                    bananarang_position(banana, height, return_target),
+                    banana.t * std::f32::consts::TAU * 2.0,
+                )
+            })
+            .collect::<Vec<_>>();
+        let banana_model = self.banana_model.take();
+        for (pos, yaw) in bananas {
+            if let Some(model) = banana_model.as_ref() {
+                append_banana_model(self, model, pos, yaw, BANANARANG_MODEL_SCALE);
+            } else {
+                append_banana(self, pos, camera_right, camera_up);
+            }
+        }
+        self.banana_model = banana_model;
+
+        if let Some(duel) = self.duel.as_ref() {
+            let center = duel.center;
+            let radius = duel.radius;
+            let progress = 1.0 - (duel.remaining / duel.duration.max(0.01)).clamp(0.0, 1.0);
+            let pulse = (duel.remaining * 5.0).sin().abs() * 0.25 + 0.75 + progress * 0.1;
+            let color = [
+                (70.0 * pulse) as u8,
+                (210.0 * pulse) as u8,
+                (255.0 * pulse) as u8,
+            ];
+            append_ring(self, height, center, radius, color);
+            append_ring(self, height, center, radius * 0.97, [40, 120, 170]);
+            let segments = 48usize;
+            for i in 0..segments {
+                let angle = i as f32 / segments as f32 * std::f32::consts::TAU;
+                let x = center.x + angle.cos() * radius;
+                let z = center.z + angle.sin() * radius;
+                let y = height.height_at(x, z);
+                let tangent = Vec3::new(-angle.sin(), 0.0, angle.cos());
+                append_quad(
+                    self,
+                    Vec3::new(x, y + 145.0, z),
+                    tangent * 8.0,
+                    Vec3::Y * 145.0,
+                    color,
+                );
+            }
+        }
+        let peels = self
+            .duel_peels
+            .iter()
+            .filter_map(|peel| {
+                let target = self.units.get(peel.target)?;
+                let pos = peel.from + (target.pos - peel.from) * peel.t.clamp(0.0, 1.0);
+                Some(pos + Vec3::Y * 90.0)
+            })
+            .collect::<Vec<_>>();
+        for pos in peels {
+            append_billboard(self, pos, 28.0, [255, 210, 60], camera_right, camera_up);
         }
 
         let player = &self.units[self.player_index];
+        let player_pos = player.pos;
+        let player_range = player.attack_range;
+        let player_target = player.attack_target;
+        let attack_pending = player.attack_pending;
+        let attack_windup = player.attack_windup;
+        let windup_timer = player.attack_windup_timer;
         if player.health > 0.0 {
-            append_ring(self, player.pos, player.pos.y + 3.0, 95.0, [90, 180, 255]);
+            append_ring(self, height, player_pos, 95.0, [90, 180, 255]);
+        }
+        // Attack range and target rings, like the reference client shows while
+        // the champion is fighting.
+        if player_target.is_some() {
+            append_ring_width(self, height, player_pos, player_range, [220, 60, 50], 0.975);
+            if let Some(target) = player_target {
+                let target_pos = self.units[target].pos;
+                append_ring_width(self, height, target_pos, 72.0, [250, 220, 90], 0.86);
+            }
+        }
+        if attack_pending {
+            let progress = 1.0 - (windup_timer / attack_windup.max(0.001)).clamp(0.0, 1.0);
+            append_ring(
+                self,
+                height,
+                player_pos,
+                100.0 + 55.0 * progress,
+                [255, 150, 55],
+            );
+        }
+
+        // Small team-coloured rings under lane imps/fairies mirror the Dota
+        // style reference and make the two sides readable at a glance.
+        let minion_rings = self
+            .units
+            .iter()
+            .filter(|u| u.visible && u.kind.is_minion() && u.health > 0.0)
+            .map(|u| (u.pos, u.team))
+            .collect::<Vec<_>>();
+        for (pos, team) in minion_rings {
+            append_ring(
+                self,
+                height,
+                pos,
+                46.0,
+                if team == 0 {
+                    [90, 160, 255]
+                } else {
+                    [255, 90, 80]
+                },
+            );
+        }
+
+        let aggro_minions = self
+            .units
+            .iter()
+            .filter(|u| {
+                u.visible
+                    && u.kind.is_minion()
+                    && u.health > 0.0
+                    && u.team == 1
+                    && u.attack_target == Some(self.player_index)
+            })
+            .map(|u| u.pos)
+            .collect::<Vec<_>>();
+        for pos in aggro_minions {
+            append_ring_width(self, height, pos, 66.0, [255, 70, 55], 0.92);
         }
 
         let structure_rings = self
@@ -1658,14 +4526,43 @@ impl AnimatedScene {
         for (pos, team) in structure_rings {
             append_ring(
                 self,
+                height,
                 pos,
-                pos.y + 4.0,
                 140.0,
                 if team == 0 {
                     [90, 160, 255]
                 } else {
                     [255, 90, 80]
                 },
+            );
+        }
+
+        let tower_danger = self
+            .units
+            .iter()
+            .filter(|u| {
+                u.visible
+                    && u.kind == UnitKind::Tower
+                    && u.team == 1
+                    && u.health > 0.0
+                    && u.pos.distance(player_pos) < u.attack_range * 1.35
+            })
+            .map(|u| {
+                (
+                    u.pos,
+                    u.attack_range,
+                    u.attack_target == Some(self.player_index),
+                )
+            })
+            .collect::<Vec<_>>();
+        for (pos, range, aggro) in tower_danger {
+            append_ring_width(
+                self,
+                height,
+                pos,
+                range,
+                if aggro { [255, 60, 45] } else { [190, 90, 70] },
+                0.985,
             );
         }
 
@@ -1676,7 +4573,57 @@ impl AnimatedScene {
             .map(|u| u.pos)
             .collect::<Vec<_>>();
         for pos in camp_rings {
-            append_ring(self, pos, pos.y + 4.0, 120.0, [230, 180, 70]);
+            append_ring(self, height, pos, 120.0, [230, 180, 70]);
+        }
+        if !self.delivery_pending.is_empty() {
+            if let Some(chest) = self.delivery_chest.and_then(|index| self.units.get(index)) {
+                append_ring(self, height, chest.pos, 150.0, [255, 210, 80]);
+            }
+        }
+
+        // Lingering ground stains under the effects layer.
+        let decals = self
+            .decals
+            .iter()
+            .map(|d| {
+                let t = (d.remaining / d.duration.max(0.01)).clamp(0.0, 1.0);
+                let color = [
+                    (d.color[0] as f32 * (0.35 + t * 0.65)) as u8,
+                    (d.color[1] as f32 * (0.35 + t * 0.65)) as u8,
+                    (d.color[2] as f32 * (0.35 + t * 0.65)) as u8,
+                ];
+                (d.pos, d.radius, color)
+            })
+            .collect::<Vec<_>>();
+        for (pos, radius, color) in decals {
+            append_ring_width(self, height, pos, radius, color, 0.22);
+        }
+
+        // Telegraphed impacts: a pulsing danger circle plus the incoming rock.
+        let impacts = self
+            .pending_impacts
+            .iter()
+            .map(|i| {
+                let progress = 1.0 - (i.delay / i.duration.max(0.01)).clamp(0.0, 1.0);
+                let pulse = 0.72 + (i.delay * 18.0).sin().abs() * 0.28;
+                (i.pos, i.radius, progress, pulse)
+            })
+            .collect::<Vec<_>>();
+        for (pos, radius, progress, pulse) in impacts {
+            append_ring(self, height, pos, radius, [255, 80, 35]);
+            append_ring_width(self, height, pos, radius * pulse, [255, 150, 60], 0.60);
+            append_ring_width(
+                self,
+                height,
+                pos,
+                radius * (0.22 + progress * 0.68),
+                [255, 210, 120],
+                0.86,
+            );
+            let fall = 1500.0 * (1.0 - progress);
+            let meteor = pos + Vec3::Y * (fall + 140.0);
+            append_billboard(self, meteor, 96.0, [255, 130, 45], camera_right, camera_up);
+            append_billboard(self, meteor, 58.0, [255, 235, 170], camera_right, camera_up);
         }
 
         let effects = self
@@ -1688,26 +4635,63 @@ impl AnimatedScene {
             })
             .collect::<Vec<_>>();
         for (pos, radius, color) in effects {
-            append_ring(self, pos, pos.y + 6.0, radius, color);
+            append_ring(self, height, pos, radius, color);
         }
 
         let shield_pos = self.units[self.player_index].pos;
         let shield = self.units[self.player_index].shield;
         if shield > 0.0 {
-            append_ring(self, shield_pos, shield_pos.y + 5.0, 120.0, [90, 255, 140]);
+            append_ring(self, height, shield_pos, 120.0, [90, 255, 140]);
         }
 
         if let Some((marker, remaining)) = self.marker {
             let pulse = (remaining * 6.0).sin().abs() * 0.25 + 0.75;
-            append_ring(self, marker, marker.y + 5.0, 55.0 * pulse, [120, 255, 120]);
+            append_ring(self, height, marker, 55.0 * pulse, [120, 255, 120]);
         }
     }
 }
 
 impl AnimatedUnit {
+    /// Ranged level scaling, matching the OSRS stat panel.
+    fn ranged_scale(&self) -> f32 {
+        1.0 + self.ranged / 100.0
+    }
+
+    fn q_rank(&self) -> u8 {
+        (1 + self.level.saturating_sub(1) / 2).min(5) as u8
+    }
+
     fn is_minion_of(&self, team: u8) -> bool {
         self.kind.is_minion() && self.team == team
     }
+}
+
+fn los_clear(collision: &WorldCollision, ox: i32, oy: i32, tx: i32, ty: i32) -> bool {
+    let dx = (tx - ox).abs();
+    let dy = (ty - oy).abs();
+    let sx = if ox < tx { 1 } else { -1 };
+    let sy = if oy < ty { 1 } else { -1 };
+    let mut err = dx - dy;
+    let mut x = ox;
+    let mut y = oy;
+    loop {
+        if (x != ox || y != oy) && (x != tx || y != ty) && collision.blocks_sight_tile(x, y) {
+            return false;
+        }
+        if x == tx && y == ty {
+            break;
+        }
+        let e2 = 2 * err;
+        if e2 > -dy {
+            err -= dy;
+            x += sx;
+        }
+        if e2 < dx {
+            err += dx;
+            y += sy;
+        }
+    }
+    true
 }
 
 fn point_in_brush(brush: &[(f32, f32, f32, f32)], pos: Vec3) -> bool {
@@ -1732,9 +4716,60 @@ fn load_model(cache: &Cache, model_id: u32) -> Result<Model> {
     Ok(Model::load(model_id, &group.data)?)
 }
 
+/// Decoded models and animation clips, memoised by id.
+///
+/// A scene builds hundreds of units out of a handful of distinct assets:
+/// every butterfly, crab, cow, imp and fairy re-decoded the same model and
+/// the same animation frames. Decoding one clip costs about 100 ms, so the
+/// repeats dominated the ~25 s stall when a match started. The maps are
+/// shared behind an `Arc` because nothing mutates them once loaded.
+struct UnitAssets<'a> {
+    cache: &'a Cache,
+    models: HashMap<u32, Arc<Model>>,
+    clips: HashMap<u32, Arc<AnimationClip>>,
+}
+
+impl<'a> UnitAssets<'a> {
+    fn new(cache: &'a Cache) -> Self {
+        Self {
+            cache,
+            models: HashMap::new(),
+            clips: HashMap::new(),
+        }
+    }
+
+    fn model(&mut self, model_id: u32) -> Result<Arc<Model>> {
+        if let Some(model) = self.models.get(&model_id) {
+            return Ok(Arc::clone(model));
+        }
+        let model = Arc::new(load_model(self.cache, model_id)?);
+        self.models.insert(model_id, Arc::clone(&model));
+        Ok(model)
+    }
+
+    fn clip(&mut self, sequence: u32) -> Result<Arc<AnimationClip>> {
+        if let Some(clip) = self.clips.get(&sequence) {
+            return Ok(Arc::clone(clip));
+        }
+        let clip = Arc::new(AnimationClip::load(self.cache, sequence)?);
+        self.clips.insert(sequence, Arc::clone(&clip));
+        Ok(clip)
+    }
+
+    /// Owned copies of a model and its attachments, ready for `Model::merge`.
+    fn merged_parts(&mut self, model_id: u32, attachments: &[u32]) -> Result<Vec<Model>> {
+        let mut parts = Vec::with_capacity(1 + attachments.len());
+        parts.push((*self.model(model_id)?).clone());
+        for &attachment in attachments {
+            parts.push((*self.model(attachment)?).clone());
+        }
+        Ok(parts)
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 fn load_unit(
-    cache: &Cache,
+    assets: &mut UnitAssets<'_>,
     model_id: u32,
     idle_sequence: Option<u32>,
     walk_sequence: Option<u32>,
@@ -1751,21 +4786,29 @@ fn load_unit(
     bar_height: f32,
     lane: Vec<Vec3>,
 ) -> Result<AnimatedUnit> {
-    let model = load_model(cache, model_id)?;
+    let model = assets.model(model_id)?;
     let idle = match idle_sequence {
-        Some(seq) => AnimationClip::load(cache, seq)?,
-        None => AnimationClip::default(),
+        Some(seq) => assets.clip(seq)?,
+        None => Arc::new(AnimationClip::default()),
     };
     let walk = match walk_sequence {
-        Some(seq) => Some(AnimationClip::load(cache, seq)?),
+        Some(seq) => Some(assets.clip(seq)?),
         None => None,
     };
+    let walk_loop_ms = walk.as_ref().map_or(0.0, |clip| clip.loop_ms());
+    let walk_stride = speed * walk_loop_ms / 1000.0;
     Ok(AnimatedUnit {
         model,
         idle,
         walk,
         pos,
         yaw: 0.0,
+        model_yaw_offset: 0.0,
+        motion: None,
+        walk_blend: 0.0,
+        walk_arm: 1.0,
+        walk_loop_ms,
+        walk_stride,
         scale,
         anim_time_ms: 0.0,
         moving: false,
@@ -1774,16 +4817,34 @@ fn load_unit(
         health,
         max_health: health,
         hit_flash: 0.0,
+        death_anim: 0.0,
         dead_timer: 0.0,
         target: None,
         path: Vec::new(),
         path_index: 0,
         attack_target: None,
         attack_cooldown: 0.0,
+        attack_windup_timer: 0.0,
+        attack_windup: 0.0,
+        attack_pending: false,
         attack_range,
         attack_damage,
+        min_base_damage_bonus: 0.0,
         attack_interval,
         speed,
+        armor: 0.0,
+        armor_reduction: 0.0,
+        armor_reduction_timer: 0.0,
+        stun_timer: 0.0,
+        venom_timer: 0.0,
+        venom_damage: 0.0,
+        venom_tick: 0.0,
+        venom_team: 0,
+        attack_speed_mult: 1.0,
+        attack_speed_timer: 0.0,
+        ranged: 0.0,
+        is_champion: kind.is_champion(),
+        spawn_delay: 0.0,
         hit_radius,
         bar_height,
         lane,
@@ -1806,75 +4867,388 @@ fn load_unit(
         e_shield: 0.0,
         w_distance: 0.0,
         ability_power: 0.0,
-        lift: 0.0,
+        structure_lane: None,
+        super_minion: false,
+        home: pos,
+        aggro_range: 0.0,
+        leash_range: 0.0,
+        camp_aggro: false,
+        camp_wander_timer: 0.0,
+        ambient_kind: None,
+        ambient_seed: 0,
+        lock_range: 0.0,
     })
 }
 
+/// Deterministic loose wedge for a minion wave. Melee minions take the front
+/// row, the ranged minion trails, and an optional super minion leads. Jitter
+/// changes each wave so repeated waves do not line up on the same exact tiles.
+fn wave_formation_positions(
+    nexus: Vec3,
+    forward: Vec3,
+    across: Vec3,
+    serial: u32,
+    super_lane: bool,
+) -> Vec<(Vec3, f32, bool, bool)> {
+    let mut formation = vec![
+        // forward tiles, lateral tiles, ranged, super
+        (1.20f32, -1.85f32, false, false),
+        (2.60, 1.85, false, false),
+        (0.20, 0.0, true, false),
+    ];
+    if super_lane {
+        formation.push((3.60, 0.0, false, true));
+    }
+    formation
+        .into_iter()
+        .enumerate()
+        .map(
+            |(index, (forward_tiles, lateral_tiles, ranged, super_minion))| {
+                let jitter = ((serial
+                    .wrapping_mul(1_103_515_245)
+                    .wrapping_add(index as u32 * 12_345)
+                    >> 16
+                    & 0xff) as f32
+                    / 255.0
+                    - 0.5)
+                    * 0.24;
+                let lateral = lateral_tiles + jitter;
+                let pos = nexus + forward * (forward_tiles * 128.0) + across * (lateral * 128.0);
+                (pos, lateral, ranged, super_minion)
+            },
+        )
+        .collect()
+}
+
+/// Copy a lane centre line shifted sideways by `offset` world units. Each
+/// minion keeps its own parallel track so a wave does not collapse into a
+/// single-file clump on the way to the enemy nexus.
+fn offset_lane(lane: &[Vec3], offset: f32) -> Vec<Vec3> {
+    let mut out = Vec::with_capacity(lane.len());
+    for index in 0..lane.len() {
+        let previous = lane[index.saturating_sub(1)];
+        let next = lane[(index + 1).min(lane.len() - 1)];
+        let dir = Vec3::new(next.x - previous.x, 0.0, next.z - previous.z);
+        let perpendicular = if dir.length_squared() > 1e-6 {
+            Vec3::new(-dir.z, 0.0, dir.x).normalize()
+        } else {
+            Vec3::X
+        };
+        out.push(lane[index] + perpendicular * offset);
+    }
+    out
+}
+
+/// Horizontal (XZ) delta between two world positions. Lane offsets sit at
+/// slightly different terrain heights than their source waypoints, so a
+/// 3D distance can never fall below the waypoint threshold and leaves units
+/// oscillating in place.
+fn planar_delta(from: Vec3, to: Vec3) -> Vec3 {
+    Vec3::new(to.x - from.x, 0.0, to.z - from.z)
+}
+
+/// Shortest horizontal distance from a point to a line segment. Used by fast
+/// skillshots so a low frame rate or a high timescale cannot tunnel through a
+/// target between two sampled positions.
+fn segment_distance_xz(point: Vec3, from: Vec3, to: Vec3) -> f32 {
+    let ab = planar_delta(from, to);
+    let ap = planar_delta(from, point);
+    let denom = ab.length_squared();
+    let t = if denom > 1e-6 {
+        (ap.dot(ab) / denom).clamp(0.0, 1.0)
+    } else {
+        0.0
+    };
+    (ap - ab * t).length()
+}
+
+fn armor_damage_multiplier(armor: f32) -> f32 {
+    if armor >= 0.0 {
+        100.0 / (100.0 + armor)
+    } else {
+        2.0 - 100.0 / (100.0 - armor)
+    }
+}
+
+/// Local-space path for the Bananarang. It starts at the left hand, travels
+/// forward-left at 30 degrees, runs across a long top face, then closes back
+/// down into the right hand. The control points are interpolated with a
+/// centripetal Catmull-Rom spline so the heading changes in gentle arcs rather
+/// than at hard corners.
+fn bananarang_local_path() -> Vec<Vec3> {
+    let hand = BANANARANG_HAND;
+    let depth = BANANARANG_DEPTH;
+    // The 30-degree launch leg sets how far the top face splays outward.
+    let top_half = hand + depth * BANANARANG_SPLAY.tan();
+    let left_hand = Vec3::new(-hand, 0.0, 0.0);
+    let right_hand = Vec3::new(hand, 0.0, 0.0);
+    let top_left = Vec3::new(-top_half, 0.0, depth);
+    let top_right = Vec3::new(top_half, 0.0, depth);
+    let left_leg = top_left - left_hand;
+    let right_leg = right_hand - top_right;
+    let controls = [
+        left_hand,
+        left_hand + left_leg * 0.55,
+        top_left,
+        Vec3::new(-top_half * 0.45, 0.0, depth),
+        Vec3::new(top_half * 0.45, 0.0, depth),
+        top_right,
+        top_right + right_leg * 0.45,
+        right_hand,
+    ];
+    catmull_rom(&controls, 18)
+}
+
+/// Centripetal Catmull-Rom interpolation. The virtual points beyond the first
+/// and last controls make the input and output tangents follow the launch and
+/// closing legs exactly while the interior stays smooth and overshoot-free.
+fn catmull_rom(points: &[Vec3], samples: usize) -> Vec<Vec3> {
+    if points.len() < 2 {
+        return points.to_vec();
+    }
+    let n = points.len();
+    let mut out = Vec::with_capacity((n - 1) * samples + 1);
+    out.push(points[0]);
+    for i in 0..n - 1 {
+        let p0 = if i == 0 {
+            points[0] * 2.0 - points[1]
+        } else {
+            points[i - 1]
+        };
+        let p1 = points[i];
+        let p2 = points[i + 1];
+        let p3 = if i + 2 >= n {
+            points[n - 1] * 2.0 - points[n - 2]
+        } else {
+            points[i + 2]
+        };
+        let t0 = 0.0;
+        let t1 = t0 + (p1 - p0).length().sqrt().max(1e-4);
+        let t2 = t1 + (p2 - p1).length().sqrt().max(1e-4);
+        let t3 = t2 + (p3 - p2).length().sqrt().max(1e-4);
+        for sample in 1..=samples {
+            let t = t1 + (t2 - t1) * (sample as f32 / samples as f32);
+            let a1 = (t1 - t) / (t1 - t0) * p0 + (t - t0) / (t1 - t0) * p1;
+            let a2 = (t2 - t) / (t2 - t1) * p1 + (t - t1) / (t2 - t1) * p2;
+            let a3 = (t3 - t) / (t3 - t2) * p2 + (t - t2) / (t3 - t2) * p3;
+            let b1 = (t2 - t) / (t2 - t0) * a1 + (t - t0) / (t2 - t0) * a2;
+            let b2 = (t3 - t) / (t3 - t1) * a2 + (t - t1) / (t3 - t1) * a3;
+            let c = (t2 - t) / (t2 - t1) * b1 + (t - t1) / (t2 - t1) * b2;
+            out.push(c);
+        }
+    }
+    out.dedup_by(|a, b| a.distance(*b) < 0.01);
+    out
+}
+
+fn path_length_table(path: &[Vec3]) -> (Vec<f32>, f32) {
+    let mut lengths = Vec::with_capacity(path.len());
+    lengths.push(0.0);
+    let mut total = 0.0;
+    for pair in path.windows(2) {
+        total += pair[0].distance(pair[1]);
+        lengths.push(total);
+    }
+    (lengths, total)
+}
+
+/// World position of the banana, sampled by arc length and lifted above the
+/// terrain. From the return leg onward, the path blends toward the king's
+/// current right hand so a moving Awowogei still catches his banana.
+fn bananarang_position(banana: &Bananarang, height: &HeightGrid, return_target: Vec3) -> Vec3 {
+    let last = banana.path.len().saturating_sub(1);
+    let t = banana.t.clamp(0.0, 1.0);
+    let target = t * banana.path_length;
+    let mut pos = banana.path.get(last).copied().unwrap_or(Vec3::ZERO);
+    if banana.path.len() > 1 {
+        let index = banana
+            .path_lengths
+            .partition_point(|&length| length < target)
+            .min(last);
+        if index == 0 {
+            pos = banana.path[0];
+        } else {
+            let previous = index - 1;
+            let segment = (banana.path_lengths[index] - banana.path_lengths[previous]).max(0.001);
+            let fraction = ((target - banana.path_lengths[previous]) / segment).clamp(0.0, 1.0);
+            pos = banana.path[previous].lerp(banana.path[index], fraction);
+        }
+    }
+    let return_blend = bananarang_return_blend(t);
+    if return_blend > 0.0 {
+        pos = pos.lerp(
+            Vec3::new(return_target.x, 0.0, return_target.z),
+            return_blend,
+        );
+    }
+    pos.y = height.height_at(pos.x, pos.z) + 70.0;
+    pos
+}
+
+/// Smoothstep weight for the moving return target. Zero through the outbound
+/// leg and top face, then easing into the king's current right hand.
+fn bananarang_return_blend(t: f32) -> f32 {
+    let u = ((t - 0.62) / 0.38).clamp(0.0, 1.0);
+    u * u * (3.0 - 2.0 * u)
+}
+
+/// Turn a unit toward a heading at a species-appropriate rate instead of
+/// snapping. The player has its own weighted motor.
+fn turn_toward(unit: &mut AnimatedUnit, target_yaw: f32, dt: f32) {
+    let rate = match unit.kind {
+        UnitKind::MeleeMinion | UnitKind::RangedMinion => 12.0,
+        UnitKind::Camp => 7.0,
+        UnitKind::DeliveryGuard => 10.0,
+        _ => 15.0,
+    };
+    let delta = (target_yaw - unit.yaw + std::f32::consts::PI).rem_euclid(std::f32::consts::TAU)
+        - std::f32::consts::PI;
+    unit.yaw += delta.clamp(-rate * dt, rate * dt);
+}
+
 fn append_unit(scene: &mut AnimatedScene, unit: &AnimatedUnit, positions: &[[f32; 3]]) {
-    let rot = Mat3::from_rotation_y(unit.yaw + MODEL_FORWARD_TURN);
-    // the body is drawn lifted; its ring, bars and everything the match
-    // measures stay on the ground at `unit.pos`
-    let base = unit.pos + Vec3::Y * unit.lift;
+    append_unit_model(scene, unit, &unit.model, positions);
+}
 
-    // every corner once, turned and scaled but not yet moved to where the unit
-    // stands: light depends on which way a surface faces, not on where it is
-    let local: Vec<Vec3> = (0..positions.len())
-        .map(|i| model_vertex_animated(positions, i, Vec3::ZERO, rot, unit.scale))
-        .collect();
-    let points: Vec<[f32; 3]> = local.iter().map(|p| p.to_array()).collect();
-    let lit = light(&points, &unit.model.faces);
-    let corner = |i: u32| base + local.get(i as usize).copied().unwrap_or(Vec3::ZERO);
+fn append_unit_model(
+    scene: &mut AnimatedScene,
+    unit: &AnimatedUnit,
+    model: &Model,
+    positions: &[[f32; 3]],
+) {
+    let rot = Mat3::from_rotation_y(unit.yaw + unit.model_yaw_offset);
+    let dominant_texture = model_dominant_texture(model);
+    // The step spring is drawing only: bars and selection rings remain on
+    // the ground while the body lifts. Corpses shrink and sink briefly.
+    let death = if unit.health <= 0.0 && unit.death_anim > 0.0 {
+        1.0 - (unit.death_anim / DEATH_SINK_TIME).clamp(0.0, 1.0)
+    } else {
+        0.0
+    };
+    let scale = unit.scale * (1.0 - 0.30 * death);
+    let origin = unit.pos
+        + Vec3::Y * (unit.motion.as_ref().map_or(0.0, |motion| motion.lift) - 72.0 * death);
 
-    for (face_idx, &face) in unit.model.faces.iter().enumerate() {
-        let [a, b, c] = face;
-        let render_type = unit
-            .model
-            .face_render_types
-            .get(face_idx)
-            .copied()
-            .unwrap_or(0);
-        let lightness = lit.corners(face_idx, face, render_type);
+    for (face_idx, &[a, b, c]) in model.faces.iter().enumerate() {
+        let pa = model_vertex_animated(positions, a as usize, origin, rot, scale);
+        let pb = model_vertex_animated(positions, b as usize, origin, rot, scale);
+        let pc = model_vertex_animated(positions, c as usize, origin, rot, scale);
 
-        let textured = unit
-            .model
+        let mut normal = (pb - pa).cross(pc - pa).normalize_or_zero();
+        if normal.length_squared() < 1e-8 {
+            normal = rot
+                * Vec3::from_array(
+                    model
+                        .face_normals
+                        .get(face_idx)
+                        .copied()
+                        .unwrap_or([0.0, 1.0, 0.0]),
+                );
+        }
+
+        let texture_id = model
             .face_textures
             .as_ref()
             .and_then(|t| t.get(face_idx))
-            .is_some_and(|&t| t >= 0);
-        let paint = |lightness: f32| -> [u8; 3] {
-            let mut rgb = if unit.kind == UnitKind::Tower {
-                tint([125.0, 117.0, 102.0], lightness)
-            } else if textured || unit.model.face_colors[face_idx] == 127 {
-                tint([48.0, 95.0, 42.0], lightness)
-            } else {
-                shade(unit.model.face_colors[face_idx], lightness)
-            };
-            if matches!(unit.kind, UnitKind::Nexus | UnitKind::Inhibitor) && unit.team == 1 {
-                rgb[0] = rgb[0].saturating_add(90);
-                rgb[1] = (rgb[1] as f32 * 0.5) as u8;
-                rgb[2] = (rgb[2] as f32 * 0.8) as u8;
-            }
-            if unit.hit_flash > 0.0 {
-                rgb[0] = 255;
-                rgb[1] = (rgb[1] as f32 * 0.55) as u8;
-                rgb[2] = (rgb[2] as f32 * 0.55) as u8;
-            }
-            rgb
+            .copied()
+            .map(|t| t as u32)
+            .filter(|&t| t < 256)
+            .or(dominant_texture);
+        let textured = texture_id.is_some();
+        let mut rgb = if textured {
+            // The sampled model texture supplies the detail; vertex colour is
+            // only a team/hit-flash tint.
+            [255, 255, 255]
+        } else if unit.kind == UnitKind::Tower {
+            [125, 117, 102]
+        } else if model.face_colors[face_idx] == 127 {
+            [84, 142, 58]
+        } else {
+            // Use the cache palette unchanged. An old darkening clamp here
+            // turned bright NPC palettes (the snakeling's white hood, for
+            // example) into muddy near-black shapes.
+            hsl_to_rgb(model.face_colors[face_idx], 1.0)
         };
+        if unit.kind.is_minion() {
+            let tint = if unit.team == 0 {
+                [0.80f32, 0.95, 1.25]
+            } else {
+                [1.25, 0.85, 0.80]
+            };
+            rgb = [
+                (rgb[0] as f32 * tint[0]).clamp(0.0, 255.0) as u8,
+                (rgb[1] as f32 * tint[1]).clamp(0.0, 255.0) as u8,
+                (rgb[2] as f32 * tint[2]).clamp(0.0, 255.0) as u8,
+            ];
+        }
+        if matches!(unit.kind, UnitKind::Nexus | UnitKind::Inhibitor) && unit.team == 1 {
+            rgb[0] = rgb[0].saturating_add(90);
+            rgb[1] = (rgb[1] as f32 * 0.5) as u8;
+            rgb[2] = (rgb[2] as f32 * 0.8) as u8;
+        }
+        if unit.hit_flash > 0.0 {
+            rgb[0] = 255;
+            rgb[1] = (rgb[1] as f32 * 0.55) as u8;
+            rgb[2] = (rgb[2] as f32 * 0.55) as u8;
+        }
 
-        let first = scene.vertices.len() as u32;
-        scene
-            .vertices
-            .push(Vertex::new(corner(a), paint(lightness[0])));
-        scene
-            .vertices
-            .push(Vertex::new(corner(b), paint(lightness[1])));
-        scene
-            .vertices
-            .push(Vertex::new(corner(c), paint(lightness[2])));
-        scene
-            .indices
-            .extend_from_slice(&[first, first + 1, first + 2]);
+        let ao_at = |p: Vec3| {
+            (0.74 + 0.26 * ((p.y - origin.y).max(0.0) / (scale * 220.0)).clamp(0.0, 1.0))
+                .clamp(0.66, 1.0)
+        };
+        let mut va = SceneVertex::new(pa, normal, rgb);
+        let mut vb = SceneVertex::new(pb, normal, rgb);
+        let mut vc = SceneVertex::new(pc, normal, rgb);
+        let material = if let Some(texture_id) = texture_id {
+            let abs_normal = normal.abs();
+            let uv_for = |p: Vec3| {
+                let local = p - origin;
+                if abs_normal.y >= abs_normal.x && abs_normal.y >= abs_normal.z {
+                    [local.x / 128.0, local.z / 128.0]
+                } else if abs_normal.x >= abs_normal.z {
+                    [local.z / 128.0, local.y / 128.0]
+                } else {
+                    [local.x / 128.0, local.y / 128.0]
+                }
+            };
+            va.texture_id = texture_id;
+            vb.texture_id = texture_id;
+            vc.texture_id = texture_id;
+            va.uv = uv_for(pa);
+            vb.uv = uv_for(pb);
+            vc.uv = uv_for(pc);
+            5
+        } else {
+            3
+        };
+        va.material = material;
+        vb.material = material;
+        vc.material = material;
+        va.ao = ao_at(pa);
+        vb.ao = ao_at(pb);
+        vc.ao = ao_at(pc);
+        let base = scene.vertices.len() as u32;
+        scene.vertices.push(va);
+        scene.vertices.push(vb);
+        scene.vertices.push(vc);
+        scene.indices.extend_from_slice(&[base, base + 1, base + 2]);
+
+        if matches!(
+            unit.kind,
+            UnitKind::Player
+                | UnitKind::Tower
+                | UnitKind::Inhibitor
+                | UnitKind::Nexus
+                | UnitKind::Camp
+        ) {
+            let cbase = scene.caster_vertices.len() as u32;
+            scene.caster_vertices.push(va);
+            scene.caster_vertices.push(vb);
+            scene.caster_vertices.push(vc);
+            scene
+                .caster_indices
+                .extend_from_slice(&[cbase, cbase + 1, cbase + 2]);
+        }
     }
 }
 
@@ -1890,6 +5264,10 @@ fn append_bar(
     up: Vec3,
     forward: Vec3,
 ) {
+    // Pull the whole bar several units toward the camera. The previous 1.5u
+    // fill offset was below the depth-buffer epsilon at MOBA camera distance,
+    // which made the fill flicker against its background while units moved.
+    let center = center + forward * 12.0;
     let bg = [18u8, 18, 20];
     append_quad(
         scene,
@@ -1898,13 +5276,85 @@ fn append_bar(
         up * (height * 0.5),
         bg,
     );
-    let fill_center = center + forward * 1.5 + right * (-width * 0.5 + width * fill * 0.5);
+    let fill_center = center + forward * 6.0 + right * (-width * 0.5 + width * fill * 0.5);
     append_quad(
         scene,
         fill_center,
         right * (width * fill * 0.5),
         up * (height * 0.45),
         color,
+    );
+}
+
+fn append_banana_model(
+    scene: &mut AnimatedScene,
+    model: &Model,
+    center: Vec3,
+    yaw: f32,
+    scale: f32,
+) {
+    let rot = Mat3::from_rotation_y(yaw);
+    let vertex = |index: usize| -> Vec3 {
+        let x = model.vertex_x.get(index).copied().unwrap_or(0) as f32;
+        let y = model.vertex_y.get(index).copied().unwrap_or(0) as f32;
+        let z = model.vertex_z.get(index).copied().unwrap_or(0) as f32;
+        center + rot * (Vec3::new(x, -y, z) * scale)
+    };
+
+    for (face_idx, &[a, b, c]) in model.faces.iter().enumerate() {
+        let pa = vertex(a as usize);
+        let pb = vertex(b as usize);
+        let pc = vertex(c as usize);
+        let mut normal = (pb - pa).cross(pc - pa).normalize_or_zero();
+        if normal.length_squared() < 1e-8 {
+            normal = rot
+                * Vec3::from_array(
+                    model
+                        .face_normals
+                        .get(face_idx)
+                        .copied()
+                        .unwrap_or([0.0, 1.0, 0.0]),
+                );
+        }
+        let palette = model.face_colors.get(face_idx).copied().unwrap_or(0);
+        let rgb = hsl_to_rgb(palette, 1.0);
+        let mut va = SceneVertex::new(pa, normal, rgb);
+        let mut vb = SceneVertex::new(pb, normal, rgb);
+        let mut vc = SceneVertex::new(pc, normal, rgb);
+        va.material = 3;
+        vb.material = 3;
+        vc.material = 3;
+        let base = scene.vertices.len() as u32;
+        scene.vertices.push(va);
+        scene.vertices.push(vb);
+        scene.vertices.push(vc);
+        scene.indices.extend_from_slice(&[base, base + 1, base + 2]);
+    }
+}
+
+fn append_banana(scene: &mut AnimatedScene, center: Vec3, right: Vec3, up: Vec3) {
+    // Comically oversized banana: overlapping yellow billboards forming a
+    // crescent, with small brown tips.
+    for i in 0..6 {
+        let u = i as f32 / 5.0 * 2.0 - 1.0;
+        let offset = right * (u * 44.0) + up * ((1.0 - u * u) * 20.0 - 4.0);
+        append_billboard(scene, center + offset, 30.0, [255, 214, 45], right, up);
+    }
+    append_billboard(
+        scene,
+        center - right * 48.0 + up * 2.0,
+        14.0,
+        [120, 80, 30],
+        right,
+        up,
+    );
+    append_billboard(
+        scene,
+        center + right * 48.0 + up * 2.0,
+        14.0,
+        [120, 80, 30],
+        right,
+        up,
     );
 }
 
@@ -1925,29 +5375,53 @@ fn append_billboard(
     );
 }
 
-fn append_ring(scene: &mut AnimatedScene, center: Vec3, y: f32, radius: f32, color: [u8; 3]) {
-    let segments = 32u32;
+fn append_ring(
+    scene: &mut AnimatedScene,
+    height: &HeightGrid,
+    center: Vec3,
+    radius: f32,
+    color: [u8; 3],
+) {
+    append_ring_width(scene, height, center, radius, color, 0.78);
+}
+
+/// A ground ring with an explicit band width. `inner` is the inner radius as a
+/// fraction of `radius`; 0.97 gives the thin range marker the reference
+/// client draws around a champion.
+fn append_ring_width(
+    scene: &mut AnimatedScene,
+    height: &HeightGrid,
+    center: Vec3,
+    radius: f32,
+    color: [u8; 3],
+    inner: f32,
+) {
+    let segments = 48u32;
     let base = scene.vertices.len() as u32;
+    // Sample the terrain per vertex so the band hugs slopes instead of
+    // slicing through them.
+    let lift = |x: f32, z: f32| height.height_at(x, z) + 6.0;
     for i in 0..segments {
         let a = i as f32 / segments as f32 * std::f32::consts::TAU;
         let b = (i + 1) as f32 / segments as f32 * std::f32::consts::TAU;
-        let inner = 0.78;
-        let p0 = Vec3::new(center.x + a.cos() * radius, y, center.z + a.sin() * radius);
-        let p1 = Vec3::new(center.x + b.cos() * radius, y, center.z + b.sin() * radius);
-        let p2 = Vec3::new(
+        let (ax, az) = (center.x + a.cos() * radius, center.z + a.sin() * radius);
+        let (bx, bz) = (center.x + b.cos() * radius, center.z + b.sin() * radius);
+        let (cx, cz) = (
             center.x + a.cos() * radius * inner,
-            y,
             center.z + a.sin() * radius * inner,
         );
-        let p3 = Vec3::new(
+        let (dx, dz) = (
             center.x + b.cos() * radius * inner,
-            y,
             center.z + b.sin() * radius * inner,
         );
-        scene.vertices.push(Vertex::new(p0, color));
-        scene.vertices.push(Vertex::new(p1, color));
-        scene.vertices.push(Vertex::new(p2, color));
-        scene.vertices.push(Vertex::new(p3, color));
+        let p0 = Vec3::new(ax, lift(ax, az), az);
+        let p1 = Vec3::new(bx, lift(bx, bz), bz);
+        let p2 = Vec3::new(cx, lift(cx, cz), cz);
+        let p3 = Vec3::new(dx, lift(dx, dz), dz);
+        scene.vertices.push(SceneVertex::unlit(p0, color));
+        scene.vertices.push(SceneVertex::unlit(p1, color));
+        scene.vertices.push(SceneVertex::unlit(p2, color));
+        scene.vertices.push(SceneVertex::unlit(p3, color));
         let o = base + i * 4;
         scene
             .indices
@@ -1957,11 +5431,158 @@ fn append_ring(scene: &mut AnimatedScene, center: Vec3, y: f32, radius: f32, col
 
 fn append_quad(scene: &mut AnimatedScene, center: Vec3, right: Vec3, up: Vec3, color: [u8; 3]) {
     let base = scene.vertices.len() as u32;
-    scene.vertices.push(Vertex::new(center - right - up, color));
-    scene.vertices.push(Vertex::new(center + right - up, color));
-    scene.vertices.push(Vertex::new(center - right + up, color));
-    scene.vertices.push(Vertex::new(center + right + up, color));
+    scene
+        .vertices
+        .push(SceneVertex::unlit(center - right - up, color));
+    scene
+        .vertices
+        .push(SceneVertex::unlit(center + right - up, color));
+    scene
+        .vertices
+        .push(SceneVertex::unlit(center - right + up, color));
+    scene
+        .vertices
+        .push(SceneVertex::unlit(center + right + up, color));
     scene
         .indices
         .extend_from_slice(&[base, base + 1, base + 2, base + 2, base + 1, base + 3]);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn wave_formation_spaces_minions_apart() {
+        let nexus = Vec3::new(1000.0, 10.0, 2000.0);
+        let forward = Vec3::Z;
+        let across = Vec3::X;
+        let formation = wave_formation_positions(nexus, forward, across, 7, false);
+        assert_eq!(formation.len(), 3);
+        for i in 0..formation.len() {
+            for j in i + 1..formation.len() {
+                let distance = formation[i].0.distance(formation[j].0);
+                assert!(
+                    distance > 220.0,
+                    "wave minions {i} and {j} spawned only {distance:.0} units apart"
+                );
+            }
+        }
+        let ranged = formation.iter().filter(|(_, _, ranged, _)| *ranged).count();
+        assert_eq!(ranged, 1);
+    }
+
+    #[test]
+    fn super_wave_adds_a_staggered_leader() {
+        let nexus = Vec3::new(1000.0, 10.0, 2000.0);
+        let formation = wave_formation_positions(nexus, Vec3::Z, Vec3::X, 3, true);
+        assert_eq!(formation.len(), 4);
+        assert_eq!(
+            formation
+                .iter()
+                .filter(|(_, _, _, super_minion)| *super_minion)
+                .count(),
+            1
+        );
+        let super_pos = formation
+            .iter()
+            .find(|(_, _, _, super_minion)| *super_minion)
+            .expect("super minion")
+            .0;
+        assert!(super_pos.z > nexus.z + 128.0);
+    }
+
+    #[test]
+    fn armor_reduces_and_amplifies_physical_damage() {
+        assert!((armor_damage_multiplier(0.0) - 1.0).abs() < 1e-6);
+        assert!((armor_damage_multiplier(100.0) - 0.5).abs() < 1e-6);
+        assert!(armor_damage_multiplier(-100.0) > 1.0);
+    }
+
+    #[test]
+    fn segment_distance_catches_fast_projectiles() {
+        let from = Vec3::ZERO;
+        let to = Vec3::new(100.0, 0.0, 0.0);
+        assert!(segment_distance_xz(Vec3::new(50.0, 0.0, 0.0), from, to) < 0.01);
+        let offset = segment_distance_xz(Vec3::new(50.0, 0.0, 30.0), from, to);
+        assert!((offset - 30.0).abs() < 0.01);
+        let behind = segment_distance_xz(Vec3::new(-25.0, 0.0, 0.0), from, to);
+        assert!((behind - 25.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn bananarang_path_is_rounded_trapezoid() {
+        let path = bananarang_local_path();
+        let first = path[0];
+        let last = *path.last().expect("path");
+        assert!((first.x + BANANARANG_HAND).abs() < 0.01);
+        assert!(first.z.abs() < 0.01);
+        assert!((last.x - BANANARANG_HAND).abs() < 0.01);
+        assert!(last.z.abs() < 0.01);
+
+        let launch = (path[1] - first).normalize();
+        let expected = Vec3::new(-BANANARANG_SPLAY.sin(), 0.0, BANANARANG_SPLAY.cos());
+        assert!(
+            launch.dot(expected) > 0.999,
+            "launch leg should leave 30 degrees to the left, got {launch:?}"
+        );
+
+        let top = path
+            .iter()
+            .filter(|p| (p.z - BANANARANG_DEPTH).abs() < 0.5)
+            .collect::<Vec<_>>();
+        assert!(top.len() >= 2);
+        let min_x = top.iter().map(|p| p.x).fold(f32::MAX, f32::min);
+        let max_x = top.iter().map(|p| p.x).fold(f32::MIN, f32::max);
+        assert!(
+            max_x - min_x > BANANARANG_HAND * 4.0,
+            "top face should be much longer than the hand gap"
+        );
+
+        let max_range = path.iter().map(|p| p.length()).fold(0.0_f32, f32::max);
+        assert!((1_300.0..1_600.0).contains(&max_range));
+
+        let mut sharpest = 0.0_f32;
+        for window in path.windows(3) {
+            let before = (window[1] - window[0]).normalize();
+            let after = (window[2] - window[1]).normalize();
+            sharpest = sharpest.max(before.dot(after).clamp(-1.0, 1.0).acos());
+        }
+        assert!(
+            sharpest < 0.5,
+            "path should change heading gradually, sharpest turn was {sharpest:.2} rad"
+        );
+    }
+
+    #[test]
+    fn bananarang_return_blend_eases_in_and_out() {
+        assert_eq!(bananarang_return_blend(0.0), 0.0);
+        assert_eq!(bananarang_return_blend(0.62), 0.0);
+        assert!(bananarang_return_blend(0.8) > 0.0);
+        assert!(bananarang_return_blend(0.8) < 1.0);
+        assert_eq!(bananarang_return_blend(1.0), 1.0);
+    }
+
+    #[test]
+    fn planar_delta_ignores_height() {
+        let from = Vec3::new(100.0, 50.0, 200.0);
+        let to = Vec3::new(100.0, 900.0, 260.0);
+        let delta = planar_delta(from, to);
+        assert_eq!(delta.y, 0.0);
+        assert!((delta.length() - 60.0).abs() < 1e-4);
+    }
+
+    #[test]
+    fn offset_lanes_keep_parallel_tracks() {
+        let lane = vec![
+            Vec3::new(0.0, 0.0, 0.0),
+            Vec3::new(0.0, 0.0, 1000.0),
+            Vec3::new(1000.0, 0.0, 2000.0),
+        ];
+        let left = offset_lane(&lane, -200.0);
+        let right = offset_lane(&lane, 200.0);
+        for (a, b) in left.iter().zip(&right) {
+            assert!(a.distance(*b) > 350.0);
+        }
+    }
 }

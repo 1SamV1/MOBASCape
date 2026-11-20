@@ -354,3 +354,43 @@ pub(crate) mod tests {
         assert_eq!(name_hash("p11_full"), name_hash("P11_FULL"));
     }
 }
+
+/// One frame as RGBA8, the shape the texture and model-texture path uses.
+#[derive(Debug, Clone)]
+pub struct RgbaFrame {
+    pub width: u32,
+    pub height: u32,
+    /// Red, green, blue and opacity for each pixel, row by row.
+    pub pixels: Vec<u8>,
+}
+
+/// An RGBA view of a sprite archive, kept for the model textures and the
+/// cache dump tools. It reads through [`SpriteSheet`], so the archive has
+/// one decoder.
+#[derive(Debug, Clone, Default)]
+pub struct SpriteDefinition {
+    pub id: u32,
+    pub frames: Vec<RgbaFrame>,
+}
+
+impl SpriteDefinition {
+    pub fn load(id: u32, data: &[u8]) -> Result<Self> {
+        let sheet = SpriteSheet::decode(id, data)?;
+        let frames = sheet
+            .frames
+            .iter()
+            .map(|frame| {
+                let mut pixels = Vec::with_capacity(frame.width * frame.height * 4);
+                for pixel in frame.rgba(&sheet.palette) {
+                    pixels.extend_from_slice(&pixel);
+                }
+                RgbaFrame {
+                    width: frame.width as u32,
+                    height: frame.height as u32,
+                    pixels,
+                }
+            })
+            .collect();
+        Ok(Self { id, frames })
+    }
+}

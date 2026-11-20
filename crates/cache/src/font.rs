@@ -225,8 +225,8 @@ mod tests {
     fn advances_and_the_baseline_come_from_the_measurements() {
         let font = Font::decode(1, &measurements(), &letters()).unwrap();
         assert_eq!(font.ascent, 10);
-        assert_eq!(font.glyphs[b'A' as usize].advance, (65 % 5 + 3) as i32);
-        assert_eq!(font.glyphs[b'A' as usize].width, 65 % 5 + 1);
+        assert_eq!(font.glyphs[b'A' as usize].advance, 3);
+        assert_eq!(font.glyphs[b'A' as usize].width, 1);
         assert_eq!(font.note, None);
         // letters start 2 down and are 8 tall: they stand on the baseline;
         // the g starts 5 down and hangs 3 below it

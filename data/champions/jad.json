@@ -1,9 +1,11 @@
 {
   "name": "JalRek-Jad",
+  "role": "TANK MAGE",
+  "tagline": "Heavy health and punishing spell damage.",
   "model": 33012,
   "idle": 7589,
   "walk": 8857,
-  "scale": 0.7,
+  "scale": 1.1,
   "health": 700,
   "mana": 260,
   "damage": 16,
@@ -16,5 +18,30 @@
   "e_heal": 100,
   "e_shield": 160,
   "w_distance": 640,
-  "weight": 85
+  "weight": 90,
+  "attack_windup": 0.5,
+  "armor": 40.0,
+  "class": "MAGIC",
+  "abilities": [
+    {
+      "key": "Q",
+      "name": "JAD'S GUARD",
+      "description": "A burst of earth magic that damages and slows nearby enemies."
+    },
+    {
+      "key": "W",
+      "name": "TELEPORT",
+      "description": "Jad blinks across the battlefield to escape or to close the gap."
+    },
+    {
+      "key": "E",
+      "name": "MINER'S ENDURANCE",
+      "description": "Jad drinks in the earth, healing himself and raising a rocky shield."
+    },
+    {
+      "key": "R",
+      "name": "EARTH SPLITTER",
+      "description": "The ground erupts under the cursor, hurling boulders at everything nearby."
+    }
+  ]
 }

@@ -1,0 +1,55 @@
+{
+  "name": "Blowpipe Ranger",
+  "role": "RANGED MARKSMAN",
+  "tagline": "Kills from beyond the treeline, one poisoned dart at a time.",
+  "model": 314,
+  "attachments": [
+    221,
+    26619,
+    258,
+    185,
+    176
+  ],
+  "idle": 2728,
+  "walk": 819,
+  "scale": 1.5,
+  "health": 420,
+  "mana": 200,
+  "damage": 9,
+  "armor": 16.0,
+  "attack_range": 640,
+  "attack_interval": 1.5,
+  "speed": 430,
+  "ranged_auto": true,
+  "ranged": 99,
+  "q_damage": 28,
+  "r_damage": 110,
+  "e_heal": 40,
+  "e_shield": 60,
+  "w_distance": 400,
+  "weight": 55,
+  "attack_windup": 0.25,
+  "class": "RANGED",
+  "abilities": [
+    {
+      "key": "Q",
+      "name": "TOXIC DART",
+      "description": "A fast poisoned dart that leaves the target venomed."
+    },
+    {
+      "key": "W",
+      "name": "DART VOLLEY",
+      "description": "A fan of five darts that poisons every enemy it hits."
+    },
+    {
+      "key": "E",
+      "name": "RANGER'S FOOTWORK",
+      "description": "The ranger hops backwards and attacks faster for a few seconds."
+    },
+    {
+      "key": "R",
+      "name": "DEADSHOT",
+      "description": "A piercing blowpipe shot that hits everything in its line and finishes off wounded targets."
+    }
+  ]
+}

@@ -19,29 +19,99 @@ data/maps/karamja_rift/
 the cache and are **not committed**. `map.json` is committed because it is our
 design data; it references cache IDs, not assets.
 
-## Current `map.json` (v1.5)
+## Current `map.json` (v1.7)
 
 The playable map is `data/maps/karamja_rift/map.json`:
 
-- `nexus`: one structure per team (model 1747, 1500 HP).
+- `spawn`: player spawn tile `[x, y]`; defaults to the first lane's second
+  waypoint when omitted.
+- `nexus`: one structure per team (model 36053, 1500 HP). The two nexuses sit
+  in 28-tile castle courtyards in the bottom-left and top-right corners.
 - `lanes`: top, mid, bottom. Each lane has a `waypoints` polyline, four
-  `towers` (two per team), and two `inhibitors` (one per team).
+  `towers` (two per team), two `inhibitors`, and two `watchtowers`. The lanes
+  run diagonally between the corner bases.
+- `castle`: perimeter and base-castle data:
+  - `bounds`: `[x0, z0, x1, z1]` map tiles enclosed by the white perimeter
+    wall.
+  - `wall_model`, `wall_scale`, `tower_model`, `tower_scale`, `gate_model`,
+    `gate_scale`, `platform_model`, `statue_model`: cache IDs/flags for the
+    castle pass. The runtime currently draws the walls, towers, gatehouses,
+    platform and statues procedurally in white stone; the IDs are kept so the
+    layout stays data-driven and cache models can be swapped back in.
+  - `tower_spacing`: fraction of each perimeter edge between wall towers.
+  - `bases`: `team`, `center`, `size`, and `corner` (`bottom_left` or
+    `top_right`). Inner walls and gate gaps are generated from these.
 - `wave_interval`: 25 s. Each lane spawns two melee skeletons and one skeleton
   mage per team per wave.
-- `camps`: four neutral jungle camps. Each camp has a tile, model, optional
-  idle/walk sequence, health, respawn time, buff (`might` or `swift`), and
-  scale. Camps grant a 60 s team buff when killed.
+- `camps`: eight neutral jungle camps. Each camp has a tile, model, optional
+  idle/walk sequence, health, respawn time, buff (`might` or `swift`), scale,
+  and its AI numbers: `damage`, `range`, `interval`, `speed`, `aggro` and
+  `leash`. Camps aggro when a hero enters `aggro` or when they take damage,
+  chase the hero, leash back to `home` when pulled past `leash`, heal to full
+  on arrival and respawn after `respawn` seconds. Camps grant a 60 s team buff
+  when killed.
+- `biomes`: regional biome pockets. Each pocket transplants a rectangle of a
+  real OSRS region into the map:
+  - `region`: `[region_x, region_y]` of the source OSRS region.
+  - `rect`: `[x, y, width, height]` tile rectangle inside that region.
+  - `origin`: map tile where the rectangle is placed.
+  - `tint`: ground colour multiplier for the pocket.
+  - `grass`: grass layer variant: `0` classic (texture 129), `1` lush
+    (203), `2` dry (18), `3` steppe (197), `4` dire (195), `5` straw (205).
+    Omit it to use the id-based default.
+  - `side`: `radiant` or `dire`, `label`: the name shown in the HUD.
+  The dire half holds dark magic (Wilderness dead-tree graveyard), vampires
+  (Morytania swamp), ogre ruins (ceremonial pillars) and a goblin camp; the
+  radiant half holds a human city (Varrock), a human keep, the elven lands
+  (Tirannwn) and the gnome stronghold. Pocket terrain, colours and scenery all
+  come from the cache.
+- `watchtowers`: per-lane structures with `kind: "watchtower"`, team, tile,
+  model, health, `range` (the long lock range), `damage`, `interval`, `scale`
+  and `aggro` (the short acquire radius). A watchtower acquires the first
+  enemy inside `aggro`, then keeps firing slow bolts at that target until it
+  dies or leaves `range`. Its bolts hit heroes, lane minions and jungle camps.
+- `river`: the waterway that splits the rift. `points` is a polyline in map
+  tiles running diagonally across the map, `width` is the half width in tiles,
+  `depth` how far the bed is cut, `bridges` lists the three lane crossings
+  that stay walkable, and `levels` sets the water height at the first and last
+  point.
 - `brush`: rectangles `[x0, y0, x1, y1]` in world tiles. Units inside brush are
   hidden from the enemy unless the player is within 500 units.
+- `atmosphere`: optional lighting/atmosphere block:
+  `sun_dir`, `sun_color`, `ambient_sky`, `ambient_ground`, `fog_color`,
+  `fog_density`, `fog_height`, `sky_top`, `sky_horizon`, `ground_fog`.
+  Values are sRGB colours and world-space units; the renderer converts them to
+  linear light.
 - Towers: model 1761, 450 HP, range 640, 18 damage / 1.2 s.
-- Inhibitors: model 1747, 700 HP, no attack. At least one enemy inhibitor must
-  fall before the nexus can be damaged.
-- Nexus: model 1747, 1500 HP. Destroying it ends the match.
+- Inhibitors: radiant model 12953, dire model 9721, 700 HP, no attack. At
+  least one enemy inhibitor must fall before the nexus can be damaged.
+- Nexus: model 36053, 1500 HP. Destroying it ends the match.
+- Castle wall: procedural white stone, with cache IDs retained in `castle`
+  for future swaps. Walls block movement and sight; gate pieces do not block.
 
-The scene clears collision in a ~4.5-tile corridor around every lane, blocks
-3×3 footprints under structures, skips scenery within 5 tiles of any lane, and
-draws a stone-path ribbon per lane. Positions are absolute world tiles (e.g.
-2800, 3040), not region-local coordinates.
+The scene clears collision in a ~4.5-tile corridor around every lane (after
+biome pockets are placed, so a pocket never seals a lane), blocks footprints
+under structures, skips scenery within 5 tiles of any lane, and draws a dirt
+path ribbon per lane. Positions are absolute world tiles (e.g. 2800, 3040),
+not region-local coordinates.
+
+Lane sides are scattered procedurally with OSRS tree models: a deterministic
+xorshift RNG (fixed seed `0x5EED9E3779B97F4A`) walks each lane with variable
+spacing (170–470 units), random offsets (4.9–9.8 tiles), random scales and
+occasional clusters and gaps. Species depend on the side of the river: dead
+and dark trees on the dire side, lush green canopy on the radiant side.
+Broken OSRS castle walls and ruin clusters (models 16918, 9233 and 9625) are
+scattered the same way 10.5–15 tiles out. The seed is fixed, so every match
+starts from the identical world. Pocket scenery is never placed within 6.5
+tiles of a lane, so a door or a wall can never end up in the middle of the
+road.
+
+Lanes are **baked into the terrain**, not drawn as a ribbon. The scene
+computes a smooth lane mask with a noise-wobbled edge, stores it in the
+terrain vertex alpha and tints the ground toward the OSRS path colour.
+`scene.wgsl` blends the OSRS dirt and path sprites into the terrain by that
+mask, so the road is seamless with the world and can never z-fight with the
+ground.
 
 ## Future schema
 
@@ -106,3 +176,19 @@ object footprints. Bridge/plane data is kept separate from display meshes.
 - Asset library: searchable cached locs/npcs/models with thumbnails.
 - Procedural generator: seeded FBM height, river, biome splat, scatter rules.
 - Export writes `map.json` + bakes; hot reload lets the client see changes live.
+
+
+## Fog of war
+
+Fog is not authored in the map. The renderer receives the hero position and a
+1500 world unit vision radius every frame and darkens the scene by horizontal
+distance in `scene.wgsl`. The visibility grid (used for unit/projectile
+culling and the minimap) is still built from team line of sight.
+
+
+## Delivery
+
+The storage chest and the Armadylean guard are runtime units spawned by the
+client next to `player_spawn` (chest at +4/+13 tiles, guard at +2.6 tiles).
+They are not authored in `map.json`; only their models are fixed (chest 1249,
+guard 28019).

@@ -13,6 +13,7 @@ pub mod sequence;
 pub mod sprite;
 pub mod store;
 pub mod terrain;
+pub mod texture;
 pub mod xtea;
 
 pub use config::{NpcDefinition, ObjectDefinition, OverlayDefinition, UnderlayDefinition};
@@ -22,7 +23,8 @@ pub use keys::XteaKeys;
 pub use locations::{Location, Locations};
 pub use model::Model;
 pub use reference::IndexData;
-pub use sprite::{SpriteFrame, SpriteSheet};
 pub use sequence::{AnimationClip, Frame, Framemap, Sequence};
+pub use sprite::{RgbaFrame, SpriteDefinition, SpriteFrame, SpriteSheet};
 pub use store::Cache;
 pub use terrain::{Terrain, Tile};
+pub use texture::TextureDefinition;

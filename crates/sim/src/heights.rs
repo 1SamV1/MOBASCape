@@ -181,7 +181,8 @@ impl HeightMap {
     pub fn add_shape(&mut self, triangles: &[[[f32; 3]; 3]], at: (f32, f32), reading: &Reading) {
         // for each cell, for each triangle over it: which way it faces and
         // the lowest and highest it is there
-        let mut seen: HashMap<(i32, i32), Vec<(Facing, i32, i32)>> = HashMap::new();
+        type Seen = HashMap<(i32, i32), Vec<(Facing, i32, i32)>>;
+        let mut seen: Seen = HashMap::new();
         let spacing = self.cell as f32 / 3.0;
 
         for tri in triangles {
@@ -675,6 +676,7 @@ pub fn compare(map: &Grid, from_heights: &Grid) -> Agreement {
 /// champion with a step and a kerb of `low` and a body `high` tall could not
 /// be in from the ground, then close what those cells enclose and add room
 /// for a body, exactly as the walkable map does.
+#[allow(clippy::too_many_arguments)]
 pub fn agreement(
     triangles: &[[[f32; 3]; 3]],
     at: (f32, f32),
