@@ -10,7 +10,7 @@ use glam::{Vec2, Vec3};
 use rift_ui::hud::state::{
     AbilityState, CampState, ChatKind, ChatLine, DamageSource, DeathState, KillFeedEntry,
     LaneState, MapPoint, MinimapState, NexusState, ObjectivesState, PlateKind, ScoreState,
-    ShopItem, ShopState, StructureMark, UnitPlate,
+    ShopItem, ShopState, StructureMark, TooltipState, UnitPlate,
 };
 
 pub fn score(player: &PlayerHud) -> ScoreState {
@@ -290,6 +290,22 @@ fn nexus_state(health: f32, vulnerable: bool) -> String {
     } else {
         "Shielded".to_string()
     }
+}
+
+pub fn tooltip(shop: &ItemShop, mouse: (i32, i32)) -> Option<TooltipState> {
+    if !shop.open {
+        return None;
+    }
+    let item = shop.items.get(shop.selected?)?;
+    let stats = shop_item(item).stats;
+    Some(TooltipState {
+        title: item.name.clone(),
+        price: item.cost,
+        stats,
+        passive: None,
+        text: String::new(),
+        at: mouse,
+    })
 }
 
 pub fn announcement(player: &PlayerHud) -> Option<String> {
@@ -652,5 +668,34 @@ mod tests {
         assert_eq!(death.killer, "A RIVAL CHAMPION");
         assert!(death.damage.is_empty());
         assert!(death_from(None, None).is_none());
+    }
+
+    #[test]
+    fn the_tooltip_follows_the_selected_shop_item_and_cursor() {
+        let item = ItemConfig {
+            id: "test".to_string(),
+            name: "Test ring".to_string(),
+            category: "jewellery".to_string(),
+            color: [1, 2, 3],
+            cost: 900,
+            damage: 0.0,
+            health: 50.0,
+            mana: 0.0,
+            speed: 0.0,
+            ability: 0.0,
+        };
+        let catalog = ItemShop {
+            items: vec![item],
+            owned: [None; 6],
+            open: true,
+            selected: Some(0),
+            category: 0,
+        };
+        let tooltip = tooltip(&catalog, (400, 250)).expect("a tooltip");
+        assert_eq!(tooltip.title, "Test ring");
+        assert_eq!(tooltip.price, 900);
+        assert_eq!(tooltip.stats, ["+50 health"]);
+        assert_eq!(tooltip.at, (400, 250));
+        assert!(tooltip.passive.is_none() && tooltip.text.is_empty());
     }
 }
