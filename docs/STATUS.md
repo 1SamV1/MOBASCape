@@ -1,6 +1,6 @@
 # Status
 
-Last updated: interface stage 3 step 14, 2026-11-20.
+Last updated: interface stage 3 step 15, 2026-11-20.
 
 ## Working
 
@@ -122,14 +122,23 @@ Last updated: interface stage 3 step 14, 2026-11-20.
   bar per damage source and each figure with the total. Unit plates and the
   shop and tooltip are stood down while the sample is dead. The scene is
   dimmed only; drawing the world grey is a later rendering task.
+- Interface stage 3 step 15: the whole interface is assembled and drawn from
+  `sample::whole()`: four feed entries, a long chat line that wraps, every
+  objective line with its second line, an ally dead, the target panel and the
+  largest tooltip, with no shop and no death. The ignored client test writes
+  `target/stage3-whole-1920.ppm`, `stage3-whole-1366.ppm`,
+  `stage3-death-1920.ppm` and `stage3-shop-1920.ppm`. Anchors and differences
+  are listed in `docs/INTERFACE_STAGE3_REVIEW.md`; the old HUD remains the
+  default until the reviewer accepts the new one.
 - Dev demos: `--demo-target`, `--demo-combat`, `--demo-camp`, `--demo-kit`,
   `--demo-shop`, `--champion`, `--timescale`, `--ui-test`,
   `--ui-theme-sheet`, `--ui-layout`, `--ui-scale`.
 
 ## Verified
 
-- `cargo test --workspace`: 192 tests pass, 2 ignored (the optional pictures
-  of the theme sheet and the labelled layout). The 15 new layout tests check
+- `cargo test --workspace`: 193 tests pass, 3 ignored (the optional pictures
+  of the theme sheet, the labelled layout and the assembled interface). The
+  15 new layout tests check
   the 1920 by 1080 rectangles, the collapse at 1280 by 720 and 1366 by
   768, the scale edges, the 953 by 280 minimum, requested scales, 7/8/9 clearance, the objectives'
   target-panel place at a forced scale, the bar and chat widths, the 38%
@@ -182,6 +191,10 @@ Last updated: interface stage 3 step 14, 2026-11-20.
 - Death tests: the 330 by 80 panel centred for three sources and their total;
   the dim covering the window with all content inside at scales 1 to 4; and
   the font-only fallback.
+- Whole-screen tests: `sample::whole()` has every fixed piece at 1920 by 1080
+  with no clashes and no collapse; at 1366 by 768 it takes exactly the two
+  budget steps the plan names (objectives to title, team frames to
+  portraits), and the rectangles are asserted.
 - **Item shop demo**: granted 4000 gold; bought all six items; final title
   `HP 730/730`, `MP 260/260`, `gold 300`, `dmg 45 spd 460`, `items 6/6`,
   ability power 45%.
@@ -195,12 +208,13 @@ Last updated: interface stage 3 step 14, 2026-11-20.
 
 ## Known issues
 
-- Stage 3 is groundwork, not the new HUD: several components are still
-  empty labelled rectangles and the old `hud.rs` remains the default. The
-  theme sheet and labelled layout have only been checked as headless
-  pictures, not yet in the running game on the GPU. The unit plates in
-  `--ui-layout` use sample window fractions; the client's live projection,
-  visibility and the replacement of the old 3D bars are stage 4. The stage 3
+- Stage 3 is assembled, not accepted: the old `hud.rs` remains the default.
+  The theme sheet and layout pictures have only been checked headlessly, not
+  yet in the running game on the GPU. The per-component "sample" marks asked
+  for in plan section 3 are not drawn; the layout header and
+  `docs/INTERFACE_STAGE3_REVIEW.md` identify the sample instead. The unit
+  plates in `--ui-layout` use sample window fractions; the client's live
+  projection, visibility and the replacement of the old 3D bars are stage 4. The stage 3
   inventory draws sample items and gold; its Shop button is inert until
   stage 4. The chat is sample text with no typing and no live match events
   until stage 4. The kill feed draws two sample entries; live kills and the
@@ -234,10 +248,11 @@ Last updated: interface stage 3 step 14, 2026-11-20.
 
 ## Next tasks
 
-1. Run `--ui-theme-sheet` and `--ui-layout` on the GPU, compare them with the
-   reference screenshots, and fix what the eye finds.
-2. Stage 3 step 15: the whole interface together, then the final comparison
-   with S2, S3, S4 and S5.
+1. Run `--ui-theme-sheet` and `--ui-layout` on the GPU, compare the four
+   assembled pictures with the reference screenshots, and accept the new
+   interface or list fixes. Then make it the default.
+2. Stage 4: connect `HudState` to the match, one component at a time, and
+   remove that component's label/sample state.
 3. HUD text/font atlas for the old shop names/costs, gold, HP/MP, level and
    labels until the new components replace it.
 4. Item selling/combining/passives and five champions with distinct kits.

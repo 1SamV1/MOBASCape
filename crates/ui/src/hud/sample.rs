@@ -13,6 +13,74 @@ pub fn state() -> HudState {
     state_for((1920, 1080))
 }
 
+/// The whole interface in the state that strains it: four feed entries, a
+/// long chat line, every objective line with its second line, an ally dead,
+/// the target open and the largest tooltip. No shop and no death, so every
+/// fixed component is on screen at once.
+pub fn whole() -> HudState {
+    whole_for((1920, 1080))
+}
+
+pub fn whole_for(window: (u32, u32)) -> HudState {
+    let mut state = state_for(window);
+    state.death = None;
+    state.shop.open = false;
+    state.feed = vec![
+        KillFeedEntry {
+            killer: "Jad".to_string(),
+            victim: "Kree".to_string(),
+            gold: 300,
+            killer_blue: true,
+            victim_blue: false,
+        },
+        KillFeedEntry {
+            killer: "Kree".to_string(),
+            victim: "Jad".to_string(),
+            gold: 274,
+            killer_blue: false,
+            victim_blue: true,
+        },
+        KillFeedEntry {
+            killer: "Jad".to_string(),
+            victim: "Monkey".to_string(),
+            gold: 250,
+            killer_blue: true,
+            victim_blue: false,
+        },
+        KillFeedEntry {
+            killer: "Monkey".to_string(),
+            victim: "Jad".to_string(),
+            gold: 180,
+            killer_blue: false,
+            victim_blue: true,
+        },
+    ];
+    let long = ChatLine {
+        kind: ChatKind::Player {
+            speaker: "Ava".to_string(),
+            hero: "Monkey".to_string(),
+            blue: true,
+        },
+        text: "the whole bottom lane is pushing past the river and the inhibitor is open, so rotate now and take the free tower before they group."
+            .to_string(),
+    };
+    let at = state.chat.len().saturating_sub(1);
+    state.chat.insert(at, long);
+    state.tooltip = Some(TooltipState {
+        title: "Berserker ring".to_string(),
+        price: 700,
+        stats: vec!["+8 damage".to_string(), "+15% ability power".to_string()],
+        passive: Some("Berserk".to_string()),
+        text: "Every fourth strike deals 15% more damage. The bearer also gains 2% movement speed for 3 seconds, and the effect refreshes on a champion takedown."
+            .to_string(),
+        at: (
+            (window.0 * 3 / 5) as i32,
+            (window.1 * 28 / 100) as i32,
+        ),
+    });
+    state
+}
+
 /// The sample at this window's size. Stage 3 has no live units, so the unit
 /// plates' positions are made up, as every other value is; they are placed
 /// in fractions of the window only so that the sample looks like the

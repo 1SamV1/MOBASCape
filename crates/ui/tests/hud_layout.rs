@@ -81,6 +81,40 @@ fn the_1920_by_1080_rectangles_match_the_plan() {
 }
 
 #[test]
+fn the_whole_sample_fits_at_1920_and_gives_way_as_the_plan_says_at_1366() {
+    let state = sample::whole();
+    let wide = place(&state, (1920, 1080), None);
+    assert_eq!(wide.scale, 1);
+    assert!(wide.conflicts.is_empty(), "{:?}", wide.conflicts);
+    assert!(wide.steps.is_empty(), "{:?}", wide.steps);
+    for piece in [
+        Piece::Score,
+        Piece::Feed,
+        Piece::Team,
+        Piece::Target,
+        Piece::Objectives,
+        Piece::Chat,
+        Piece::Ability,
+        Piece::Inventory,
+        Piece::Minimap,
+    ] {
+        assert!(wide.get(piece).is_some(), "{} missing", piece.name());
+    }
+
+    let small = place(&state, (1366, 768), None);
+    assert!(small.conflicts.is_empty(), "{:?}", small.conflicts);
+    assert_eq!(
+        small.steps,
+        [
+            "objectives to its title (budget)",
+            "team frames to portraits (budget)",
+        ]
+    );
+    assert_eq!(rect(&small, Piece::Objectives), Rect::new(8, 292, 272, 24));
+    assert_eq!(rect(&small, Piece::Team), Rect::new(1294, 168, 60, 188));
+}
+
+#[test]
 fn the_game_sample_gives_way_at_the_sizes_the_plan_lists() {
     let state = sample::state();
     let wide = place(&state, (1920, 1080), None);

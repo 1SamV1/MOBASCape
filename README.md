@@ -4,7 +4,7 @@ A 5v5 MOBA built on a custom Rust engine, using modern Old School RuneScape
 cache assets for its visual identity. Server-authoritative, data-driven, and
 designed for fast-paced low-team-count matches.
 
-> Status: **M4.0 item shop, interface stage 3 steps A, B and 1 through 14**. The cache
+> Status: **M4.0 item shop, interface stage 3 steps A, B and 1 through 15**. The cache
 > reader, terrain/location/model/sequence decoders, animated NPCs, a 3x3
 > Karamja block, A* pathfinding with collision, hold-to-steer, a screen-space
 > HUD, auto-attacks, a Q/W/E/R kit with mana/cooldowns/XP/gold, three
@@ -15,8 +15,8 @@ designed for fast-paced low-team-count matches.
 > theme sheet, the pure placing/collapse pass, and drawn score strip,
 > ability bar, minimap, objectives, team frames, target panel, unit plates,
 > inventory, chat, kill feed, announcements, tooltip, shop and death
-> overlay; the other components are still labelled rectangles and the old
-> HUD remains the default. There is no networking yet.
+> overlay, assembled whole; the old HUD remains the default and the review
+> sheet is waiting for the reviewer's eye. There is no networking yet.
 > See [docs/STATUS.md](docs/STATUS.md).
 
 ## What exists
@@ -39,6 +39,8 @@ designed for fast-paced low-team-count matches.
   item shop/inventory, live minimap, click-to-move + hold-to-steer, HUD,
   auto-attacks, Q
 - `data/maps/karamja_rift/map.json` — lanes, structures, camps, wave timing
+- `docs/INTERFACE_STAGE3_REVIEW.md` — the assembled interface's anchors and
+  differences for the reviewer
 - `docs/reference` — archived Java-era experiments (not built)
 
 ## Requirements

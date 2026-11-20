@@ -337,4 +337,59 @@ mod tests {
             placed.steps
         );
     }
+
+    /// The assembled interface in the states step 15 compares: the strained
+    /// whole at 1920 by 1080 and 1366 by 768, the death screen and the shop.
+    /// Ignored by default because it writes pictures.
+    #[test]
+    #[ignore = "writes pictures of the assembled interface for the eye"]
+    fn the_whole_stage_three_can_be_written_for_the_eye() {
+        let Some((root, theme)) = pinned_theme() else {
+            eprintln!("no pinned cache; nothing to draw");
+            return;
+        };
+        let write = |name: &str, w: usize, h: usize, list: rift_ui::DrawList| {
+            let (vertices, indices) = list.finish();
+            let mut pixels = vec![[24u8, 24, 30, 255]; w * h];
+            rift_ui::raster::render(&vertices, &indices, &theme.atlas, w, h, &mut pixels);
+            let mut ppm = format!("P6\n{w} {h}\n255\n").into_bytes();
+            for pixel in pixels {
+                ppm.extend_from_slice(&pixel[..3]);
+            }
+            let path = root.join(format!("target/{name}.ppm"));
+            std::fs::write(&path, ppm).expect("write the interface picture");
+            path
+        };
+
+        for (name, window) in [
+            ("stage3-whole-1920", (1920u32, 1080u32)),
+            ("stage3-whole-1366", (1366, 768)),
+        ] {
+            let state = rift_ui::hud::sample::whole_for(window);
+            let placed = rift_ui::hud::place(&state, window, None);
+            let list = rift_ui::hud::stage3::build(&theme, &placed, &state);
+            let path = write(name, window.0 as usize, window.1 as usize, list);
+            eprintln!(
+                "{}: scale {}, usual {:.1}%, steps {:?}",
+                path.display(),
+                placed.scale,
+                placed.usual_coverage * 100.0,
+                placed.steps
+            );
+        }
+
+        let state = rift_ui::hud::sample::state();
+        let placed = rift_ui::hud::place(&state, (1920, 1080), None);
+        let list = rift_ui::hud::stage3::build(&theme, &placed, &state);
+        let path = write("stage3-death-1920", 1920, 1080, list);
+        eprintln!("{}: death state", path.display());
+
+        let mut state = rift_ui::hud::sample::whole_for((1920, 1080));
+        state.shop.open = true;
+        state.tooltip = None;
+        let placed = rift_ui::hud::place(&state, (1920, 1080), None);
+        let list = rift_ui::hud::stage3::build(&theme, &placed, &state);
+        let path = write("stage3-shop-1920", 1920, 1080, list);
+        eprintln!("{}: shop state", path.display());
+    }
 }
