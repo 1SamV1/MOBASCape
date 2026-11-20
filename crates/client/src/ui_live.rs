@@ -8,9 +8,9 @@ use crate::items::{CATEGORY_LABELS, ItemConfig, ItemShop};
 use crate::scene::{CampBuff, SceneData};
 use glam::{Vec2, Vec3};
 use rift_ui::hud::state::{
-    AbilityState, CampState, ChatKind, ChatLine, KillFeedEntry, LaneState, MapPoint, MinimapState,
-    NexusState, ObjectivesState, PlateKind, ScoreState, ShopItem, ShopState, StructureMark,
-    UnitPlate,
+    AbilityState, CampState, ChatKind, ChatLine, DeathState, KillFeedEntry, LaneState, MapPoint,
+    MinimapState, NexusState, ObjectivesState, PlateKind, ScoreState, ShopItem, ShopState,
+    StructureMark, UnitPlate,
 };
 
 pub fn score(player: &PlayerHud) -> ScoreState {
@@ -290,6 +290,29 @@ fn nexus_state(health: f32, vulnerable: bool) -> String {
     } else {
         "Shielded".to_string()
     }
+}
+
+pub fn announcement(player: &PlayerHud) -> Option<String> {
+    player.announcement.clone()
+}
+
+pub fn death(player: &PlayerHud) -> Option<DeathState> {
+    death_from(player.respawn_remaining, player.announcement.as_deref())
+}
+
+/// The respawn count and killer are live; the damage breakdown is not
+/// recorded by the match yet, so that panel is omitted.
+pub fn death_from(respawn: Option<f32>, announcement: Option<&str>) -> Option<DeathState> {
+    let seconds = respawn?;
+    let killer = announcement
+        .and_then(|text| text.strip_prefix("YOU HAVE BEEN SLAIN BY "))
+        .unwrap_or("The Rift");
+    Some(DeathState {
+        respawn_seconds: seconds.max(0.0).ceil() as u32,
+        killer: killer.to_string(),
+        killer_blue: false,
+        damage: Vec::new(),
+    })
 }
 
 pub fn shop(shop: &ItemShop) -> ShopState {
@@ -613,5 +636,15 @@ mod tests {
         assert_eq!(state.category, "WEAPONS");
         assert_eq!(state.items.len(), 1);
         assert_eq!(state.selected, 0);
+    }
+
+    #[test]
+    fn the_death_overlay_reads_respawn_and_killer() {
+        let death = death_from(Some(3.2), Some("YOU HAVE BEEN SLAIN BY A RIVAL CHAMPION"))
+            .expect("a death state");
+        assert_eq!(death.respawn_seconds, 4);
+        assert_eq!(death.killer, "A RIVAL CHAMPION");
+        assert!(death.damage.is_empty());
+        assert!(death_from(None, None).is_none());
     }
 }

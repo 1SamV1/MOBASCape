@@ -23,25 +23,27 @@ Last updated: interface stage 3 assembled on top of M5.6, 2026-11-20.
   `target/stage3-whole-1366.ppm`, `target/stage3-death-1920.ppm` and
   `target/stage3-shop-1920.ppm`, written by an ignored client test.
 - Stage 4 has started with the score strip, ability bar, minimap, objectives,
-  unit plates, chat, kill feed and shop: `--ui-live` draws the assembled
-  interface with the clock, both teams' kills, the player's K/D/A and creep
-  score, health, resource, level, experience and cooldowns from `PlayerHud`;
-  the live lanes, river, unit dots, structures, camps and camera box on the
-  minimap; the lane tower/inhibitor pips, nexus states and camp timers in
-  the objectives panel; the already-projected hero, minion and structure
-  plates over the battlefield; the match event log and recent kills; and the
-  shop categories, filtered items, prices, stats and selection. Neutral camp
-  plates stay with the old HUD. The feed only carries allied kills, and its
-  gold is derived from the victim type because the match does not record
-  per-kill gold. The shop overlay is display-only for now: buying stays in
-  the old HUD. The other components still use the stage 3 sample until their
-  own bridges are added; team frames wait for allied champions beyond the
-  player. The conversions are in `crates/client/src/ui_live.rs` and are unit
-  tested.
-- Verified: `cargo test --workspace` 242 tests pass, 3 ignored; the client
+  unit plates, chat, kill feed, shop, announcements and death overlay:
+  `--ui-live` draws the assembled interface with the clock, both teams'
+  kills, the player's K/D/A and creep score, health, resource, level,
+  experience and cooldowns from `PlayerHud`; the live lanes, river, unit
+  dots, structures, camps and camera box on the minimap; the lane
+  tower/inhibitor pips, nexus states and camp timers in the objectives
+  panel; the already-projected hero, minion and structure plates over the
+  battlefield; the match event log, recent kills, announcements and the
+  respawn/killer death lines. Neutral camp plates stay with the old HUD. The
+  feed only carries allied kills, and its gold is derived from the victim
+  type because the match does not record per-kill gold. The death damage
+  breakdown is omitted because the match does not record it yet; the dim,
+  death line and respawn count are live. The shop overlay is display-only
+  for now: buying stays in the old HUD. The other components still use the
+  stage 3 sample until their own bridges are added; team frames wait for
+  allied champions beyond the player. The conversions are in
+  `crates/client/src/ui_live.rs` and are unit tested.
+- Verified: `cargo test --workspace` 243 tests pass, 3 ignored; the client
   and tools build; the stage 3 layout tests, live score/ability/minimap/
-  objectives/plates/chat/shop tests, sim battle tests and cache decoders all
-  run.
+  objectives/plates/chat/shop/announcement/death tests, sim battle tests and
+  cache decoders all run.
 
 
 ## 2026-11-19 — Lane readability
