@@ -1,14 +1,16 @@
-//! Stage 4's first live bridge: the score strip's slice of `HudState` from
-//! the running match. Every other component still uses the stage 3 sample
-//! until its own bridge is added.
+//! Stage 4's live bridges: slices of `HudState` read from the running match.
+//! Each component still falls back to the stage 3 sample until its own
+//! bridge is added.
 
 use crate::animated::{AnimatedScene, UnitKind};
 use crate::hud::{PlayerHud, UnitFrame};
+use crate::items::{CATEGORY_LABELS, ItemConfig, ItemShop};
 use crate::scene::{CampBuff, SceneData};
 use glam::{Vec2, Vec3};
 use rift_ui::hud::state::{
     AbilityState, CampState, ChatKind, ChatLine, KillFeedEntry, LaneState, MapPoint, MinimapState,
-    NexusState, ObjectivesState, PlateKind, ScoreState, StructureMark, UnitPlate,
+    NexusState, ObjectivesState, PlateKind, ScoreState, ShopItem, ShopState, StructureMark,
+    UnitPlate,
 };
 
 pub fn score(player: &PlayerHud) -> ScoreState {
@@ -290,6 +292,57 @@ fn nexus_state(health: f32, vulnerable: bool) -> String {
     }
 }
 
+pub fn shop(shop: &ItemShop) -> ShopState {
+    let filtered = shop.filtered_items();
+    let items = filtered
+        .iter()
+        .map(|&index| shop_item(&shop.items[index]))
+        .collect();
+    let selected = shop
+        .selected
+        .and_then(|wanted| filtered.iter().position(|&index| index == wanted))
+        .unwrap_or(0);
+    ShopState {
+        open: shop.open,
+        category: CATEGORY_LABELS
+            .get(shop.category)
+            .copied()
+            .unwrap_or("ALL")
+            .to_string(),
+        search: "Search items".to_string(),
+        items,
+        selected,
+        scroll: 0,
+        hint: "Buying stays in the old HUD for now.".to_string(),
+    }
+}
+
+pub fn shop_item(item: &ItemConfig) -> ShopItem {
+    let mut stats = Vec::new();
+    if item.damage != 0.0 {
+        stats.push(format!("+{:.0} damage", item.damage));
+    }
+    if item.health != 0.0 {
+        stats.push(format!("+{:.0} health", item.health));
+    }
+    if item.mana != 0.0 {
+        stats.push(format!("+{:.0} mana", item.mana));
+    }
+    if item.speed != 0.0 {
+        stats.push(format!("+{:.0} speed", item.speed));
+    }
+    if item.ability != 0.0 {
+        stats.push(format!("+{:.0}% ability power", item.ability));
+    }
+    ShopItem {
+        name: item.name.clone(),
+        price: item.cost,
+        colour: item.color,
+        stats,
+        builds_into: None,
+    }
+}
+
 pub fn chat(player: &PlayerHud) -> Vec<ChatLine> {
     chat_lines(&player.events)
 }
@@ -526,5 +579,39 @@ mod tests {
         assert_eq!(structure.killer, "A TOWER");
         assert_eq!(structure.victim, "A MINION");
         assert_eq!(structure.gold, 10);
+    }
+
+    #[test]
+    fn the_shop_reads_its_filtered_items_and_chosen_index() {
+        let item = ItemConfig {
+            id: "test".to_string(),
+            name: "Test blade".to_string(),
+            category: "weapon".to_string(),
+            color: [10, 20, 30],
+            cost: 700,
+            damage: 8.0,
+            health: 0.0,
+            mana: 0.0,
+            speed: 0.0,
+            ability: 15.0,
+        };
+        let converted = shop_item(&item);
+        assert_eq!(converted.name, "Test blade");
+        assert_eq!(converted.price, 700);
+        assert_eq!(converted.colour, [10, 20, 30]);
+        assert_eq!(converted.stats, ["+8 damage", "+15% ability power"]);
+
+        let catalog = ItemShop {
+            items: vec![item],
+            owned: [None; 6],
+            open: true,
+            selected: Some(0),
+            category: 1,
+        };
+        let state = shop(&catalog);
+        assert!(state.open);
+        assert_eq!(state.category, "WEAPONS");
+        assert_eq!(state.items.len(), 1);
+        assert_eq!(state.selected, 0);
     }
 }
