@@ -1,6 +1,6 @@
 # Status
 
-Last updated: interface stage 3 step 8, 2026-11-19.
+Last updated: interface stage 3 step 9, 2026-11-19.
 
 ## Working
 
@@ -90,13 +90,19 @@ Last updated: interface stage 3 step 8, 2026-11-19.
   three numbered empty, the gold pile and count, and a Shop button. It is
   drawn only when the placing pass shows it, so the narrow-window collapse
   takes it away with the rest of the bottom row.
+- Interface stage 3 step 9: the chat and event log is drawn in
+  `--ui-layout`: parchment, six wrapped sample lines with system lines dark,
+  match events blue and player names in their team colour with the hero in
+  brackets, a scrollbar and the All/Game/Public tabs. When the placing pass
+  cuts the chat to its last line, only that line is drawn. The drawing layer
+  gains a pure paragraph wrap in `crates/ui/src/wrap.rs`.
 - Dev demos: `--demo-target`, `--demo-combat`, `--demo-camp`, `--demo-kit`,
   `--demo-shop`, `--champion`, `--timescale`, `--ui-test`,
   `--ui-theme-sheet`, `--ui-layout`, `--ui-scale`.
 
 ## Verified
 
-- `cargo test --workspace`: 162 tests pass, 2 ignored (the optional pictures
+- `cargo test --workspace`: 171 tests pass, 2 ignored (the optional pictures
   of the theme sheet and the labelled layout). The 15 new layout tests check
   the 1920 by 1080 rectangles, the collapse at 1280 by 720 and 1366 by
   768, the scale edges, the 953 by 280 minimum, requested scales, 7/8/9 clearance, the objectives'
@@ -108,7 +114,7 @@ Last updated: interface stage 3 step 8, 2026-11-19.
 - Stage 3 labelled layout: written headlessly to `target/layout-1920.ppm` at
   1920 by 1080, scale 1, usual coverage 16.5%, no clashes and no steps; the
   score strip, ability bar, minimap, objectives, team frames, target panel,
-  unit plates and inventory in it are the real components, the rest are
+  unit plates, inventory and chat in it are the real components, the rest are
   labelled rectangles.
 - Score strip tests: within its rectangle at scales 1 to 4; no pixel outside
   the rectangle; a theme with only a font still draws panel fallback and
@@ -130,6 +136,10 @@ Last updated: interface stage 3 step 8, 2026-11-19.
   draws the fallback.
 - Inventory tests: containment at scales 1 to 4; no pixel outside the
   rectangle; a theme with only fonts still draws the fallback.
+- Chat tests: full and last-line containment at scales 1 to 4; no pixel
+  outside the rectangle; a theme with only fonts still draws the fallback.
+  The wrap tests cover words at the last fitting space, a word broken between
+  characters, empty text, exactly the width and a zero width.
 - **Item shop demo**: granted 4000 gold; bought all six items; final title
   `HP 730/730`, `MP 260/260`, `gold 300`, `dmg 45 spd 460`, `items 6/6`,
   ability power 45%.
@@ -150,7 +160,8 @@ Last updated: interface stage 3 step 8, 2026-11-19.
   `--ui-layout` use sample window fractions; the client's live projection,
   visibility and the replacement of the old 3D bars are stage 4. The stage 3
   inventory draws sample items and gold; its Shop button is inert until
-  stage 4.
+  stage 4. The chat is sample text with no typing and no live match events
+  until stage 4.
 - Sprite names on the theme sheet are shortened (`icon.` and `map.dot.` are
   omitted) to fit; the full role names are in the theme file and the load log.
 - Item purchases are client-side in this prototype. The authoritative server
@@ -176,7 +187,7 @@ Last updated: interface stage 3 step 8, 2026-11-19.
 
 1. Run `--ui-theme-sheet` and `--ui-layout` on the GPU, compare them with the
    reference screenshots, and fix what the eye finds.
-2. Stage 3 step 9: chat, then kill feed, announcements, tooltip, shop,
+2. Stage 3 step 10: the kill feed, then announcements, tooltip, shop,
    death screen, and the whole together.
 3. HUD text/font atlas for the old shop names/costs, gold, HP/MP, level and
    labels until the new components replace it.

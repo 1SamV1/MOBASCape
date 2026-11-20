@@ -126,6 +126,26 @@ pub struct InventoryItem {
     pub colour: [u8; 3],
 }
 
+/// Who a chat line comes from, which decides its colours: a system line is
+/// dark on the parchment, a match event is blue, and a player's name takes
+/// their team's colour with their hero in brackets.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ChatKind {
+    System,
+    Event,
+    Player {
+        speaker: String,
+        hero: String,
+        blue: bool,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ChatLine {
+    pub kind: ChatKind,
+    pub text: String,
+}
+
 /// What kind of unit a plate belongs to. The three kinds draw at different
 /// sizes: heroes carry a name, level and bar, minions a thin bar, structures
 /// a wider one.
@@ -163,7 +183,7 @@ pub struct HudState {
     pub target: Option<TargetState>,
     pub inventory: Vec<Option<InventoryItem>>,
     pub gold: u32,
-    pub chat: Vec<String>,
+    pub chat: Vec<ChatLine>,
     pub feed: Vec<KillFeedEntry>,
     pub announcement: Option<String>,
     pub tooltip: Option<String>,

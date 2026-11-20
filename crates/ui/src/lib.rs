@@ -20,6 +20,7 @@ pub mod scale;
 pub mod test_screen;
 pub mod theme;
 pub mod theme_sheet;
+pub mod wrap;
 
 pub use atlas::{Atlas, Image, Region};
 pub use draw::{DrawList, Rect, Vertex};

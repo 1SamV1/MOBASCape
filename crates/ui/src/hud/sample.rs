@@ -3,9 +3,9 @@
 //! component reads the match until stage 4.
 
 use crate::hud::state::{
-    AbilityState, AllyState, CampState, HudState, InventoryItem, KillFeedEntry, LaneState,
-    MapPoint, MinimapState, NexusState, ObjectivesState, PlateKind, ScoreState, StructureMark,
-    TargetStat, TargetState, UnitPlate,
+    AbilityState, AllyState, CampState, ChatKind, ChatLine, HudState, InventoryItem, KillFeedEntry,
+    LaneState, MapPoint, MinimapState, NexusState, ObjectivesState, PlateKind, ScoreState,
+    StructureMark, TargetStat, TargetState, UnitPlate,
 };
 
 pub fn state() -> HudState {
@@ -282,12 +282,42 @@ fn base() -> HudState {
         ],
         gold: 1240,
         chat: vec![
-            "Welcome to the Rift.".to_string(),
-            "Monkey: top is pushed.".to_string(),
-            "Jad: rotating to mid.".to_string(),
-            "Game: blue team took a tower.".to_string(),
-            "Kree: need two more for drake.".to_string(),
-            "Press Enter to Chat".to_string(),
+            ChatLine {
+                kind: ChatKind::System,
+                text: "Welcome to the Rift.".to_string(),
+            },
+            ChatLine {
+                kind: ChatKind::Player {
+                    speaker: "Ava".to_string(),
+                    hero: "Monkey".to_string(),
+                    blue: true,
+                },
+                text: "top is pushed.".to_string(),
+            },
+            ChatLine {
+                kind: ChatKind::Player {
+                    speaker: "Rex".to_string(),
+                    hero: "Jad".to_string(),
+                    blue: true,
+                },
+                text: "rotating to mid.".to_string(),
+            },
+            ChatLine {
+                kind: ChatKind::Event,
+                text: "Blue team took a tower.".to_string(),
+            },
+            ChatLine {
+                kind: ChatKind::Player {
+                    speaker: "Kai".to_string(),
+                    hero: "Kree".to_string(),
+                    blue: false,
+                },
+                text: "need two more for drake.".to_string(),
+            },
+            ChatLine {
+                kind: ChatKind::System,
+                text: "Press Enter to Chat".to_string(),
+            },
         ],
         feed: vec![
             KillFeedEntry {
