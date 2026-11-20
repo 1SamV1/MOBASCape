@@ -154,6 +154,9 @@ struct Cli {
     /// Champion index to start spectating (dev verification).
     #[arg(long)]
     spectate_index: Option<usize>,
+    /// Dev: kill the player after one second to verify the respawn overlay.
+    #[arg(long)]
+    demo_death: bool,
 }
 
 fn main() -> Result<()> {
@@ -346,6 +349,8 @@ fn main() -> Result<()> {
         demo_shop: cli.demo_shop,
         demo_shop_timer: 0.0,
         demo_shop_stage: 0,
+        demo_death: cli.demo_death,
+        demo_death_timer: 0.0,
         demo_base: cli.demo_base,
         demo_base_timer: 0.0,
         demo_base_stage: 0,
@@ -445,6 +450,8 @@ struct App {
     demo_shop: bool,
     demo_shop_timer: f32,
     demo_shop_stage: u8,
+    demo_death: bool,
+    demo_death_timer: f32,
     demo_base: bool,
     demo_base_timer: f32,
     demo_base_stage: u8,
@@ -930,6 +937,16 @@ impl App {
                     );
                 }
                 self.demo_shop = false;
+            }
+        }
+
+        if self.demo_death {
+            self.demo_death_timer += dt;
+            if self.demo_death_timer >= 1.0 {
+                if let Some(animated) = self.animated.as_mut() {
+                    animated.demo_kill_player();
+                }
+                self.demo_death = false;
             }
         }
 
@@ -1670,6 +1687,10 @@ impl App {
                         team: unit.team,
                     })
                 }),
+                respawn_remaining: {
+                    let player = &animated.units[animated.player_index];
+                    (player.health <= 0.0).then_some(player.dead_timer.max(0.0))
+                },
                 announcement: animated.announcement.as_ref().map(|(text, _)| text.clone()),
                 kill_feed: animated
                     .kill_feed

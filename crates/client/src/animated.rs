@@ -966,6 +966,19 @@ impl AnimatedScene {
         Ok(animated)
     }
 
+    /// Dev hook: kill the local player so the respawn HUD can be inspected.
+    pub fn demo_kill_player(&mut self) {
+        let pi = self.player_index;
+        let player = &mut self.units[pi];
+        player.health = 0.0;
+        player.dead_timer = PLAYER_RESPAWN;
+        player.path.clear();
+        player.path_index = 0;
+        player.attack_pending = false;
+        player.attack_target = None;
+        self.announcement = Some(("YOU HAVE BEEN SLAIN".to_string(), 3.0));
+    }
+
     /// Pop the reference client's combat feedback: floating numbers, a kill
     /// announcement, a kill feed and a minimap ping. Used by `--demo-fx`.
     pub fn demo_fx(&mut self) {

@@ -39,6 +39,8 @@ Goal: the match is a deterministic, headless, testable state machine.
 - **Focus correction:** the client-side sim overlay and standalone 3D arena
   were removed; they pulled attention away from the real match. Spectator
   mode is now a camera swap over the main game's champions (`V`, `Z`/`X`).
+- **Core-loop feedback:** last-hit `+NG` gold floats and a proper death /
+  respawn overlay (countdown, hidden ability and inventory HUD, `--demo-death`).
 - Remaining M7 work stays headless: keep the sim and CLI as the server spine,
   and defer client migration until the core game loop is satisfying.
 - `crates/bots`: scripted dev bots that can finish a match headless.

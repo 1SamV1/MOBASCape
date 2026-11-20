@@ -1,6 +1,23 @@
 # Status
 
-Last updated: main-game spectator cameras, 2026-11-19.
+Last updated: main-game spectator + core-loop feedback, 2026-11-19.
+
+## 2026-11-19 — Core-loop feedback: deaths and rewards
+
+- Last-hit gold is now visible: every player kill pushes a `+NG` float above
+  the victim (minion, camp, tower, inhibitor, champion, nexus), on top of the
+  existing damage numbers and kill feed.
+- Added a proper death state to the HUD: dimmed screen, `YOU HAVE BEEN SLAIN`,
+  a live `RESPAWNING IN N` countdown fed from the player's respawn timer, and
+  `THE FOUNTAIN AWAITS`.
+- While dead, the player's ability bar, inventory, shop/deliver buttons, health
+  orbs and hero profile card are hidden; the duplicate centre announcement is
+  suppressed so the death card owns the screen.
+- `--demo-death` kills the player after one second so the overlay can be
+  inspected without relying on a random fight.
+- Verified captures: `/tmp/opencode/death_overlay2.png`,
+  `/tmp/opencode/gold_camp.png`; client benchmark back to **p50 16.7 ms**
+  (~60 fps), tests 61, clippy clean.
 
 ## 2026-11-19 — Focus correction: main-game spectator
 

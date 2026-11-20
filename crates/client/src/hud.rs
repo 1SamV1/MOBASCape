@@ -145,6 +145,8 @@ pub struct PlayerHud {
     /// Red screen-edge flash while the player is taking damage.
     pub damage_flash: f32,
     pub spectator: Option<SpectatorInfo>,
+    /// Seconds until the local player respawns, when dead.
+    pub respawn_remaining: Option<f32>,
     /// Centre-screen announcement, e.g. "YOU HAVE SLAIN A MINION!".
     pub announcement: Option<String>,
     /// Recent kill messages shown under the roster.
@@ -587,6 +589,8 @@ impl Hud {
         self.vertices.clear();
         self.indices.clear();
         let spectating = player.spectator.is_some();
+        let dead = player.respawn_remaining.is_some();
+        let hide_player_hud = spectating || dead;
         let mouse_x = mouse.0 as f32;
         let mouse_y = mouse.1 as f32;
 
@@ -733,7 +737,7 @@ impl Hud {
             );
         }
 
-        if !spectating {
+        if !hide_player_hud {
             // Hero profile card above the minimap: portrait, name, level and
             // health so you can see who the marker on the map is.
             if let Some(hero) = player.heroes.first() {
@@ -887,7 +891,38 @@ impl Hud {
             );
         }
 
-        if !spectating {
+        if let Some(remaining) = player.respawn_remaining {
+            self.quad_alpha(width, height, 0.0, 0.0, width, height, [0, 0, 0], 0.30);
+            self.text_centered(
+                width,
+                height,
+                width * 0.5,
+                height * 0.30,
+                2.8,
+                "YOU HAVE BEEN SLAIN",
+                [255, 90, 80],
+            );
+            self.text_centered(
+                width,
+                height,
+                width * 0.5,
+                height * 0.30 + 44.0,
+                1.35,
+                &format!("RESPAWNING IN {:.0}", remaining.ceil()),
+                [245, 235, 220],
+            );
+            self.text_centered(
+                width,
+                height,
+                width * 0.5,
+                height * 0.30 + 68.0,
+                0.8,
+                "THE FOUNTAIN AWAITS",
+                [190, 190, 200],
+            );
+        }
+
+        if !hide_player_hud {
             // Four ability boxes, bottom-centre.
             let box_size = 58.0;
             let gap = 8.0;
@@ -1073,16 +1108,19 @@ impl Hud {
         }
 
         // Centre-screen announcement, like the reference client's kill shout.
-        if let Some(announcement) = player.announcement.as_deref() {
-            self.text_centered(
-                width,
-                height,
-                width * 0.5,
-                height * 0.30,
-                1.4,
-                announcement,
-                OSRS_YELLOW,
-            );
+        // The death overlay already owns the screen when the player is dead.
+        if !dead {
+            if let Some(announcement) = player.announcement.as_deref() {
+                self.text_centered(
+                    width,
+                    height,
+                    width * 0.5,
+                    height * 0.30,
+                    1.4,
+                    announcement,
+                    OSRS_YELLOW,
+                );
+            }
         }
 
         // Kill feed under the roster panel.
@@ -1597,7 +1635,7 @@ impl Hud {
             }
         }
 
-        if !spectating {
+        if !hide_player_hud {
             // Buff indicator sits just above the bottom health bars; the
             // reference client keeps the top-left corner clear for the scoreboard.
             if let Some((remaining, duration, color)) = player.buff {
