@@ -126,6 +126,30 @@ pub struct InventoryItem {
     pub colour: [u8; 3],
 }
 
+/// What kind of unit a plate belongs to. The three kinds draw at different
+/// sizes: heroes carry a name, level and bar, minions a thin bar, structures
+/// a wider one.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PlateKind {
+    Hero,
+    Minion,
+    Structure,
+}
+
+/// One unit plate, already placed in window pixels by the client's
+/// projection. `at` is the unit's head; the plate is drawn above it. The
+/// interface draws a plate where it is told and never places one.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UnitPlate {
+    pub at: (i32, i32),
+    pub kind: PlateKind,
+    pub name: String,
+    pub level: u8,
+    pub health: u32,
+    pub max_health: u32,
+    pub blue: bool,
+}
+
 /// Everything the interface shows, as plain data. The component slices are
 /// kept together here so the client has one thing to fill, not a dozen.
 #[derive(Debug, Clone, PartialEq)]
@@ -135,6 +159,7 @@ pub struct HudState {
     pub minimap: MinimapState,
     pub objectives: ObjectivesState,
     pub allies: Vec<AllyState>,
+    pub plates: Vec<UnitPlate>,
     pub target: Option<TargetState>,
     pub inventory: Vec<Option<InventoryItem>>,
     pub gold: u32,

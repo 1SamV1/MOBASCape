@@ -4,11 +4,25 @@
 
 use crate::hud::state::{
     AbilityState, AllyState, CampState, HudState, InventoryItem, KillFeedEntry, LaneState,
-    MapPoint, MinimapState, NexusState, ObjectivesState, ScoreState, StructureMark, TargetStat,
-    TargetState,
+    MapPoint, MinimapState, NexusState, ObjectivesState, PlateKind, ScoreState, StructureMark,
+    TargetStat, TargetState, UnitPlate,
 };
 
 pub fn state() -> HudState {
+    state_for((1920, 1080))
+}
+
+/// The sample at this window's size. Stage 3 has no live units, so the unit
+/// plates' positions are made up, as every other value is; they are placed
+/// in fractions of the window only so that the sample looks like the
+/// reference at any size the layout screen is run at.
+pub fn state_for(window: (u32, u32)) -> HudState {
+    let mut state = base();
+    state.plates = plates(window);
+    state
+}
+
+fn base() -> HudState {
     HudState {
         score: ScoreState {
             clock: "12:34".to_string(),
@@ -206,6 +220,7 @@ pub fn state() -> HudState {
                 respawn_seconds: None,
             },
         ],
+        plates: Vec::new(),
         target: Some(TargetState {
             name: "Top outer statue".to_string(),
             kind: "Structure".to_string(),
@@ -290,5 +305,108 @@ pub fn state() -> HudState {
         ],
         announcement: Some("Giant Mole has appeared!".to_string()),
         tooltip: Some("Berserker ring: +8 damage".to_string()),
+    }
+}
+
+/// Made-up unit plates at fractions of this window, drawn in the order they
+/// are listed: minions under structures under heroes.
+fn plates(window: (u32, u32)) -> Vec<UnitPlate> {
+    let x = |f: f32| (window.0 as f32 * f).round() as i32;
+    let y = |f: f32| (window.1 as f32 * f).round() as i32;
+    let at = |fx: f32, fy: f32| (x(fx), y(fy));
+    vec![
+        plate(
+            at(0.450, 0.610),
+            PlateKind::Minion,
+            "Blue melee",
+            1,
+            55,
+            55,
+            true,
+        ),
+        plate(
+            at(0.475, 0.620),
+            PlateKind::Minion,
+            "Blue melee",
+            1,
+            41,
+            55,
+            true,
+        ),
+        plate(
+            at(0.530, 0.600),
+            PlateKind::Minion,
+            "Red melee",
+            1,
+            55,
+            55,
+            false,
+        ),
+        plate(
+            at(0.555, 0.610),
+            PlateKind::Minion,
+            "Red melee",
+            1,
+            28,
+            55,
+            false,
+        ),
+        plate(
+            at(0.340, 0.330),
+            PlateKind::Structure,
+            "Top tower",
+            1,
+            1000,
+            1000,
+            true,
+        ),
+        plate(
+            at(0.670, 0.310),
+            PlateKind::Structure,
+            "Top outer statue",
+            1,
+            620,
+            1000,
+            false,
+        ),
+        plate(at(0.430, 0.500), PlateKind::Hero, "Jad", 6, 208, 700, true),
+        plate(
+            at(0.500, 0.400),
+            PlateKind::Hero,
+            "Monkey",
+            7,
+            438,
+            730,
+            true,
+        ),
+        plate(
+            at(0.640, 0.360),
+            PlateKind::Hero,
+            "Kree",
+            6,
+            208,
+            420,
+            false,
+        ),
+    ]
+}
+
+fn plate(
+    at: (i32, i32),
+    kind: PlateKind,
+    name: &str,
+    level: u8,
+    health: u32,
+    max_health: u32,
+    blue: bool,
+) -> UnitPlate {
+    UnitPlate {
+        at,
+        kind,
+        name: name.to_string(),
+        level,
+        health,
+        max_health,
+        blue,
     }
 }

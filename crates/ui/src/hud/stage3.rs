@@ -6,7 +6,7 @@ use crate::draw::DrawList;
 use crate::hud::layout::{Layout, Piece};
 use crate::hud::{
     ability_bar, minimap, objectives, score_strip, sketch, state::HudState, target_panel,
-    team_frames,
+    team_frames, unit_plates,
 };
 use crate::theme::Theme;
 
@@ -23,6 +23,7 @@ pub fn build(theme: &Theme, layout: &Layout, state: &HudState) -> DrawList {
             Piece::Target,
         ],
     );
+    unit_plates::draw(theme, &mut list, &state.plates);
     if let Some(area) = layout.get(Piece::Score) {
         score_strip::draw(theme, &mut list, area, &state.score);
     }

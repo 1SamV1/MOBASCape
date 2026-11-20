@@ -738,7 +738,7 @@ impl App {
             renderer.set_hud_mesh(&self.hud.vertices, &self.hud.indices);
             if let Some(theme) = self.ui_theme.as_ref() {
                 let (list, what, detail) = if self.ui_layout {
-                    let state = rift_ui::hud::sample::state();
+                    let state = rift_ui::hud::sample::state_for(renderer.size);
                     let placed = rift_ui::hud::place(&state, renderer.size, self.ui_scale);
                     let detail = format!(
                         "requested {:?}, drawn {}, usual {:.1}%, steps {:?}, conflicts {:?}",

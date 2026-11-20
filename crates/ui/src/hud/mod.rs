@@ -12,6 +12,7 @@ pub mod stage3;
 pub mod state;
 pub mod target_panel;
 pub mod team_frames;
+pub mod unit_plates;
 
 pub use layout::{
     Conflict, Layout, Piece, choose_scale, closer_than_gap, effective_scale, fits_full, holds,
