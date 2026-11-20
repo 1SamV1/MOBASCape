@@ -65,63 +65,65 @@ pub fn draw(theme: &Theme, list: &mut DrawList, death: &DeathState) {
         outline::draw(list, font, &words, x, below, yellow, outline_colour);
     }
 
-    let area = panel_rect(screen, s, death.damage.len());
-    match theme.panel("panel.dark") {
-        Some(style) => list.panel(style, area),
-        None => list.rect(area, [0.02, 0.02, 0.03, 0.92]),
-    }
+    if !death.damage.is_empty() {
+        let area = panel_rect(screen, s, death.damage.len());
+        match theme.panel("panel.dark") {
+            Some(style) => list.panel(style, area),
+            None => list.rect(area, [0.02, 0.02, 0.03, 0.92]),
+        }
 
-    let killer_team = if death.killer_blue {
-        blue_team
-    } else {
-        red_team
-    };
-    let heading = bold.or(body);
-    let baseline = area.y + 17 * s;
-    if let Some(font) = heading {
-        let prefix = "Killed by ";
-        let width = list.text(font, prefix, area.x + 10 * s, baseline, quiet);
-        list.text(
-            font,
-            &death.killer,
-            area.x + 10 * s + width,
-            baseline,
-            killer_team,
-        );
-        let total = format!("{}", death.total());
-        let width = font.width(&total) * s;
-        list.text(
-            font,
-            &total,
-            area.right() - 10 * s - width,
-            baseline,
-            yellow,
-        );
-    }
-
-    let total = death.total().max(1);
-    let mut y = area.y + 28 * s;
-    for source in &death.damage {
-        if let Some(font) = small {
-            list.text(font, &source.name, area.x + 10 * s, y + 12 * s, quiet);
-            let amount = source.amount.to_string();
-            let width = font.width(&amount) * s;
+        let killer_team = if death.killer_blue {
+            blue_team
+        } else {
+            red_team
+        };
+        let heading = bold.or(body);
+        let baseline = area.y + 17 * s;
+        if let Some(font) = heading {
+            let prefix = "Killed by ";
+            let width = list.text(font, prefix, area.x + 10 * s, baseline, quiet);
             list.text(
                 font,
-                &amount,
+                &death.killer,
+                area.x + 10 * s + width,
+                baseline,
+                killer_team,
+            );
+            let total = format!("{}", death.total());
+            let width = font.width(&total) * s;
+            list.text(
+                font,
+                &total,
                 area.right() - 10 * s - width,
-                y + 12 * s,
-                text,
+                baseline,
+                yellow,
             );
         }
-        let bar = Rect::new(area.x + 90 * s, y + 4 * s, 160 * s, 8 * s);
-        list.rect(bar, back);
-        let fraction = (source.amount as f32 / total as f32).clamp(0.0, 1.0);
-        list.rect(
-            Rect::new(bar.x, bar.y, (bar.w as f32 * fraction) as i32, bar.h),
-            enemy,
-        );
-        y += 16 * s;
+
+        let total = death.total().max(1);
+        let mut y = area.y + 28 * s;
+        for source in &death.damage {
+            if let Some(font) = small {
+                list.text(font, &source.name, area.x + 10 * s, y + 12 * s, quiet);
+                let amount = source.amount.to_string();
+                let width = font.width(&amount) * s;
+                list.text(
+                    font,
+                    &amount,
+                    area.right() - 10 * s - width,
+                    y + 12 * s,
+                    text,
+                );
+            }
+            let bar = Rect::new(area.x + 90 * s, y + 4 * s, 160 * s, 8 * s);
+            list.rect(bar, back);
+            let fraction = (source.amount as f32 / total as f32).clamp(0.0, 1.0);
+            list.rect(
+                Rect::new(bar.x, bar.y, (bar.w as f32 * fraction) as i32, bar.h),
+                enemy,
+            );
+            y += 16 * s;
+        }
     }
 
     list.set_layer(previous);
