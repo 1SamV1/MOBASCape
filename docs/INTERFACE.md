@@ -1,9 +1,9 @@
 # Interface
 
 Status: **design approved with clarifications, and frozen. Stages 1 and 2
-have passed and are frozen with it. Stage 3's step A theme and step B placing
-pass are built and tested headlessly; its components are not built, and
-`hud.rs` is still the default.** The stage 3 plan was frozen separately in
+have passed and are frozen with it. Stage 3's step A theme, step B placing
+pass and step 1 score strip are built and tested headlessly; the other
+components are not built, and `hud.rs` is still the default.** The stage 3 plan was frozen separately in
 `docs/INTERFACE_STAGE3_PLAN.md`; each later stage and component still needs
 its own go-ahead after the stage before it has passed its check. A change to
 this document is a design change and is reviewed like one.

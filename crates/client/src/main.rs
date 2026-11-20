@@ -749,7 +749,7 @@ impl App {
                         placed.conflicts
                     );
                     (
-                        rift_ui::hud::sketch::build(theme, &placed),
+                        rift_ui::hud::stage3::build(theme, &placed, &state),
                         "interface layout",
                         detail,
                     )

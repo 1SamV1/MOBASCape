@@ -318,7 +318,7 @@ mod tests {
         };
         let state = rift_ui::hud::sample::state();
         let placed = rift_ui::hud::place(&state, (1920, 1080), None);
-        let list = rift_ui::hud::sketch::build(&theme, &placed);
+        let list = rift_ui::hud::stage3::build(&theme, &placed, &state);
         let (vertices, indices) = list.finish();
         let (w, h) = (1920usize, 1080usize);
         let mut pixels = vec![[24u8, 24, 30, 255]; w * h];

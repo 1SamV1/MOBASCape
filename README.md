@@ -4,7 +4,7 @@ A 5v5 MOBA built on a custom Rust engine, using modern Old School RuneScape
 cache assets for its visual identity. Server-authoritative, data-driven, and
 designed for fast-paced low-team-count matches.
 
-> Status: **M4.0 item shop, interface stage 3 steps A and B**. The cache
+> Status: **M4.0 item shop, interface stage 3 steps A, B and 1**. The cache
 > reader, terrain/location/model/sequence decoders, animated NPCs, a 3x3
 > Karamja block, A* pathfinding with collision, hold-to-steer, a screen-space
 > HUD, auto-attacks, a Q/W/E/R kit with mana/cooldowns/XP/gold, three
@@ -12,8 +12,9 @@ designed for fast-paced low-team-count matches.
 > with towers/inhibitors/shielded nexus, minion waves, jungle camps with team
 > buffs, brush/fog of war, a live minimap, and a win condition are working.
 > The stage 2 drawing layer is frozen, and stage 3 now has a cache-backed
-> theme sheet and the pure placing/collapse pass; its components are still
-> labelled rectangles and the old HUD remains the default. There is no
+> theme sheet, the pure placing/collapse pass, and a drawn score strip; the
+> other components are still labelled rectangles and the old HUD remains the
+> default. There is no
 > networking yet. See [docs/STATUS.md](docs/STATUS.md).
 
 ## What exists
@@ -26,9 +27,9 @@ designed for fast-paced low-team-count matches.
   - sequences, frames, framemaps, and interpolated vertex animation
 - `crates/sim` — deterministic tile grid, collision, and A* pathfinding
 - `crates/tools` — `rift-tools` CLI for cache inspection and OBJ export
-- `crates/ui` — interface drawing layer and stage 3 placing pass: sprites,
+- `crates/ui` — interface drawing layer and stage 3 interface: sprites,
   nine-slice panels, bitmap fonts, clipping, whole-number scaling, `HudState`,
-  scale by fit and the collapse order
+  scale by fit, the collapse order and the score strip
 - `crates/client` — native wgpu client: 3x3 Karamja, animated NPCs, three lanes,
   towers/inhibitors/nexus, minion waves, jungle camps/buffs, brush/fog of war,
   item shop/inventory, live minimap, click-to-move + hold-to-steer, HUD,

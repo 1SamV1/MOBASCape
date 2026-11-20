@@ -3,7 +3,9 @@
 
 pub mod layout;
 pub mod sample;
+pub mod score_strip;
 pub mod sketch;
+pub mod stage3;
 pub mod state;
 
 pub use layout::{
