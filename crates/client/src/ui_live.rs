@@ -2,8 +2,11 @@
 //! the running match. Every other component still uses the stage 3 sample
 //! until its own bridge is added.
 
+use crate::animated::{AnimatedScene, UnitKind};
 use crate::hud::PlayerHud;
-use rift_ui::hud::state::{AbilityState, ScoreState};
+use crate::scene::SceneData;
+use glam::{Vec2, Vec3};
+use rift_ui::hud::state::{AbilityState, MapPoint, MinimapState, ScoreState, StructureMark};
 
 pub fn score(player: &PlayerHud) -> ScoreState {
     score_from(
@@ -33,6 +36,121 @@ pub fn score_from(
         deaths: own.1,
         assists: own.2,
         creep_score,
+    }
+}
+
+/// The minimap picture's own size, matching `crates/ui/src/hud/minimap.rs`.
+const MAP: (f32, f32) = (254.0, 252.0);
+
+pub fn minimap(
+    scene: &SceneData,
+    animated: &AnimatedScene,
+    camera: (f32, f32, f32, f32),
+    window: (u32, u32),
+) -> MinimapState {
+    let (min, max) = animated.minimap_bounds;
+    let point = |p: Vec3| map_point(p, min, max);
+
+    let lanes = animated
+        .lanes
+        .iter()
+        .map(|lane| lane.iter().map(|p| point(*p)).collect())
+        .collect();
+    let river = scene
+        .map
+        .river
+        .as_ref()
+        .map(|river| {
+            river
+                .points
+                .iter()
+                .map(|(x, z)| point(Vec3::new(x * 128.0, 0.0, z * 128.0)))
+                .collect()
+        })
+        .unwrap_or_default();
+
+    let bases = [
+        StructureMark {
+            at: point(animated.nexus_positions[0]),
+            blue: true,
+        },
+        StructureMark {
+            at: point(animated.nexus_positions[1]),
+            blue: false,
+        },
+    ];
+
+    let mut allies = Vec::new();
+    let mut enemies = Vec::new();
+    let mut camps = Vec::new();
+    let mut structures = Vec::new();
+    for unit in &animated.units {
+        if !unit.visible || unit.health <= 0.0 {
+            continue;
+        }
+        if unit.kind.is_structure() {
+            structures.push(StructureMark {
+                at: point(unit.pos),
+                blue: unit.team == 0,
+            });
+            continue;
+        }
+        if unit.kind == UnitKind::Camp {
+            camps.push(point(unit.pos));
+            continue;
+        }
+        if matches!(
+            unit.kind,
+            UnitKind::Player
+                | UnitKind::EnemyChampion
+                | UnitKind::MeleeMinion
+                | UnitKind::RangedMinion
+        ) {
+            let mark = point(unit.pos);
+            if unit.team == 0 {
+                allies.push(mark);
+            } else {
+                enemies.push(mark);
+            }
+        }
+    }
+
+    let (cx, cz, distance, pitch) = camera;
+    let aspect = window.0 as f32 / window.1.max(1) as f32;
+    let half_w = distance * 0.466 * aspect;
+    let half_h = distance * 0.466 / pitch.sin().max(0.2);
+    let a = point(Vec3::new(cx - half_w, 0.0, cz - half_h));
+    let b = point(Vec3::new(cx + half_w, 0.0, cz + half_h));
+    let camera = (
+        a.x.min(b.x),
+        a.y.min(b.y),
+        (b.x - a.x).abs().max(1),
+        (b.y - a.y).abs().max(1),
+    );
+
+    MinimapState {
+        lanes,
+        river,
+        bases: bases.to_vec(),
+        allies,
+        enemies,
+        camps,
+        structures,
+        camera,
+    }
+}
+
+fn map_point(p: Vec3, min: Vec2, max: Vec2) -> MapPoint {
+    let normal = |value: f32, low: f32, high: f32| {
+        if high > low {
+            ((value - low) / (high - low)).clamp(0.0, 1.0)
+        } else {
+            0.5
+        }
+    };
+    MapPoint {
+        x: (normal(p.x, min.x, max.x) * MAP.0).round() as i32,
+        y: (normal(p.z, min.y, max.y) * MAP.1).round() as i32,
     }
 }
 
@@ -118,5 +236,17 @@ mod tests {
         assert_eq!(bar.health, 730);
         assert_eq!(bar.level, 255);
         assert_eq!(bar.experience, 0);
+    }
+
+    #[test]
+    fn minimap_points_land_in_the_picture_and_clamp_outside_it() {
+        let min = Vec2::new(100.0, 200.0);
+        let max = Vec2::new(300.0, 400.0);
+        let middle = map_point(Vec3::new(200.0, 0.0, 300.0), min, max);
+        assert_eq!(middle, MapPoint { x: 127, y: 126 });
+        let outside = map_point(Vec3::new(0.0, 0.0, 9999.0), min, max);
+        assert_eq!(outside, MapPoint { x: 0, y: 252 });
+        let flat = map_point(Vec3::new(1.0, 0.0, 1.0), min, min);
+        assert_eq!(flat, MapPoint { x: 127, y: 126 });
     }
 }

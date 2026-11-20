@@ -1794,6 +1794,12 @@ impl App {
                 &heroes,
             );
             renderer.set_hud_mesh(&self.hud.vertices, &self.hud.indices);
+            let ui_camera = (
+                renderer.camera.target.x,
+                renderer.camera.target.z,
+                renderer.camera.distance,
+                renderer.camera.pitch,
+            );
             draw_ui_overlay(
                 renderer,
                 self.ui_theme.as_ref(),
@@ -1803,6 +1809,9 @@ impl App {
                 self.ui_scale,
                 &mut self.ui_shown,
                 Some(&player_hud),
+                Some(animated),
+                self.scene.as_ref(),
+                ui_camera,
             );
             if let Some(index) = self.spectator {
                 if let Some(unit) = animated.units.get(index) {
@@ -2433,15 +2442,23 @@ fn draw_ui_overlay(
     scale: Option<u32>,
     shown_cache: &mut (u32, u32, u32),
     player: Option<&PlayerHud>,
+    animated: Option<&AnimatedScene>,
+    scene: Option<&SceneData>,
+    camera: (f32, f32, f32, f32),
 ) {
     let Some(theme) = theme else {
         return;
     };
     let (list, what, detail) = if layout || live {
         let mut state = rift_ui::hud::sample::whole_for(renderer.size);
-        if live && let Some(player) = player {
-            state.score = crate::ui_live::score(player);
-            state.ability = crate::ui_live::ability(player);
+        if live {
+            if let Some(player) = player {
+                state.score = crate::ui_live::score(player);
+                state.ability = crate::ui_live::ability(player);
+            }
+            if let (Some(animated), Some(scene)) = (animated, scene) {
+                state.minimap = crate::ui_live::minimap(scene, animated, camera, renderer.size);
+            }
         }
         let placed = rift_ui::hud::place(&state, renderer.size, scale);
         let detail = format!(
