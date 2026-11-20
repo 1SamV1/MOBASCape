@@ -8,9 +8,9 @@ use crate::items::{CATEGORY_LABELS, ItemConfig, ItemShop};
 use crate::scene::{CampBuff, SceneData};
 use glam::{Vec2, Vec3};
 use rift_ui::hud::state::{
-    AbilityState, CampState, ChatKind, ChatLine, DeathState, KillFeedEntry, LaneState, MapPoint,
-    MinimapState, NexusState, ObjectivesState, PlateKind, ScoreState, ShopItem, ShopState,
-    StructureMark, UnitPlate,
+    AbilityState, CampState, ChatKind, ChatLine, DamageSource, DeathState, KillFeedEntry,
+    LaneState, MapPoint, MinimapState, NexusState, ObjectivesState, PlateKind, ScoreState,
+    ShopItem, ShopState, StructureMark, UnitPlate,
 };
 
 pub fn score(player: &PlayerHud) -> ScoreState {
@@ -296,8 +296,14 @@ pub fn announcement(player: &PlayerHud) -> Option<String> {
     player.announcement.clone()
 }
 
-pub fn death(player: &PlayerHud) -> Option<DeathState> {
-    death_from(player.respawn_remaining, player.announcement.as_deref())
+pub fn death(player: &PlayerHud, animated: &AnimatedScene) -> Option<DeathState> {
+    let mut death = death_from(player.respawn_remaining, player.announcement.as_deref())?;
+    death.damage = animated
+        .damage_sources()
+        .into_iter()
+        .map(|(name, amount)| DamageSource { name, amount })
+        .collect();
+    Some(death)
 }
 
 /// The respawn count and killer are live; the damage breakdown is not

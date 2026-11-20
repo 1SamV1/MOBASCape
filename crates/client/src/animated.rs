@@ -453,6 +453,9 @@ pub struct AnimatedScene {
     pub player_assists: u32,
     /// Creep score: enemy lane minions last-hit by the player.
     pub player_cs: u32,
+    /// Damage the player has taken recently: source, amount, seconds left.
+    /// Used by the death overlay's breakdown.
+    recent_damage: Vec<(String, f32, f32)>,
     pub wave_interval: f32,
     pub gold_income: f32,
     pub lanes: Vec<Vec<Vec3>>,
@@ -902,6 +905,7 @@ impl AnimatedScene {
             player_deaths: 0,
             player_assists: 0,
             player_cs: 0,
+            recent_damage: Vec::new(),
             wave_interval: scene.map.wave_interval,
             gold_income: 0.0,
             lanes: scene
@@ -2398,6 +2402,52 @@ impl AnimatedScene {
             .map(|biome| biome.label.clone())
     }
 
+    /// Aggregate the recent player damage by source, largest first.
+    pub fn damage_sources(&self) -> Vec<(String, u32)> {
+        damage_totals(
+            &self
+                .recent_damage
+                .iter()
+                .map(|(name, amount, _)| (name.clone(), *amount))
+                .collect::<Vec<_>>(),
+        )
+    }
+
+    fn record_damage(&mut self, label: &str, amount: f32) {
+        if let Some((_, total, timer)) = self
+            .recent_damage
+            .iter_mut()
+            .find(|(name, _, _)| name == label)
+        {
+            *total += amount;
+            *timer = 10.0;
+        } else {
+            self.recent_damage.push((label.to_string(), amount, 10.0));
+        }
+    }
+
+    fn damage_label(&self, attacker_team: u8, aggressor: Option<usize>) -> String {
+        if let Some(index) = aggressor
+            && let Some(unit) = self.units.get(index)
+        {
+            return match unit.kind {
+                UnitKind::Player | UnitKind::EnemyChampion => "Rival champion",
+                UnitKind::Tower => "Tower",
+                UnitKind::Camp => "Camp",
+                UnitKind::Watchtower => "Watchtower",
+                UnitKind::MeleeMinion | UnitKind::RangedMinion => "Minion",
+                _ => "The Rift",
+            }
+            .to_string();
+        }
+        match attacker_team {
+            1 => "Enemy",
+            2 => "Neutral",
+            _ => "The Rift",
+        }
+        .to_string()
+    }
+
     /// Team scoreboard: (kills, deaths) per team.
     pub fn team_scores(&self) -> ((u32, u32), (u32, u32)) {
         (
@@ -2525,6 +2575,10 @@ impl AnimatedScene {
             }
         }
         self.kill_feed.retain_mut(|(_, timer)| {
+            *timer -= dt;
+            *timer > 0.0
+        });
+        self.recent_damage.retain_mut(|(_, _, timer)| {
             *timer -= dt;
             *timer > 0.0
         });
@@ -2959,7 +3013,7 @@ impl AnimatedScene {
                             execute: 0.0,
                         });
                     } else {
-                        self.damage_unit(target, damage, team);
+                        self.damage_unit_by(target, damage, team, Some(index));
                     }
                 }
             } else {
@@ -3081,7 +3135,7 @@ impl AnimatedScene {
                             execute: 0.0,
                         });
                     } else {
-                        self.damage_unit(ti, damage, 2);
+                        self.damage_unit_by(ti, damage, 2, Some(index));
                     }
                 }
             } else {
@@ -3434,6 +3488,10 @@ impl AnimatedScene {
                 amount,
             )
         };
+        if index == self.player_index && amount > 0.0 {
+            let label = self.damage_label(attacker_team, aggressor);
+            self.record_damage(&label, amount);
+        }
         let hero_aggressor = match aggressor {
             Some(aggressor) => self.units[aggressor].kind == UnitKind::Player,
             None => attacker_team == 0,
@@ -4700,6 +4758,23 @@ fn point_in_brush(brush: &[(f32, f32, f32, f32)], pos: Vec3) -> bool {
     })
 }
 
+/// Sum damage entries by source, largest first, then by name.
+pub fn damage_totals(entries: &[(String, f32)]) -> Vec<(String, u32)> {
+    let mut totals: Vec<(String, f32)> = Vec::new();
+    for (name, amount) in entries {
+        if let Some((_, total)) = totals.iter_mut().find(|(label, _)| label == name) {
+            *total += *amount;
+        } else {
+            totals.push((name.clone(), *amount));
+        }
+    }
+    totals.sort_by(|a, b| b.1.total_cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
+    totals
+        .into_iter()
+        .map(|(name, amount)| (name, amount.round() as u32))
+        .collect()
+}
+
 fn xp_for_level(level: u32) -> f32 {
     100.0 + (level.saturating_sub(1) as f32) * 80.0
 }
@@ -5570,6 +5645,24 @@ mod tests {
         let delta = planar_delta(from, to);
         assert_eq!(delta.y, 0.0);
         assert!((delta.length() - 60.0).abs() < 1e-4);
+    }
+
+    #[test]
+    fn damage_totals_merge_by_source_and_sort_largest_first() {
+        let entries = vec![
+            ("Tower".to_string(), 40.0),
+            ("Rival champion".to_string(), 120.0),
+            ("Tower".to_string(), 30.0),
+            ("Minion".to_string(), 10.0),
+        ];
+        assert_eq!(
+            damage_totals(&entries),
+            vec![
+                ("Rival champion".to_string(), 120),
+                ("Tower".to_string(), 70),
+                ("Minion".to_string(), 10),
+            ]
+        );
     }
 
     #[test]

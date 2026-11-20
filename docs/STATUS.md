@@ -33,14 +33,16 @@ Last updated: interface stage 3 assembled on top of M5.6, 2026-11-20.
   battlefield; the match event log, recent kills, announcements and the
   respawn/killer death lines. Neutral camp plates stay with the old HUD. The
   feed only carries allied kills, and its gold is derived from the victim
-  type because the match does not record per-kill gold. The death damage
-  breakdown is omitted because the match does not record it yet; the dim,
-  death line and respawn count are live. The shop overlay is display-only
-  for now: buying stays in the old HUD. The other components still use the
-  stage 3 sample until their own bridges are added; team frames wait for
-  allied champions beyond the player. The conversions are in
-  `crates/client/src/ui_live.rs` and are unit tested.
-- Verified: `cargo test --workspace` 243 tests pass, 3 ignored; the client
+  type because the match does not record per-kill gold. The death panel now
+  shows the real damage breakdown: damage to the player in the last ten
+  seconds is grouped by source (rival champion, tower, minion, camp,
+  watchtower or a team fallback) and sorted largest first. The shop overlay
+  is display-only for now: buying stays in the old HUD. The other components
+  still use the stage 3 sample until their own bridges are added; team
+  frames wait for allied champions beyond the player. The conversions are in
+  `crates/client/src/ui_live.rs`, with the damage log in `AnimatedScene`, and
+  are unit tested.
+- Verified: `cargo test --workspace` 244 tests pass, 3 ignored; the client
   and tools build; the stage 3 layout tests, live score/ability/minimap/
   objectives/plates/chat/shop/announcement/death tests, sim battle tests and
   cache decoders all run.
