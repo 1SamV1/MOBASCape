@@ -41,6 +41,10 @@ Goal: the match is a deterministic, headless, testable state machine.
   mode is now a camera swap over the main game's champions (`V`, `Z`/`X`).
 - **Core-loop feedback:** last-hit `+NG` gold floats and a proper death /
   respawn overlay (countdown, hidden ability and inventory HUD, `--demo-death`).
+- **Lane readability:** enemy tower range rings, aggro rings on minions
+  targeting the player, and white last-hit health bars.
+- **Ground art:** cache scrape command plus six cache-scraped grass biome
+  variants in a 512px mirror-tiled array.
 - Remaining M7 work stays headless: keep the sim and CLI as the server spine,
   and defer client migration until the core game loop is satisfying.
 - `crates/bots`: scripted dev bots that can finish a match headless.

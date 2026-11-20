@@ -4280,6 +4280,8 @@ impl AnimatedScene {
         // Minions and camps keep cheap world-space bars. Champions,
         // structures and dummies use the readable screen-space plates built
         // by the client, so drawing both would double up the health bars.
+        let player_damage = self.units[self.player_index].attack_damage;
+        let player_bar_pos = self.units[self.player_index].pos;
         let bars = self
             .units
             .iter()
@@ -4304,7 +4306,15 @@ impl AnimatedScene {
                     width,
                     height,
                     (unit.health / unit.max_health).clamp(0.0, 1.0),
-                    if unit.team == 0 {
+                    if unit.team == 1
+                        && unit.kind.is_minion()
+                        && unit.health <= player_damage
+                        && unit.pos.distance(player_bar_pos) < 1400.0
+                    {
+                        // Last-hit window: the bar turns white when one
+                        // auto-attack would secure the minion.
+                        [255, 255, 255]
+                    } else if unit.team == 0 {
                         [95u8, 225, 120]
                     } else if unit.team == 2 {
                         [242u8, 64, 52]
@@ -4487,6 +4497,22 @@ impl AnimatedScene {
             );
         }
 
+        let aggro_minions = self
+            .units
+            .iter()
+            .filter(|u| {
+                u.visible
+                    && u.kind.is_minion()
+                    && u.health > 0.0
+                    && u.team == 1
+                    && u.attack_target == Some(self.player_index)
+            })
+            .map(|u| u.pos)
+            .collect::<Vec<_>>();
+        for pos in aggro_minions {
+            append_ring_width(self, height, pos, 66.0, [255, 70, 55], 0.92);
+        }
+
         let structure_rings = self
             .units
             .iter()
@@ -4508,6 +4534,35 @@ impl AnimatedScene {
                 } else {
                     [255, 90, 80]
                 },
+            );
+        }
+
+        let tower_danger = self
+            .units
+            .iter()
+            .filter(|u| {
+                u.visible
+                    && u.kind == UnitKind::Tower
+                    && u.team == 1
+                    && u.health > 0.0
+                    && u.pos.distance(player_pos) < u.attack_range * 1.35
+            })
+            .map(|u| {
+                (
+                    u.pos,
+                    u.attack_range,
+                    u.attack_target == Some(self.player_index),
+                )
+            })
+            .collect::<Vec<_>>();
+        for (pos, range, aggro) in tower_danger {
+            append_ring_width(
+                self,
+                height,
+                pos,
+                range,
+                if aggro { [255, 60, 45] } else { [190, 90, 70] },
+                0.985,
             );
         }
 

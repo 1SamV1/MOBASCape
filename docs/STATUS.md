@@ -1,6 +1,38 @@
 # Status
 
-Last updated: main-game spectator + core-loop feedback, 2026-11-19.
+Last updated: lane readability + cache-scraped grass biome variants, 2026-11-19.
+
+## 2026-11-19 — Lane readability
+
+- Enemy tower range is drawn as a ground ring whenever the player is within
+  1.35× its attack range. It brightens when the tower is actually targeting
+  the player.
+- Enemy minions that have the player as their attack target get a red aggro
+  ring, so lane pressure is visible instead of inferred.
+- Enemy minion health bars turn **white** when one auto-attack would kill
+  them, giving a clear last-hit window.
+- Verified capture: `/tmp/opencode/tower_danger.png` (red tower range).
+  Tests 61, clippy clean, client ~54.5 fps at 1280×720.
+
+## 2026-11-19 — Cache-scraped grass biome variants
+
+- Added `rift-tools dump-textures`: exports all 208 index-9 textures and,
+  with `--sprites`, all 6,839 readable index-8 sprites into
+  `assets/cache-scrape/` with CSV metadata.
+- Confirmed the current ground grass is cache texture **129**.
+- Added six grass variants: classic 129, lush 203, dry 18, steppe 197,
+  dire 195, straw 205. `map.json` biome entries now carry a `grass` field;
+  dire pockets use dire/dry/steppe, radiant pockets use lush, and default
+  lanes stay classic.
+- Grass is loaded into a dedicated **512px mirror-tiled array** (pattern
+  repeats every four tiles with no mirror seams), sampled with nearest/LOD0
+  so the scraped blades stay crisp. Classic ground borrows lush as a sparse
+  detail pass.
+- The post grade was eased and the terrain sampler switched to nearest so
+  scraped OSRS greens survive the tonemap.
+- Verified captures: `/tmp/opencode/grass_hires.png`,
+  `/tmp/opencode/grass_hires_lush.png`, `/tmp/opencode/biome_goblin.png`,
+  `/tmp/opencode/biome_elven.png`, `/tmp/opencode/grass_compare.png`.
 
 ## 2026-11-19 — Core-loop feedback: deaths and rewards
 
