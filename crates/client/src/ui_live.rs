@@ -3,12 +3,12 @@
 //! until its own bridge is added.
 
 use crate::animated::{AnimatedScene, UnitKind};
-use crate::hud::PlayerHud;
+use crate::hud::{PlayerHud, UnitFrame};
 use crate::scene::{CampBuff, SceneData};
 use glam::{Vec2, Vec3};
 use rift_ui::hud::state::{
     AbilityState, CampState, LaneState, MapPoint, MinimapState, NexusState, ObjectivesState,
-    ScoreState, StructureMark,
+    PlateKind, ScoreState, StructureMark, UnitPlate,
 };
 
 pub fn score(player: &PlayerHud) -> ScoreState {
@@ -290,6 +290,34 @@ fn nexus_state(health: f32, vulnerable: bool) -> String {
     }
 }
 
+pub fn plates(player: &PlayerHud) -> Vec<UnitPlate> {
+    player.unit_frames.iter().filter_map(plate).collect()
+}
+
+/// One already-projected unit frame as a plate. Neutral camps are left to
+/// the old HUD; the three plate kinds are hero, minion and structure.
+pub fn plate(frame: &UnitFrame) -> Option<UnitPlate> {
+    if frame.team == 2 {
+        return None;
+    }
+    let kind = if frame.hero {
+        PlateKind::Hero
+    } else if frame.structure {
+        PlateKind::Structure
+    } else {
+        PlateKind::Minion
+    };
+    Some(UnitPlate {
+        at: (frame.x.round() as i32, frame.y.round() as i32),
+        kind,
+        name: frame.name.clone(),
+        level: frame.level.clamp(0, u8::MAX as u32) as u8,
+        health: count(frame.health),
+        max_health: count(frame.max_health),
+        blue: frame.team == 0,
+    })
+}
+
 pub fn ability(player: &PlayerHud) -> AbilityState {
     ability_from(
         player.health,
@@ -393,5 +421,31 @@ mod tests {
         assert_eq!(nexus_state(0.0, true), "0");
         assert_eq!(nexus_state(620.0, true), "620");
         assert_eq!(nexus_state(620.0, false), "Shielded");
+    }
+
+    #[test]
+    fn unit_frames_become_plates_and_neutral_camps_are_skipped() {
+        let mut frame = UnitFrame {
+            x: 400.4,
+            y: 250.6,
+            name: "Rival".to_string(),
+            level: 7,
+            health: 208.4,
+            max_health: 420.0,
+            mana: 0.0,
+            max_mana: 0.0,
+            team: 1,
+            hero: true,
+            structure: false,
+            width: 184.0,
+        };
+        let hero = plate(&frame).expect("a hero plate");
+        assert_eq!(hero.at, (400, 251));
+        assert_eq!(hero.kind, PlateKind::Hero);
+        assert_eq!((hero.health, hero.max_health), (208, 420));
+        assert_eq!((hero.level, hero.blue), (7, false));
+
+        frame.team = 2;
+        assert!(plate(&frame).is_none());
     }
 }

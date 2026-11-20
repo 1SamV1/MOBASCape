@@ -22,18 +22,20 @@ Last updated: interface stage 3 assembled on top of M5.6, 2026-11-20.
 - Headless evidence: `target/stage3-whole-1920.ppm`,
   `target/stage3-whole-1366.ppm`, `target/stage3-death-1920.ppm` and
   `target/stage3-shop-1920.ppm`, written by an ignored client test.
-- Stage 4 has started with the score strip, ability bar, minimap and
-  objectives: `--ui-live` draws the assembled interface with the clock,
+- Stage 4 has started with the score strip, ability bar, minimap, objectives
+  and unit plates: `--ui-live` draws the assembled interface with the clock,
   both teams' kills, the player's K/D/A and creep score, health, resource,
   level, experience and cooldowns from `PlayerHud`; the live lanes, river,
-  unit dots, structures, camps and camera box on the minimap; and the lane
+  unit dots, structures, camps and camera box on the minimap; the lane
   tower/inhibitor pips, nexus states and camp timers in the objectives
-  panel. The other components still use the stage 3 sample until their own
-  bridges are added. The conversions are in `crates/client/src/ui_live.rs`
-  and are unit tested.
-- Verified: `cargo test --workspace` 239 tests pass, 3 ignored; the client
+  panel; and the already-projected hero, minion and structure plates over
+  the battlefield. Neutral camp plates stay with the old HUD. The other
+  components still use the stage 3 sample until their own bridges are added;
+  team frames wait for allied champions beyond the player. The conversions
+  are in `crates/client/src/ui_live.rs` and are unit tested.
+- Verified: `cargo test --workspace` 240 tests pass, 3 ignored; the client
   and tools build; the stage 3 layout tests, live score/ability/minimap/
-  objectives tests, sim battle tests and cache decoders all run together.
+  objectives/plates tests, sim battle tests and cache decoders all run.
 
 
 ## 2026-11-19 — Lane readability
