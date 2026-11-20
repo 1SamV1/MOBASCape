@@ -22,9 +22,14 @@ Last updated: interface stage 3 assembled on top of M5.6, 2026-11-20.
 - Headless evidence: `target/stage3-whole-1920.ppm`,
   `target/stage3-whole-1366.ppm`, `target/stage3-death-1920.ppm` and
   `target/stage3-shop-1920.ppm`, written by an ignored client test.
-- Verified: `cargo test --workspace` 235 tests pass, 3 ignored; the client
-  and tools build; the stage 3 layout tests, sim battle tests and cache
-  decoders all run together.
+- Stage 4 has started with the score strip: `--ui-live` draws the assembled
+  interface with the clock, both teams' kills and the player's K/D/A and
+  creep score from `PlayerHud`. The other components still use the stage 3
+  sample until their own bridges are added. The conversion is in
+  `crates/client/src/ui_live.rs` and is unit tested.
+- Verified: `cargo test --workspace` 236 tests pass, 3 ignored; the client
+  and tools build; the stage 3 layout tests, live score test, sim battle
+  tests and cache decoders all run together.
 
 
 ## 2026-11-19 — Lane readability

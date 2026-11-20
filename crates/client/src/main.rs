@@ -14,6 +14,7 @@ mod scene;
 mod terrain_textures;
 mod theme_file;
 mod ui_assets;
+mod ui_live;
 mod ui_pass;
 
 use std::collections::HashSet;
@@ -158,6 +159,9 @@ struct Cli {
     /// Draw the assembled stage 3 interface over the game.
     #[arg(long)]
     ui_layout: bool,
+    /// Draw the assembled interface with the live score strip.
+    #[arg(long)]
+    ui_live: bool,
     /// Force the interface's scale (1 to 4) instead of taking it from the
     /// window's size.
     #[arg(long)]
@@ -297,7 +301,7 @@ fn main() -> Result<()> {
     ui_atlas.add_minimap(&minimap_image);
     let ui_atlas = Arc::new(ui_atlas);
     // The stage 3 interface's theme, only when its dev screen was asked for.
-    let ui_theme = if cli.ui_test || cli.ui_theme_sheet || cli.ui_layout {
+    let ui_theme = if cli.ui_test || cli.ui_theme_sheet || cli.ui_layout || cli.ui_live {
         let theme = theme_file::load(&cache, &cli.ui_theme)
             .with_context(|| format!("loading theme {}", cli.ui_theme.display()))?;
         tracing::info!(
@@ -408,6 +412,7 @@ fn main() -> Result<()> {
         ui_theme,
         ui_theme_sheet: cli.ui_theme_sheet,
         ui_layout: cli.ui_layout,
+        ui_live: cli.ui_live,
         ui_scale: cli.ui_scale,
         ui_shown: (0, 0, 0),
         graphics_classic: cli.graphics.eq_ignore_ascii_case("classic"),
@@ -517,6 +522,8 @@ struct App {
     ui_theme_sheet: bool,
     /// Whether the assembled interface was asked for.
     ui_layout: bool,
+    /// Whether the assembled interface takes the live score strip.
+    ui_live: bool,
     ui_scale: Option<u32>,
     /// The window size and scale the interface was last built for.
     ui_shown: (u32, u32, u32),
@@ -1792,8 +1799,10 @@ impl App {
                 self.ui_theme.as_ref(),
                 self.ui_theme_sheet,
                 self.ui_layout,
+                self.ui_live,
                 self.ui_scale,
                 &mut self.ui_shown,
+                Some(&player_hud),
             );
             if let Some(index) = self.spectator {
                 if let Some(unit) = animated.units.get(index) {
@@ -2414,19 +2423,25 @@ impl App {
 
 /// Build the stage 3 interface for this window and hand it to the renderer's
 /// interface pass, when its theme was asked for.
+#[allow(clippy::too_many_arguments)]
 fn draw_ui_overlay(
     renderer: &mut Renderer,
     theme: Option<&rift_ui::Theme>,
     theme_sheet: bool,
     layout: bool,
+    live: bool,
     scale: Option<u32>,
     shown_cache: &mut (u32, u32, u32),
+    player: Option<&PlayerHud>,
 ) {
     let Some(theme) = theme else {
         return;
     };
-    let (list, what, detail) = if layout {
-        let state = rift_ui::hud::sample::whole_for(renderer.size);
+    let (list, what, detail) = if layout || live {
+        let mut state = rift_ui::hud::sample::whole_for(renderer.size);
+        if live && let Some(player) = player {
+            state.score = crate::ui_live::score(player);
+        }
         let placed = rift_ui::hud::place(&state, renderer.size, scale);
         let detail = format!(
             "requested {:?}, drawn {}, usual {:.1}%, steps {:?}, conflicts {:?}",
@@ -2438,7 +2453,11 @@ fn draw_ui_overlay(
         );
         (
             rift_ui::hud::stage3::build(theme, &placed, &state),
-            "interface layout",
+            if live {
+                "interface live"
+            } else {
+                "interface layout"
+            },
             detail,
         )
     } else if theme_sheet {
@@ -2477,6 +2496,7 @@ fn has_demo_flags(cli: &Cli) -> bool {
     cli.ui_test
         || cli.ui_theme_sheet
         || cli.ui_layout
+        || cli.ui_live
         || cli.demo_target.is_some()
         || cli.spawn.is_some()
         || cli.demo_combat
