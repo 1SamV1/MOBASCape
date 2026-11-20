@@ -2467,6 +2467,7 @@ fn draw_ui_overlay(
             }
             if let (Some(player), Some(animated)) = (player, animated) {
                 state.death = crate::ui_live::death(player, animated);
+                state.allies = crate::ui_live::allies(animated);
             }
             if let (Some(animated), Some(scene)) = (animated, scene) {
                 state.minimap = crate::ui_live::minimap(scene, animated, camera, renderer.size);

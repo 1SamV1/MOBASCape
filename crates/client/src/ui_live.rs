@@ -8,9 +8,9 @@ use crate::items::{CATEGORY_LABELS, ItemConfig, ItemShop};
 use crate::scene::{CampBuff, SceneData};
 use glam::{Vec2, Vec3};
 use rift_ui::hud::state::{
-    AbilityState, CampState, ChatKind, ChatLine, DamageSource, DeathState, KillFeedEntry,
-    LaneState, MapPoint, MinimapState, NexusState, ObjectivesState, PlateKind, ScoreState,
-    ShopItem, ShopState, StructureMark, TooltipState, UnitPlate,
+    AbilityState, AllyState, CampState, ChatKind, ChatLine, DamageSource, DeathState,
+    KillFeedEntry, LaneState, MapPoint, MinimapState, NexusState, ObjectivesState, PlateKind,
+    ScoreState, ShopItem, ShopState, StructureMark, TooltipState, UnitPlate,
 };
 
 pub fn score(player: &PlayerHud) -> ScoreState {
@@ -306,6 +306,56 @@ pub fn tooltip(shop: &ItemShop, mouse: (i32, i32)) -> Option<TooltipState> {
         text: String::new(),
         at: mouse,
     })
+}
+
+/// The player's allied champions, excluding the player. The current match is
+/// one hero a side, so this is empty until more allied champions are spawned.
+pub fn allies(animated: &AnimatedScene) -> Vec<AllyState> {
+    animated
+        .units
+        .iter()
+        .enumerate()
+        .filter(|(index, unit)| {
+            *index != animated.player_index && unit.is_champion && unit.team == 0
+        })
+        .map(|(index, unit)| {
+            let name = animated
+                .unit_info(index)
+                .map(|(name, _, _)| name)
+                .unwrap_or_else(|| "Ally".to_string());
+            ally_from(
+                name,
+                unit.health,
+                unit.max_health,
+                unit.mana,
+                unit.max_mana,
+                unit.level,
+                unit.dead_timer,
+            )
+        })
+        .collect()
+}
+
+fn ally_from(
+    name: String,
+    health: f32,
+    max_health: f32,
+    resource: f32,
+    max_resource: f32,
+    level: u32,
+    dead_timer: f32,
+) -> AllyState {
+    let dead = health <= 0.0;
+    AllyState {
+        name,
+        health: count(health).min(count(max_health)),
+        max_health: count(max_health),
+        resource: count(resource).min(count(max_resource)),
+        max_resource: count(max_resource),
+        level: level.clamp(0, u8::MAX as u32) as u8,
+        dead,
+        respawn_seconds: dead.then(|| dead_timer.max(0.0).ceil() as u32),
+    }
 }
 
 pub fn announcement(player: &PlayerHud) -> Option<String> {
@@ -697,5 +747,18 @@ mod tests {
         assert_eq!(tooltip.stats, ["+50 health"]);
         assert_eq!(tooltip.at, (400, 250));
         assert!(tooltip.passive.is_none() && tooltip.text.is_empty());
+    }
+
+    #[test]
+    fn an_allied_champion_becomes_a_team_frame() {
+        let ally = ally_from("Ally".to_string(), 208.4, 700.0, 90.6, 260.0, 6, 0.0);
+        assert_eq!((ally.health, ally.max_health), (208, 700));
+        assert_eq!((ally.resource, ally.max_resource), (91, 260));
+        assert_eq!((ally.level, ally.dead), (6, false));
+        assert_eq!(ally.respawn_seconds, None);
+
+        let dead = ally_from("Ally".to_string(), 0.0, 700.0, 0.0, 260.0, 6, 4.2);
+        assert!(dead.dead);
+        assert_eq!(dead.respawn_seconds, Some(5));
     }
 }
