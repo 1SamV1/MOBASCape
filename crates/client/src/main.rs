@@ -1811,6 +1811,7 @@ impl App {
                 Some(&player_hud),
                 Some(animated),
                 self.scene.as_ref(),
+                Some(&self.shop),
                 ui_camera,
             );
             if let Some(index) = self.spectator {
@@ -2444,6 +2445,7 @@ fn draw_ui_overlay(
     player: Option<&PlayerHud>,
     animated: Option<&AnimatedScene>,
     scene: Option<&SceneData>,
+    shop: Option<&ItemShop>,
     camera: (f32, f32, f32, f32),
 ) {
     let Some(theme) = theme else {
@@ -2462,6 +2464,9 @@ fn draw_ui_overlay(
             if let (Some(animated), Some(scene)) = (animated, scene) {
                 state.minimap = crate::ui_live::minimap(scene, animated, camera, renderer.size);
                 state.objectives = crate::ui_live::objectives(scene, animated);
+            }
+            if let Some(shop) = shop {
+                state.shop = crate::ui_live::shop(shop);
             }
         }
         let placed = rift_ui::hud::place(&state, renderer.size, scale);
