@@ -4,7 +4,8 @@
 
 use crate::hud::state::{
     AbilityState, AllyState, CampState, HudState, InventoryItem, KillFeedEntry, LaneState,
-    MapPoint, MinimapState, NexusState, ObjectivesState, ScoreState, StructureMark, TargetState,
+    MapPoint, MinimapState, NexusState, ObjectivesState, ScoreState, StructureMark, TargetStat,
+    TargetState,
 };
 
 pub fn state() -> HudState {
@@ -208,8 +209,44 @@ pub fn state() -> HudState {
         target: Some(TargetState {
             name: "Top outer statue".to_string(),
             kind: "Structure".to_string(),
+            blue: false,
+            description: "Outer tower - fires on enemy minions.".to_string(),
             health: 620,
             max_health: 1000,
+            stats: vec![
+                TargetStat {
+                    label: "Attack".to_string(),
+                    value: "92".to_string(),
+                },
+                TargetStat {
+                    label: "Attack speed".to_string(),
+                    value: "1.2".to_string(),
+                },
+                TargetStat {
+                    label: "Defence melee".to_string(),
+                    value: "60".to_string(),
+                },
+                TargetStat {
+                    label: "Defence mage".to_string(),
+                    value: "40".to_string(),
+                },
+                TargetStat {
+                    label: "Power".to_string(),
+                    value: "0".to_string(),
+                },
+                TargetStat {
+                    label: "Range".to_string(),
+                    value: "3".to_string(),
+                },
+                TargetStat {
+                    label: "Defence ranged".to_string(),
+                    value: "55".to_string(),
+                },
+                TargetStat {
+                    label: "Move".to_string(),
+                    value: "0".to_string(),
+                },
+            ],
         }),
         inventory: vec![
             Some(InventoryItem {

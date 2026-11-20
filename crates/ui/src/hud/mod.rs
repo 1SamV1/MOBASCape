@@ -10,6 +10,7 @@ pub mod score_strip;
 pub mod sketch;
 pub mod stage3;
 pub mod state;
+pub mod target_panel;
 pub mod team_frames;
 
 pub use layout::{

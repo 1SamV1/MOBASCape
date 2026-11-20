@@ -87,12 +87,27 @@ pub struct AllyState {
     pub respawn_seconds: Option<u32>,
 }
 
+/// One figure in the target panel's two columns.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TargetStat {
+    pub label: String,
+    pub value: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TargetState {
     pub name: String,
+    /// The tag at the panel's right: "Structure", "Hero", "Minion".
     pub kind: String,
+    /// Which team the target belongs to; the name takes its colour.
+    pub blue: bool,
+    /// The orange line under the health bar. Stage 3 samples it; stage 4
+    /// fills it from the selected unit.
+    pub description: String,
     pub health: u32,
     pub max_health: u32,
+    /// Up to eight figures, drawn two columns of four.
+    pub stats: Vec<TargetStat>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
