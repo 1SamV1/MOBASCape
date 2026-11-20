@@ -4,6 +4,7 @@
 pub mod ability_bar;
 pub mod chat;
 pub mod inventory;
+pub mod kill_feed;
 pub mod layout;
 pub mod minimap;
 pub mod objectives;

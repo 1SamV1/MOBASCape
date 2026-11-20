@@ -5,8 +5,8 @@
 use crate::draw::DrawList;
 use crate::hud::layout::{Layout, Piece};
 use crate::hud::{
-    ability_bar, chat, inventory, minimap, objectives, score_strip, sketch, state::HudState,
-    target_panel, team_frames, unit_plates,
+    ability_bar, chat, inventory, kill_feed, minimap, objectives, score_strip, sketch,
+    state::HudState, target_panel, team_frames, unit_plates,
 };
 use crate::theme::Theme;
 
@@ -23,6 +23,7 @@ pub fn build(theme: &Theme, layout: &Layout, state: &HudState) -> DrawList {
             Piece::Target,
             Piece::Inventory,
             Piece::Chat,
+            Piece::Feed,
         ],
     );
     unit_plates::draw(theme, &mut list, &state.plates);
@@ -49,6 +50,9 @@ pub fn build(theme: &Theme, layout: &Layout, state: &HudState) -> DrawList {
     }
     if let Some(area) = layout.get(Piece::Chat) {
         chat::draw(theme, &mut list, area, &state.chat);
+    }
+    if let Some(area) = layout.get(Piece::Feed) {
+        kill_feed::draw(theme, &mut list, area, &state.feed);
     }
     list
 }

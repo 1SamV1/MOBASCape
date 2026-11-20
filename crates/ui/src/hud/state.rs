@@ -116,6 +116,7 @@ pub struct KillFeedEntry {
     pub victim: String,
     pub gold: u32,
     pub killer_blue: bool,
+    pub victim_blue: bool,
 }
 
 /// One item in the six-slot inventory.
