@@ -3,8 +3,15 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
 use clap::{Parser, Subcommand};
-use rift_cache::{Cache, Model, ObjectDefinition, SpriteDefinition, Terrain, TextureDefinition};
+use rift_cache::font::FONT_INDEX;
+use rift_cache::sprite::SPRITE_INDEX;
+use rift_cache::{
+    Cache, Font, Model, ObjectDefinition, SpriteDefinition, SpriteSheet, Terrain, TextureDefinition,
+};
 use rift_sim::Match as BattleMatch;
+
+mod interface_dump;
+mod picture;
 
 #[derive(Parser, Debug)]
 #[command(name = "rift-tools", about = "OSRS cache inspection for Rift")]
@@ -82,6 +89,28 @@ enum Command {
         region_y: u32,
         out: PathBuf,
     },
+    /// Write sprites as PNGs with a report, to check the sprite decoder by
+    /// eye (docs/INTERFACE.md, stage 1).
+    DumpSprites {
+        /// Folder to write into. It is made if it is not there.
+        out: PathBuf,
+        /// First sprite id. Without it, from the first there is.
+        #[arg(long)]
+        from: Option<u32>,
+        /// Last sprite id. Without it, to the last there is.
+        #[arg(long)]
+        to: Option<u32>,
+        /// Write only the overview sheets and the report, not a file for
+        /// every frame.
+        #[arg(long)]
+        overview_only: bool,
+    },
+    /// Write every font's letters, measurements and a test line, to check
+    /// the font decoder by eye.
+    DumpFonts {
+        /// Folder to write into.
+        out: PathBuf,
+    },
     /// Run a deterministic headless 5v5 bot match and print its state hash.
     Match {
         #[arg(long, default_value_t = 1)]
@@ -141,6 +170,13 @@ fn main() -> Result<()> {
         Command::Model { id } => model(&cache, id)?,
         Command::ExportObj { id, out } => export_obj(&cache, id, &out)?,
         Command::Sprite { id, out } => sprite(&cache, id, &out)?,
+        Command::DumpSprites {
+            out,
+            from,
+            to,
+            overview_only,
+        } => dump_sprites(&cache, &out, from, to, overview_only)?,
+        Command::DumpFonts { out } => dump_fonts(&cache, &out)?,
         Command::Texture { id, out } => texture(&cache, id, &out)?,
         Command::DumpTextures { out, sprites } => dump_textures(&cache, &out, sprites)?,
         Command::TerrainObj {
@@ -725,6 +761,150 @@ fn export_obj(cache: &Cache, id: u32, out: &PathBuf) -> Result<()> {
         out.display(),
         model.vertex_count,
         model.face_count
+    );
+    Ok(())
+}
+
+fn save_all(out: &std::path::Path, files: Vec<(String, picture::Picture)>) -> Result<usize> {
+    std::fs::create_dir_all(out)?;
+    let count = files.len();
+    for (path, picture) in files {
+        let path = out.join(path);
+        picture
+            .save(&path)
+            .with_context(|| format!("writing {}", path.display()))?;
+    }
+    Ok(count)
+}
+
+fn dump_sprites(
+    cache: &Cache,
+    out: &std::path::Path,
+    from: Option<u32>,
+    to: Option<u32>,
+    overview_only: bool,
+) -> Result<()> {
+    let reference = cache
+        .reference(SPRITE_INDEX)
+        .context("reading the list of sprites")?;
+    let wanted: Vec<(u32, i32)> = reference
+        .archives
+        .iter()
+        .filter(|a| from.is_none_or(|from| a.id >= from) && to.is_none_or(|to| a.id <= to))
+        .map(|a| (a.id, a.name_hash))
+        .collect();
+    if wanted.is_empty() {
+        bail!("no sprites in that range");
+    }
+
+    let mut report = interface_dump::sprite_report_heading();
+    let mut failed = String::new();
+    let mut thumbs: Vec<interface_dump::Thumb> = Vec::new();
+    let (mut read, mut frames, mut files, mut unread) = (0usize, 0usize, 0usize, 0usize);
+    // one overview sheet for every hundred ids
+    let flush = |thumbs: &mut Vec<interface_dump::Thumb>| -> Result<()> {
+        if let (Some(first), Some(last)) = (thumbs.first(), thumbs.last()) {
+            let path = out.join(format!("overview/{:05}-{:05}.png", first.id, last.id));
+            interface_dump::overview(thumbs)
+                .save(&path)
+                .with_context(|| format!("writing {}", path.display()))?;
+        }
+        thumbs.clear();
+        Ok(())
+    };
+    for (id, hash) in wanted {
+        if thumbs
+            .first()
+            .is_some_and(|first| first.id / 100 != id / 100)
+        {
+            flush(&mut thumbs)?;
+        }
+        let sheet = cache
+            .group(SPRITE_INDEX, id)
+            .map_err(anyhow::Error::from)
+            .and_then(|group| SpriteSheet::decode(id, &group.data).map_err(anyhow::Error::from));
+        let sheet = match sheet {
+            Ok(sheet) => sheet,
+            Err(error) => {
+                failed.push_str(&format!("{id}\t{error}\n"));
+                continue;
+            }
+        };
+        read += 1;
+        frames += sheet.frames.len();
+        if sheet.unread != 0 {
+            unread += 1;
+        }
+        let dump = interface_dump::dump_sprite(&sheet, &interface_dump::name_of(hash));
+        report.push_str(&dump.report);
+        if !overview_only {
+            files += save_all(out, dump.files)?;
+        }
+        thumbs.push(interface_dump::Thumb::of(&sheet));
+    }
+    flush(&mut thumbs)?;
+
+    std::fs::create_dir_all(out)?;
+    std::fs::write(out.join("sprites.tsv"), report)?;
+    std::fs::write(out.join("sprites_failed.tsv"), &failed)?;
+    println!(
+        "sprites: {read} read, {frames} frames, {files} pictures written to {}",
+        out.display()
+    );
+    println!(
+        "sprites: {} could not be read (sprites_failed.tsv); {unread} left bytes unread, which a right reading does not",
+        failed.lines().count()
+    );
+    Ok(())
+}
+
+fn dump_fonts(cache: &Cache, out: &std::path::Path) -> Result<()> {
+    let reference = cache
+        .reference(FONT_INDEX)
+        .context("reading the list of fonts")?;
+    let mut report = interface_dump::font_report_heading();
+    let mut summary =
+        String::from("font\tname\tbytes of measurements\tletters\tbaseline\tabove\tbelow\tnote\n");
+    let (mut read, mut failed) = (0usize, 0usize);
+    for archive in &reference.archives {
+        let id = archive.id;
+        let name = interface_dump::name_of(archive.name_hash);
+        let font = (|| -> Result<(Font, SpriteSheet, usize)> {
+            let measurements = cache.group(FONT_INDEX, id)?.data;
+            let letters = SpriteSheet::decode(id, &cache.group(SPRITE_INDEX, id)?.data)?;
+            let font = Font::decode(id, &measurements, &letters)?;
+            Ok((font, letters, measurements.len()))
+        })();
+        match font {
+            Ok((font, letters, bytes)) => {
+                read += 1;
+                summary.push_str(&format!(
+                    "{id}\t{name}\t{bytes}\t{}\t{}\t{}\t{}\t{}\n",
+                    letters.frames.len(),
+                    font.ascent,
+                    font.max_ascent,
+                    font.max_descent,
+                    font.note.as_deref().unwrap_or("")
+                ));
+                let dump = interface_dump::dump_font(&font, &letters, &name);
+                report.push_str(&dump.report);
+                save_all(out, dump.files)?;
+            }
+            Err(error) => {
+                failed += 1;
+                summary.push_str(&format!(
+                    "{id}\t{name}\t-\t-\t-\t-\t-\tnot read: {error:#}\n"
+                ));
+            }
+        }
+    }
+    std::fs::create_dir_all(out)?;
+    std::fs::write(out.join("fonts.tsv"), &summary)?;
+    std::fs::write(out.join("font_glyphs.tsv"), report)?;
+    print!("{summary}");
+    println!(
+        "fonts: {read} read, {failed} not read; pictures in {}",
+        out.join("fonts").display()
     );
     Ok(())
 }

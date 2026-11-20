@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/cache", "crates/tools", "crates/sim", "crates/client"]
+members = ["crates/cache", "crates/tools", "crates/sim", "crates/ui", "crates/client"]
 
 [workspace.package]
 version = "0.1.0"
@@ -32,3 +32,13 @@ opt-level = 2
 [profile.release]
 lto = "thin"
 codegen-units = 1
+
+# A build for trying changes quickly: `cargo run -p rift-client --profile quick`.
+# Optimised like a release, but without the whole-program pass at the end that
+# makes a release build take minutes after every change. The game runs a
+# little slower than a release and behaves the same.
+[profile.quick]
+inherits = "release"
+lto = "off"
+codegen-units = 16
+incremental = true

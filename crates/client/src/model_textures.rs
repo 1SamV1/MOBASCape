@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use image::imageops::FilterType;
 use image::{Rgba, RgbaImage};
-use rift_cache::{Cache, SpriteDefinition, SpriteFrame, TextureDefinition};
+use rift_cache::{Cache, RgbaFrame, SpriteDefinition, TextureDefinition};
 
 const SIZE: u32 = 128;
 const MIPS: u32 = 8;
@@ -132,7 +132,7 @@ fn resize_texture(source: &RgbaImage) -> RgbaImage {
     image
 }
 
-fn frame_image(frame: &SpriteFrame) -> RgbaImage {
+fn frame_image(frame: &RgbaFrame) -> RgbaImage {
     if let Some(image) = RgbaImage::from_raw(frame.width, frame.height, frame.pixels.clone()) {
         image
     } else {

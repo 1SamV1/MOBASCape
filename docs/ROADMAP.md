@@ -18,7 +18,9 @@ assume one full-time developer plus an AI agent; part-time work takes longer.
 
 ## Non-goals for v1
 
-Matchmaking service, ranked, progression, skins, spectator/replay, mobile,
+Matchmaking service, ranked, progression, skins, the in-world spectator arena
+(the read-only spectator role and match recording are designed for from the
+start; see [SPECTATING.md](SPECTATING.md)), mobile,
 browser client, wards, cache music/sound synthesis, player gear compositing,
 textures on every surface.
 

@@ -1,6 +1,31 @@
 # Status
 
-Last updated: lane readability + cache-scraped grass biome variants, 2026-11-19.
+Last updated: interface stage 3 assembled on top of M5.6, 2026-11-20.
+
+## 2026-11-20 — Interface stage 3 assembled
+
+- Merged the interface stage 3 branch (steps A, B and 1 through 15) onto the
+  M5.6 client and map. The stage 3 work is in `crates/ui`: a cache-backed
+  theme, scale by fit, the placing/collapse pass, every component, the
+  assembled whole, and the review sheet in `docs/INTERFACE_STAGE3_REVIEW.md`.
+- `--ui-theme-sheet` draws every role; `--ui-layout` draws the assembled
+  sample interface over the game. Stage 3 was accepted at the merge of PR
+  #1. The old `crates/client/src/hud.rs` and its 3D unit bars remain the
+  running default until stage 4 connects each component to the match.
+- The interface owns its own pass in `crates/client/src/ui_pass.rs`; the
+  theme loader is `crates/client/src/theme_file.rs`. Both sit beside the
+  M5.6 HUD pipeline and the 117HD renderer.
+- The item list scroll, paragraph wrapping and outlined text came across with
+  the stage 3 work. The cache keeps one sprite decoder: the RGBA
+  `SpriteDefinition` used by the texture path now reads through
+  `SpriteSheet`.
+- Headless evidence: `target/stage3-whole-1920.ppm`,
+  `target/stage3-whole-1366.ppm`, `target/stage3-death-1920.ppm` and
+  `target/stage3-shop-1920.ppm`, written by an ignored client test.
+- Verified: `cargo test --workspace` 235 tests pass, 3 ignored; the client
+  and tools build; the stage 3 layout tests, sim battle tests and cache
+  decoders all run together.
+
 
 ## 2026-11-19 — Lane readability
 

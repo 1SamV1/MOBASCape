@@ -682,3 +682,67 @@ match: it shows a lobby first.
   never stuck on the lobby.
 
 The flow is now: hero select -> LOCK IN -> lobby -> match.
+
+## ADR-046 — Spectators are a read-only role on the one authoritative match
+
+**Status:** proposed.
+
+The MOBA will be watchable live, eventually from an arena inside a persistent
+world. A spectator observes the same match instance as the players, through a
+`Spectator` role that can never send commands. The protocol carries the role
+from its first version.
+
+Consequences: no message format may assume ten players; spectators connect to
+a broadcast relay, never to the match server. See [SPECTATING.md](SPECTATING.md).
+
+## ADR-047 — Visibility is a per-recipient filter over full state
+
+**Status:** proposed.
+
+The simulation holds the whole truth and computes each team's vision. Players
+receive their team's permitted view; spectators receive everything, behind a
+delay set per competition type (none for casual, configured for ranked and
+tournaments).
+
+Consequences: fog is never part of match state or the snapshot format; the
+delay lives in the relay, not the simulation. This is where ADR-016's
+client-side fog moves to.
+
+## ADR-048 — Every match is recorded; determinism is proven by replay
+
+**Status:** proposed.
+
+A recording is the applied commands plus a state hash per tick. Replaying it
+must reproduce every hash or report the first tick that differs. Server
+authority alone does not guarantee replays.
+
+Consequences: the match must run as a fixed-tick simulation in `crates/sim`
+before this can exist; every new simulation system needs a recorded match that
+replays, and all simulation state must be in the hash.
+
+## ADR-049 — Move the match into the simulation before adding more to it
+
+**Status:** proposed.
+
+Match logic currently lives in `crates/client/src/animated.rs`, in floating
+point, on the render loop. Spectating, replays and multiplayer all need it in
+`crates/sim`. Each milestone built in the client adds to what must move.
+
+Consequences: the simulation tick, state hash and recorder come next, and
+match systems move across one at a time, each with a replay test. See the
+path in SPECTATING.md.
+
+## ADR-050 — Movement is finished first, per champion, before more is built on it
+
+**Status:** proposed.
+
+Champions currently move at a fixed speed and face their direction of travel
+instantly. Movement is what a player does every second, so it is built to feel
+right before attacks, abilities and items are layered on. The target is weight:
+turn time, acceleration, stopping, attack wind-up and distance-driven walk
+animation, each a value in the champion's data file.
+
+Consequences: movement becomes the first system in the simulation tick
+(ADR-049); a `--lab` mode exists for tuning; the checklist in
+[MOVEMENT.md](MOVEMENT.md) must be complete, including a sign-off by play,
+before combat is built on the new movement.

@@ -12,7 +12,9 @@ mod portraits;
 mod renderer;
 mod scene;
 mod terrain_textures;
+mod theme_file;
 mod ui_assets;
+mod ui_pass;
 
 use std::collections::HashSet;
 use std::path::PathBuf;
@@ -146,6 +148,23 @@ struct Cli {
     /// Simulation speed multiplier for verification.
     #[arg(long, default_value_t = 1.0)]
     timescale: f32,
+    /// Draw the interface renderer's test screen over the game.
+    #[arg(long)]
+    ui_test: bool,
+    /// Draw the stage 3 theme sheet over the game: every role by name, and
+    /// the pieces together.
+    #[arg(long)]
+    ui_theme_sheet: bool,
+    /// Draw the assembled stage 3 interface over the game.
+    #[arg(long)]
+    ui_layout: bool,
+    /// Force the interface's scale (1 to 4) instead of taking it from the
+    /// window's size.
+    #[arg(long)]
+    ui_scale: Option<u32>,
+    /// The theme: which images, fonts and colours the interface is made of.
+    #[arg(long, default_value = "data/ui/theme.json")]
+    ui_theme: PathBuf,
     /// Show the engineer stat sheet and visibility counters in the HUD.
     #[arg(long)]
     debug_hud: bool,
@@ -277,6 +296,24 @@ fn main() -> Result<()> {
     let minimap_image = minimap::render(&scene, animated.minimap_bounds, minimap::MINIMAP_SIZE);
     ui_atlas.add_minimap(&minimap_image);
     let ui_atlas = Arc::new(ui_atlas);
+    // The stage 3 interface's theme, only when its dev screen was asked for.
+    let ui_theme = if cli.ui_test || cli.ui_theme_sheet || cli.ui_layout {
+        let theme = theme_file::load(&cache, &cli.ui_theme)
+            .with_context(|| format!("loading theme {}", cli.ui_theme.display()))?;
+        tracing::info!(
+            "interface theme {}: atlas {} x {}, fonts {:?}, panels {:?}, sprites {:?}, colours {:?}",
+            cli.ui_theme.display(),
+            theme.atlas.width,
+            theme.atlas.height,
+            theme.font_roles().collect::<Vec<_>>(),
+            theme.panel_roles().collect::<Vec<_>>(),
+            theme.sprite_roles().collect::<Vec<_>>(),
+            theme.colour_roles().collect::<Vec<_>>()
+        );
+        Some(theme)
+    } else {
+        None
+    };
     let initial_player = animated.player_index;
     let champion_indices: Vec<usize> = animated
         .units
@@ -368,6 +405,11 @@ fn main() -> Result<()> {
         demo_combat_cast: false,
         demo_combat_target: None,
         hud: Hud::new(ui_atlas),
+        ui_theme,
+        ui_theme_sheet: cli.ui_theme_sheet,
+        ui_layout: cli.ui_layout,
+        ui_scale: cli.ui_scale,
+        ui_shown: (0, 0, 0),
         graphics_classic: cli.graphics.eq_ignore_ascii_case("classic"),
         debug_view: parse_debug_view(&cli.debug_view),
         shadow_mode: cli.shadows.clone(),
@@ -469,6 +511,15 @@ struct App {
     demo_combat_cast: bool,
     demo_combat_target: Option<usize>,
     hud: Hud,
+    /// The stage 3 interface theme, when its dev screen was asked for.
+    ui_theme: Option<rift_ui::Theme>,
+    /// Whether the theme sheet was asked for instead of the test screen.
+    ui_theme_sheet: bool,
+    /// Whether the assembled interface was asked for.
+    ui_layout: bool,
+    ui_scale: Option<u32>,
+    /// The window size and scale the interface was last built for.
+    ui_shown: (u32, u32, u32),
     graphics_classic: bool,
     debug_view: u32,
     shadow_mode: String,
@@ -551,6 +602,9 @@ impl ApplicationHandler for App {
         renderer.set_graphics_mode(!self.graphics_classic);
         renderer.set_shadow_mode(parse_shadow_mode(&self.shadow_mode));
         renderer.set_debug_view(self.debug_view);
+        if let Some(theme) = self.ui_theme.as_ref() {
+            renderer.set_ui_atlas(&theme.atlas);
+        }
         if let Some((path, after)) = self.screenshot_request.take() {
             renderer.request_screenshot(path, after);
         }
@@ -1733,6 +1787,14 @@ impl App {
                 &heroes,
             );
             renderer.set_hud_mesh(&self.hud.vertices, &self.hud.indices);
+            draw_ui_overlay(
+                renderer,
+                self.ui_theme.as_ref(),
+                self.ui_theme_sheet,
+                self.ui_layout,
+                self.ui_scale,
+                &mut self.ui_shown,
+            );
             if let Some(index) = self.spectator {
                 if let Some(unit) = animated.units.get(index) {
                     renderer.camera.target = unit.pos + Vec3::Y * 140.0;
@@ -2350,10 +2412,72 @@ impl App {
     }
 }
 
+/// Build the stage 3 interface for this window and hand it to the renderer's
+/// interface pass, when its theme was asked for.
+fn draw_ui_overlay(
+    renderer: &mut Renderer,
+    theme: Option<&rift_ui::Theme>,
+    theme_sheet: bool,
+    layout: bool,
+    scale: Option<u32>,
+    shown_cache: &mut (u32, u32, u32),
+) {
+    let Some(theme) = theme else {
+        return;
+    };
+    let (list, what, detail) = if layout {
+        let state = rift_ui::hud::sample::whole_for(renderer.size);
+        let placed = rift_ui::hud::place(&state, renderer.size, scale);
+        let detail = format!(
+            "requested {:?}, drawn {}, usual {:.1}%, steps {:?}, conflicts {:?}",
+            placed.requested,
+            placed.scale,
+            placed.usual_coverage * 100.0,
+            placed.steps,
+            placed.conflicts
+        );
+        (
+            rift_ui::hud::stage3::build(theme, &placed, &state),
+            "interface layout",
+            detail,
+        )
+    } else if theme_sheet {
+        (
+            rift_ui::theme_sheet::build(theme, renderer.size, scale),
+            "interface theme sheet",
+            String::new(),
+        )
+    } else {
+        (
+            rift_ui::test_screen::build(theme, renderer.size, scale),
+            "interface test",
+            String::new(),
+        )
+    };
+    let shown = (renderer.size.0, renderer.size.1, list.scale() as u32);
+    if shown != *shown_cache {
+        tracing::info!(
+            "{}: window {} x {}, scale {}, {} quads {}",
+            what,
+            shown.0,
+            shown.1,
+            shown.2,
+            list.len(),
+            detail
+        );
+        *shown_cache = shown;
+    }
+    let (vertices, indices) = list.finish();
+    renderer.set_ui_mesh(&vertices, &indices);
+}
+
 /// Dev demos and explicit spawn requests boot straight into the match instead
 /// of stopping at the champion picker.
 fn has_demo_flags(cli: &Cli) -> bool {
-    cli.demo_target.is_some()
+    cli.ui_test
+        || cli.ui_theme_sheet
+        || cli.ui_layout
+        || cli.demo_target.is_some()
         || cli.spawn.is_some()
         || cli.demo_combat
         || cli.demo_anim

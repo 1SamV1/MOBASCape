@@ -13,6 +13,7 @@ use crate::model_textures::ModelTextures;
 use crate::scene::{Atmosphere, HeightGrid, MeshData, SceneData, SceneVertex, srgb_to_linear};
 use crate::terrain_textures::TerrainTextures;
 use crate::ui_assets::UiAtlas;
+use crate::ui_pass::UiPass;
 
 #[repr(C)]
 #[derive(Copy, Clone, Default, bytemuck::Pod, bytemuck::Zeroable)]
@@ -392,6 +393,9 @@ pub struct Renderer {
     hud_vertex_capacity: usize,
     hud_index_capacity: usize,
     hud_index_count: u32,
+    /// The interface's own pass, drawn after the HUD; none until it is
+    /// given an atlas.
+    ui: Option<UiPass>,
     pub camera: Camera,
     pub size: (u32, u32),
 }
@@ -1493,6 +1497,7 @@ impl Renderer {
             hud_vertex_capacity,
             hud_index_capacity,
             hud_index_count: 0,
+            ui: None,
             camera: initial_camera,
             size: (width, height),
         };
@@ -1767,6 +1772,24 @@ impl Renderer {
             return None;
         }
         Some((origin, dir))
+    }
+
+    /// Give the interface pass its atlas. Called once, when the theme is
+    /// loaded; the game's own HUD pipeline is separate.
+    pub fn set_ui_atlas(&mut self, atlas: &rift_ui::Atlas) {
+        self.ui = Some(UiPass::new(
+            &self.device,
+            &self.queue,
+            self.config.format,
+            atlas,
+        ));
+    }
+
+    /// This frame's interface quads, in window pixels.
+    pub fn set_ui_mesh(&mut self, vertices: &[rift_ui::Vertex], indices: &[u32]) {
+        if let Some(ui) = self.ui.as_mut() {
+            ui.set_mesh(&self.device, &self.queue, self.size, vertices, indices);
+        }
     }
 
     pub fn set_hud_mesh(&mut self, vertices: &[UiVertex], indices: &[u32]) {
@@ -2098,6 +2121,11 @@ impl Renderer {
             }
         }
 
+        // the interface, over the HUD and the finished scene
+        if let Some(ui) = self.ui.as_ref() {
+            ui.draw(&mut encoder, &view);
+        }
+
         // Dev screenshot: copy the composited surface (scene + HUD) before it
         // is presented. Reads back synchronously; only used by tooling.
         let mut capture = None;
@@ -2225,7 +2253,7 @@ fn write_screenshot(
     Ok(())
 }
 
-fn create_dynamic_buffer(
+pub(crate) fn create_dynamic_buffer(
     device: &wgpu::Device,
     label: &str,
     size: usize,

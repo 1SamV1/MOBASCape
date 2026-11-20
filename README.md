@@ -4,7 +4,8 @@ A 5v5 MOBA built on a custom Rust engine, inspired by modern Old School RuneScap
 for its visual identity. Server-authoritative, data-driven, and
 designed for fast-paced low-team-count matches.
 
-> Status: **M5.6 Biome map + Dota style presentation**. The cache reader,
+> Status: **M5.6 Biome map + Dota style presentation, plus interface stage 3
+> steps A, B and 1 through 15 assembled for review**. The cache reader,
 > terrain/location/model/sequence decoders, animated NPCs, a 5x5 Karamja block,
 > A* pathfinding with collision, hold-to-steer, a bitmap-font HUD, auto-attacks,
 > a Q/W/E/R kit with mana/cooldowns/XP/gold, three data-driven champions, a
@@ -31,8 +32,13 @@ designed for fast-paced low-team-count matches.
 > side), a diagonal river with three bridge crossings, a 282x282 white castle
 > perimeter wall with corner bases in the bottom-left and top-right, three
 > diagonal lanes, tree lines down every lane, a shadow (not tinted) fog of war,
-> and a Dota style scoreboard, unit tooltip, minimap viewport and biome label. See [docs/STATUS.md](docs/STATUS.md) and
-> [docs/UI_ASSETS.md](docs/UI_ASSETS.md).
+> and a Dota style scoreboard, unit tooltip, minimap viewport and biome label.
+> The interface branch adds stage 3 in `crates/ui`: a cache-backed theme,
+> scale by fit, the placing/collapse pass, and every component through the
+> assembled whole, accepted at PR #1. The old HUD remains the running
+> default until stage 4 connects each component to the match. See [docs/STATUS.md](docs/STATUS.md),
+> [docs/UI_ASSETS.md](docs/UI_ASSETS.md) and
+> [docs/INTERFACE_STAGE3_REVIEW.md](docs/INTERFACE_STAGE3_REVIEW.md).
 
 ## What exists
 
@@ -44,14 +50,21 @@ designed for fast-paced low-team-count matches.
   - sequences, frames, framemaps, and interpolated vertex animation
 - `crates/sim` — deterministic tile grid, collision, and A* pathfinding
 - `crates/tools` — `rift-tools` CLI for cache inspection and OBJ export
+- `crates/ui` — interface drawing layer and stage 3 interface: sprites,
+  nine-slice panels, bitmap fonts, paragraph wrapping, clipping, whole-number
+  scaling, `HudState`, scale by fit, the collapse order, the score strip,
+  ability bar, minimap, objectives, team frames, target panel, unit plates,
+  inventory, chat, kill feed, announcements, tooltip, shop and death overlay
 - `crates/client` — native wgpu client: 5x5 Karamja with regional biome
   pockets and a river, animated NPCs, three lanes, towers/inhibitors/nexus,
   minion waves, jungle camps/buffs with aggro and leash, brush/fog of war,
   item shop/inventory, bitmap-font HUD, 117HD Core lighting/atmosphere, HDR
   bloom, cache-native ground textures, fogged minimap, click-to-move +
-  hold-to-steer, auto-attacks, Q
+  hold-to-steer, auto-attacks, Q, and the stage 3 interface dev screen
 - `data/maps/karamja_rift/map.json` — lanes, structures, camps, biome pockets,
   river and wave timing
+- `docs/INTERFACE_STAGE3_REVIEW.md` — the assembled interface's anchors and
+  differences for the reviewer
 - `docs/reference` — archived Java-era experiments (not built)
 
 ## Requirements
@@ -146,6 +159,10 @@ cargo run -p rift-client -- --graphics 117hd --pitch 0.22
 # Grant gold, open the shop, and buy all six items
 cargo run -p rift-client -- --demo-shop --timescale 4
 
+# Interface stage 3: the theme sheet, then the assembled interface
+cargo run -p rift-client -- --ui-theme-sheet
+cargo run -p rift-client -- --ui-layout
+
 # Verify fountain healing and passive gold
 cargo run -p rift-client -- --demo-base --timescale 4
 
@@ -202,6 +219,8 @@ commands, and how to contribute without breaking determinism or leaking assets.
 - [docs/ENGINE_ROADMAP.md](docs/ENGINE_ROADMAP.md)
 - [docs/MAP_FORMAT.md](docs/MAP_FORMAT.md)
 - [docs/NETCODE.md](docs/NETCODE.md)
+- [docs/SPECTATING.md](docs/SPECTATING.md)
+- [docs/MOVEMENT.md](docs/MOVEMENT.md)
 - [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md)
 - [docs/UI_ASSETS.md](docs/UI_ASSETS.md)
 - [docs/DECISIONS.md](docs/DECISIONS.md)
