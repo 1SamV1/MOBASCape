@@ -2458,6 +2458,7 @@ fn draw_ui_overlay(
             }
             if let (Some(animated), Some(scene)) = (animated, scene) {
                 state.minimap = crate::ui_live::minimap(scene, animated, camera, renderer.size);
+                state.objectives = crate::ui_live::objectives(scene, animated);
             }
         }
         let placed = rift_ui::hud::place(&state, renderer.size, scale);

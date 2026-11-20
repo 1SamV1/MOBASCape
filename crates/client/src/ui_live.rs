@@ -4,9 +4,12 @@
 
 use crate::animated::{AnimatedScene, UnitKind};
 use crate::hud::PlayerHud;
-use crate::scene::SceneData;
+use crate::scene::{CampBuff, SceneData};
 use glam::{Vec2, Vec3};
-use rift_ui::hud::state::{AbilityState, MapPoint, MinimapState, ScoreState, StructureMark};
+use rift_ui::hud::state::{
+    AbilityState, CampState, LaneState, MapPoint, MinimapState, NexusState, ObjectivesState,
+    ScoreState, StructureMark,
+};
 
 pub fn score(player: &PlayerHud) -> ScoreState {
     score_from(
@@ -154,6 +157,139 @@ fn map_point(p: Vec3, min: Vec2, max: Vec2) -> MapPoint {
     }
 }
 
+pub fn objectives(scene: &SceneData, animated: &AnimatedScene) -> ObjectivesState {
+    let lanes = animated
+        .lanes
+        .iter()
+        .enumerate()
+        .map(|(index, _)| {
+            let name = scene
+                .map
+                .lanes
+                .get(index)
+                .map(|lane| lane_name(&lane.id))
+                .unwrap_or_else(|| format!("Lane {}", index + 1));
+            let blue_towers = tower_slots(animated, index, 0);
+            let red_towers = tower_slots(animated, index, 1);
+            LaneState {
+                name,
+                blue_towers,
+                blue_inhibitor: inhibitor_alive(animated, index, 0),
+                red_towers,
+                red_inhibitor: inhibitor_alive(animated, index, 1),
+            }
+        })
+        .collect();
+
+    let nexuses = [0u8, 1]
+        .into_iter()
+        .map(|team| {
+            let health = animated
+                .units
+                .iter()
+                .find(|unit| unit.kind == UnitKind::Nexus && unit.team == team)
+                .map_or(0.0, |unit| unit.health);
+            NexusState {
+                name: if team == 0 { "Blue nexus" } else { "Red nexus" }.to_string(),
+                blue: team == 0,
+                state: nexus_state(health, animated.nexus_vulnerable(team)),
+            }
+        })
+        .collect();
+
+    let mut second_lines = 0;
+    let camps = animated
+        .units
+        .iter()
+        .filter(|unit| unit.kind == UnitKind::Camp)
+        .map(|unit| {
+            let grant = match unit.camp_buff.unwrap_or(CampBuff::Might) {
+                CampBuff::Might => "Might",
+                CampBuff::Swift => "Swift",
+            };
+            let state = if unit.health > 0.0 {
+                "Alive".to_string()
+            } else {
+                format!("{:.0}s", unit.dead_timer.max(0.0))
+            };
+            let detail = (0..2).find_map(|team| {
+                let (remaining, _, buff) = animated.team_buff(team)?;
+                (buff == unit.camp_buff.unwrap_or(CampBuff::Might)).then(|| {
+                    format!(
+                        "{} {} {:.0}s",
+                        if team == 0 { "Blue" } else { "Red" },
+                        grant,
+                        remaining
+                    )
+                })
+            });
+            if detail.is_some() {
+                second_lines += 1;
+            }
+            CampState {
+                name: format!("{grant} camp"),
+                grant: grant.to_string(),
+                state,
+                detail,
+            }
+        })
+        .collect();
+
+    ObjectivesState {
+        lanes,
+        nexuses,
+        camps,
+        second_lines,
+        usual_second_lines: 0,
+    }
+}
+
+fn tower_slots(animated: &AnimatedScene, lane: usize, team: u8) -> [bool; 2] {
+    let home = animated.nexus_positions[team as usize];
+    let mut towers: Vec<(f32, bool)> = animated
+        .units
+        .iter()
+        .filter(|unit| {
+            unit.kind == UnitKind::Tower && unit.team == team && unit.structure_lane == Some(lane)
+        })
+        .map(|unit| (unit.pos.distance(home), unit.health > 0.0))
+        .collect();
+    // The tower farthest from the team's nexus is the outer one.
+    towers.sort_by(|a, b| b.0.total_cmp(&a.0));
+    let mut slots = [false; 2];
+    for (slot, (_, alive)) in towers.into_iter().take(2).enumerate() {
+        slots[slot] = alive;
+    }
+    slots
+}
+
+fn inhibitor_alive(animated: &AnimatedScene, lane: usize, team: u8) -> bool {
+    animated.units.iter().any(|unit| {
+        unit.kind == UnitKind::Inhibitor
+            && unit.team == team
+            && unit.structure_lane == Some(lane)
+            && unit.health > 0.0
+    })
+}
+
+fn lane_name(id: &str) -> String {
+    let mut chars = id.chars();
+    match chars.next() {
+        Some(first) => first.to_uppercase().chain(chars).collect(),
+        None => "Lane".to_string(),
+    }
+}
+
+fn nexus_state(health: f32, vulnerable: bool) -> String {
+    if health <= 0.0 {
+        "0".to_string()
+    } else if vulnerable {
+        format!("{health:.0}")
+    } else {
+        "Shielded".to_string()
+    }
+}
+
 pub fn ability(player: &PlayerHud) -> AbilityState {
     ability_from(
         player.health,
@@ -248,5 +384,14 @@ mod tests {
         assert_eq!(outside, MapPoint { x: 0, y: 252 });
         let flat = map_point(Vec3::new(1.0, 0.0, 1.0), min, min);
         assert_eq!(flat, MapPoint { x: 127, y: 126 });
+    }
+
+    #[test]
+    fn objective_names_and_nexus_states_read_naturally() {
+        assert_eq!(lane_name("top"), "Top");
+        assert_eq!(lane_name("mid"), "Mid");
+        assert_eq!(nexus_state(0.0, true), "0");
+        assert_eq!(nexus_state(620.0, true), "620");
+        assert_eq!(nexus_state(620.0, false), "Shielded");
     }
 }
