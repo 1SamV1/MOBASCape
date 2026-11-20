@@ -5,7 +5,8 @@
 
 use rift_ui::atlas::Image;
 use rift_ui::draw::{DrawList, Rect};
-use rift_ui::hud::{sample, shop};
+use rift_ui::hud::sample;
+use rift_ui::hud::shop::{self, ShopHit};
 use rift_ui::raster;
 use rift_ui::theme::{GlyphSource, Theme, ThemeBuilder};
 
@@ -127,4 +128,23 @@ fn a_theme_with_only_fonts_still_draws_the_shop() {
     let mut list = DrawList::new((1920, 1080), 1, &theme.atlas);
     shop::draw(&theme, &mut list, &state.shop, state.gold);
     assert!(!list.is_empty());
+}
+
+#[test]
+fn clicks_hit_rows_buy_and_close() {
+    let state = sample::state();
+    let area = shop::rect(Rect::new(0, 0, 1920, 1080), 1);
+    assert_eq!(
+        shop::hit(area, 1, &state.shop, (760, 485)),
+        Some(ShopHit::Row(3))
+    );
+    assert_eq!(
+        shop::hit(area, 1, &state.shop, (1228, 697)),
+        Some(ShopHit::Buy)
+    );
+    assert_eq!(
+        shop::hit(area, 1, &state.shop, (1323, 272)),
+        Some(ShopHit::Close)
+    );
+    assert_eq!(shop::hit(area, 1, &state.shop, (10, 10)), None);
 }

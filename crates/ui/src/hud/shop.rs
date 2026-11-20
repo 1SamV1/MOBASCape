@@ -30,6 +30,51 @@ pub fn rect(screen: Rect, scale: i32) -> Rect {
     Rect::new(x, y, w.min(screen.w), h.min(screen.h))
 }
 
+/// What a click on the shop overlay means.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ShopHit {
+    Close,
+    Row(usize),
+    Buy,
+}
+
+/// Hit-test the live shop. `area` is [`rect`]'s result and `scale` is the
+/// interface scale the overlay was drawn at.
+pub fn hit(area: Rect, scale: i32, state: &ShopState, mouse: (i32, i32)) -> Option<ShopHit> {
+    let s = scale.max(1);
+    let point = |x: i32, y: i32, w: i32, h: i32| {
+        mouse.0 >= x && mouse.0 < x + w && mouse.1 >= y && mouse.1 < y + h
+    };
+    if point(area.right() - 40 * s, area.y + 10 * s, 24 * s, 24 * s) {
+        return Some(ShopHit::Close);
+    }
+    let view = Rect::new(area.x + 178 * s, area.y + 82 * s, 360 * s, 398 * s);
+    for (index, _) in state.items.iter().enumerate() {
+        let y = view.y + index as i32 * ROW * s - state.scroll * s;
+        let row = Rect::new(view.x, y, view.w, 42 * s);
+        if mouse.1 >= row.y
+            && mouse.1 < row.bottom()
+            && mouse.1 >= view.y
+            && mouse.1 < view.bottom()
+            && mouse.0 >= row.x
+            && mouse.0 < row.right()
+        {
+            return Some(ShopHit::Row(index));
+        }
+    }
+    let detail = Rect::new(area.x + 550 * s, area.y + 48 * s, 218 * s, 432 * s);
+    let buy = Rect::new(
+        detail.x + 12 * s,
+        detail.bottom() - 48 * s,
+        detail.w - 24 * s,
+        30 * s,
+    );
+    if point(buy.x, buy.y, buy.w, buy.h) {
+        return Some(ShopHit::Buy);
+    }
+    None
+}
+
 pub fn draw(theme: &Theme, list: &mut DrawList, shop: &ShopState, gold: u32) {
     let s = list.scale();
     let screen = list.screen();

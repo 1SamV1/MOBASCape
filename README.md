@@ -39,8 +39,8 @@ designed for fast-paced low-team-count matches.
 > the live score strip, ability bar, minimap, objectives, unit plates, chat,
 > kill feed, shop, shop tooltip, announcements, death overlay (with real
 > damage breakdown bars), team frames and a click-selected target panel from
-> the match. The old HUD remains the running default until the other
-> components follow. See [docs/STATUS.md](docs/STATUS.md),
+> the match. The live shop overlay now selects and buys items. The old HUD
+> remains the running default until the other components follow. See [docs/STATUS.md](docs/STATUS.md),
 > [docs/UI_ASSETS.md](docs/UI_ASSETS.md) and
 > [docs/INTERFACE_STAGE3_REVIEW.md](docs/INTERFACE_STAGE3_REVIEW.md).
 

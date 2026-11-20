@@ -38,15 +38,17 @@ Last updated: interface stage 3 assembled on top of M5.6, 2026-11-20.
   seconds is grouped by source (rival champion, tower, minion, camp,
   watchtower or a team fallback) and sorted largest first. The shop tooltip
   follows the selected item and the live cursor while the shop is open. The
-  shop overlay is display-only for now: buying stays in the old HUD. The
-  other components still use the stage 3 sample until their own bridges are
-  added. Team frames are bridged too, but the current match is one hero a
-  side, so they stay empty until allied champions are spawned. Clicking a
-  unit now selects it and fills the target panel with its live name, kind,
-  health, description and combat figures; clicking the ground clears the
-  selection. The conversions are in `crates/client/src/ui_live.rs`, with the
-  damage log in `AnimatedScene`, and are unit tested.
-- Verified: `cargo test --workspace` 247 tests pass, 3 ignored; the client
+  new shop overlay now takes clicks: a row selects its item, Buy purchases
+  the selection through the same item path as the old HUD, and the close
+  button closes the shop; category switching stays in the old HUD. The other
+  components still use the stage 3 sample until their own bridges are added.
+  Team frames are bridged too, but the current match is one hero a side, so
+  they stay empty until allied champions are spawned. Clicking a unit now
+  selects it and fills the target panel with its live name, kind, health,
+  description and combat figures; clicking the ground clears the selection.
+  The conversions are in `crates/client/src/ui_live.rs`, with the damage log
+  in `AnimatedScene`, and are unit tested.
+- Verified: `cargo test --workspace` 248 tests pass, 3 ignored; the client
   and tools build; the stage 3 layout tests, live score/ability/minimap/
   objectives/plates/chat/shop/tooltip/announcement/death/team-frame/target
   tests, sim battle tests and cache decoders all run.

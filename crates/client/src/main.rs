@@ -690,6 +690,9 @@ impl ApplicationHandler for App {
                 {
                     return;
                 }
+                if state == ElementState::Pressed && self.live_shop_click(w, h) {
+                    return;
+                }
                 if state == ElementState::Pressed && self.shop.open {
                     if shop_close_at(w, h, self.mouse_pos) {
                         self.shop.open = false;
@@ -2226,6 +2229,42 @@ impl App {
         };
         self.spectator = Some(champions[next]);
         self.follow = false;
+    }
+
+    /// Handle a click on the new shop overlay when `--ui-live` is drawing it.
+    /// Returns true when the click belonged to the overlay, so the old shop
+    /// does not also act on it.
+    fn live_shop_click(&mut self, width: f32, height: f32) -> bool {
+        if !self.ui_live || !self.shop.open {
+            return false;
+        }
+        let window = (width.max(1.0) as u32, height.max(1.0) as u32);
+        let state = rift_ui::hud::sample::whole_for(window);
+        let placed = rift_ui::hud::place(&state, window, self.ui_scale);
+        let area = rift_ui::hud::shop::rect(
+            rift_ui::draw::Rect::new(0, 0, window.0 as i32, window.1 as i32),
+            placed.scale as i32,
+        );
+        let live = crate::ui_live::shop(&self.shop);
+        let mouse = (self.mouse_pos.0 as i32, self.mouse_pos.1 as i32);
+        if let Some(hit) = rift_ui::hud::shop::hit(area, placed.scale as i32, &live, mouse) {
+            match hit {
+                rift_ui::hud::shop::ShopHit::Row(index) => {
+                    if let Some(&item) = self.shop.filtered_items().get(index) {
+                        self.shop.selected = Some(item);
+                    }
+                }
+                rift_ui::hud::shop::ShopHit::Buy => {
+                    if let Some(item) = self.shop.selected {
+                        self.purchase_item(item);
+                    }
+                }
+                rift_ui::hud::shop::ShopHit::Close => self.shop.open = false,
+            }
+            return true;
+        }
+        let (mx, my) = (mouse.0, mouse.1);
+        mx >= area.x && mx < area.right() && my >= area.y && my < area.bottom()
     }
 
     fn pick_and_move(&mut self) {
