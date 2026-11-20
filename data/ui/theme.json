@@ -1,19 +1,58 @@
 {
   "sprites": {
-    "test.sprite": { "sprite": 198 }
+    "test.sprite": { "sprite": 198 },
+    "icon.kills": { "sprite": 442 },
+    "icon.team.blue": { "sprite": 1066 },
+    "icon.team.red": { "sprite": 1060 },
+    "icon.gold": { "sprite": 1090 },
+    "icon.equip.0": { "sprite": 156 },
+    "icon.equip.1": { "sprite": 157 },
+    "icon.equip.2": { "sprite": 158 },
+    "icon.equip.3": { "sprite": 159 },
+    "icon.equip.4": { "sprite": 160 },
+    "icon.equip.5": { "sprite": 161 },
+    "icon.equip.6": { "sprite": 162 },
+    "icon.equip.7": { "sprite": 163 },
+    "icon.equip.8": { "sprite": 164 },
+    "icon.equip.9": { "sprite": 165 },
+    "orb.ring": { "sprite": 1059 },
+    "map.dot.enemy": { "sprite": 300, "frame": 0 },
+    "map.dot.structure": { "sprite": 300, "frame": 1 },
+    "map.dot.neutral": { "sprite": 300, "frame": 2 },
+    "map.dot.camp": { "sprite": 300, "frame": 3 },
+    "map.dot.ally": { "sprite": 300, "frame": 4 },
+    "scrollbar": { "sprite": 316 }
   },
   "panels": {
-    "panel": { "sprite": 170, "insets": [6, 6, 6, 6] }
+    "panel": { "sprite": 170, "insets": [6, 6, 6, 6] },
+    "panel.stone": { "sprite": 1031, "insets": [12, 12, 12, 12] },
+    "panel.dark": { "solid": "#000000d9" },
+    "panel.parchment": { "sprite": 1017, "insets": [12, 12, 12, 12] },
+    "panel.slot": { "sprite": 1077, "insets": [6, 6, 6, 6] },
+    "button.stone": { "sprite": 170, "insets": [8, 8, 8, 8] },
+    "button.stone.red": { "sprite": 177, "insets": [7, 7, 7, 7] }
   },
   "fonts": {
-    "small": { "font": 494 },
-    "body": { "font": 495 },
-    "bold": { "font": 496 },
-    "title": { "font": 497 }
+    "font.small": { "font": 494 },
+    "font.body": { "font": 495 },
+    "font.bold": { "font": 496 },
+    "font.title": { "font": 497 }
   },
   "colours": {
     "text": "#ffffff",
+    "text.quiet": "#c8c8c8",
+    "text.title": "#ff981f",
+    "text.team.blue": "#8cb8ff",
+    "text.team.red": "#ff8080",
+    "text.good": "#00ff00",
+    "text.outline": "#000000",
     "announcement": "#ffff00",
-    "shade": "#00000080"
+    "death": "#ff3030",
+    "bar.health": "#00c000",
+    "bar.resource": "#00ffff",
+    "bar.enemy": "#ff3030",
+    "bar.back": "#000000cc",
+    "shade": "#000000d9",
+    "dim": "#00000080"
   }
 }

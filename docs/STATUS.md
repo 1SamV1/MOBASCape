@@ -1,11 +1,12 @@
 # Status
 
-Last updated: M4.0 item shop, 2026-11-13.
+Last updated: interface stage 3 steps A and B, 2026-11-19.
 
 ## Working
 
-- Rust workspace builds; `cargo test --workspace` and `cargo clippy
-  --workspace --all-targets` are clean.
+- Rust workspace builds; `cargo test --workspace` passes. Clippy still reports
+  pre-existing lints in `crates/sim`, `crates/cache` tests and the frozen
+  stage 2 drawing layer; they are not from the stage 3 work.
 - Cache reader: all 25 indices, reference tables, XTEA, gzip/bzip2/LZMA,
   archive splitting with real file IDs.
 - Terrain/locations/object/NPC/underlay/overlay configs.
@@ -41,13 +42,36 @@ Last updated: M4.0 item shop, 2026-11-13.
 - HUD: health/mana/XP/shield/buff bars, four ability boxes, six inventory slots,
   shop panel with item-colour swatches/cost bars/owned markers, nexus bars, wave
   timer, crosshair, live minimap; numeric state in the title.
+- Interface stage 2: `crates/ui` drawing layer (sprites, nine-slice panels,
+  bitmap text, rectangles, clipping, whole-number scale), the client's UI pass,
+  and the theme loader. `--ui-test` draws its test screen over the game.
+- Interface stage 3 step A: the stage 3 theme roles in `data/ui/theme.json`
+  (stone, dark and parchment panels, slot and button frames, four fonts,
+  icons, map dots and 15 colours); `--ui-theme-sheet` draws every role by
+  name and the pieces together. `panel.stone` uses the single stone panel
+  1031: the 913–936 and 952–997 sprites are scrollbar and tab parts, not a
+  panel frame kit.
+- Interface stage 3 step B: `HudState`, `sample.rs`, the scale by fit, the
+  placing pass and the collapse order in `crates/ui/src/hud/`. `--ui-layout`
+  draws every component as a labelled empty rectangle over the game. The
+  old `hud.rs` is still the default and still runs the match.
 - Dev demos: `--demo-target`, `--demo-combat`, `--demo-camp`, `--demo-kit`,
-  `--demo-shop`, `--champion`, `--timescale`.
+  `--demo-shop`, `--champion`, `--timescale`, `--ui-test`,
+  `--ui-theme-sheet`, `--ui-layout`, `--ui-scale`.
 
 ## Verified
 
-- `cargo test --workspace`: 17 tests pass (6 cache, 7 sim, 4 items).
-- `cargo clippy --workspace --all-targets`: no warnings.
+- `cargo test --workspace`: 137 tests pass, 2 ignored (the optional pictures
+  of the theme sheet and the labelled layout). The 15 new layout tests check
+  the 1920 by 1080 rectangles, the collapse at 1280 by 720 and 1366 by
+  768, the scale edges, the 953 by 280 minimum, requested scales, 7/8/9 clearance, the objectives'
+  target-panel place at a forced scale, the bar and chat widths, the 38%
+  rule, a 23 by 16 window sweep with no clash, determinism and the quarter.
+- Stage 3 theme sheet: loaded from the real cache, seven panels, four fonts,
+  22 sprites and 15 colours; written headlessly to `target/theme-sheet.ppm`
+  for the eye. The in-game GPU check is still to do.
+- Stage 3 labelled layout: written headlessly to `target/layout-1920.ppm` at
+  1920 by 1080, scale 1, usual coverage 16.5%, no clashes and no steps.
 - **Item shop demo**: granted 4000 gold; bought all six items; final title
   `HP 730/730`, `MP 260/260`, `gold 300`, `dmg 45 spd 460`, `items 6/6`,
   ability power 45%.
@@ -61,6 +85,12 @@ Last updated: M4.0 item shop, 2026-11-13.
 
 ## Known issues
 
+- Stage 3 is groundwork, not the new HUD: the components are still empty
+  labelled rectangles and the old `hud.rs` remains the default. The theme
+  sheet and labelled layout have only been checked as headless pictures, not
+  yet in the running game on the GPU.
+- Sprite names on the theme sheet are shortened (`icon.` and `map.dot.` are
+  omitted) to fit; the full role names are in the theme file and the load log.
 - Item purchases are client-side in this prototype. The authoritative server
   must own gold, shop range, inventory, and stat application before multiplayer.
 - No item selling, combining, passives, or active item effects; six flat-stat
@@ -82,13 +112,20 @@ Last updated: M4.0 item shop, 2026-11-13.
 
 ## Next tasks
 
-1. HUD text/font atlas for shop names/costs, gold, HP/MP, level, and labels.
-2. Item selling/combining/passives and five champions with distinct kits.
-3. Server-authoritative fog + minimap click-to-pan + brush visuals.
-4. Inhibitor respawn/super minions and base/fountain visuals.
-5. Deterministic 30 Hz sim tick in `crates/sim` + state hash.
-6. Texture sampling and better foliage/trunk colours.
-7. Lobby + QUIC netcode after the sim loop is stable.
+1. Run `--ui-theme-sheet` and `--ui-layout` on the GPU, compare them with the
+   reference screenshots, and fix what the eye finds.
+2. Stage 3 components in the plan's order: score strip, ability bar with
+   health and resource, minimap, objectives, team frames, target panel, unit
+   plates, inventory, chat, kill feed, announcements, tooltip, shop, death
+   screen, then the whole together.
+3. HUD text/font atlas for the old shop names/costs, gold, HP/MP, level and
+   labels until the new components replace it.
+4. Item selling/combining/passives and five champions with distinct kits.
+5. Server-authoritative fog + minimap click-to-pan + brush visuals.
+6. Inhibitor respawn/super minions and base/fountain visuals.
+7. Deterministic 30 Hz sim tick in `crates/sim` + state hash.
+8. Texture sampling and better foliage/trunk colours.
+9. Lobby + QUIC netcode after the sim loop is stable.
 
 ## Verification log
 

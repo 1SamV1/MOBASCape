@@ -1,11 +1,12 @@
 # Interface
 
 Status: **design approved with clarifications, and frozen. Stages 1 and 2
-have passed and are frozen with it. Nothing else is built.** Stage 3 (the
-static interface) is not authorised: it waits on the reference screenshots
-being adopted and on its own plan being reviewed. `hud.rs` is untouched. Each
-later stage needs its own go-ahead after the stage before it has passed its
-check. A change to this document is a design change and is reviewed like one.
+have passed and are frozen with it. Stage 3's step A theme and step B placing
+pass are built and tested headlessly; its components are not built, and
+`hud.rs` is still the default.** The stage 3 plan was frozen separately in
+`docs/INTERFACE_STAGE3_PLAN.md`; each later stage and component still needs
+its own go-ahead after the stage before it has passed its check. A change to
+this document is a design change and is reviewed like one.
 
 It was written before any code because the work replaces most of
 `crates/client/src/hud.rs` and adds a drawing layer the client does not have.

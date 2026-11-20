@@ -14,10 +14,12 @@
 pub mod atlas;
 pub mod draw;
 pub mod font;
+pub mod hud;
 pub mod raster;
 pub mod scale;
 pub mod test_screen;
 pub mod theme;
+pub mod theme_sheet;
 
 pub use atlas::{Atlas, Image, Region};
 pub use draw::{DrawList, Rect, Vertex};

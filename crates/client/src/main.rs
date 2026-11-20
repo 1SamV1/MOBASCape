@@ -72,6 +72,13 @@ struct Cli {
     /// Draw the interface renderer's test screen over the game.
     #[arg(long)]
     ui_test: bool,
+    /// Draw the stage 3 theme sheet over the game: every role by name, and
+    /// the pieces together.
+    #[arg(long)]
+    ui_theme_sheet: bool,
+    /// Draw the stage 3 labelled rectangles over the game (step B).
+    #[arg(long)]
+    ui_layout: bool,
     /// Force the interface's scale (1 to 4) instead of taking it from the
     /// window's size.
     #[arg(long)]
@@ -105,19 +112,20 @@ fn main() -> Result<()> {
     let animated = AnimatedScene::new(&cache, &scene, &champion)?;
     let height = scene.height.clone();
     let collision = scene.collision.clone();
-    // The interface renderer's test screen, only when asked for. The game's
-    // own interface does not use the new drawing layer yet.
-    let ui_theme = if cli.ui_test {
+    // The interface renderer's test screen or theme sheet, only when asked
+    // for. The game's own interface does not use the new drawing layer yet.
+    let ui_theme = if cli.ui_test || cli.ui_theme_sheet || cli.ui_layout {
         let theme = theme_file::load(&cache, &cli.ui_theme)
             .with_context(|| format!("loading theme {}", cli.ui_theme.display()))?;
         tracing::info!(
-            "interface theme {}: atlas {} x {}, fonts {:?}, panels {:?}, sprites {:?}",
+            "interface theme {}: atlas {} x {}, fonts {:?}, panels {:?}, sprites {:?}, colours {:?}",
             cli.ui_theme.display(),
             theme.atlas.width,
             theme.atlas.height,
             theme.font_roles().collect::<Vec<_>>(),
             theme.panel_roles().collect::<Vec<_>>(),
-            theme.sprite_roles().collect::<Vec<_>>()
+            theme.sprite_roles().collect::<Vec<_>>(),
+            theme.colour_roles().collect::<Vec<_>>()
         );
         Some(theme)
     } else {
@@ -176,6 +184,8 @@ fn main() -> Result<()> {
         demo_combat_target: None,
         hud: Hud::new(),
         ui_theme,
+        ui_theme_sheet: cli.ui_theme_sheet,
+        ui_layout: cli.ui_layout,
         ui_scale: cli.ui_scale,
         ui_shown: (0, 0, 0),
         fog_timer: 0.0,
@@ -223,8 +233,13 @@ struct App {
     demo_combat_cast: bool,
     demo_combat_target: Option<usize>,
     hud: Hud,
-    /// The theme for the interface test screen, when it was asked for.
+    /// The theme for the interface test screen or theme sheet, when it was
+    /// asked for.
     ui_theme: Option<rift_ui::Theme>,
+    /// Whether the theme sheet was asked for instead of the test screen.
+    ui_theme_sheet: bool,
+    /// Whether the step B labelled rectangles were asked for.
+    ui_layout: bool,
     ui_scale: Option<u32>,
     /// The window size and scale the test screen was last built for.
     ui_shown: (u32, u32, u32),
@@ -722,15 +737,45 @@ impl App {
                 .build_minimap(renderer.size.0 as f32, renderer.size.1 as f32, animated);
             renderer.set_hud_mesh(&self.hud.vertices, &self.hud.indices);
             if let Some(theme) = self.ui_theme.as_ref() {
-                let list = rift_ui::test_screen::build(theme, renderer.size, self.ui_scale);
+                let (list, what, detail) = if self.ui_layout {
+                    let state = rift_ui::hud::sample::state();
+                    let placed = rift_ui::hud::place(&state, renderer.size, self.ui_scale);
+                    let detail = format!(
+                        "requested {:?}, drawn {}, usual {:.1}%, steps {:?}, conflicts {:?}",
+                        placed.requested,
+                        placed.scale,
+                        placed.usual_coverage * 100.0,
+                        placed.steps,
+                        placed.conflicts
+                    );
+                    (
+                        rift_ui::hud::sketch::build(theme, &placed),
+                        "interface layout",
+                        detail,
+                    )
+                } else if self.ui_theme_sheet {
+                    (
+                        rift_ui::theme_sheet::build(theme, renderer.size, self.ui_scale),
+                        "interface theme sheet",
+                        String::new(),
+                    )
+                } else {
+                    (
+                        rift_ui::test_screen::build(theme, renderer.size, self.ui_scale),
+                        "interface test",
+                        String::new(),
+                    )
+                };
                 let shown = (renderer.size.0, renderer.size.1, list.scale() as u32);
                 if shown != self.ui_shown {
                     tracing::info!(
-                        "interface test: window {} x {}, scale {}, {} quads",
+                        "{}: window {} x {}, scale {}, {} quads {}",
+                        what,
                         shown.0,
                         shown.1,
                         shown.2,
-                        list.len()
+                        list.len(),
+                        detail
                     );
                     self.ui_shown = shown;
                 }

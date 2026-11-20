@@ -67,6 +67,10 @@ impl Theme {
         self.colours.get(role).copied().unwrap_or(MISSING)
     }
 
+    pub fn has_colour(&self, role: &str) -> bool {
+        self.colours.contains_key(role)
+    }
+
     /// Every role of each kind, in name order.
     pub fn sprite_roles(&self) -> impl Iterator<Item = &str> {
         self.sprites.keys().map(String::as_str)
@@ -78,6 +82,10 @@ impl Theme {
 
     pub fn font_roles(&self) -> impl Iterator<Item = &str> {
         self.fonts.keys().map(String::as_str)
+    }
+
+    pub fn colour_roles(&self) -> impl Iterator<Item = &str> {
+        self.colours.keys().map(String::as_str)
     }
 
     /// The check drawn for a missing image.

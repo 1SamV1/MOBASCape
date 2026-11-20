@@ -37,13 +37,23 @@ struct SpriteRef {
     frame: usize,
 }
 
+/// A panel is either cut from one cache sprite or a flat colour. Flat
+/// panels are for pieces the reference draws as plain see-through
+/// rectangles, which have no sprite to cut.
 #[derive(Deserialize)]
-struct PanelRef {
-    sprite: u32,
-    #[serde(default)]
-    frame: usize,
-    /// How much of the left, top, right and bottom is kept as it is.
-    insets: [u32; 4],
+#[serde(untagged)]
+enum PanelRef {
+    Sprite {
+        sprite: u32,
+        #[serde(default)]
+        frame: usize,
+        /// How much of the left, top, right and bottom is kept as it is.
+        insets: [u32; 4],
+    },
+    Solid {
+        /// "#rrggbb" or "#rrggbbaa".
+        solid: String,
+    },
 }
 
 #[derive(Deserialize)]
@@ -64,10 +74,23 @@ pub fn load(cache: &Cache, path: &Path) -> Result<Theme> {
         builder.sprite(role, image);
     }
     for (role, panel) in &file.panels {
-        let image = frame_image(cache, panel.sprite, panel.frame)
-            .with_context(|| format!("panel role {role}"))?;
+        let (image, insets) = match panel {
+            PanelRef::Sprite {
+                sprite,
+                frame,
+                insets,
+            } => (
+                frame_image(cache, *sprite, *frame)
+                    .with_context(|| format!("panel role {role}"))?,
+                *insets,
+            ),
+            PanelRef::Solid { solid } => (
+                solid_image(solid).with_context(|| format!("panel role {role}"))?,
+                [0, 0, 0, 0],
+            ),
+        };
         builder
-            .panel(role, image, panel.insets)
+            .panel(role, image, insets)
             .map_err(|why| anyhow!(why))?;
     }
     for (role, font) in &file.fonts {
@@ -151,6 +174,23 @@ fn add_font(cache: &Cache, builder: &mut ThemeBuilder, role: &str, id: u32) -> R
     Ok(())
 }
 
+/// A one-pixel image of one colour. A panel of it repeats that one pixel,
+/// which is how a flat, see-through panel is made.
+fn solid_image(text: &str) -> Result<Image> {
+    let colour = parse_colour(text)?;
+    let byte = |value: f32| (value.clamp(0.0, 1.0) * 255.0).round() as u8;
+    Ok(Image::filled(
+        1,
+        1,
+        [
+            byte(colour[0]),
+            byte(colour[1]),
+            byte(colour[2]),
+            byte(colour[3]),
+        ],
+    ))
+}
+
 fn parse_colour(text: &str) -> Result<rift_ui::Colour> {
     let hex = text
         .strip_prefix('#')
@@ -169,4 +209,132 @@ fn parse_colour(text: &str) -> Result<rift_ui::Colour> {
         part(4)?,
         if hex.len() == 8 { part(6)? } else { 1.0 },
     ])
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_flat_panel_is_one_pixel_of_its_colour() {
+        let image = solid_image("#10203080").unwrap();
+        assert_eq!((image.width, image.height), (1, 1));
+        assert_eq!(image.pixels[0], [16, 32, 48, 128]);
+        assert!(solid_image("#12345").is_err());
+        assert!(solid_image("102030").is_err());
+        assert!(solid_image("#zzzzzz").is_err());
+    }
+
+    /// The real theme, when the pinned cache has been unpacked; `None` in a
+    /// checkout that has no cache, so the test still runs without one.
+    fn pinned_theme() -> Option<(std::path::PathBuf, Theme)> {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let cache = root.join(".cache/osrs-235/cache");
+        if !cache.join("main_file_cache.dat2").exists() {
+            return None;
+        }
+        let cache = Cache::open(&cache).expect("the pinned cache opens");
+        let theme = load(&cache, &root.join("data/ui/theme.json")).expect("the theme loads");
+        Some((root, theme))
+    }
+
+    #[test]
+    fn the_stage_three_roles_load_from_the_pinned_cache_when_it_is_present() {
+        let Some((_, theme)) = pinned_theme() else {
+            return;
+        };
+        for role in [
+            "font.small",
+            "font.body",
+            "font.bold",
+            "font.title",
+            "panel.stone",
+            "panel.dark",
+            "panel.parchment",
+            "panel.slot",
+            "button.stone",
+            "button.stone.red",
+            "icon.kills",
+            "icon.team.blue",
+            "icon.team.red",
+            "icon.gold",
+            "orb.ring",
+        ] {
+            let found =
+                theme.font(role).is_some() || theme.panel(role).is_some() || theme.has_sprite(role);
+            assert!(found, "role {role} is missing");
+        }
+        for role in [
+            "text",
+            "text.title",
+            "announcement",
+            "bar.health",
+            "shade",
+            "dim",
+        ] {
+            assert!(theme.has_colour(role), "colour {role} is missing");
+        }
+        let sheet = rift_ui::theme_sheet::build(&theme, (1920, 1080), None);
+        assert!(
+            sheet.len() > 200,
+            "the theme sheet has {} quads",
+            sheet.len()
+        );
+    }
+
+    /// Write the theme sheet to `target/theme-sheet.ppm` for the eye, under
+    /// the same conditions as the in-game sheet (step A). Ignored by
+    /// default: it is evidence, not a unit test, and writes a picture.
+    #[test]
+    #[ignore = "writes a picture of the theme sheet for the eye"]
+    fn the_theme_sheet_can_be_written_for_the_eye() {
+        let Some((root, theme)) = pinned_theme() else {
+            eprintln!("no pinned cache; nothing to draw");
+            return;
+        };
+        let sheet = rift_ui::theme_sheet::build(&theme, (1920, 1080), None);
+        let (vertices, indices) = sheet.finish();
+        let (w, h) = (1920usize, 1080usize);
+        let mut pixels = vec![[24u8, 24, 30, 255]; w * h];
+        rift_ui::raster::render(&vertices, &indices, &theme.atlas, w, h, &mut pixels);
+        let mut ppm = format!("P6\n{w} {h}\n255\n").into_bytes();
+        for pixel in pixels {
+            ppm.extend_from_slice(&pixel[..3]);
+        }
+        let path = root.join("target/theme-sheet.ppm");
+        std::fs::write(&path, ppm).expect("write the theme sheet picture");
+        eprintln!("theme sheet written to {}", path.display());
+    }
+
+    /// The step B labelled rectangles over a plain ground, for the eye. It
+    /// is ignored by default: it writes a picture, and the game's own
+    /// `--ui-layout` draws the same rectangles over a live match.
+    #[test]
+    #[ignore = "writes a picture of the labelled layout for the eye"]
+    fn the_layout_sketch_can_be_written_for_the_eye() {
+        let Some((root, theme)) = pinned_theme() else {
+            eprintln!("no pinned cache; nothing to draw");
+            return;
+        };
+        let state = rift_ui::hud::sample::state();
+        let placed = rift_ui::hud::place(&state, (1920, 1080), None);
+        let list = rift_ui::hud::sketch::build(&theme, &placed);
+        let (vertices, indices) = list.finish();
+        let (w, h) = (1920usize, 1080usize);
+        let mut pixels = vec![[24u8, 24, 30, 255]; w * h];
+        rift_ui::raster::render(&vertices, &indices, &theme.atlas, w, h, &mut pixels);
+        let mut ppm = format!("P6\n{w} {h}\n255\n").into_bytes();
+        for pixel in pixels {
+            ppm.extend_from_slice(&pixel[..3]);
+        }
+        let path = root.join("target/layout-1920.ppm");
+        std::fs::write(&path, ppm).expect("write the layout picture");
+        eprintln!(
+            "layout written to {}: scale {}, usual {:.1}%, steps {:?}",
+            path.display(),
+            placed.scale,
+            placed.usual_coverage * 100.0,
+            placed.steps
+        );
+    }
 }

@@ -21,7 +21,7 @@ pub const TEST_LINE: &str = "The quick brown fox 0123456789 Oh dear, you are dea
 /// The roles the test screen asks a theme for.
 pub const SPRITE: &str = "test.sprite";
 pub const PANEL: &str = "panel";
-pub const LABEL_FONT: &str = "body";
+pub const LABEL_FONT: &str = "font.body";
 pub const TEXT: &str = "text";
 pub const ANNOUNCEMENT: &str = "announcement";
 pub const SHADE: &str = "shade";

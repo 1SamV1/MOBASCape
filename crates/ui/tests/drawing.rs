@@ -5,7 +5,7 @@
 use rift_ui::atlas::{AtlasBuilder, Image, Region};
 use rift_ui::draw::{DrawList, Rect};
 use rift_ui::theme::{GlyphSource, Panel, Theme, ThemeBuilder};
-use rift_ui::{raster, scale, test_screen};
+use rift_ui::{raster, scale, test_screen, theme_sheet};
 
 type Px = [u8; 4];
 const GROUND: Px = [10, 20, 30, 255];
@@ -378,7 +378,7 @@ fn test_theme(with_everything: bool) -> Theme {
             .panel(test_screen::PANEL, numbered(12, 12), [4, 4, 4, 4])
             .unwrap();
         builder.font(test_screen::LABEL_FONT, boxes(), 8, 12);
-        builder.font("title", boxes(), 8, 14);
+        builder.font("font.title", boxes(), 8, 14);
         builder.colour(test_screen::TEXT, [1.0, 1.0, 1.0, 1.0]);
         builder.colour(test_screen::ANNOUNCEMENT, [1.0, 1.0, 0.0, 1.0]);
         builder.colour(test_screen::SHADE, [0.0, 0.0, 0.0, 0.5]);
@@ -478,7 +478,7 @@ fn two_themes_with_the_same_roles_draw_the_same_layout() {
         )
         .unwrap();
     builder.font(test_screen::LABEL_FONT, boxes(), 8, 12);
-    builder.font("title", boxes(), 8, 14);
+    builder.font("font.title", boxes(), 8, 14);
     builder.sprite("something.else", Image::filled(50, 50, [0, 0, 0, 255]));
     let b = builder.build();
     let places = |theme: &Theme| -> Vec<[i32; 2]> {
@@ -490,4 +490,59 @@ fn two_themes_with_the_same_roles_draw_the_same_layout() {
             .collect()
     };
     assert_eq!(places(&a), places(&b));
+}
+
+#[test]
+fn the_theme_sheet_builds_on_whole_pixels_inside_the_window() {
+    let theme = test_theme(true);
+    for window in [
+        (640, 360),
+        (1280, 720),
+        (1366, 768),
+        (1600, 900),
+        (1920, 1080),
+        (2560, 1440),
+        (3840, 2160),
+        (333, 211),
+        (1, 1),
+    ] {
+        let list = theme_sheet::build(&theme, window, None);
+        assert_eq!(
+            list.scale() as u32,
+            scale::choose(window, theme_sheet::NEED)
+        );
+        let (vertices, indices) = list.finish();
+        assert!(!vertices.is_empty(), "{window:?}");
+        assert_eq!(indices.len() % 6, 0);
+        for vertex in &vertices {
+            assert_eq!(vertex.pos[0].fract(), 0.0, "{window:?}");
+            assert_eq!(vertex.pos[1].fract(), 0.0, "{window:?}");
+            assert!(
+                vertex.pos[0] >= 0.0 && vertex.pos[0] <= window.0 as f32,
+                "{window:?}"
+            );
+            assert!(
+                vertex.pos[1] >= 0.0 && vertex.pos[1] <= window.1 as f32,
+                "{window:?}"
+            );
+        }
+    }
+}
+
+#[test]
+fn the_theme_sheet_shows_every_role_the_theme_has() {
+    let theme = test_theme(true);
+    let expected = theme.sprite_roles().count()
+        + theme.panel_roles().count()
+        + theme.font_roles().count()
+        + theme.colour_roles().count();
+    let list = theme_sheet::build(&theme, (1920, 1080), Some(2));
+    // A name, a picture or swatch and a sample for each role is more than
+    // one quad each; the count is a floor, not an exact shape.
+    assert!(
+        list.len() > expected,
+        "{} roles, {} quads",
+        expected,
+        list.len()
+    );
 }
