@@ -1813,6 +1813,7 @@ impl App {
                 self.scene.as_ref(),
                 Some(&self.shop),
                 ui_camera,
+                (self.mouse_pos.0 as i32, self.mouse_pos.1 as i32),
             );
             if let Some(index) = self.spectator {
                 if let Some(unit) = animated.units.get(index) {
@@ -2447,6 +2448,7 @@ fn draw_ui_overlay(
     scene: Option<&SceneData>,
     shop: Option<&ItemShop>,
     camera: (f32, f32, f32, f32),
+    mouse: (i32, i32),
 ) {
     let Some(theme) = theme else {
         return;
@@ -2454,6 +2456,7 @@ fn draw_ui_overlay(
     let (list, what, detail) = if layout || live {
         let mut state = rift_ui::hud::sample::whole_for(renderer.size);
         if live {
+            state.tooltip = None;
             if let Some(player) = player {
                 state.score = crate::ui_live::score(player);
                 state.ability = crate::ui_live::ability(player);
@@ -2471,6 +2474,7 @@ fn draw_ui_overlay(
             }
             if let Some(shop) = shop {
                 state.shop = crate::ui_live::shop(shop);
+                state.tooltip = crate::ui_live::tooltip(shop, mouse);
             }
         }
         let placed = rift_ui::hud::place(&state, renderer.size, scale);
