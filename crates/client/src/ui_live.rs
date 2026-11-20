@@ -7,8 +7,8 @@ use crate::hud::{PlayerHud, UnitFrame};
 use crate::scene::{CampBuff, SceneData};
 use glam::{Vec2, Vec3};
 use rift_ui::hud::state::{
-    AbilityState, CampState, LaneState, MapPoint, MinimapState, NexusState, ObjectivesState,
-    PlateKind, ScoreState, StructureMark, UnitPlate,
+    AbilityState, CampState, ChatKind, ChatLine, KillFeedEntry, LaneState, MapPoint, MinimapState,
+    NexusState, ObjectivesState, PlateKind, ScoreState, StructureMark, UnitPlate,
 };
 
 pub fn score(player: &PlayerHud) -> ScoreState {
@@ -290,6 +290,62 @@ fn nexus_state(health: f32, vulnerable: bool) -> String {
     }
 }
 
+pub fn chat(player: &PlayerHud) -> Vec<ChatLine> {
+    chat_lines(&player.events)
+}
+
+/// The event log is newest first; the chat panel reads oldest at the top.
+pub fn chat_lines(events: &[String]) -> Vec<ChatLine> {
+    events
+        .iter()
+        .rev()
+        .map(|text| ChatLine {
+            kind: ChatKind::Event,
+            text: text.clone(),
+        })
+        .collect()
+}
+
+pub fn feed(player: &PlayerHud) -> Vec<KillFeedEntry> {
+    player
+        .kill_feed
+        .iter()
+        .rev()
+        .take(4)
+        .map(|line| feed_entry(line))
+        .collect()
+}
+
+/// The live feed only carries allied kills, and its lines are written by
+/// `AnimatedScene` as "YOU SLAIN X" or "KILLER HAS SLAIN VICTIM".
+pub fn feed_entry(line: &str) -> KillFeedEntry {
+    let (killer, victim) = if let Some(victim) = line.strip_prefix("YOU SLAIN ") {
+        ("You", victim)
+    } else if let Some((killer, victim)) = line.split_once(" HAS SLAIN ") {
+        (killer, victim)
+    } else {
+        ("The Rift", line)
+    };
+    KillFeedEntry {
+        killer: killer.to_string(),
+        victim: victim.to_string(),
+        gold: reward(victim),
+        killer_blue: true,
+        victim_blue: false,
+    }
+}
+
+fn reward(victim: &str) -> u32 {
+    match victim {
+        "A MINION" => 10,
+        "A TOWER" => 100,
+        "AN INHIBITOR" => 150,
+        "A CAMP" => 50,
+        "A DUMMY" => 20,
+        _ => 0,
+    }
+}
+
 pub fn plates(player: &PlayerHud) -> Vec<UnitPlate> {
     player.unit_frames.iter().filter_map(plate).collect()
 }
@@ -447,5 +503,28 @@ mod tests {
 
         frame.team = 2;
         assert!(plate(&frame).is_none());
+    }
+
+    #[test]
+    fn the_event_log_reverses_into_chat_and_the_feed_parses_kills() {
+        let events = vec!["NEWEST".to_string(), "OLDEST".to_string()];
+        let chat = chat_lines(&events);
+        assert_eq!(chat.len(), 2);
+        assert_eq!(chat[0].text, "OLDEST");
+        assert_eq!(chat[0].kind, ChatKind::Event);
+        assert_eq!(chat[1].text, "NEWEST");
+
+        let kill = feed_entry("YOU SLAIN A MINION");
+        assert_eq!(
+            (kill.killer.as_str(), kill.victim.as_str()),
+            ("You", "A MINION")
+        );
+        assert_eq!(kill.gold, 10);
+        assert!(kill.killer_blue && !kill.victim_blue);
+
+        let structure = feed_entry("A TOWER HAS SLAIN A MINION");
+        assert_eq!(structure.killer, "A TOWER");
+        assert_eq!(structure.victim, "A MINION");
+        assert_eq!(structure.gold, 10);
     }
 }

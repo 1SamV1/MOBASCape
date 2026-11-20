@@ -36,9 +36,9 @@ designed for fast-paced low-team-count matches.
 > The interface branch adds stage 3 in `crates/ui`: a cache-backed theme,
 > scale by fit, the placing/collapse pass, and every component through the
 > assembled whole, accepted at PR #1. Stage 4 has started: `--ui-live` reads
-> the live score strip, ability bar, minimap, objectives and unit plates from
-> the match. The old HUD remains the running default until the other
-> components follow. See [docs/STATUS.md](docs/STATUS.md),
+> the live score strip, ability bar, minimap, objectives, unit plates, chat
+> and kill feed from the match. The old HUD remains the running default until
+> the other components follow. See [docs/STATUS.md](docs/STATUS.md),
 > [docs/UI_ASSETS.md](docs/UI_ASSETS.md) and
 > [docs/INTERFACE_STAGE3_REVIEW.md](docs/INTERFACE_STAGE3_REVIEW.md).
 
@@ -166,7 +166,7 @@ cargo run -p rift-client -- --ui-theme-sheet
 cargo run -p rift-client -- --ui-layout
 
 # Stage 4: the assembled interface with the live score strip, ability bar,
-# minimap, objectives and unit plates
+# minimap, objectives, unit plates, chat and kill feed
 cargo run -p rift-client -- --ui-live
 
 # Verify fountain healing and passive gold

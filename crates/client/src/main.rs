@@ -2456,6 +2456,8 @@ fn draw_ui_overlay(
                 state.score = crate::ui_live::score(player);
                 state.ability = crate::ui_live::ability(player);
                 state.plates = crate::ui_live::plates(player);
+                state.chat = crate::ui_live::chat(player);
+                state.feed = crate::ui_live::feed(player);
             }
             if let (Some(animated), Some(scene)) = (animated, scene) {
                 state.minimap = crate::ui_live::minimap(scene, animated, camera, renderer.size);
