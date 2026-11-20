@@ -2461,7 +2461,9 @@ fn draw_ui_overlay(
                 state.chat = crate::ui_live::chat(player);
                 state.feed = crate::ui_live::feed(player);
                 state.announcement = crate::ui_live::announcement(player);
-                state.death = crate::ui_live::death(player);
+            }
+            if let (Some(player), Some(animated)) = (player, animated) {
+                state.death = crate::ui_live::death(player, animated);
             }
             if let (Some(animated), Some(scene)) = (animated, scene) {
                 state.minimap = crate::ui_live::minimap(scene, animated, camera, renderer.size);
