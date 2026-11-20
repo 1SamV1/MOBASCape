@@ -2,9 +2,9 @@
 
 Status: **design approved with clarifications, and frozen. Stages 1 and 2
 have passed and are frozen with it. Stage 3's step A theme, step B placing
-pass, step 1 score strip and step 2 ability bar are built and tested
-headlessly; the other components are not built, and `hud.rs` is still the
-default.** The stage 3 plan was frozen separately in
+pass, step 1 score strip, step 2 ability bar and step 3 minimap are built
+and tested headlessly; the other components are not built, and `hud.rs` is
+still the default.** The stage 3 plan was frozen separately in
 `docs/INTERFACE_STAGE3_PLAN.md`; each later stage and component still needs
 its own go-ahead after the stage before it has passed its check. A change to
 this document is a design change and is reviewed like one.

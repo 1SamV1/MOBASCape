@@ -3,8 +3,8 @@
 //! component reads the match until stage 4.
 
 use crate::hud::state::{
-    AbilityState, AllyState, CampState, HudState, InventoryItem, KillFeedEntry, MinimapState,
-    ObjectivesState, ScoreState, TargetState,
+    AbilityState, AllyState, CampState, HudState, InventoryItem, KillFeedEntry, MapPoint,
+    MinimapState, ObjectivesState, ScoreState, StructureMark, TargetState,
 };
 
 pub fn state() -> HudState {
@@ -28,9 +28,75 @@ pub fn state() -> HudState {
             cooldowns: [0.0, 3.2, 0.0, 18.5],
         },
         minimap: MinimapState {
-            allies: 4,
-            enemies: 5,
-            camps: 2,
+            lanes: vec![
+                vec![
+                    MapPoint { x: 42, y: 210 },
+                    MapPoint { x: 44, y: 70 },
+                    MapPoint { x: 100, y: 33 },
+                    MapPoint { x: 205, y: 42 },
+                ],
+                vec![
+                    MapPoint { x: 42, y: 210 },
+                    MapPoint { x: 126, y: 126 },
+                    MapPoint { x: 205, y: 42 },
+                ],
+                vec![
+                    MapPoint { x: 42, y: 210 },
+                    MapPoint { x: 190, y: 208 },
+                    MapPoint { x: 212, y: 150 },
+                    MapPoint { x: 205, y: 42 },
+                ],
+            ],
+            river: vec![
+                MapPoint { x: 0, y: 42 },
+                MapPoint { x: 58, y: 72 },
+                MapPoint { x: 126, y: 126 },
+                MapPoint { x: 196, y: 182 },
+                MapPoint { x: 254, y: 218 },
+            ],
+            bases: vec![
+                StructureMark {
+                    at: MapPoint { x: 38, y: 216 },
+                    blue: true,
+                },
+                StructureMark {
+                    at: MapPoint { x: 214, y: 36 },
+                    blue: false,
+                },
+            ],
+            allies: vec![
+                MapPoint { x: 74, y: 158 },
+                MapPoint { x: 112, y: 108 },
+                MapPoint { x: 160, y: 92 },
+                MapPoint { x: 198, y: 58 },
+            ],
+            enemies: vec![
+                MapPoint { x: 102, y: 150 },
+                MapPoint { x: 138, y: 120 },
+                MapPoint { x: 166, y: 72 },
+                MapPoint { x: 176, y: 178 },
+                MapPoint { x: 214, y: 116 },
+            ],
+            camps: vec![MapPoint { x: 82, y: 92 }, MapPoint { x: 170, y: 156 }],
+            structures: vec![
+                StructureMark {
+                    at: MapPoint { x: 48, y: 166 },
+                    blue: true,
+                },
+                StructureMark {
+                    at: MapPoint { x: 86, y: 68 },
+                    blue: true,
+                },
+                StructureMark {
+                    at: MapPoint { x: 204, y: 88 },
+                    blue: false,
+                },
+                StructureMark {
+                    at: MapPoint { x: 164, y: 190 },
+                    blue: false,
+                },
+            ],
+            camera: (96, 92, 58, 48),
         },
         objectives: ObjectivesState {
             lines: 6,

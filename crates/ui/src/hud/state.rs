@@ -125,9 +125,30 @@ pub struct AbilityState {
     pub cooldowns: [f32; 4],
 }
 
+/// A point in the minimap's own 254 by 252 picture.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct MapPoint {
+    pub x: i32,
+    pub y: i32,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct StructureMark {
+    pub at: MapPoint,
+    pub blue: bool,
+}
+
+/// The minimap's picture and marks. Stage 3 fills this with a sample map;
+/// stage 4 feeds the client's visible units and camera box.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MinimapState {
-    pub allies: usize,
-    pub enemies: usize,
-    pub camps: usize,
+    pub lanes: Vec<Vec<MapPoint>>,
+    pub river: Vec<MapPoint>,
+    pub bases: Vec<StructureMark>,
+    pub allies: Vec<MapPoint>,
+    pub enemies: Vec<MapPoint>,
+    pub camps: Vec<MapPoint>,
+    pub structures: Vec<StructureMark>,
+    /// Left, top, width and height in the map picture.
+    pub camera: (i32, i32, i32, i32),
 }
