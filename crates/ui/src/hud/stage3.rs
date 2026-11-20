@@ -5,11 +5,20 @@
 
 use crate::draw::DrawList;
 use crate::hud::layout::{Layout, Piece};
-use crate::hud::{ability_bar, minimap, score_strip, sketch, state::HudState};
+use crate::hud::{ability_bar, minimap, objectives, score_strip, sketch, state::HudState};
 use crate::theme::Theme;
 
 pub fn build(theme: &Theme, layout: &Layout, state: &HudState) -> DrawList {
-    let mut list = sketch::build(theme, layout);
+    let mut list = sketch::build_without(
+        theme,
+        layout,
+        &[
+            Piece::Score,
+            Piece::Ability,
+            Piece::Minimap,
+            Piece::Objectives,
+        ],
+    );
     if let Some(area) = layout.get(Piece::Score) {
         score_strip::draw(theme, &mut list, area, &state.score);
     }
@@ -18,6 +27,9 @@ pub fn build(theme: &Theme, layout: &Layout, state: &HudState) -> DrawList {
     }
     if let Some(area) = layout.get(Piece::Minimap) {
         minimap::draw(theme, &mut list, area, &state.minimap);
+    }
+    if let Some(area) = layout.get(Piece::Objectives) {
+        objectives::draw(theme, &mut list, area, &state.objectives);
     }
     list
 }

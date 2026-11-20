@@ -11,6 +11,12 @@ const PANEL: i32 = 10;
 const WRITING: i32 = 11;
 
 pub fn build(theme: &Theme, layout: &Layout) -> DrawList {
+    build_without(theme, layout, &[])
+}
+
+/// The same screen, but with no label or border behind components that are
+/// already drawn for real.
+pub fn build_without(theme: &Theme, layout: &Layout, live: &[Piece]) -> DrawList {
     let mut list = DrawList::new(layout.window, layout.scale, &theme.atlas);
     let s = list.scale();
     let text = theme.colour("text");
@@ -27,6 +33,9 @@ pub fn build(theme: &Theme, layout: &Layout) -> DrawList {
     };
 
     for (piece, rect) in &layout.pieces {
+        if live.contains(piece) {
+            continue;
+        }
         list.set_layer(PANEL);
         list.rect(*rect, fill);
         list.outline(*rect, s.max(1), border(*piece));

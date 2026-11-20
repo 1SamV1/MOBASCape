@@ -3,8 +3,8 @@
 //! component reads the match until stage 4.
 
 use crate::hud::state::{
-    AbilityState, AllyState, CampState, HudState, InventoryItem, KillFeedEntry, MapPoint,
-    MinimapState, ObjectivesState, ScoreState, StructureMark, TargetState,
+    AbilityState, AllyState, CampState, HudState, InventoryItem, KillFeedEntry, LaneState,
+    MapPoint, MinimapState, NexusState, ObjectivesState, ScoreState, StructureMark, TargetState,
 };
 
 pub fn state() -> HudState {
@@ -99,7 +99,41 @@ pub fn state() -> HudState {
             camera: (96, 92, 58, 48),
         },
         objectives: ObjectivesState {
-            lines: 6,
+            lanes: vec![
+                LaneState {
+                    name: "Top".to_string(),
+                    blue_towers: [true, false],
+                    blue_inhibitor: true,
+                    red_towers: [true, true],
+                    red_inhibitor: true,
+                },
+                LaneState {
+                    name: "Mid".to_string(),
+                    blue_towers: [true, true],
+                    blue_inhibitor: true,
+                    red_towers: [true, false],
+                    red_inhibitor: true,
+                },
+                LaneState {
+                    name: "Bot".to_string(),
+                    blue_towers: [true, true],
+                    blue_inhibitor: false,
+                    red_towers: [true, true],
+                    red_inhibitor: true,
+                },
+            ],
+            nexuses: vec![
+                NexusState {
+                    name: "Blue nexus".to_string(),
+                    blue: true,
+                    state: "Shielded".to_string(),
+                },
+                NexusState {
+                    name: "Red nexus".to_string(),
+                    blue: false,
+                    state: "620".to_string(),
+                },
+            ],
             second_lines: 4,
             usual_second_lines: 0,
             camps: vec![

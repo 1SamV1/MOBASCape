@@ -15,17 +15,35 @@ pub struct CampState {
     pub detail: Option<String>,
 }
 
+/// One lane's structure pips. Two towers, then the inhibitor.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LaneState {
+    pub name: String,
+    pub blue_towers: [bool; 2],
+    pub blue_inhibitor: bool,
+    pub red_towers: [bool; 2],
+    pub red_inhibitor: bool,
+}
+
+/// A nexus line: shielded, open, or its health as text.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NexusState {
+    pub name: String,
+    pub blue: bool,
+    pub state: String,
+}
+
 /// The lanes table and the objectives list.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ObjectivesState {
-    /// The six objective lines: two nexus and four camps.
-    pub lines: usize,
-    /// How many of those lines have a second line today.
+    pub lanes: Vec<LaneState>,
+    pub nexuses: Vec<NexusState>,
+    pub camps: Vec<CampState>,
+    /// How many of the objective lines have a second line today.
     pub second_lines: usize,
     /// How many second lines the usual state shows. The budget is measured
     /// on this state; the longest list is what the scale must fit.
     pub usual_second_lines: usize,
-    pub camps: Vec<CampState>,
 }
 
 impl ObjectivesState {
@@ -36,12 +54,18 @@ impl ObjectivesState {
         158 + 24 * (lines + second_lines) as i32
     }
 
+    /// The objective lines are the nexuses and the camps. There is no
+    /// separate count to fall out of step with the content.
+    pub fn lines(&self) -> usize {
+        self.nexuses.len() + self.camps.len()
+    }
+
     pub fn usual_height(&self) -> i32 {
-        Self::height(self.lines, self.usual_second_lines)
+        Self::height(self.lines(), self.usual_second_lines)
     }
 
     pub fn longest_height(&self) -> i32 {
-        Self::height(self.lines, self.second_lines)
+        Self::height(self.lines(), self.second_lines)
     }
 
     /// What the sample wants on screen: the full list when it is live.

@@ -4,6 +4,7 @@
 pub mod ability_bar;
 pub mod layout;
 pub mod minimap;
+pub mod objectives;
 pub mod sample;
 pub mod score_strip;
 pub mod sketch;
