@@ -314,6 +314,9 @@ struct BiomeJson {
     /// Ground tint multiplier applied to the pocket terrain.
     #[serde(default)]
     tint: Option<[f32; 3]>,
+    /// Grass layer: 0 classic, 1 lush, 2 dry, 3 steppe, 4 dire, 5 straw.
+    #[serde(default)]
+    grass: Option<u8>,
     /// Scenery budget for the pocket.
     #[serde(default = "default_budget")]
     budget: usize,
@@ -321,6 +324,16 @@ struct BiomeJson {
 
 fn default_budget() -> usize {
     90
+}
+
+fn default_grass_variant(id: &str) -> u8 {
+    match id {
+        "radiant_human_city" | "radiant_elven_lands" | "radiant_gnome_stronghold" => 1,
+        "dire_dark_magic" | "dire_vampire" => 4,
+        "dire_ogre" => 3,
+        "dire_goblin" => 2,
+        _ => 0,
+    }
 }
 
 /// The river that splits the map between the radiant and dire halves.
@@ -575,6 +588,7 @@ pub struct BiomePocket {
     pub rect: (u32, u32, u32, u32),
     pub origin: (i32, i32),
     pub tint: [f32; 3],
+    pub grass_variant: u8,
     pub budget: usize,
 }
 
@@ -939,6 +953,9 @@ impl MapLayout {
                         biome.origin[1].round() as i32,
                     ),
                     tint: biome.tint.unwrap_or([1.0, 1.0, 1.0]),
+                    grass_variant: biome
+                        .grass
+                        .unwrap_or_else(|| default_grass_variant(&biome.id)),
                     budget: biome.budget,
                 }
             })
@@ -1267,6 +1284,7 @@ pub fn build(
 
     let mut heights = vec![0.0f32; size * size];
     let mut colors = vec![[60u8, 90, 50]; size * size];
+    let mut grass_variant = vec![0u8; size * size];
 
     for gy in 0..size {
         for gx in 0..size {
@@ -1403,6 +1421,15 @@ pub fn build(
                     colors[idx][k] = (colors[idx][k] as f32 * (1.0 - blend)
                         + tinted[k] as f32 * blend)
                         .clamp(0.0, 255.0) as u8;
+                }
+                // Dither the grass variant across the pocket's soft edge so
+                // biome transitions read as a natural field change rather
+                // than a rectangular tile boundary.
+                let coverage = blend.clamp(0.0, 1.0);
+                if coverage >= 1.0
+                    || value_noise(map_tx as f32 * 0.55, map_ty as f32 * 0.55) < coverage
+                {
+                    grass_variant[idx] = biome.grass_variant;
                 }
                 if tile.underlay_id == 0 {
                     pocket_water.push((gx, gy));
@@ -1630,6 +1657,10 @@ pub fn build(
             v10.material = 4;
             v01.material = 4;
             v11.material = 4;
+            v00.texture_id = grass_variant[idx] as u32;
+            v10.texture_id = grass_variant[idx + 1] as u32;
+            v01.texture_id = grass_variant[idx + size] as u32;
+            v11.texture_id = grass_variant[idx + size + 1] as u32;
             terrain_mesh.push_triangle(v00, v01, v10);
             terrain_mesh.push_triangle(v10, v01, v11);
         }

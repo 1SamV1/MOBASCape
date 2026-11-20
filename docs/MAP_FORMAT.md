@@ -56,6 +56,9 @@ The playable map is `data/maps/karamja_rift/map.json`:
   - `rect`: `[x, y, width, height]` tile rectangle inside that region.
   - `origin`: map tile where the rectangle is placed.
   - `tint`: ground colour multiplier for the pocket.
+  - `grass`: grass layer variant: `0` classic (texture 129), `1` lush
+    (203), `2` dry (18), `3` steppe (197), `4` dire (195), `5` straw (205).
+    Omit it to use the id-based default.
   - `side`: `radiant` or `dire`, `label`: the name shown in the HUD.
   The dire half holds dark magic (Wilderness dead-tree graveyard), vampires
   (Morytania swamp), ogre ruins (ceremonial pillars) and a goblin camp; the

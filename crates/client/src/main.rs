@@ -1,6 +1,7 @@
 mod animated;
 mod champion;
 mod font;
+mod grass_textures;
 mod hero_select;
 mod hud;
 mod items;

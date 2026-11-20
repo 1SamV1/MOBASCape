@@ -31,6 +31,7 @@ struct SceneGlobals {
 @group(0) @binding(4) var terrain_sampler: sampler;
 @group(0) @binding(5) var model_textures: texture_2d_array<f32>;
 @group(0) @binding(6) var model_sampler: sampler;
+@group(0) @binding(7) var grass_textures: texture_2d_array<f32>;
 
 struct VsIn {
     @location(0) position: vec3<f32>,
@@ -358,24 +359,31 @@ fn albedo(input: VsOut) -> vec3<f32> {
         let slope = clamp(input.uv.x, 0.0, 1.0);
         // Warp the tiling so the 1.5-tile repeat never lines up into a grid
         // in the near field.
-        let uv = input.world.xz / 256.0
+        let uv = input.world.xz / 512.0
             + vec2<f32>(
                 noise2(input.world.xz / 780.0),
                 noise2(input.world.zx / 910.0 + 17.0)
             ) * 0.05;
+        // Biome variants: 0 classic, 1 lush, 2 dry, 3 steppe, 4 dire, 5 straw.
+        let variant = min(input.texture_id, 5u);
         // Two grass samples at different scales and rotations, blended by a
-        // slow selector. This breaks the 192-unit repeat without the blurred
-        // look of a single stretched sprite.
-        let grass_a = textureSampleLevel(terrain_textures, terrain_sampler, uv, 0, 0.0).rgb;
-        let alt_uv = rotate2(input.world.xz / 451.0, 2.1)
+        // slow selector. The 512px mirror-tiled array repeats every four
+        // tiles, so the pattern is far less obvious at the MOBA camera.
+        let grass_a =
+            textureSampleLevel(grass_textures, terrain_sampler, uv, variant, 0.0).rgb;
+        let alt_uv = rotate2(input.world.xz / 903.0, 2.1)
             + vec2<f32>(0.17, 0.31)
             + vec2<f32>(
                 noise2(input.world.xz / 900.0 + 41.0),
                 noise2(input.world.zx / 1010.0 + 23.0)
             ) * 0.04;
-        let grass_b = textureSampleLevel(terrain_textures, terrain_sampler, alt_uv, 0, 0.0).rgb;
+        // Classic ground borrows the lush layer as a sparse detail pass so
+        // its repeat never lines up into a visible weave.
+        let detail_layer = select(1u, variant, variant > 0u);
+        let grass_b =
+            textureSampleLevel(grass_textures, terrain_sampler, alt_uv, detail_layer, 0.0).rgb;
         let selector = smoothstep(0.25, 0.75, noise2(input.world.xz / 1270.0));
-        let grass_raw = mix(grass_a, grass_b, 0.24 + selector * 0.18);
+        let grass_raw = mix(grass_a, grass_b, 0.20 + selector * 0.16);
         // Keep the scraped sprite's own green; lift saturation slightly
         // because the HDR/tonemap chain compresses it.
         let grass_luma = dot(grass_raw, vec3<f32>(0.299, 0.587, 0.114));

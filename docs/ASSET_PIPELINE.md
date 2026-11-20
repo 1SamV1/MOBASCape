@@ -185,7 +185,29 @@ Known caveats from the community quickstart:
 - A successful file export does not prove correctness. Verify colours, textures,
   and animation visually against the game.
 
-## 6. Visual verification checklist
+## 6. Ground texture scrape
+
+The terrain texture array reads `assets/osrs-ground/*.png`. Scrape the cache and
+install the scraped sources locally (never commit them):
+
+```sh
+cargo run -p rift-tools -- dump-textures --out assets/cache-scrape --sprites
+cp assets/cache-scrape/textures/texture_0129.png assets/osrs-ground/grass.png
+cp assets/cache-scrape/textures/texture_0203.png assets/osrs-ground/grass_lush.png
+cp assets/cache-scrape/textures/texture_0018.png assets/osrs-ground/grass_dry.png
+cp assets/cache-scrape/textures/texture_0197.png assets/osrs-ground/grass_steppe.png
+cp assets/cache-scrape/textures/texture_0195.png assets/osrs-ground/grass_dire.png
+cp assets/cache-scrape/textures/texture_0205.png assets/osrs-ground/grass_straw.png
+```
+
+The base terrain array keeps `grass, dirt, stone, sand, water, path`. The six
+grass variants are loaded separately into a 512px mirror-tiled array (classic,
+lush, dry, steppe, dire, straw) so the grass pattern repeats every four tiles
+instead of every one and a half, with no mirror seams. Terrain vertices carry
+the biome variant in `texture_id`; `0` selects classic and `1..5` select the
+rest.
+
+## 7. Visual verification checklist
 
 For every new asset class:
 
@@ -196,7 +218,7 @@ For every new asset class:
 4. Record cache ID, model ID, sequence ID, and source build in the PR/test note.
 5. Check the asset in engine space: 1 tile = 128 units, height ×8, Y flipped.
 
-## 7. Legal and distribution
+## 8. Legal and distribution
 
 Jagex owns the cache and assets. This repository does **not** include them.
 Users must obtain their own cache and run the extractor locally. Do not

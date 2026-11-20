@@ -7,6 +7,7 @@ use wgpu::util::DeviceExt;
 use winit::window::Window;
 
 use crate::animated::SceneLight;
+use crate::grass_textures::GrassTextures;
 use crate::hud::UiVertex;
 use crate::model_textures::ModelTextures;
 use crate::scene::{Atmosphere, HeightGrid, MeshData, SceneData, SceneVertex, srgb_to_linear};
@@ -538,6 +539,31 @@ impl Renderer {
             ..Default::default()
         });
 
+        let grass_textures = GrassTextures::load()?;
+        let grass_texture = device.create_texture_with_data(
+            &queue,
+            &wgpu::TextureDescriptor {
+                label: Some("grass texture array"),
+                size: wgpu::Extent3d {
+                    width: grass_textures.width,
+                    height: grass_textures.height,
+                    depth_or_array_layers: grass_textures.layers,
+                },
+                mip_level_count: grass_textures.mip_levels,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: wgpu::TextureFormat::Rgba8UnormSrgb,
+                usage: wgpu::TextureUsages::TEXTURE_BINDING,
+                view_formats: &[],
+            },
+            wgpu::util::TextureDataOrder::LayerMajor,
+            &grass_textures.pixels,
+        );
+        let grass_view = grass_texture.create_view(&wgpu::TextureViewDescriptor {
+            dimension: Some(wgpu::TextureViewDimension::D2Array),
+            ..Default::default()
+        });
+
         let model_texture = device.create_texture_with_data(
             &queue,
             &wgpu::TextureDescriptor {
@@ -670,6 +696,16 @@ impl Renderer {
                     ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
                     count: None,
                 },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 7,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        view_dimension: wgpu::TextureViewDimension::D2Array,
+                        multisampled: false,
+                    },
+                    count: None,
+                },
             ],
         });
 
@@ -704,6 +740,10 @@ impl Renderer {
                 wgpu::BindGroupEntry {
                     binding: 6,
                     resource: wgpu::BindingResource::Sampler(&model_sampler),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 7,
+                    resource: wgpu::BindingResource::TextureView(&grass_view),
                 },
             ],
         });

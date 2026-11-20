@@ -741,6 +741,7 @@
       "id": "dire_dark_magic",
       "side": "dire",
       "label": "DARK MAGIC",
+      "grass": 4,
       "region": [
         48,
         52
@@ -766,6 +767,7 @@
       "id": "dire_vampire",
       "side": "dire",
       "label": "VAMPIRE SWAMP",
+      "grass": 4,
       "region": [
         54,
         52
@@ -791,6 +793,7 @@
       "id": "dire_ogre",
       "side": "dire",
       "label": "OGRE RUINS",
+      "grass": 3,
       "region": [
         23,
         55
@@ -816,6 +819,7 @@
       "id": "dire_goblin",
       "side": "dire",
       "label": "GOBLIN CAMP",
+      "grass": 2,
       "region": [
         29,
         53
@@ -841,6 +845,7 @@
       "id": "radiant_human_city",
       "side": "radiant",
       "label": "HUMAN CITY",
+      "grass": 1,
       "region": [
         50,
         52
@@ -866,6 +871,7 @@
       "id": "radiant_human_keep",
       "side": "radiant",
       "label": "HUMAN KEEP",
+      "grass": 0,
       "region": [
         46,
         52
@@ -891,6 +897,7 @@
       "id": "radiant_elven_lands",
       "side": "radiant",
       "label": "ELVEN LANDS",
+      "grass": 1,
       "region": [
         42,
         49
@@ -916,6 +923,7 @@
       "id": "radiant_gnome_stronghold",
       "side": "radiant",
       "label": "GNOME STRONGHOLD",
+      "grass": 1,
       "region": [
         41,
         48
