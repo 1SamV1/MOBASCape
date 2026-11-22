@@ -330,8 +330,13 @@ fn main() -> Result<()> {
         Vec::new()
     };
     let ui_theme = if cli.ui_test || cli.ui_theme_sheet || cli.ui_layout || cli.ui_live {
-        let theme = theme_file::load_with_items(&cache, &cli.ui_theme, &item_icons)
-            .with_context(|| format!("loading theme {}", cli.ui_theme.display()))?;
+        let theme = theme_file::load_with_items_and_minimap(
+            &cache,
+            &cli.ui_theme,
+            &item_icons,
+            Some(&minimap_image),
+        )
+        .with_context(|| format!("loading theme {}", cli.ui_theme.display()))?;
         tracing::info!(
             "interface theme {}: atlas {} x {}, fonts {:?}, panels {:?}, sprites {:?}, colours {:?}",
             cli.ui_theme.display(),

@@ -33,6 +33,11 @@ pub fn draw(theme: &Theme, list: &mut DrawList, area: Rect, state: &MinimapState
     );
     list.push_clip(map);
     list.rect(map, [0.035, 0.075, 0.055, 0.96]);
+    // The live theme carries a terrain picture baked from the cache terrain
+    // colours. The sample theme has no such role, so the dark map remains.
+    if theme.has_sprite("minimap.terrain") {
+        list.sprite(theme.sprite("minimap.terrain"), map.x, map.y);
+    }
 
     let at = |point: MapPoint| (map.x + point.x * s, map.y + point.y * s);
     let line = |list: &mut DrawList, points: &[MapPoint], width: i32, colour: Colour| {

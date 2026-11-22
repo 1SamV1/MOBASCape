@@ -40,8 +40,9 @@ designed for fast-paced low-team-count matches.
 > the live score strip, ability bar, minimap, objectives, unit plates, chat,
 > kill feed, shop, shop tooltip, announcements, death overlay (with real
 > damage breakdown bars), team frames, a click-selected target panel, the
-> six-slot inventory, the live gold count from the match and cache-baked OSRS
-> item icons. Every `HudState` slice now reads live data. The live shop
+> six-slot inventory, the live gold count from the match, cache-baked OSRS
+> item icons and the cache-terrain minimap picture. Every `HudState` slice now
+> reads live data. The live shop
 > overlay switches categories, scrolls the expanded item list, selects and
 > buys items, and the assembled inventory's Shop button opens it. Under
 > `--ui-live` the assembled interface owns the screen and the legacy HUD is

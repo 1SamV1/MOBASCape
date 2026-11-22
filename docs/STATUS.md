@@ -1,6 +1,19 @@
 # Status
 
-Last updated: neutral camp bars in the live plates, 2026-11-21.
+Last updated: live minimap terrain, 2026-11-21.
+
+## 2026-11-21 — Live minimap uses the cache terrain picture
+
+- The live minimap now receives the terrain picture baked from the cached
+  terrain colours, fitted from 256×256 to the component’s 254×254 slot. The
+  picture is drawn before the river, lanes, structures and dots, so the live
+  map reads like the game instead of a black panel.
+- `theme_file::load_with_items_and_minimap` adds the `minimap.terrain` role;
+  the sample theme still has no such role and keeps its dark sample map.
+- No new visual assets were introduced: the picture is generated from the
+  cache terrain and resized with nearest filtering to preserve the pixel look.
+- Verified: 258 tests pass, 4 ignored; workspace clippy clean. Capture:
+  `/tmp/opencode/ui_live_minimap.png`.
 
 ## 2026-11-21 — Neutral camp bars in the live unit plates
 

@@ -70,6 +70,16 @@ pub fn load(cache: &Cache, path: &Path) -> Result<Theme> {
 /// The role is `icon.item.<key>`; a failed bake leaves the role out, and the
 /// component falls back to its colour swatch instead of a missing image.
 pub fn load_with_items(cache: &Cache, path: &Path, items: &[(String, u32)]) -> Result<Theme> {
+    load_with_items_and_minimap(cache, path, items, None)
+}
+
+/// The same, plus the cache-derived terrain minimap used by the live HUD.
+pub fn load_with_items_and_minimap(
+    cache: &Cache,
+    path: &Path,
+    items: &[(String, u32)],
+    minimap: Option<&image::RgbaImage>,
+) -> Result<Theme> {
     let text = std::fs::read_to_string(path)
         .with_context(|| format!("reading theme {}", path.display()))?;
     let file: ThemeFile =
@@ -116,7 +126,23 @@ pub fn load_with_items(cache: &Cache, path: &Path, items: &[(String, u32)]) -> R
             Err(err) => tracing::warn!("item icon {key} ({item_id}): {err:#}"),
         }
     }
+    if let Some(minimap) = minimap {
+        builder.sprite("minimap.terrain", minimap_sprite_image(minimap));
+    }
     Ok(builder.build())
+}
+
+/// Fit the baked terrain map to the live minimap's 254 by 252 picture.
+fn minimap_sprite_image(minimap: &image::RgbaImage) -> Image {
+    let resized = image::imageops::resize(minimap, 254, 254, image::imageops::FilterType::Nearest);
+    Image::new(
+        254,
+        254,
+        resized
+            .pixels()
+            .map(|pixel| [pixel[0], pixel[1], pixel[2], pixel[3]])
+            .collect(),
+    )
 }
 
 fn sheet(cache: &Cache, id: u32) -> Result<SpriteSheet> {
@@ -210,6 +236,14 @@ fn parse_colour(text: &str) -> Result<rift_ui::Colour> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_minimap_picture_is_fitted_to_the_live_picture() {
+        let minimap = image::RgbaImage::from_pixel(256, 256, image::Rgba([4, 8, 12, 255]));
+        let image = minimap_sprite_image(&minimap);
+        assert_eq!((image.width, image.height), (254, 254));
+        assert_eq!(image.pixels[0], [4, 8, 12, 255]);
+    }
 
     #[test]
     fn flat_panel_colours_parse() {
