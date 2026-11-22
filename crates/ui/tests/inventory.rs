@@ -104,6 +104,24 @@ fn nothing_is_drawn_outside_the_rectangle() {
 }
 
 #[test]
+fn the_shop_button_sits_inside_the_inventory_at_every_scale() {
+    for s in 1..=4i32 {
+        let area = Rect::new(10, 20, inventory::SIZE.0 * s, inventory::SIZE.1 * s);
+        let button = inventory::shop_button(area, s);
+        assert_eq!(button.x, area.x + 8 * s);
+        assert_eq!(button.y, area.y + 128 * s);
+        assert_eq!((button.w, button.h), (128 * s, 24 * s));
+        assert!(button.right() <= area.right());
+        assert!(button.bottom() <= area.bottom());
+    }
+    let area = Rect::new(10, 20, 144, 160);
+    assert_eq!(inventory::shop_button(area, 1), Rect::new(18, 148, 128, 24));
+    assert!(inventory::shop_button_at(area, 1, (82, 160)));
+    assert!(!inventory::shop_button_at(area, 1, (17, 160)));
+    assert!(!inventory::shop_button_at(area, 1, (82, 172)));
+}
+
+#[test]
 fn a_theme_with_only_fonts_still_draws_the_inventory() {
     let mut builder = ThemeBuilder::new();
     builder.font("font.small", boxes(), 8, 10);

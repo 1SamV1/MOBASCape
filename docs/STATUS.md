@@ -2,6 +2,18 @@
 
 Last updated: live stage 4 interface state, 2026-11-21.
 
+## 2026-11-21 — Assembled inventory opens the shop
+
+- The live interface now caches the `Layout` from its draw pass, so click
+  routing uses the rectangles that were actually drawn rather than rebuilding
+  them from the sample state.
+- The assembled inventory's Shop button is hit-tested with the same geometry
+  that draws it (`inventory::shop_button` and `shop_button_at`). Clicking it
+  opens the live shop overlay; clicks elsewhere on the inventory panel are
+  consumed so they do not fall through to the old HUD or the world.
+- Verified: `cargo test --workspace` 250 tests pass, 3 ignored; workspace
+  clippy is clean.
+
 ## 2026-11-21 — Live inventory and gold
 
 - The stage 4 inventory is bridged: its six slots now come from

@@ -2,8 +2,7 @@
 //! slots in two rows of three, the gold count and a Shop button.
 //!
 //! Stage 3 draws labelled squares and three sample items; stage 4 fills the
-//! same slice from the match. The Shop button is drawn but its click is not
-//! routed to the live overlay yet.
+//! same slice from the match and routes the Shop button to the live overlay.
 
 use crate::Colour;
 use crate::draw::{DrawList, Rect};
@@ -15,6 +14,21 @@ pub const SIZE: (i32, i32) = (144, 160);
 const LAYER: i32 = 20;
 const CELL: i32 = 40;
 const PITCH: i32 = 44;
+
+/// The Shop button's rectangle inside the inventory's area.
+pub fn shop_button(area: Rect, scale: i32) -> Rect {
+    let s = scale.max(1);
+    Rect::new(area.x + 8 * s, area.y + 128 * s, 128 * s, 24 * s)
+}
+
+/// Whether the pointer is on the Shop button.
+pub fn shop_button_at(area: Rect, scale: i32, mouse: (i32, i32)) -> bool {
+    let button = shop_button(area, scale);
+    mouse.0 >= button.x
+        && mouse.0 < button.right()
+        && mouse.1 >= button.y
+        && mouse.1 < button.bottom()
+}
 
 pub fn draw(
     theme: &Theme,
@@ -116,7 +130,7 @@ pub fn draw(
         );
     }
 
-    let button = Rect::new(area.x + 8 * s, area.y + 128 * s, 128 * s, 24 * s);
+    let button = shop_button(area, s);
     match theme.panel("button.stone") {
         Some(panel) => list.panel(panel, button),
         None => list.rect(button, [0.12, 0.10, 0.08, 0.95]),

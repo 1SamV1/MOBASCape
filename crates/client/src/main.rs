@@ -416,6 +416,7 @@ fn main() -> Result<()> {
         ui_live: cli.ui_live,
         ui_scale: cli.ui_scale,
         ui_shown: (0, 0, 0),
+        ui_placed: None,
         graphics_classic: cli.graphics.eq_ignore_ascii_case("classic"),
         debug_view: parse_debug_view(&cli.debug_view),
         shadow_mode: cli.shadows.clone(),
@@ -530,6 +531,8 @@ struct App {
     ui_scale: Option<u32>,
     /// The window size and scale the interface was last built for.
     ui_shown: (u32, u32, u32),
+    /// The last placed live interface, so its controls can be hit-tested.
+    ui_placed: Option<rift_ui::hud::Layout>,
     graphics_classic: bool,
     debug_view: u32,
     shadow_mode: String,
@@ -690,7 +693,7 @@ impl ApplicationHandler for App {
                 {
                     return;
                 }
-                if state == ElementState::Pressed && self.live_shop_click(w, h) {
+                if state == ElementState::Pressed && self.live_interface_click(w, h) {
                     return;
                 }
                 if state == ElementState::Pressed && self.shop.open {
@@ -1806,7 +1809,7 @@ impl App {
                 renderer.camera.distance,
                 renderer.camera.pitch,
             );
-            draw_ui_overlay(
+            let placed = draw_ui_overlay(
                 renderer,
                 self.ui_theme.as_ref(),
                 self.ui_theme_sheet,
@@ -1822,6 +1825,9 @@ impl App {
                 (self.mouse_pos.0 as i32, self.mouse_pos.1 as i32),
                 self.selected,
             );
+            if self.ui_live {
+                self.ui_placed = placed;
+            }
             if let Some(index) = self.spectator {
                 if let Some(unit) = animated.units.get(index) {
                     renderer.camera.target = unit.pos + Vec3::Y * 140.0;
@@ -2231,39 +2237,60 @@ impl App {
         self.follow = false;
     }
 
-    /// Handle a click on the new shop overlay when `--ui-live` is drawing it.
-    /// Returns true when the click belonged to the overlay, so the old shop
-    /// does not also act on it.
-    fn live_shop_click(&mut self, width: f32, height: f32) -> bool {
-        if !self.ui_live || !self.shop.open {
+    /// Handle a click on the assembled interface when `--ui-live` is drawing
+    /// it. Returns true when the click belonged to a control or panel, so the
+    /// old HUD and the world do not also act on it.
+    fn live_interface_click(&mut self, width: f32, height: f32) -> bool {
+        if !self.ui_live {
             return false;
         }
         let window = (width.max(1.0) as u32, height.max(1.0) as u32);
-        let state = rift_ui::hud::sample::whole_for(window);
-        let placed = rift_ui::hud::place(&state, window, self.ui_scale);
-        let area = rift_ui::hud::shop::rect(
-            rift_ui::draw::Rect::new(0, 0, window.0 as i32, window.1 as i32),
-            placed.scale as i32,
-        );
-        let live = crate::ui_live::shop(&self.shop);
-        let mouse = (self.mouse_pos.0 as i32, self.mouse_pos.1 as i32);
-        if let Some(hit) = rift_ui::hud::shop::hit(area, placed.scale as i32, &live, mouse) {
-            match hit {
-                rift_ui::hud::shop::ShopHit::Row(index) => {
-                    if let Some(&item) = self.shop.filtered_items().get(index) {
-                        self.shop.selected = Some(item);
-                    }
-                }
-                rift_ui::hud::shop::ShopHit::Buy => {
-                    if let Some(item) = self.shop.selected {
-                        self.purchase_item(item);
-                    }
-                }
-                rift_ui::hud::shop::ShopHit::Close => self.shop.open = false,
+        let placed = match self.ui_placed.as_ref() {
+            Some(placed) if placed.window == window => placed.clone(),
+            _ => {
+                let state = rift_ui::hud::sample::whole_for(window);
+                rift_ui::hud::place(&state, window, self.ui_scale)
             }
+        };
+        let scale = placed.scale as i32;
+        let mouse = (self.mouse_pos.0 as i32, self.mouse_pos.1 as i32);
+
+        if self.shop.open {
+            let area = rift_ui::hud::shop::rect(
+                rift_ui::draw::Rect::new(0, 0, window.0 as i32, window.1 as i32),
+                scale,
+            );
+            let live = crate::ui_live::shop(&self.shop);
+            if let Some(hit) = rift_ui::hud::shop::hit(area, scale, &live, mouse) {
+                match hit {
+                    rift_ui::hud::shop::ShopHit::Row(index) => {
+                        if let Some(&item) = self.shop.filtered_items().get(index) {
+                            self.shop.selected = Some(item);
+                        }
+                    }
+                    rift_ui::hud::shop::ShopHit::Buy => {
+                        if let Some(item) = self.shop.selected {
+                            self.purchase_item(item);
+                        }
+                    }
+                    rift_ui::hud::shop::ShopHit::Close => self.shop.open = false,
+                }
+                return true;
+            }
+            let (mx, my) = mouse;
+            return mx >= area.x && mx < area.right() && my >= area.y && my < area.bottom();
+        }
+
+        let Some(area) = placed.get(rift_ui::hud::Piece::Inventory) else {
+            return false;
+        };
+        if rift_ui::hud::inventory::shop_button_at(area, scale, mouse) {
+            self.shop.open = true;
+            self.shop.selected = self.shop.filtered_items().first().copied();
+            tracing::info!("shop: opened from the assembled inventory");
             return true;
         }
-        let (mx, my) = (mouse.0, mouse.1);
+        let (mx, my) = mouse;
         mx >= area.x && mx < area.right() && my >= area.y && my < area.bottom()
     }
 
@@ -2500,10 +2527,9 @@ fn draw_ui_overlay(
     camera: (f32, f32, f32, f32),
     mouse: (i32, i32),
     selected: Option<usize>,
-) {
-    let Some(theme) = theme else {
-        return;
-    };
+) -> Option<rift_ui::hud::Layout> {
+    let theme = theme?;
+    let mut placed_out = None;
     let (list, what, detail) = if layout || live {
         let mut state = rift_ui::hud::sample::whole_for(renderer.size);
         if live {
@@ -2534,6 +2560,7 @@ fn draw_ui_overlay(
             }
         }
         let placed = rift_ui::hud::place(&state, renderer.size, scale);
+        placed_out = Some(placed.clone());
         let detail = format!(
             "requested {:?}, drawn {}, usual {:.1}%, steps {:?}, conflicts {:?}",
             placed.requested,
@@ -2579,6 +2606,7 @@ fn draw_ui_overlay(
     }
     let (vertices, indices) = list.finish();
     renderer.set_ui_mesh(&vertices, &indices);
+    placed_out
 }
 
 /// Dev demos and explicit spawn requests boot straight into the match instead
