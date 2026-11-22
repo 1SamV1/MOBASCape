@@ -31,6 +31,13 @@ const DECOR_STRUCTURE_CLEAR: f32 = 2.2 * 128.0;
 /// look wrong once the flat-colour fallback is applied.
 const DECOR_MODEL_BLOCKLIST: &[u32] = &[3951, 4730, 32530];
 
+/// River crossings: the terrain is levelled into a ford and a cache-textured
+/// deck is laid over it, aligned with the lane.
+const BRIDGE_HALF_LENGTH: f32 = 4.5 * 128.0;
+const BRIDGE_HALF_WIDTH: f32 = 2.6 * 128.0;
+const BRIDGE_TRANSITION: f32 = 2.0 * 128.0;
+const BRIDGE_DECK_LIFT: f32 = 2.0;
+
 /// Convert an sRGB channel to linear light. The surface is an sRGB target, so
 /// shader output must be linear or the palette is double-gamma corrected.
 pub fn srgb_to_linear(c: f32) -> f32 {
@@ -1485,6 +1492,7 @@ pub fn build(
     let mut river_blocked: Vec<(i32, i32)> = Vec::new();
     let mut water_mask = vec![0.0f32; size * size];
     let mut water_level = vec![0.0f32; size * size];
+    let mut river_levels: Vec<f32> = Vec::new();
     if let Some(river) = &map.river {
         let points = &river.points;
         if points.len() >= 2 {
@@ -1513,6 +1521,7 @@ pub fn build(
                     levels[index] = levels[index - 1] - 0.5;
                 }
             }
+            river_levels = levels.clone();
             for gy in 0..size - 1 {
                 for gx in 0..size - 1 {
                     let tx = (origin_tile_x + gx as i32) as f32;
@@ -1575,7 +1584,6 @@ pub fn build(
         origin_tile_y,
         map.castle.as_ref(),
     );
-
     // Smooth the per-tile color field before triangulating. Two box-blur
     // passes remove the hard square boundaries between adjacent tiles; the
     // resulting per-corner colors interpolate across the terrain mesh.
@@ -1621,6 +1629,17 @@ pub fn build(
             }
         }
     }
+
+    // Level the bridge corridors after lane grading so the final terrain and
+    // the bridge deck share one flat surface.
+    flatten_bridge_crossings(
+        &mut heights,
+        size,
+        origin_tile_x,
+        origin_tile_y,
+        &map,
+        &river_levels,
+    );
 
     let mut terrain_mesh = MeshData::new();
     for gy in 0..size - 1 {
@@ -1852,6 +1871,8 @@ pub fn build(
     let mut shadow_mesh = MeshData::new();
     let mut shadow_caster_mesh = MeshData::new();
     let mut model_cache: HashMap<u32, Model> = HashMap::new();
+    let bridge_decks = append_bridge_decks(&mut model_mesh, &map, &height);
+    tracing::info!("bridge decks: {} crossings", bridge_decks);
     let mut placements = 0usize;
     let mut decor_placements = 0usize;
     const MODEL_LIMIT: usize = 900;
@@ -3459,6 +3480,171 @@ impl Rng {
 }
 
 /// Smooth value noise used to wobble the lane edges.
+/// Place a simple cache-textured deck over every authored river crossing.
+/// The deck follows the lane direction at the bridge point and samples the
+/// terrain at its corners, so it covers the dry ford without floating.
+fn flatten_bridge_crossings(
+    heights: &mut [f32],
+    size: usize,
+    origin_tile_x: i32,
+    origin_tile_y: i32,
+    map: &MapLayout,
+    river_levels: &[f32],
+) {
+    let Some(river) = map.river.as_ref() else {
+        return;
+    };
+    for bridge in &river.bridges {
+        let bx = bridge.0 * 128.0;
+        let bz = bridge.1 * 128.0;
+        let Some((tx, tz)) = nearest_lane_tangent(&map.lanes, bx, bz) else {
+            continue;
+        };
+        let (nx, nz) = (-tz, tx);
+        let sample = |x: f32, z: f32| {
+            bilinear(
+                heights,
+                size,
+                x / 128.0 - origin_tile_x as f32,
+                z / 128.0 - origin_tile_y as f32,
+            )
+        };
+        let bank_a = sample(
+            bx + tx * (BRIDGE_HALF_LENGTH - 128.0),
+            bz + tz * (BRIDGE_HALF_LENGTH - 128.0),
+        );
+        let bank_b = sample(
+            bx - tx * (BRIDGE_HALF_LENGTH - 128.0),
+            bz - tz * (BRIDGE_HALF_LENGTH - 128.0),
+        );
+        let centre = sample(bx, bz);
+        let water_level = bridge_water_level(river, river_levels, bridge.0, bridge.1);
+        let target = bank_a.max(bank_b).max(centre + 2.0).max(water_level + 14.0);
+        let reach = BRIDGE_HALF_LENGTH + BRIDGE_HALF_WIDTH + 128.0;
+        let gx0 = (((bx - reach) / 128.0).floor() as i32 - origin_tile_x).max(1);
+        let gx1 = (((bx + reach) / 128.0).ceil() as i32 - origin_tile_x).min(size as i32 - 2);
+        let gy0 = (((bz - reach) / 128.0).floor() as i32 - origin_tile_y).max(1);
+        let gy1 = (((bz + reach) / 128.0).ceil() as i32 - origin_tile_y).min(size as i32 - 2);
+        for gy in gy0..=gy1 {
+            for gx in gx0..=gx1 {
+                let wx = (origin_tile_x + gx) as f32 * 128.0;
+                let wz = (origin_tile_y + gy) as f32 * 128.0;
+                let along = (wx - bx) * tx + (wz - bz) * tz;
+                let across = (wx - bx) * nx + (wz - bz) * nz;
+                let inside =
+                    (BRIDGE_HALF_LENGTH - along.abs()).min(BRIDGE_HALF_WIDTH - across.abs());
+                if inside <= 0.0 {
+                    continue;
+                }
+                let t = smoothstep(0.0, BRIDGE_TRANSITION, inside);
+                let index = gy as usize * size + gx as usize;
+                heights[index] = heights[index] * (1.0 - t) + target * t;
+            }
+        }
+    }
+}
+
+fn append_bridge_decks(mesh: &mut MeshData, map: &MapLayout, height: &HeightGrid) -> usize {
+    let Some(river) = map.river.as_ref() else {
+        return 0;
+    };
+    let mut count = 0;
+    for bridge in &river.bridges {
+        let bx = bridge.0 * 128.0;
+        let bz = bridge.1 * 128.0;
+        let Some((tx, tz)) = nearest_lane_tangent(&map.lanes, bx, bz) else {
+            continue;
+        };
+        let (nx, nz) = (-tz, tx);
+        let mut corners = [Vec3::ZERO; 4];
+        for (index, (along, across)) in [(-1.0, -1.0), (1.0, -1.0), (-1.0, 1.0), (1.0, 1.0)]
+            .into_iter()
+            .enumerate()
+        {
+            let x = bx + tx * BRIDGE_HALF_LENGTH * along + nx * BRIDGE_HALF_WIDTH * across;
+            let z = bz + tz * BRIDGE_HALF_LENGTH * along + nz * BRIDGE_HALF_WIDTH * across;
+            corners[index] = Vec3::new(x, 0.0, z);
+        }
+        // The deck edge can sit just outside the levelled corridor; key the
+        // height off the corridor centre so the whole crossing clears it.
+        let deck_y = height.height_at(bx, bz) + BRIDGE_DECK_LIFT + 2.0;
+        tracing::info!(
+            "bridge deck {:?}: deck_y={:.1}, terrain_center={:.1}",
+            bridge,
+            deck_y,
+            height.height_at(bx, bz)
+        );
+        let mut vertices = Vec::with_capacity(4);
+        for corner in corners {
+            let mut vertex = SceneVertex::new(
+                Vec3::new(corner.x, deck_y, corner.z),
+                Vec3::Y,
+                [196, 172, 132],
+            );
+            vertex.uv = [corner.x / 128.0, corner.z / 128.0];
+            vertex.material = 7;
+            vertex.texture_id = 22;
+            vertices.push(vertex);
+        }
+        mesh.push_triangle(vertices[0], vertices[2], vertices[1]);
+        mesh.push_triangle(vertices[1], vertices[2], vertices[3]);
+
+        // Low rails make the deck read as a bridge rather than a floating
+        // stone slab. They are visual only; the lane remains walkable.
+        for across in [-1.0f32, 1.0] {
+            let a = Vec3::new(
+                bx + tx * BRIDGE_HALF_LENGTH + nx * BRIDGE_HALF_WIDTH * across,
+                deck_y,
+                bz + tz * BRIDGE_HALF_LENGTH + nz * BRIDGE_HALF_WIDTH * across,
+            );
+            let b = Vec3::new(
+                bx - tx * BRIDGE_HALF_LENGTH + nx * BRIDGE_HALF_WIDTH * across,
+                deck_y,
+                bz - tz * BRIDGE_HALF_LENGTH + nz * BRIDGE_HALF_WIDTH * across,
+            );
+            let mut rail = Vec::with_capacity(4);
+            for (point, top) in [(a, false), (b, false), (b, true), (a, true)] {
+                let mut vertex = SceneVertex::new(
+                    Vec3::new(point.x, deck_y + if top { 18.0 } else { 0.0 }, point.z),
+                    Vec3::Y,
+                    [128, 102, 72],
+                );
+                vertex.uv = [point.x / 128.0, point.z / 128.0];
+                vertex.material = 7;
+                vertex.texture_id = 5;
+                rail.push(vertex);
+            }
+            mesh.push_triangle(rail[0], rail[1], rail[2]);
+            mesh.push_triangle(rail[0], rail[2], rail[3]);
+        }
+        count += 1;
+    }
+    count
+}
+
+fn nearest_lane_tangent(lanes: &[LaneSpawn], x: f32, z: f32) -> Option<(f32, f32)> {
+    let mut best = (f32::MAX, 0.0, 0.0);
+    for lane in lanes {
+        for pair in lane.waypoints.windows(2) {
+            let (ax, az) = (pair[0].x, pair[0].z);
+            let (dx, dz) = (pair[1].x - ax, pair[1].z - az);
+            let length2 = dx * dx + dz * dz;
+            if length2 < 1e-6 {
+                continue;
+            }
+            let t = (((x - ax) * dx + (z - az) * dz) / length2).clamp(0.0, 1.0);
+            let px = ax + dx * t;
+            let pz = az + dz * t;
+            let distance2 = (x - px) * (x - px) + (z - pz) * (z - pz);
+            if distance2 < best.0 {
+                let length = length2.sqrt();
+                best = (distance2, dx / length, dz / length);
+            }
+        }
+    }
+    (best.0 < f32::MAX).then_some((best.1, best.2))
+}
+
 /// Pack a cache ground-overlay texture and its blend weight into the high
 /// bytes of a terrain vertex's `texture_id`. The low byte is reserved for the
 /// grass variant.
@@ -3575,6 +3761,16 @@ fn bilinear(values: &[f32], size: usize, x: f32, y: f32) -> f32 {
     let top = values[i] * (1.0 - fx) + values[i + 1] * fx;
     let bottom = values[i + size] * (1.0 - fx) + values[i + size + 1] * fx;
     top * (1.0 - fy) + bottom * fy
+}
+
+fn bridge_water_level(river: &RiverSpec, levels: &[f32], x: f32, z: f32) -> f32 {
+    if levels.is_empty() {
+        return 0.0;
+    }
+    let (_, segment, along) = nearest_on_polyline(&river.points, x, z);
+    let start = levels.get(segment).copied().unwrap_or(0.0);
+    let end = levels.get(segment + 1).copied().unwrap_or(start);
+    start + (end - start) * along
 }
 
 /// Distance to a polyline plus the index of the closest segment and how far
@@ -4704,6 +4900,18 @@ mod tests {
         let blob = SceneVertex::blob(Vec3::ZERO, 0.4, [0.0, 0.0]);
         assert_eq!(blob.material, 2);
         assert!((blob.color[3] - 0.4).abs() < 1e-6);
+    }
+
+    #[test]
+    fn bridge_tangent_follows_the_nearest_lane_segment() {
+        let lanes = vec![LaneSpawn {
+            id: "mid".to_string(),
+            waypoints: vec![Vec3::new(0.0, 0.0, 0.0), Vec3::new(1280.0, 0.0, -1280.0)],
+        }];
+        let (tx, tz) = nearest_lane_tangent(&lanes, 1000.0, -1000.0).unwrap();
+        let diagonal = 0.5f32.sqrt();
+        assert!((tx - diagonal).abs() < 1e-5);
+        assert!((tz + diagonal).abs() < 1e-5);
     }
 
     #[test]

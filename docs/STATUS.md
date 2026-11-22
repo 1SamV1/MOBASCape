@@ -1,6 +1,22 @@
 # Status
 
-Last updated: 64-unit river surface, 2026-11-22.
+Last updated: cache-textured bridge decks, 2026-11-22.
+
+## 2026-11-22 — Cache-textured bridge decks
+
+- Levelled the three river crossings into flat bridge corridors after lane
+  grading, then laid cache-textured wooden decks over them. Each deck follows
+  the lane tangent and is sized to span the carved ford; low cache-wood rails
+  give it a bridge read instead of a floating slab.
+- Texture IDs are cache scraped: planks from `texture_0022`, rails from
+  `texture_0005`. No new visual assets.
+- Visual capture: `/tmp/opencode/bridgedeck10.png`. The deck is a first-pass
+  geometry/art solution; stone abutments and richer rail detail can follow.
+- Performance: auto 1920×1008 p50 **12.56 ms / 79.5 fps**, p95 13.28 ms,
+  GPU **12.16 ms** (scene 10.94); native p50 **14.65 ms / 68 fps**, p95
+  15.53 ms, GPU **14.25 ms** (scene 13.02).
+- Added a bridge-tangent test. Verified: 272 tests pass, 4 ignored; workspace
+  clippy clean.
 
 ## 2026-11-22 — 64-unit river surface
 

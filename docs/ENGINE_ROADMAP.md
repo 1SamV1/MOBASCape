@@ -226,19 +226,22 @@ not move, so the existing dither stayed.
   texture array and blends it over the classifier.
 - The river surface is generated from the water mask at 64-unit resolution
   with soft shoreline opacity (111k vertices / 37k triangles).
+- The three crossings are levelled after lane grading and covered by
+  cache-textured wooden decks with low rails (`texture_0022` / `texture_0005`).
 - 1,839 deterministic cache plants and 244 slope boulders add ground cover;
   the static model mesh is now 835k triangles (674k before).
 - Post grade is less desaturated; sun/ambient is slightly more directional.
 
 | 1920×1008 | Auto (0.91×) | Native |
 |---|---:|---:|
-| p50 | **12.98 ms / 77 fps** | **15.27 ms / 66 fps** |
-| p95 | 13.86 ms | 15.99 ms |
-| GPU frame | **12.57 ms** | **14.75 ms** |
-| Scene pass | **11.31 ms** | **13.52 ms** |
+| p50 | **12.56 ms / 79.5 fps** | **14.65 ms / 68 fps** |
+| p95 | 13.28 ms | 15.53 ms |
+| GPU frame | **12.16 ms** | **14.25 ms** |
+| Scene pass | **10.94 ms** | **13.02 ms** |
 
-The art slice costs about +1.2 ms GPU against the flat fallback frame; the
-overlay sample alone is ~0.3 ms auto / ~0.6 ms native.
+The art slice costs about +1.0 ms GPU against the flat fallback frame; the
+overlay sample alone is ~0.3 ms auto / ~0.6 ms native. The bridge decks add
+only a few quads.
 Reference audit, gap matrix and milestone order:
 `docs/REFERENCE_AUDIT_2026-11-22.md`.
 

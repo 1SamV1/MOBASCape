@@ -138,7 +138,9 @@ Implemented:
   feed real OSRS path/dirt/ground art into the shader.
 - **64-unit river surface.** The water sheet now follows the carved water
   mask at half-tile resolution with soft shoreline opacity, removing the
-  128-unit bank staircase. Bridge/ford decks are still a follow-up.
+  128-unit bank staircase.
+- **Bridge decks.** The three crossings are levelled after lane grading and
+  covered by cache-textured wooden decks with low rails.
 - **Cache-only ground cover.** 1,839 deterministic low-poly flowers, ferns,
   grass and mushrooms, plus 244 slope boulders, all selected from cache object
   definitions. No new art assets; the model mesh rose from 674k to 835k
@@ -153,8 +155,9 @@ Known limits and follow-ups:
 1. **Terrain banks are still one tile (128 units) per vertex.** The water
    surface is now 64 units, but the land side of the bank still needs a finer
    mesh or a slope-aware skirt.
-2. **Bridge/ford crossings need decks.** The water mask intentionally leaves
-   a dry crossing; it currently reads as a green wedge instead of a bridge.
+2. **Bridge decks are a first pass.** They read as wooden platforms; stone
+   abutments, richer rails and a slight arch would bring them closer to the
+   reference.
 3. **Ground cover is still sparse at the reference density.** LOD/instancing
    should precede a large density increase.
 4. **Lighting/grade still lacks strong contact/SSAO and received shadows on
