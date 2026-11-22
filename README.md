@@ -44,7 +44,8 @@ designed for fast-paced low-team-count matches.
 > item icons and the cache-terrain minimap picture. Every `HudState` slice now
 > reads live data. The live shop
 > overlay switches categories, scrolls the expanded item list, selects and
-> buys items, and the assembled inventory's Shop button opens it. Under
+> buys items, calls the delivery guard when purchases are stored, and the
+> assembled inventory's Shop button opens it. Under
 > `--ui-live` the assembled interface owns the screen and the legacy HUD is
 > not built. The old HUD remains the running default and its legacy grid still
 > shows six entries per

@@ -37,6 +37,7 @@ pub enum ShopHit {
     Category(usize),
     Row(usize),
     Buy,
+    Deliver,
 }
 
 /// Hit-test the live shop. `area` is [`rect`]'s result and `scale` is the
@@ -85,7 +86,25 @@ pub fn hit(area: Rect, scale: i32, state: &ShopState, mouse: (i32, i32)) -> Opti
     if point(buy.x, buy.y, buy.w, buy.h) {
         return Some(ShopHit::Buy);
     }
+    if state.delivery.is_some() {
+        let delivery = delivery_rect(area, s);
+        if point(delivery.x, delivery.y, delivery.w, delivery.h) {
+            return Some(ShopHit::Deliver);
+        }
+    }
     None
+}
+
+/// The delivery control in the detail pane, above Buy.
+fn delivery_rect(area: Rect, scale: i32) -> Rect {
+    let s = scale.max(1);
+    let detail = Rect::new(area.x + 550 * s, area.y + 48 * s, 218 * s, 432 * s);
+    Rect::new(
+        detail.x + 12 * s,
+        detail.bottom() - 80 * s,
+        detail.w - 24 * s,
+        26 * s,
+    )
 }
 
 pub fn draw(theme: &Theme, list: &mut DrawList, shop: &ShopState, gold: u32) {
@@ -310,6 +329,23 @@ pub fn draw(theme: &Theme, list: &mut DrawList, shop: &ShopState, gold: u32) {
             detail.y + 24 * s,
             quiet,
         );
+    }
+    if let Some(label) = &shop.delivery {
+        let delivery = delivery_rect(area, s);
+        match theme.panel("button.stone") {
+            Some(panel) => list.panel(panel, delivery),
+            None => list.rect(delivery, [0.12, 0.10, 0.08, 0.95]),
+        }
+        if let Some(font) = bold {
+            let width = font.width(label) * s;
+            list.text(
+                font,
+                label,
+                delivery.x + (delivery.w - width) / 2,
+                delivery.y + (delivery.h + font.ascent * s) / 2,
+                text,
+            );
+        }
     }
 
     // The foot line: what you own, a hint, and the gold.

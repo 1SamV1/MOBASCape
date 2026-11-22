@@ -157,6 +157,8 @@ pub struct ShopState {
     /// How far the item list is scrolled, in interface pixels.
     pub scroll: i32,
     pub hint: String,
+    /// The delivery control's label, when purchases are waiting or in flight.
+    pub delivery: Option<String>,
 }
 
 /// One source of damage on the death panel.

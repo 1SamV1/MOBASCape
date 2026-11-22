@@ -463,7 +463,21 @@ pub fn shop(shop: &ItemShop) -> ShopState {
         selected,
         scroll: shop.scroll,
         hint: "Click a row, then Buy.".to_string(),
+        delivery: None,
     }
+}
+
+/// Label for the shop's delivery control. `state` is the `PlayerHud`
+/// delivery state: 0 idle, 1 flying to the hero, 2 returning.
+pub fn delivery_label(pending: usize, state: u8) -> Option<String> {
+    if pending == 0 {
+        return None;
+    }
+    Some(match state {
+        0 => format!("DELIVER ({pending})"),
+        1 => "DELIVERING".to_string(),
+        _ => "RETURNING".to_string(),
+    })
 }
 
 pub fn shop_item(item: &ItemConfig) -> ShopItem {
@@ -760,6 +774,14 @@ mod tests {
         assert_eq!(structure.killer, "A TOWER");
         assert_eq!(structure.victim, "A MINION");
         assert_eq!(structure.gold, 10);
+    }
+
+    #[test]
+    fn the_delivery_control_reads_pending_and_state() {
+        assert_eq!(delivery_label(0, 0), None);
+        assert_eq!(delivery_label(2, 0).as_deref(), Some("DELIVER (2)"));
+        assert_eq!(delivery_label(2, 1).as_deref(), Some("DELIVERING"));
+        assert_eq!(delivery_label(2, 2).as_deref(), Some("RETURNING"));
     }
 
     #[test]

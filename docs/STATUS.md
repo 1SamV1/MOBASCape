@@ -1,6 +1,20 @@
 # Status
 
-Last updated: live minimap terrain, 2026-11-21.
+Last updated: live shop delivery control, 2026-11-21.
+
+## 2026-11-21 — Live shop delivery control
+
+- The live shop's detail pane now has a `DELIVER (N)` / `DELIVERING` /
+  `RETURNING` control above Buy when purchases are waiting or in transit.
+  Clicking it calls the same `AnimatedScene::call_delivery` path as the old
+  HUD's button.
+- The control uses the theme's scraped `button.stone` panel and cache font;
+  no new visual assets were introduced.
+- The shop bridge now carries the delivery label from `PlayerHud`, and the
+  click path reads the live animated state so the label and action agree.
+- Added a delivery-label test and a hit-test for the control.
+- Verified: 259 tests pass, 4 ignored; workspace clippy clean. Capture:
+  `/tmp/opencode/ui_live_delivery.png`.
 
 ## 2026-11-21 — Live minimap uses the cache terrain picture
 

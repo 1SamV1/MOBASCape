@@ -166,6 +166,11 @@ fn clicks_hit_categories_rows_buy_and_close() {
         shop::hit(area, 1, &state.shop, (1228, 697)),
         Some(ShopHit::Buy)
     );
+    state.shop.delivery = Some("DELIVER (2)".to_string());
+    assert_eq!(
+        shop::hit(area, 1, &state.shop, (1200, 660)),
+        Some(ShopHit::Deliver)
+    );
     assert_eq!(
         shop::hit(area, 1, &state.shop, (1323, 272)),
         Some(ShopHit::Close)

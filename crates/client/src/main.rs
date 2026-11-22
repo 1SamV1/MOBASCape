@@ -2409,7 +2409,15 @@ impl App {
                 rift_ui::draw::Rect::new(0, 0, window.0 as i32, window.1 as i32),
                 scale,
             );
-            let live = crate::ui_live::shop(&self.shop);
+            let mut live = crate::ui_live::shop(&self.shop);
+            live.delivery = self.animated.as_ref().and_then(|animated| {
+                let state = match animated.delivery_state {
+                    crate::animated::DeliveryState::Idle => 0,
+                    crate::animated::DeliveryState::FlyingToHero => 1,
+                    crate::animated::DeliveryState::Returning => 2,
+                };
+                crate::ui_live::delivery_label(animated.delivery_count(), state)
+            });
             if let Some(hit) = rift_ui::hud::shop::hit(area, scale, &live, mouse) {
                 match hit {
                     rift_ui::hud::shop::ShopHit::Category(index) => {
@@ -2427,6 +2435,17 @@ impl App {
                     rift_ui::hud::shop::ShopHit::Buy => {
                         if let Some(item) = self.shop.selected {
                             self.purchase_item(item);
+                        }
+                    }
+                    rift_ui::hud::shop::ShopHit::Deliver => {
+                        if let Some(animated) = self.animated.as_mut()
+                            && animated.call_delivery()
+                        {
+                            log_event(
+                                &mut self.event_log,
+                                "ARMADYLEAN GUARD DISPATCHED".to_string(),
+                            );
+                            tracing::info!("delivery: guard dispatched from the live shop");
                         }
                     }
                     rift_ui::hud::shop::ShopHit::Close => self.shop.open = false,
@@ -2712,6 +2731,9 @@ fn draw_ui_overlay(
             }
             if let Some(shop) = shop {
                 state.shop = crate::ui_live::shop(shop);
+                state.shop.delivery = player.and_then(|player| {
+                    crate::ui_live::delivery_label(player.delivery_pending, player.delivery_state)
+                });
                 state.tooltip = crate::ui_live::tooltip(shop, mouse);
                 state.inventory = crate::ui_live::inventory(shop);
             }
