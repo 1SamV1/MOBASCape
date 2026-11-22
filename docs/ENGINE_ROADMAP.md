@@ -128,14 +128,19 @@ What moved the number:
   post pass skips its FXAA taps on that path. `--msaa 1` keeps FXAA.
 - **Profiling**: `--benchmark` now prints `sim`, `mesh`, `hud`, `ui` and
   `submit` phase averages, plus the mesh shadow/build split and unit count.
+  `--gpu-timing` (automatic under `--benchmark`) adds per-pass GPU time from
+  timestamp queries: `benchmark gpu: frame=… shadow=… scene=… bloom=… post=…
+  hud=… interface=…`.
 - **UI cost**: solid theme panels were being tiled as 1×1 images. They now
   draw as one rectangle, so the live 1080p HUD dropped from 162,830 quads to
   2,327 and from 46.7 ms to ~0.9 ms of build time.
 
-The remaining frame is dominated by `submit` (scene + shadow + post) at
-~8.3 ms, then mesh ~4.1 ms and HUD ~0.7 ms on this run. Native-resolution
-1080p still needs a further ~0.7 ms from the scene pass to clear 60 without
-the auto scale.
+Timestamp queries put the 1920×1008 auto-scale frame at **12.00 ms GPU**:
+scene **10.33 ms**, bloom **0.74 ms**, post **0.79 ms**, shadow **0.05 ms**,
+HUD/interface **0.09 ms**. The old HUD's GPU pass is only **0.06 ms**; its
+remaining cost is the 0.6 ms CPU build. The scene pass is therefore the only
+large GPU cost, and native-resolution 1080p needs the scene pass reduced by
+roughly 2 ms to hold 60 without the auto scale.
 
 ## 3. Current hot spots
 
@@ -145,8 +150,9 @@ the auto scale.
 2. **Terrain fragment cost**: the fast path samples grass, dirt and stone;
    sand reuses dirt. The remaining cost is 4× MSAA resolve plus the lit
    fragment work, not the old noise stack.
-3. **No GPU timing yet**: CPU phases now show where the frame goes, but GPU
-   timestamps and pass-level costs still need a wgpu timestamp query path.
+3. **Scene fill**: GPU timestamps show the scene pass at ~10.3 ms, with bloom
+   and post another ~1.5 ms. MSAA 4 resolve, terrain and merged scenery
+   fragments dominate; the shadow map is now effectively free at ~0.05 ms.
 4. **HUD geometry**: the old HUD is rebuilt and uploaded every frame. The
    live HUD now draws flat panels as one rectangle instead of tiling a 1×1
    image, cutting its 1080p build from 46.7 ms to ~0.9 ms.
@@ -168,7 +174,9 @@ the auto scale.
 - ✅ CPU phase timing: sim, mesh build, HUD, interface and submit.
 - ✅ `--window-size WIDTHxHEIGHT` and `--render-scale auto|0.5..1.0` for a
   repeatable 1080p and native-resolution comparison.
-- [ ] Enable `wgpu` timestamp queries where supported.
+- ✅ Enable `wgpu` timestamp queries where supported: `--gpu-timing` writes
+  per-pass begin/end timestamps, reads them back asynchronously and reports
+  averages; adapters without `TIMESTAMP_QUERY` fall back cleanly.
 - [ ] Add golden performance smoke tests for chunk counts and draw counts.
 - [ ] Make a 1080p capture the default benchmark scene before further
   renderer changes; `--window-size 1920x1080` is the current gate.
@@ -267,6 +275,11 @@ cargo run --release -p rift-client -- --present-mode immediate
 
 # Fixed-duration frame-time stats, then exit
 cargo run --release -p rift-client -- --present-mode immediate --benchmark 8
+
+# Per-pass GPU budget (also automatic with --benchmark); drop the benchmark
+# to print live GPU averages while playing
+cargo run --release -p rift-client -- --present-mode immediate --benchmark 8 --gpu-timing
+cargo run --release -p rift-client -- --present-mode immediate --gpu-timing
 
 # Shadow cost
 cargo run --release -p rift-client -- --present-mode immediate --shadows off

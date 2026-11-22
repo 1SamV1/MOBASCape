@@ -7,6 +7,7 @@ use wgpu::util::DeviceExt;
 use winit::window::Window;
 
 use crate::animated::SceneLight;
+use crate::gpu_timing::{self, GpuTimer};
 use crate::grass_textures::GrassTextures;
 use crate::hud::UiVertex;
 use crate::model_textures::ModelTextures;
@@ -420,6 +421,8 @@ pub struct Renderer {
     /// The interface's own pass, drawn after the HUD; none until it is
     /// given an atlas.
     ui: Option<UiPass>,
+    /// Per-pass GPU timings, when the adapter and the caller allow them.
+    gpu_timer: Option<GpuTimer>,
     pub camera: Camera,
     pub size: (u32, u32),
     /// The scene is rendered at this fraction of the window; post and HUD stay
@@ -444,6 +447,7 @@ impl Renderer {
         draw_distance: f32,
         model_textures: ModelTextures,
         ui_atlas: Arc<UiAtlas>,
+        gpu_timing: bool,
     ) -> Result<Self> {
         let msaa_samples = if msaa_samples >= 4 { 4 } else { 1 };
         let render_scale = render_scale.clamp(0.5, 1.0);
@@ -466,10 +470,16 @@ impl Renderer {
             .await
             .context("requesting adapter")?;
 
+        let timestamp_query =
+            gpu_timing && adapter.features().contains(wgpu::Features::TIMESTAMP_QUERY);
+        let mut required_features = wgpu::Features::empty();
+        if timestamp_query {
+            required_features |= wgpu::Features::TIMESTAMP_QUERY;
+        }
         let (device, queue) = adapter
             .request_device(&wgpu::DeviceDescriptor {
                 label: Some("rift device"),
-                required_features: wgpu::Features::empty(),
+                required_features,
                 required_limits: wgpu::Limits::default(),
                 experimental_features: wgpu::ExperimentalFeatures::default(),
                 memory_hints: wgpu::MemoryHints::Performance,
@@ -477,6 +487,19 @@ impl Renderer {
             })
             .await
             .context("requesting device")?;
+
+        let gpu_timer = if timestamp_query {
+            tracing::info!(
+                "gpu timing: timestamp queries on, sampling every {} frames",
+                gpu_timing::SAMPLE_FRAMES
+            );
+            Some(GpuTimer::new(&device, &queue))
+        } else {
+            if gpu_timing {
+                tracing::warn!("gpu timing: this adapter has no TIMESTAMP_QUERY support");
+            }
+            None
+        };
 
         let caps = surface.get_capabilities(&adapter);
         let format = caps
@@ -1550,6 +1573,7 @@ impl Renderer {
             hud_index_capacity,
             hud_index_count: 0,
             ui: None,
+            gpu_timer,
             camera: initial_camera,
             size: (width, height),
             render_scale,
@@ -1567,6 +1591,25 @@ impl Renderer {
     /// it has no effect on normal gameplay.
     pub fn request_screenshot(&mut self, path: std::path::PathBuf, delay_frames: u32) {
         self.screenshot = Some((path, delay_frames));
+    }
+
+    /// Rolling per-pass GPU milliseconds, once a timestamp readback has
+    /// arrived. `None` when timing is off or the adapter has no support.
+    pub fn gpu_pass_ms(&self) -> Option<Vec<(&'static str, f64)>> {
+        let averages = self.gpu_timer.as_ref()?.averages();
+        (!averages.is_empty()).then_some(averages)
+    }
+
+    /// Sum of the measured pass averages for one frame.
+    pub fn gpu_frame_ms(&self) -> Option<f64> {
+        self.gpu_timer.as_ref()?.average_frame_ms()
+    }
+
+    /// Forget GPU samples, e.g. when a benchmark starts after warm-up.
+    pub fn reset_gpu_timing(&mut self) {
+        if let Some(timer) = self.gpu_timer.as_mut() {
+            timer.reset();
+        }
     }
 
     pub fn resize(&mut self, width: u32, height: u32) {
@@ -1951,6 +1994,12 @@ impl Renderer {
 
         let update_shadow = self.shadow_mode == 2 && self.shadow_tick % 2 == 0;
         self.shadow_tick = self.shadow_tick.wrapping_add(1);
+        if let Some(timer) = self.gpu_timer.as_mut() {
+            // Collect the previous readback before starting this frame's
+            // timestamps.
+            timer.poll(&self.device);
+            timer.begin_frame(update_shadow);
+        }
         if update_shadow {
             let mut shadow_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("sun shadow pass"),
@@ -1963,7 +2012,7 @@ impl Renderer {
                     }),
                     stencil_ops: None,
                 }),
-                timestamp_writes: None,
+                timestamp_writes: self.gpu_timer.as_ref().and_then(|timer| timer.writes(0)),
                 occlusion_query_set: None,
                 multiview_mask: None,
             });
@@ -2031,7 +2080,7 @@ impl Renderer {
                     }),
                     stencil_ops: None,
                 }),
-                timestamp_writes: None,
+                timestamp_writes: self.gpu_timer.as_ref().and_then(|timer| timer.writes(1)),
                 occlusion_query_set: None,
                 multiview_mask: None,
             });
@@ -2085,6 +2134,7 @@ impl Renderer {
         {
             let mut bright_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("bloom bright pass"),
+                timestamp_writes: self.gpu_timer.as_ref().and_then(|timer| timer.writes(2)),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                     view: &self.bloom_half_view,
                     depth_slice: None,
@@ -2095,7 +2145,6 @@ impl Renderer {
                     },
                 })],
                 depth_stencil_attachment: None,
-                timestamp_writes: None,
                 occlusion_query_set: None,
                 multiview_mask: None,
             });
@@ -2107,6 +2156,7 @@ impl Renderer {
         {
             let mut blur_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("bloom horizontal pass"),
+                timestamp_writes: self.gpu_timer.as_ref().and_then(|timer| timer.writes(3)),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                     view: &self.bloom_temp_view,
                     depth_slice: None,
@@ -2117,7 +2167,6 @@ impl Renderer {
                     },
                 })],
                 depth_stencil_attachment: None,
-                timestamp_writes: None,
                 occlusion_query_set: None,
                 multiview_mask: None,
             });
@@ -2129,6 +2178,7 @@ impl Renderer {
         {
             let mut blur_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("bloom vertical pass"),
+                timestamp_writes: self.gpu_timer.as_ref().and_then(|timer| timer.writes(4)),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                     view: &self.bloom_final_view,
                     depth_slice: None,
@@ -2139,7 +2189,6 @@ impl Renderer {
                     },
                 })],
                 depth_stencil_attachment: None,
-                timestamp_writes: None,
                 occlusion_query_set: None,
                 multiview_mask: None,
             });
@@ -2151,6 +2200,7 @@ impl Renderer {
         {
             let mut post_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("post pass"),
+                timestamp_writes: self.gpu_timer.as_ref().and_then(|timer| timer.writes(5)),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                     view: &view,
                     depth_slice: None,
@@ -2161,7 +2211,6 @@ impl Renderer {
                     },
                 })],
                 depth_stencil_attachment: None,
-                timestamp_writes: None,
                 occlusion_query_set: None,
                 multiview_mask: None,
             });
@@ -2180,6 +2229,7 @@ impl Renderer {
         {
             let mut hud_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("hud pass"),
+                timestamp_writes: self.gpu_timer.as_ref().and_then(|timer| timer.writes(6)),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                     view: &view,
                     depth_slice: None,
@@ -2190,7 +2240,6 @@ impl Renderer {
                     },
                 })],
                 depth_stencil_attachment: None,
-                timestamp_writes: None,
                 occlusion_query_set: None,
                 multiview_mask: None,
             });
@@ -2206,7 +2255,14 @@ impl Renderer {
 
         // the interface, over the HUD and the finished scene
         if let Some(ui) = self.ui.as_ref() {
-            ui.draw(&mut encoder, &view);
+            let drew = ui.draw(
+                &mut encoder,
+                &view,
+                self.gpu_timer.as_ref().and_then(|timer| timer.writes(7)),
+            );
+            if drew && let Some(timer) = self.gpu_timer.as_mut() {
+                timer.mark(7);
+            }
         }
 
         // Dev screenshot: copy the composited surface (scene + HUD) before it
@@ -2262,7 +2318,14 @@ impl Renderer {
             }
         }
 
+        if let Some(timer) = self.gpu_timer.as_mut() {
+            timer.finish_frame(&mut encoder);
+        }
+
         self.queue.submit(std::iter::once(encoder.finish()));
+        if let Some(timer) = self.gpu_timer.as_mut() {
+            timer.after_submit();
+        }
         self.queue.present(output);
 
         if let Some((path, buffer, padded, unpadded, width, height, format)) = capture {

@@ -222,10 +222,16 @@ impl UiPass {
         self.index_count = indices.len() as u32;
     }
 
-    /// Draw over what is already in `view`.
-    pub fn draw(&self, encoder: &mut wgpu::CommandEncoder, view: &wgpu::TextureView) {
+    /// Draw over what is already in `view`. Returns whether a pass was
+    /// recorded, so the GPU profiler knows if its timestamps are valid.
+    pub fn draw(
+        &self,
+        encoder: &mut wgpu::CommandEncoder,
+        view: &wgpu::TextureView,
+        timestamp_writes: Option<wgpu::RenderPassTimestampWrites<'_>>,
+    ) -> bool {
         if self.index_count == 0 {
-            return;
+            return false;
         }
         let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("interface pass"),
@@ -239,7 +245,7 @@ impl UiPass {
                 },
             })],
             depth_stencil_attachment: None,
-            timestamp_writes: None,
+            timestamp_writes,
             occlusion_query_set: None,
             multiview_mask: None,
         });
@@ -248,6 +254,7 @@ impl UiPass {
         pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
         pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
         pass.draw_indexed(0..self.index_count, 0, 0..1);
+        true
     }
 }
 

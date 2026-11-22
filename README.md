@@ -53,7 +53,9 @@ designed for fast-paced low-team-count matches.
 > Release on the 680M measures p50 9.3 ms at 1280×720 and p50 13.2 ms at
 > 1920×1008 with `--render-scale auto` and the HUD at native resolution.
 > `--ui-live` measures p50 12.7 ms / 78 fps at 1920×1008 after the flat-panel
-> fast path. See
+> fast path. Timestamp queries on the same run put the GPU frame at 12.0 ms:
+> scene 10.3 ms, bloom 0.7 ms, post 0.8 ms and the shadow map 0.05 ms, so the
+> scene pass is the remaining 60 fps target. See
 > [docs/STATUS.md](docs/STATUS.md),
 > [docs/UI_ASSETS.md](docs/UI_ASSETS.md) and
 > [docs/INTERFACE_STAGE3_REVIEW.md](docs/INTERFACE_STAGE3_REVIEW.md).
@@ -162,6 +164,7 @@ cargo run -p rift-client -- --graphics classic
 # Benchmark/quality overrides (auto scene scale targets 1.4M pixels)
 cargo run --release -p rift-client -- --present-mode immediate --benchmark 8
 cargo run --release -p rift-client -- --window-size 1920x1080 --present-mode immediate --benchmark 8
+cargo run --release -p rift-client -- --benchmark 8 --gpu-timing   # + per-pass GPU ms
 cargo run --release -p rift-client -- --present-mode immediate --msaa 1
 cargo run --release -p rift-client -- --window-size 1920x1080 --render-scale 1.0 --present-mode immediate --benchmark 8
 

@@ -1,6 +1,26 @@
 # Status
 
-Last updated: live shop delivery control, 2026-11-21.
+Last updated: per-pass GPU timings, 2026-11-21.
+
+## 2026-11-21 — Per-pass GPU timings from timestamp queries
+
+- `--gpu-timing` (and every `--benchmark` run) now enables `wgpu` timestamp
+  queries when the adapter advertises `TIMESTAMP_QUERY`. Each render pass
+  writes one begin/end pair, and one frame in 61 resolves the query set into a
+  small buffer that is mapped asynchronously. The CPU never waits on the GPU.
+- `benchmark gpu:` reports `shadow`, `scene`, `bloom bright`, `bloom h`,
+  `bloom v`, `post`, `hud` and `interface` averages plus their measured sum.
+  Interactive runs log a `gpu passes:` line every five samples. Adapters
+  without timestamp support log one warning and continue normally.
+- Measured on the 680M at 1920×1008 with auto scene scale: **12.00 ms** GPU
+  frame, **scene 10.33 ms**, **bloom 0.74 ms**, **post 0.79 ms**, **shadow
+  0.05 ms**, HUD/interface **0.09 ms**. The scene pass is the 60 fps target;
+  the CPU benchmark stays at p50 12.61 ms / 79 fps.
+- Sampling uses a prime interval so it does not line up with the shadow's
+  every-other-frame cadence, and a reset at benchmark start discards a
+  pre-warm-up readback.
+- No new visual assets were introduced; this change only reads counters.
+- Verified: 262 tests pass, 4 ignored; workspace clippy clean.
 
 ## 2026-11-21 — Live shop delivery control
 

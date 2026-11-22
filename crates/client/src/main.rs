@@ -1,6 +1,7 @@
 mod animated;
 mod champion;
 mod font;
+mod gpu_timing;
 mod grass_textures;
 mod hero_select;
 mod hud;
@@ -151,6 +152,10 @@ struct Cli {
     /// Run a fixed-duration frame-time benchmark, then exit (seconds).
     #[arg(long)]
     benchmark: Option<f32>,
+    /// Measure per-pass GPU time with timestamp queries when the adapter
+    /// supports them. The benchmark enables this automatically.
+    #[arg(long)]
+    gpu_timing: bool,
     /// Dev: write a PNG of the presented frame, then exit.
     #[arg(long)]
     screenshot: Option<PathBuf>,
@@ -469,6 +474,8 @@ fn main() -> Result<()> {
         benchmark_submit_ms: 0.0,
         benchmark_phase_frames: 0,
         benchmark_done: false,
+        benchmark_profiling: false,
+        gpu_timing: cli.gpu_timing || cli.benchmark.is_some(),
         screenshot_request: cli
             .screenshot
             .clone()
@@ -595,6 +602,9 @@ struct App {
     benchmark_submit_ms: f32,
     benchmark_phase_frames: u32,
     benchmark_done: bool,
+    /// Whether the GPU timing totals have been reset for this benchmark.
+    benchmark_profiling: bool,
+    gpu_timing: bool,
     screenshot_request: Option<(std::path::PathBuf, u32)>,
     app_time: f32,
     lane_log_timer: f32,
@@ -647,6 +657,7 @@ impl ApplicationHandler for App {
             self.draw_distance,
             model_textures,
             self.hud.atlas.clone(),
+            self.gpu_timing,
         )) {
             Ok(renderer) => renderer,
             Err(err) => {
@@ -994,6 +1005,12 @@ impl App {
         self.last_frame = now;
         self.app_time += dt;
         let profiling = self.benchmark_remaining.is_some() && self.app_time > 1.0;
+        if profiling && !self.benchmark_profiling {
+            self.benchmark_profiling = true;
+            if let Some(renderer) = self.renderer.as_mut() {
+                renderer.reset_gpu_timing();
+            }
+        }
         let mut phase_sim = 0.0f32;
         let mut phase_mesh = 0.0f32;
         let mut phase_hud = 0.0f32;
@@ -1046,6 +1063,17 @@ impl App {
                     mesh_build_ms,
                     mesh_units
                 );
+                if let Some(renderer) = self.renderer.as_ref()
+                    && let Some(passes) = renderer.gpu_pass_ms()
+                {
+                    let detail = passes
+                        .iter()
+                        .map(|(name, ms)| format!("{name}={ms:.2}ms"))
+                        .collect::<Vec<_>>()
+                        .join(" ");
+                    let total = renderer.gpu_frame_ms().unwrap_or(0.0);
+                    tracing::info!("benchmark gpu: frame={total:.2}ms {detail}");
+                }
                 self.benchmark_remaining = None;
                 self.benchmark_done = true;
             }
