@@ -39,9 +39,13 @@ reference, using only cache-scraped terrain, textures and models.
   at 128 units, slope-driven grass/soil/rock and a steeper cliff override.
 - **Done:** deterministic cache-only ground cover (1,839 plants, 244 slope
   boulders) and a less muted grade/sun balance.
-- **Next:** per-tile cache overlay textures, alpha-tested foliage, finer
-  terrain/water banks, water props, tree variety, LOD/instancing, received
-  shadows and contact AO.
+- **Done:** per-tile cache overlay textures packed into the terrain vertex
+  ID and blended over the classifier.
+- **Tried and reverted:** alpha-tested foliage cutouts. This cache's canopy
+  alphas are not cutout masks; preserving them punched sky holes through the
+  canopies. Keep the opaque average-colour fill.
+- **Next:** finer terrain/water banks, water props, tree variety,
+  LOD/instancing, received shadows and contact AO.
 - **Exit:** base/lane/jungle/river captures read as the reference's world;
   1920×1008 holds 60 fps; no invented visual assets.
 

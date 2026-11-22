@@ -209,9 +209,13 @@ cp assets/cache-scrape/textures/texture_0205.png assets/osrs-ground/grass_straw.
 The base terrain array keeps `grass, dirt, stone, sand, water, path`. The six
 grass variants are loaded separately into a 512px mirror-tiled array (classic,
 lush, dry, steppe, dire, straw) so the grass pattern repeats every four tiles
-instead of every one and a half, with no mirror seams. Terrain vertices carry
-the biome variant in `texture_id`; `0` selects classic and `1..5` select the
-rest.
+instead of every one and a half, with no mirror seams.
+
+Terrain vertices also carry a packed cache ground identity: the low byte is
+the grass variant, bits 8–15 are an overlay texture ID, and bits 16–23 are
+its blend weight. Textured overlay definitions (common in the biome pockets
+and paths) are sampled from the 256-layer cache texture array at a 128-unit
+world repeat; underlays in this cache are colour-only.
 
 ## 7. Visual verification checklist
 

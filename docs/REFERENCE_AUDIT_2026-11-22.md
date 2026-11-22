@@ -133,31 +133,34 @@ Implemented:
   repeat, slope-driven grass/soil/rock classification and a steeper cliff
   override. The post grade is less desaturated and the sun/ambient balance is
   slightly more directional.
+- **Per-tile cache overlay textures.** Terrain vertices pack overlay texture
+  ID and weight alongside the grass variant; base tiles and biome pockets
+  feed real OSRS path/dirt/ground art into the shader.
 - **Cache-only ground cover.** 1,839 deterministic low-poly flowers, ferns,
   grass and mushrooms, plus 244 slope boulders, all selected from cache object
   definitions. No new art assets; the model mesh rose from 674k to 835k
   triangles.
-- **Performance.** Auto 1920×1008: p50 12.79 ms / 79 fps, p95 13.53 ms,
-  GPU 12.21 ms (scene 10.99). Native: p50 14.82 ms / 69 fps, p95 15.59 ms,
-  GPU 14.14 ms (scene 12.92). GPU timings are the reliable budget under the
+- **Performance.** Auto 1920×1008: p50 12.98 ms / 77 fps, p95 13.86 ms,
+  GPU 12.57 ms (scene 11.31). Native: p50 15.27 ms / 66 fps, p95 15.99 ms,
+  GPU 14.75 ms (scene 13.52). GPU timings are the reliable budget under the
   current desktop load.
 
 Known limits and follow-ups:
 
-1. **Per-tile overlay textures are still discarded.** The cache has 152
-   textured overlays; the shader still invents a grass/dirt/stone blend from
-   blurred vertex colour. This is the next highest-leverage ground fix.
-2. **Foliage alpha is forced opaque.** Cache leaves/flowers render as solid
-   blobs. Alpha-testing the model texture atlas would restore OSRS canopy and
-   flower silhouettes.
-3. **Terrain and water banks are one tile (128 units) per vertex.** Fine
+1. **Terrain and water banks are one tile (128 units) per vertex.** Fine
    cliffs, smooth riverbanks and natural water edges need a finer mesh or a
    slope-aware skirt.
-4. **Ground cover is still sparse at the reference density.** LOD/instancing
+2. **Ground cover is still sparse at the reference density.** LOD/instancing
    should precede a large density increase.
-5. **Lighting/grade still lacks strong contact/SSAO and received shadows on
+3. **Lighting/grade still lacks strong contact/SSAO and received shadows on
    cache scenery.** The castle and trees currently skip the sun shadow lookup.
-6. **No water props.** Reeds, lilies, shore rocks and driftwood are missing.
+4. **No water props.** Reeds, lilies, shore rocks and driftwood are missing.
+5. **Foliage cutouts do not work with this cache.** Alpha-testing canopy
+   sprites punched sky holes; keep the opaque fill and pursue tree model
+   variety/geometry instead.
+6. **Big dirt/rock hills still read as broad smooth masses.** Add rock
+   outcrops, tree variety and finer terrain/water mesh resolution before
+   more amplitude.
 
 ## 6. Skills installed for this project
 

@@ -154,9 +154,10 @@ fn resize_texture(source: &RgbaImage) -> RgbaImage {
     }
     for pixel in image.pixels_mut() {
         if pixel[3] <= 8 {
-            // OSRS trees read as solid leaf masses in the reference look;
-            // fill transparent sprite borders with the average colour so no
-            // see-through gaps appear between canopy faces.
+            // OSRS canopy sprites are painted as solid leaf masses; their
+            // sparse alpha is not a cutout mask. Fill transparent sprite
+            // borders with the average colour so filtering cannot bleed
+            // black between canopy faces.
             *pixel = Rgba([avg[0], avg[1], avg[2], 255]);
         } else {
             pixel[3] = 255;

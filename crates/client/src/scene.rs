@@ -1292,6 +1292,10 @@ pub fn build(
     let mut heights = vec![0.0f32; size * size];
     let mut colors = vec![[60u8, 90, 50]; size * size];
     let mut grass_variant = vec![0u8; size * size];
+    // Packed per-tile ground overlay: bits 8..15 are the cache texture ID,
+    // bits 16..23 are the blend weight. The low byte carries the grass
+    // variant when the terrain triangle is built.
+    let mut tile_overlay = vec![0u32; size * size];
 
     for gy in 0..size {
         for gx in 0..size {
@@ -1331,6 +1335,25 @@ pub fn build(
             } else {
                 [60, 90, 50]
             };
+
+            // Keep the cache's textured ground overlays. Most base tiles
+            // have a colour-only underlay, but the biome pockets and paths
+            // carry real overlay textures.
+            let tx = origin_tile_x + gx as i32;
+            let ty = origin_tile_y + gy as i32;
+            let rx = (tx >> 6) as u32;
+            let ry = (ty >> 6) as u32;
+            let lx = (tx & 63) as usize;
+            let ly = (ty & 63) as usize;
+            if let Some(terrain) = terrains.get(&(rx, ry)) {
+                let tile = terrain.tile(0, lx, ly);
+                if let Some(overlay) = overlays.get(&(tile.overlay_id as u32))
+                    && overlay.texture != 0
+                {
+                    let weight = if overlay.hide_underlay { 255 } else { 160 };
+                    tile_overlay[idx] = pack_ground_overlay(overlay.texture, weight);
+                }
+            }
         }
     }
 
@@ -1416,6 +1439,16 @@ pub fn build(
                     .min(ph.saturating_sub(1).saturating_sub(ly)) as f32;
                 let blend = (edge / 7.0).clamp(0.0, 1.0);
                 let blend = blend * blend * (3.0 - 2.0 * blend);
+                tile_overlay[idx] = 0;
+                if let Some(overlay) = overlays.get(&(tile.overlay_id as u32))
+                    && overlay.texture != 0
+                {
+                    let base_weight = if overlay.hide_underlay { 255.0 } else { 160.0 };
+                    let weight = (base_weight * blend).round() as u8;
+                    if weight > 0 {
+                        tile_overlay[idx] = pack_ground_overlay(overlay.texture, weight);
+                    }
+                }
                 let pocket_h = tile.height as f32 * 8.0;
                 heights[idx] = heights[idx] * (1.0 - blend) + pocket_h * blend;
                 let c = tile_color(terrain, &underlays, &overlays, sx as usize, sy as usize);
@@ -1665,10 +1698,14 @@ pub fn build(
             v10.material = 4;
             v01.material = 4;
             v11.material = 4;
-            v00.texture_id = grass_variant[idx] as u32;
-            v10.texture_id = grass_variant[idx + 1] as u32;
-            v01.texture_id = grass_variant[idx + size] as u32;
-            v11.texture_id = grass_variant[idx + size + 1] as u32;
+            // One packed ground identity per tile: low byte is the grass
+            // variant, the upper bytes carry the cache overlay texture and
+            // its weight. Flat interpolation keeps both triangles equal.
+            let ground = tile_overlay[idx] | grass_variant[idx] as u32;
+            v00.texture_id = ground;
+            v10.texture_id = ground;
+            v01.texture_id = ground;
+            v11.texture_id = ground;
             terrain_mesh.push_triangle(v00, v01, v10);
             terrain_mesh.push_triangle(v10, v01, v11);
         }
@@ -3486,6 +3523,13 @@ impl Rng {
 }
 
 /// Smooth value noise used to wobble the lane edges.
+/// Pack a cache ground-overlay texture and its blend weight into the high
+/// bytes of a terrain vertex's `texture_id`. The low byte is reserved for the
+/// grass variant.
+fn pack_ground_overlay(texture: u8, weight: u8) -> u32 {
+    ((texture as u32) << 8) | ((weight as u32) << 16)
+}
+
 fn value_noise(x: f32, z: f32) -> f32 {
     let ix = x.floor();
     let iz = z.floor();
@@ -4651,6 +4695,17 @@ mod tests {
         let blob = SceneVertex::blob(Vec3::ZERO, 0.4, [0.0, 0.0]);
         assert_eq!(blob.material, 2);
         assert!((blob.color[3] - 0.4).abs() < 1e-6);
+    }
+
+    #[test]
+    fn ground_overlay_packs_texture_and_weight_without_touching_the_variant() {
+        let packed = pack_ground_overlay(129, 255);
+        assert_eq!(packed & 0xff, 0);
+        assert_eq!((packed >> 8) & 0xff, 129);
+        assert_eq!((packed >> 16) & 0xff, 255);
+        let with_grass = packed | 3;
+        assert_eq!(with_grass & 0xff, 3);
+        assert_eq!((with_grass >> 8) & 0xff, 129);
     }
 
     #[test]

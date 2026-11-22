@@ -1,6 +1,29 @@
 # Status
 
-Last updated: world-art first slice, 2026-11-22.
+Last updated: cache overlay ground textures, 2026-11-22.
+
+## 2026-11-22 — Cache overlay ground textures
+
+- Terrain vertices now carry a packed per-tile ground identity: low byte is
+  the grass variant, bits 8–15 are the cache overlay texture ID, bits 16–23
+  are the blend weight. The shader samples that cache texture from the model
+  texture array and blends it over the classified grass/soil/rock.
+- Base tiles and biome pockets both feed the packed overlay, with pocket
+  edges fading the overlay weight with the existing 7-tile blend. This uses
+  real OSRS path/dirt/biome ground art instead of only approximating it from
+  blurred vertex colour.
+- Visual result: lane dirt and the pocket cliffs now carry actual cache
+  ground texture instead of smooth brown gradients. Captures:
+  `/tmp/opencode/overlay_mid.png` and `/tmp/opencode/overlay_pocket.png`.
+- Tried and reverted: alpha-tested foliage cutouts. The cache canopy sprites
+  use sparse alpha that is not a cutout mask; preserving it punched blue sky
+  holes through every canopy. The opaque average-colour fill is correct for
+  this cache. No visual assets were added.
+- Performance after the overlay sample: auto 1920×1008 p50 **12.98 ms /
+  77 fps**, p95 13.86 ms, GPU **12.57 ms** (scene 11.31); the overlay adds
+  about 0.3 ms GPU. Native remains above 60 fps.
+- Added a packing test for the overlay/variant byte layout. Verified:
+  270 tests pass, 4 ignored; workspace clippy clean.
 
 ## 2026-11-22 — World-art first slice: cache ground, sculpted terrain, ground cover
 

@@ -333,15 +333,18 @@ fn albedo(input: VsOut) -> vec3<f32> {
         return tex.rgb * input.color.rgb;
     }
     if (input.material == 4u) {
-        // Stable world-space planar UVs. Two grass scales break the 4-tile
-        // repeat: the 512-unit macro layer carries the field, and the
-        // 192-unit detail layer restores close-up grass grain. Both use
-        // derivatives so the mip chain is finally used at distance.
+        // Stable world-space planar UVs. The 384-unit grass repeat is a
+        // compromise between the old 512-unit macro tile and an expensive
+        // second detail sample; derivatives keep the mip chain useful at
+        // distance.
         let slope = clamp(input.uv.x, 0.0, 1.0);
         // 384 units per repeat is a compromise between the old 512-unit
         // macro tile (too soft) and a second detail sample (too expensive).
         let uv = input.world.xz / 384.0;
-        let variant = min(input.texture_id, 5u);
+        let packed = input.texture_id;
+        let variant = min(packed & 0xFFu, 5u);
+        let overlay_texture = (packed >> 8u) & 0xFFu;
+        let overlay_weight = f32((packed >> 16u) & 0xFFu) / 255.0;
         let grass_macro = textureSampleGrad(
             grass_textures,
             terrain_sampler,
@@ -413,6 +416,19 @@ fn albedo(input: VsOut) -> vec3<f32> {
             + water * water_weight) / weight_total;
         let cliff = smoothstep(0.30, 0.62, slope);
         tex = mix(tex, stone * (0.82 + 0.18 * c), cliff * 0.88);
+
+        // Cache overlay art wins where the source tile carries a textured
+        // overlay. This restores real OSRS paths, dirt and biome ground that
+        // the old colour classifier could only approximate.
+        if (overlay_weight > 0.001 && overlay_texture > 0u) {
+            let overlay = textureSample(
+                model_textures,
+                model_sampler,
+                input.world.xz / 128.0,
+                overlay_texture
+            ).rgb;
+            tex = mix(tex, overlay * (0.86 + c * 0.28), overlay_weight);
+        }
 
         let steep = smoothstep(0.10, 0.38, slope);
         tex *= 1.0 - steep * 0.16;

@@ -221,30 +221,38 @@ not move, so the existing dither stayed.
 - Grass uses one mip-correct 384-unit sample with per-sample tone; dirt and
   stone use triplanar 128-unit projection. Slope drives a grass → soil →
   rock/cliff blend.
+- Terrain vertices pack a per-tile cache overlay texture and weight alongside
+  the grass variant; the shader samples the real overlay art from the model
+  texture array and blends it over the classifier.
 - 1,839 deterministic cache plants and 244 slope boulders add ground cover;
   the static model mesh is now 835k triangles (674k before).
 - Post grade is less desaturated; sun/ambient is slightly more directional.
 
 | 1920×1008 | Auto (0.91×) | Native |
 |---|---:|---:|
-| p50 | **12.79 ms / 79 fps** | **14.82 ms / 69 fps** |
-| p95 | 13.53 ms | 15.59 ms |
-| GPU frame | **12.21 ms** | **14.14 ms** |
-| Scene pass | **10.99 ms** | **12.92 ms** |
+| p50 | **12.98 ms / 77 fps** | **15.27 ms / 66 fps** |
+| p95 | 13.86 ms | 15.99 ms |
+| GPU frame | **12.57 ms** | **14.75 ms** |
+| Scene pass | **11.31 ms** | **13.52 ms** |
 
-The art slice costs about +0.9 ms GPU against the flat fallback frame.
+The art slice costs about +1.2 ms GPU against the flat fallback frame; the
+overlay sample alone is ~0.3 ms auto / ~0.6 ms native.
 Reference audit, gap matrix and milestone order:
 `docs/REFERENCE_AUDIT_2026-11-22.md`.
 
+Alpha-tested foliage was tried and reverted: this cache's canopy sprites use
+sparse alpha that is not a cutout mask, so preserving it punched sky holes
+through every canopy. Opaque average-colour fill remains correct.
+
 ## 3. Current hot spots
 
-1. **Scene fill**: the scene pass is ~11.0 ms at the 0.91× auto scale and
-   ~12.9 ms native. 4× MSAA raster plus terrain and scenery fragments
+1. **Scene fill**: the scene pass is ~11.3 ms at the 0.91× auto scale and
+   ~13.5 ms native. 4× MSAA raster plus terrain and scenery fragments
    dominate; the shadow map is effectively free at ~0.05 ms.
-2. **Terrain fragment cost**: one grass sample plus triplanar dirt/stone and
-   the slope classifier. The world-art slice added roughly 0.9 ms GPU;
-   per-tile cache overlay textures and finer terrain/water meshes are the
-   next art costs.
+2. **Terrain fragment cost**: one grass sample, triplanar dirt/stone, the
+   per-tile cache overlay and the slope classifier. The world-art slice
+   added roughly 1.2 ms GPU; finer terrain/water meshes and received
+   shadows are the next art costs.
 3. **Post**: the native-resolution composite/grade/dither pass is ~0.78 ms
    and is now the larger half of the former post/bloom chain; bloom is down to
    ~0.28 ms at auto scale.
