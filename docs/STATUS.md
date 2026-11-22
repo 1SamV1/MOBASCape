@@ -1,6 +1,23 @@
 # Status
 
-Last updated: interface stage 3 assembled on top of M5.6, 2026-11-20.
+Last updated: live stage 4 interface state, 2026-11-21.
+
+## 2026-11-21 — Live inventory and gold
+
+- The stage 4 inventory is bridged: its six slots now come from
+  `ItemShop::owned`, in slot order, with each item's live name and colour.
+  Empty slots stay empty, and an owned index that no longer resolves is
+  skipped rather than drawn as a broken item.
+- The inventory's gold line and the shop overlay's footer now read
+  `PlayerHud::gold`. Buying through the new shop overlay updates both on the
+  next frame.
+- The shop footer hint now says "Click a row, then Buy." instead of claiming
+  buying still lives in the old HUD.
+- This completes the stage 4 data bridge: every `HudState` slice is filled
+  from the match. The old HUD is still the running default while click
+  routing and final parity are finished.
+- Verified: `cargo test --workspace` 249 tests pass, 3 ignored; workspace
+  clippy is clean.
 
 ## 2026-11-20 — Interface stage 3 assembled
 
@@ -40,8 +57,9 @@ Last updated: interface stage 3 assembled on top of M5.6, 2026-11-20.
   follows the selected item and the live cursor while the shop is open. The
   new shop overlay now takes clicks: a row selects its item, Buy purchases
   the selection through the same item path as the old HUD, and the close
-  button closes the shop; category switching stays in the old HUD. The other
-  components still use the stage 3 sample until their own bridges are added.
+  button closes the shop; category switching stays in the old HUD. The
+  remaining components stayed on the stage 3 sample until their own bridges
+  were added; the last of them, inventory and gold, are in the latest entry.
   Team frames are bridged too, but the current match is one hero a side, so
   they stay empty until allied champions are spawned. Clicking a unit now
   selects it and fills the target panel with its live name, kind, health,

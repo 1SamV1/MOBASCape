@@ -2516,6 +2516,7 @@ fn draw_ui_overlay(
                 state.chat = crate::ui_live::chat(player);
                 state.feed = crate::ui_live::feed(player);
                 state.announcement = crate::ui_live::announcement(player);
+                state.gold = player.gold;
             }
             if let (Some(player), Some(animated)) = (player, animated) {
                 state.death = crate::ui_live::death(player, animated);
@@ -2529,6 +2530,7 @@ fn draw_ui_overlay(
             if let Some(shop) = shop {
                 state.shop = crate::ui_live::shop(shop);
                 state.tooltip = crate::ui_live::tooltip(shop, mouse);
+                state.inventory = crate::ui_live::inventory(shop);
             }
         }
         let placed = rift_ui::hud::place(&state, renderer.size, scale);

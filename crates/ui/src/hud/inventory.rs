@@ -2,7 +2,8 @@
 //! slots in two rows of three, the gold count and a Shop button.
 //!
 //! Stage 3 draws labelled squares and three sample items; stage 4 fills the
-//! same slice from the match and makes the button open the shop.
+//! same slice from the match. The Shop button is drawn but its click is not
+//! routed to the live overlay yet.
 
 use crate::Colour;
 use crate::draw::{DrawList, Rect};

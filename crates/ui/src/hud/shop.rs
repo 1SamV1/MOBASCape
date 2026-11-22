@@ -4,8 +4,9 @@
 //! "Your items" foot line with the gold count.
 //!
 //! Stage 3 draws the frame and our six sample items; stage 4 fills it from
-//! the item system and makes buying work. The item list is clipped and
-//! scrolled, so a longer list cannot draw outside its panel.
+//! the item system. Rows, Buy and Close are routed; category switching still
+//! belongs to the old HUD. The item list is clipped and scrolled, so a longer
+//! list cannot draw outside its panel.
 
 use crate::Colour;
 use crate::draw::{DrawList, Rect};

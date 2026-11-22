@@ -1,6 +1,6 @@
 //! Stage 4's live bridges: slices of `HudState` read from the running match.
-//! Each component still falls back to the stage 3 sample until its own
-//! bridge is added.
+//! Every slice now comes from the match; the stage 3 sample only fills a
+//! field when its live source is absent (for example before the first frame).
 
 use crate::animated::{AnimatedScene, UnitKind};
 use crate::hud::{PlayerHud, UnitFrame};
@@ -9,9 +9,9 @@ use crate::scene::{CampBuff, SceneData};
 use glam::{Vec2, Vec3};
 use rift_ui::hud::state::{
     AbilityState, AllyState, CampState, ChatKind, ChatLine, DamageSource, DeathState,
-    KillFeedEntry, LaneState, MapPoint, MinimapState, NexusState, ObjectivesState, PlateKind,
-    ScoreState, ShopItem, ShopState, StructureMark, TargetStat, TargetState, TooltipState,
-    UnitPlate,
+    InventoryItem, KillFeedEntry, LaneState, MapPoint, MinimapState, NexusState, ObjectivesState,
+    PlateKind, ScoreState, ShopItem, ShopState, StructureMark, TargetStat, TargetState,
+    TooltipState, UnitPlate,
 };
 
 pub fn score(player: &PlayerHud) -> ScoreState {
@@ -456,7 +456,7 @@ pub fn shop(shop: &ItemShop) -> ShopState {
         items,
         selected,
         scroll: 0,
-        hint: "Buying stays in the old HUD for now.".to_string(),
+        hint: "Click a row, then Buy.".to_string(),
     }
 }
 
@@ -483,6 +483,25 @@ pub fn shop_item(item: &ItemConfig) -> ShopItem {
         colour: item.color,
         stats,
         builds_into: None,
+    }
+}
+
+/// The six inventory slots, in order. Purchases fill `ItemShop::owned` from
+/// the first free slot, so empty slots stay empty and shift nothing.
+pub fn inventory(shop: &ItemShop) -> Vec<Option<InventoryItem>> {
+    shop.owned
+        .iter()
+        .map(|slot| {
+            slot.and_then(|index| shop.items.get(index))
+                .map(inventory_item)
+        })
+        .collect()
+}
+
+pub fn inventory_item(item: &ItemConfig) -> InventoryItem {
+    InventoryItem {
+        name: item.name.clone(),
+        colour: item.color,
     }
 }
 
@@ -756,6 +775,50 @@ mod tests {
         assert_eq!(state.category, "WEAPONS");
         assert_eq!(state.items.len(), 1);
         assert_eq!(state.selected, 0);
+    }
+
+    #[test]
+    fn the_inventory_reads_owned_slots_in_order_and_leaves_gaps_empty() {
+        let item = |name: &str, color: [u8; 3]| ItemConfig {
+            id: name.to_lowercase(),
+            name: name.to_string(),
+            category: "weapon".to_string(),
+            color,
+            cost: 100,
+            damage: 0.0,
+            health: 0.0,
+            mana: 0.0,
+            speed: 0.0,
+            ability: 0.0,
+        };
+        let catalog = ItemShop {
+            items: vec![item("Sword", [1, 2, 3]), item("Shield", [4, 5, 6])],
+            owned: [Some(1), None, Some(0), Some(99), None, None],
+            open: false,
+            selected: None,
+            category: 0,
+        };
+        let slots = inventory(&catalog);
+        assert_eq!(slots.len(), 6);
+        assert_eq!(
+            slots[0],
+            Some(InventoryItem {
+                name: "Shield".to_string(),
+                colour: [4, 5, 6],
+            })
+        );
+        assert_eq!(slots[1], None);
+        assert_eq!(
+            slots[2].as_ref().map(|item| item.name.as_str()),
+            Some("Sword")
+        );
+        assert_eq!(slots[3], None);
+        assert_eq!(slots[4], None);
+        assert_eq!(slots[5], None);
+
+        let sword = inventory_item(&catalog.items[0]);
+        assert_eq!(sword.name, "Sword");
+        assert_eq!(sword.colour, [1, 2, 3]);
     }
 
     #[test]
