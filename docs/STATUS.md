@@ -1,6 +1,26 @@
 # Status
 
-Last updated: sharper auto-scale budget, 2026-11-22.
+Last updated: smaller bloom chain, 2026-11-22.
+
+## 2026-11-22 — Bloom runs at 320×180
+
+- The three bloom passes now work at **320×180** instead of 640×360: 16.7% of
+  1920×1008 and 25% of 1280×720. At the default 0.24 bloom weight the glow is
+  visually unchanged, but the chain no longer costs a millisecond-scale
+  fraction of the frame.
+- Interleaved 1920×1008 auto A/B: bloom bright/h/v **0.36/0.19/0.19 ms →
+  0.20/0.04/0.04 ms**, total **0.74 → 0.28 ms**. The GPU frame fell from
+  12.34 ms to **11.59–11.77 ms**, p50 from 12.77 ms to **12.16–12.29 ms**
+  (81–82 fps) and p95 from 13.62 ms to **13.16–13.24 ms**.
+- Native 1920×1008: bloom **0.80 → 0.31 ms**, GPU frame **13.86 → 13.68 ms**,
+  p50 14.46 ms / 69 fps and p95 15.48 ms. 1280×720: bloom **0.61 → 0.27 ms**,
+  p50 7.65 → **7.39 ms / 134 fps**.
+- Visual A/B: `/tmp/opencode/bloom640_demo.png` against
+  `/tmp/opencode/bloom320_demo.png`, both with the live demo kit active. Same
+  scraped cache assets; no visual assets were added.
+- Tried and not kept: replacing the post-pass sin dither with a cheaper hash;
+  it did not lower the post time, so the existing dither stayed.
+- Verified: 263 tests pass, 4 ignored; workspace clippy clean.
 
 ## 2026-11-22 — Auto scale spends the new headroom on sharpness
 

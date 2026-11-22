@@ -1,8 +1,7 @@
 # Engine road map
 
 Last updated: 2026-11-22, after per-pass GPU timings, the point-light radius
-gate and the larger auto-scale budget that spends the new headroom on world
-sharpness.
+gate, the larger auto-scale budget and the 320×180 bloom chain.
 
 This is the working performance/architecture backlog. It records what the
 engine does today, what was measured, and the next changes that should give
@@ -19,9 +18,9 @@ the largest wins per unit of risk.
   texture layers, 4× MSAA HDR scene target, 1024px sun shadow map.
 - Simulation: click-to-move, A* pathing, hybrid dynamic-unit meshes, three
   lanes, minions, camps, towers and inhibitors.
-- Renderer: one offscreen HDR target, bloom bright/blur/final passes, FXAA +
-  grade + dither post, HUD after post. `--render-scale auto` targets 1.6M
-  scene pixels; post and HUD stay at native window resolution.
+- Renderer: one offscreen HDR target, 320×180 bloom bright/blur/final passes,
+  FXAA + grade + dither post, HUD after post. `--render-scale auto` targets
+  1.6M scene pixels; post and HUD stay at native window resolution.
 
 ### Measured (release, `--present-mode immediate`, 1280×720)
 
@@ -190,6 +189,29 @@ Native 1920×1008 is unchanged at p50 14.35 ms / 69.7 fps, so `--render-scale
 Tried and not kept: a one-tap castle grain projection, which did not move the
 scene time (12.14 → 12.29 ms) and was reverted.
 
+### 2e. 2026-11-22 — Bloom at 320×180
+
+The three bloom passes were still working at 640×360 even when the scene was
+1.6M pixels. The glow is deliberately soft, and the default 0.24 weight makes
+the extra resolution invisible, so all three targets are now **320×180**.
+Visual A/B (`/tmp/opencode/bloom640_demo.png` vs `/tmp/opencode/bloom320_demo.png`)
+with the live demo kit active showed no visible difference.
+
+| 1920×1008 auto, interleaved | 640×360 | 320×180 |
+|---|---:|---:|
+| Bloom bright | 0.36 ms | **0.20 ms** |
+| Bloom horizontal | 0.19 ms | **0.04 ms** |
+| Bloom vertical | 0.19 ms | **0.04 ms** |
+| Bloom total | 0.74 ms | **0.28 ms** |
+| GPU frame | 12.34 ms | **11.59–11.77 ms** |
+| p50 | 12.77 ms | **12.16–12.29 ms** |
+| p95 | 13.62 ms | **13.16–13.24 ms** |
+
+Native 1920×1008: bloom 0.80 → **0.31 ms**, GPU frame 13.86 → **13.68 ms**.
+1280×720: bloom 0.61 → **0.27 ms**, p50 7.65 → **7.39 ms / 134 fps**.
+Tried and not kept: a cheaper hash for the post-pass dither; the post time did
+not move, so the existing dither stayed.
+
 ## 3. Current hot spots
 
 1. **Scene fill**: the scene pass is ~9.8 ms at the 0.91× auto scale and
@@ -199,8 +221,9 @@ scene time (12.14 → 12.29 ms) and was reverted.
 2. **Terrain fragment cost**: the fast path samples grass, dirt and stone;
    sand reuses dirt. At 0.82× albedo alone added ~2.1 ms over the normal
    view, before lighting and fog.
-3. **Post and bloom**: the full-screen chain is ~1.55 ms at native resolution
-   and is the next fixed cost after the scene.
+3. **Post**: the native-resolution composite/grade/dither pass is ~0.78 ms
+   and is now the larger half of the former post/bloom chain; bloom is down to
+   ~0.28 ms at auto scale.
 4. **HUD geometry**: the old HUD is rebuilt and uploaded every frame. The
    live HUD now draws flat panels as one rectangle instead of tiling a 1×1
    image, cutting its 1080p build from 46.7 ms to ~0.9 ms.

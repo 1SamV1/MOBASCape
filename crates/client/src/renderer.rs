@@ -16,6 +16,11 @@ use crate::terrain_textures::TerrainTextures;
 use crate::ui_assets::UiAtlas;
 use crate::ui_pass::UiPass;
 
+/// The bloom chain's fixed working size. The glow is deliberately soft, so
+/// 320x180 (16.7% of 1920x1008, 25% of 1280x720) cuts the three full-screen
+/// bloom passes by ~75% without a visible change at the default bloom weight.
+const BLOOM_SIZE: (u32, u32) = (320, 180);
+
 #[repr(C)]
 #[derive(Copy, Clone, Default, bytemuck::Pod, bytemuck::Zeroable)]
 struct GpuLight {
@@ -1349,17 +1354,17 @@ impl Renderer {
             "hdr scene msaa",
         );
         let (bloom_half_texture, bloom_half_view) =
-            create_hdr_target(&device, 640, 360, "bloom half");
+            create_hdr_target(&device, BLOOM_SIZE.0, BLOOM_SIZE.1, "bloom half");
         let (bloom_temp_texture, bloom_temp_view) =
-            create_hdr_target(&device, 640, 360, "bloom temp");
+            create_hdr_target(&device, BLOOM_SIZE.0, BLOOM_SIZE.1, "bloom temp");
         let (bloom_final_texture, bloom_final_view) =
-            create_hdr_target(&device, 640, 360, "bloom final");
+            create_hdr_target(&device, BLOOM_SIZE.0, BLOOM_SIZE.1, "bloom final");
 
         let bloom_h_uniform = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("bloom horizontal uniform"),
             contents: bytemuck::bytes_of(&BloomUniform {
                 direction: [1.0, 0.0],
-                texel: [1.0 / 640.0, 1.0 / 360.0],
+                texel: [1.0 / BLOOM_SIZE.0 as f32, 1.0 / BLOOM_SIZE.1 as f32],
             }),
             usage: wgpu::BufferUsages::UNIFORM,
         });
@@ -1367,7 +1372,7 @@ impl Renderer {
             label: Some("bloom vertical uniform"),
             contents: bytemuck::bytes_of(&BloomUniform {
                 direction: [0.0, 1.0],
-                texel: [1.0 / 640.0, 1.0 / 360.0],
+                texel: [1.0 / BLOOM_SIZE.0 as f32, 1.0 / BLOOM_SIZE.1 as f32],
             }),
             usage: wgpu::BufferUsages::UNIFORM,
         });
