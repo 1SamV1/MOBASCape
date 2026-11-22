@@ -1,6 +1,17 @@
 # Status
 
-Last updated: live interface owns the screen, 2026-11-21.
+Last updated: neutral camp bars in the live plates, 2026-11-21.
+
+## 2026-11-21 — Neutral camp bars in the live unit plates
+
+- The live bridge no longer drops every team 2 unit frame. Neutral camps and
+  dummies now become small minion-style plates, so suppressing the legacy HUD
+  no longer removes their health bars.
+- The plates use the existing scraped cache theme fonts and colours; no new
+  visual assets were introduced.
+- Updated the plate conversion test to assert a neutral camp stays visible.
+- Verified: 257 tests pass, 4 ignored; workspace clippy clean. Capture:
+  `/tmp/opencode/ui_live_campbars.png`.
 
 ## 2026-11-21 — Live interface suppresses the legacy HUD
 

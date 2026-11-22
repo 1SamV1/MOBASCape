@@ -576,9 +576,9 @@ pub fn plates(player: &PlayerHud) -> Vec<UnitPlate> {
 /// One already-projected unit frame as a plate. Neutral camps are left to
 /// the old HUD; the three plate kinds are hero, minion and structure.
 pub fn plate(frame: &UnitFrame) -> Option<UnitPlate> {
-    if frame.team == 2 {
-        return None;
-    }
+    // Neutral camps and dummies are plate-eligible team 2 units; with the
+    // legacy HUD suppressed they need their own small bars in the assembled
+    // interface.
     let kind = if frame.hero {
         PlateKind::Hero
     } else if frame.structure {
@@ -711,7 +711,7 @@ mod tests {
     }
 
     #[test]
-    fn unit_frames_become_plates_and_neutral_camps_are_skipped() {
+    fn unit_frames_become_plates_and_neutral_camps_keep_their_bars() {
         let mut frame = UnitFrame {
             x: 400.4,
             y: 250.6,
@@ -733,7 +733,10 @@ mod tests {
         assert_eq!((hero.level, hero.blue), (7, false));
 
         frame.team = 2;
-        assert!(plate(&frame).is_none());
+        frame.hero = false;
+        let camp = plate(&frame).expect("a neutral camp plate");
+        assert_eq!(camp.kind, PlateKind::Minion);
+        assert!(!camp.blue);
     }
 
     #[test]
