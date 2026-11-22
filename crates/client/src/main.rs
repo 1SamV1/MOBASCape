@@ -4,6 +4,7 @@ mod font;
 mod grass_textures;
 mod hero_select;
 mod hud;
+mod item_icons;
 mod items;
 mod minimap;
 mod model_textures;
@@ -301,8 +302,16 @@ fn main() -> Result<()> {
     ui_atlas.add_minimap(&minimap_image);
     let ui_atlas = Arc::new(ui_atlas);
     // The stage 3 interface's theme, only when its dev screen was asked for.
+    let item_icons: Vec<(String, u32)> = if cli.ui_live {
+        shop.items
+            .iter()
+            .filter_map(|item| item.obj.map(|obj| (item.id.clone(), obj)))
+            .collect()
+    } else {
+        Vec::new()
+    };
     let ui_theme = if cli.ui_test || cli.ui_theme_sheet || cli.ui_layout || cli.ui_live {
-        let theme = theme_file::load(&cache, &cli.ui_theme)
+        let theme = theme_file::load_with_items(&cache, &cli.ui_theme, &item_icons)
             .with_context(|| format!("loading theme {}", cli.ui_theme.display()))?;
         tracing::info!(
             "interface theme {}: atlas {} x {}, fonts {:?}, panels {:?}, sprites {:?}, colours {:?}",
@@ -704,6 +713,7 @@ impl ApplicationHandler for App {
                     if let Some(category) = shop_category_at(w, h, self.mouse_pos) {
                         self.shop.category = category;
                         self.shop.selected = self.shop.filtered_items().first().copied();
+                        self.shop.scroll = 0;
                         return;
                     }
                     if let Some(item) = shop_card_at(w, h, self.mouse_pos, &self.shop) {
@@ -746,6 +756,7 @@ impl ApplicationHandler for App {
                 {
                     self.shop.open = true;
                     self.shop.selected = self.shop.filtered_items().first().copied();
+                    self.shop.scroll = 0;
                     return;
                 }
                 match state {
@@ -836,6 +847,7 @@ impl ApplicationHandler for App {
                         self.shop.open = !self.shop.open;
                         if self.shop.open {
                             self.shop.selected = self.shop.filtered_items().first().copied();
+                            self.shop.scroll = 0;
                         }
                         println!("shop open={}", self.shop.open);
                     } else if let Some(index) = digit_index(code) {
@@ -857,6 +869,17 @@ impl ApplicationHandler for App {
                 }
             }
             WindowEvent::MouseWheel { delta, .. } => {
+                let amount = match delta {
+                    MouseScrollDelta::LineDelta(_, y) => y,
+                    MouseScrollDelta::PixelDelta(pos) => pos.y as f32 / 120.0,
+                };
+                if self.ui_live && self.shop.open {
+                    let rows = self.shop.filtered_items().len() as i32;
+                    let max = (rows * 44 - 398).max(0);
+                    let step = (amount * 44.0).round() as i32;
+                    self.shop.scroll = (self.shop.scroll - step).clamp(0, max);
+                    return;
+                }
                 if !self.focused
                     || !(self.held.contains(&KeyCode::ControlLeft)
                         || self.held.contains(&KeyCode::ControlRight))
@@ -865,10 +888,6 @@ impl ApplicationHandler for App {
                 }
                 let Some(renderer) = self.renderer.as_mut() else {
                     return;
-                };
-                let amount = match delta {
-                    MouseScrollDelta::LineDelta(_, y) => y,
-                    MouseScrollDelta::PixelDelta(pos) => pos.y as f32 / 120.0,
                 };
                 renderer.camera.distance =
                     (renderer.camera.distance * (1.0 - amount * 0.12)).clamp(900.0, 12_000.0);
@@ -964,6 +983,7 @@ impl App {
                     animated.debug_grant_gold(4000);
                 }
                 self.shop.open = true;
+                self.shop.scroll = 0;
                 tracing::info!("demo shop: granted 4000 gold, shop open");
                 self.demo_shop_stage = 1;
             }
@@ -1792,7 +1812,9 @@ impl App {
                 animated.match_over,
                 self.mouse_pos,
             );
-            self.hud.build_shop(hud_w, hud_h, &player_hud, &self.shop);
+            if !self.ui_live {
+                self.hud.build_shop(hud_w, hud_h, &player_hud, &self.shop);
+            }
             self.hud.build_minimap(
                 renderer.size.0 as f32,
                 renderer.size.1 as f32,
@@ -2267,6 +2289,7 @@ impl App {
                         if index < crate::items::CATEGORY_LABELS.len() {
                             self.shop.category = index;
                             self.shop.selected = self.shop.filtered_items().first().copied();
+                            self.shop.scroll = 0;
                         }
                     }
                     rift_ui::hud::shop::ShopHit::Row(index) => {
@@ -2293,6 +2316,7 @@ impl App {
         if rift_ui::hud::inventory::shop_button_at(area, scale, mouse) {
             self.shop.open = true;
             self.shop.selected = self.shop.filtered_items().first().copied();
+            self.shop.scroll = 0;
             tracing::info!("shop: opened from the assembled inventory");
             return true;
         }

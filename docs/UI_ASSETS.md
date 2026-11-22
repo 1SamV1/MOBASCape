@@ -1,7 +1,19 @@
 # OSRS UI asset pipeline
 
-The client can render authentic OSRS item icons and UI tab/button sprites from
-the gitignored `assets/osrs-ui` tree. Assets are **never committed**.
+The assembled stage 4 interface (`--ui-live`) is cache-native and does **not**
+need the external PNG tree:
+
+- its fonts are OSRS interface fonts from cache index 13
+  (`data/ui/theme.json` names font ids 494 to 497);
+- its panels and icons are cache sprites named in the same theme file;
+- every item icon is baked from the cache item definition (config archive 10)
+  and the item's inventory model (index 7) by
+  `crates/client/src/item_icons.rs`;
+- its text colours are the OSRS interface palette in
+  `data/ui/theme.json` (white, yellow, orange, green, red and quiet grey).
+
+The old `crates/client/src/hud.rs` still uses the gitignored `assets/osrs-ui`
+tree described below until it retires. Assets are **never committed**.
 
 ## 1. Sprite package
 
@@ -72,7 +84,7 @@ Path("assets/osrs-ui/items/bronze_sword.png").write_bytes(
 PY
 ```
 
-## 4. How the client loads it
+## 4. How the old HUD loads it
 
 `crates/client/src/ui_assets.rs` builds a 1024×1024 RGBA atlas at startup:
 
@@ -94,10 +106,18 @@ pipeline.
   the external PNG path is deliberate and keeps the repository asset-free.
 
 
-## Interface font and HUD icons
+## Cache fonts and stage 4 items
 
-The OSRS interface font is not stored in the cache: the client ships it as
-binary font data, and RuneLite redistributes it as `runescape.ttf`,
+The OSRS interface font **is** in the cache. `crates/cache/src/font.rs`
+decodes index 13 measurements and index 8 glyph sprites; `theme_file::load`
+uses fonts 494 to 497 for `font.small`, `font.body`, `font.bold` and
+`font.title`. `theme_file::load_with_items` additionally bakes one
+`icon.item.<id>` role for every entry in `data/items/items.json` that has a
+cache `obj` id. A failed bake is logged and leaves the colour/initial fallback
+in that slot.
+
+The old HUD's font is still the external baked atlas below. The OSRS interface
+font is redistributed by RuneLite as `runescape.ttf`,
 `runescape_bold.ttf` and `runescape_small.ttf` (BSD-2-Clause). Put the regular
 font in `assets/osrs-ui/font/runescape.ttf` and bake it:
 
@@ -112,7 +132,8 @@ draws text with whole-pixel glyph scales so nearest filtering keeps the pixel
 font crisp. If the font files are missing, the HUD falls back to the built-in
 5x7 bitmap font.
 
-HUD icons are scraped from the OSRS sprite dump into `assets/osrs-ui/ui/`:
+The old HUD's icons are scraped from the OSRS sprite dump into
+`assets/osrs-ui/ui/`; the stage 4 HUD uses cache sprites directly:
 
 | key | sprite | use |
 | --- | --- | --- |

@@ -8,8 +8,9 @@ designed for fast-paced low-team-count matches.
 > steps A, B and 1 through 15 assembled for review**. The cache reader,
 > terrain/location/model/sequence decoders, animated NPCs, a 5x5 Karamja block,
 > A* pathfinding with collision, hold-to-steer, a bitmap-font HUD, auto-attacks,
-> a Q/W/E/R kit with mana/cooldowns/XP/gold, three data-driven champions, a
-> six-item shop with tooltips and six inventory slots, passive gold and
+> a Q/W/E/R kit with mana/cooldowns/XP/gold, three data-driven champions, an
+> 89-item OSRS shop with cache-baked icons, tooltips and six inventory slots,
+> passive gold and
 > fountain healing, three lanes with towers/inhibitors/shielded nexus,
 > inhibitor respawn and super minions, minion waves, jungle camps with team
 > buffs, brush/fog of war, a fogged minimap with click-to-pan, and a win
@@ -39,10 +40,12 @@ designed for fast-paced low-team-count matches.
 > the live score strip, ability bar, minimap, objectives, unit plates, chat,
 > kill feed, shop, shop tooltip, announcements, death overlay (with real
 > damage breakdown bars), team frames, a click-selected target panel, the
-> six-slot inventory and the live gold count from the match. Every
-> `HudState` slice now reads live data. The live shop overlay switches
-> categories, selects and buys items, and the assembled inventory's Shop
-> button opens it. The old HUD remains the running default while the last
+> six-slot inventory, the live gold count from the match and cache-baked OSRS
+> item icons. Every `HudState` slice now reads live data. The live shop
+> overlay switches categories, scrolls the expanded item list, selects and
+> buys items, and the assembled inventory's Shop button opens it. The old HUD
+> remains the running default and its legacy grid still shows six entries per
+> category while the last
 > interaction gaps and final parity are finished. See [docs/STATUS.md](docs/STATUS.md),
 > [docs/UI_ASSETS.md](docs/UI_ASSETS.md) and
 > [docs/INTERFACE_STAGE3_REVIEW.md](docs/INTERFACE_STAGE3_REVIEW.md).
@@ -163,7 +166,7 @@ cargo run -p rift-client -- --graphics 117hd --pitch 0.22
 # Optional: populate the gitignored UI asset tree (see docs/UI_ASSETS.md)
 # assets/osrs-ui/items/*.png + assets/osrs-ui/ui/tab.png
 
-# Grant gold, open the shop, and buy all six items
+# Grant gold, open the shop, and buy six items
 cargo run -p rift-client -- --demo-shop --timescale 4
 
 # Interface stage 3: the theme sheet, then the assembled interface
@@ -171,7 +174,7 @@ cargo run -p rift-client -- --ui-theme-sheet
 cargo run -p rift-client -- --ui-layout
 
 # Stage 4: the assembled interface with live match data (press B for the
-# shop overlay)
+# shop overlay; the mouse wheel scrolls the 89-item list)
 cargo run -p rift-client -- --ui-live
 
 # Verify fountain healing and passive gold

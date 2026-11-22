@@ -2,6 +2,8 @@
   {
     "id": "bronze_sword",
     "name": "Bronze sword",
+    "obj": 1277,
+    "category": "melee",
     "color": [
       180,
       120,
@@ -12,87 +14,1502 @@
     "health": 0,
     "mana": 0,
     "speed": 0,
-    "ability": 0,
-    "category": "weapon"
+    "ability": 0
   },
   {
-    "id": "iron_plate",
-    "name": "Iron platebody",
+    "id": "iron_sword",
+    "name": "Iron sword",
+    "obj": 1279,
+    "category": "melee",
     "color": [
       160,
       160,
       170
     ],
-    "cost": 400,
-    "damage": 0,
-    "health": 150,
-    "mana": 0,
-    "speed": 0,
-    "ability": 0,
-    "category": "armour"
-  },
-  {
-    "id": "fury",
-    "name": "Amulet of fury",
-    "color": [
-      80,
-      200,
-      220
-    ],
-    "cost": 800,
-    "damage": 15,
-    "health": 50,
-    "mana": 20,
-    "speed": 0,
-    "ability": 0,
-    "category": "jewellery"
-  },
-  {
-    "id": "berserker",
-    "name": "Berserker ring",
-    "color": [
-      220,
-      80,
-      80
-    ],
-    "cost": 700,
-    "damage": 8,
+    "cost": 550,
+    "damage": 16,
     "health": 0,
     "mana": 0,
     "speed": 0,
-    "ability": 15,
-    "category": "jewellery"
+    "ability": 0
   },
   {
-    "id": "ahrims",
+    "id": "steel_sword",
+    "name": "Steel sword",
+    "obj": 1281,
+    "category": "melee",
+    "color": [
+      150,
+      150,
+      160
+    ],
+    "cost": 850,
+    "damage": 23,
+    "health": 0,
+    "mana": 0,
+    "speed": 0,
+    "ability": 0
+  },
+  {
+    "id": "mithril_sword",
+    "name": "Mithril sword",
+    "obj": 1285,
+    "category": "melee",
+    "color": [
+      90,
+      130,
+      180
+    ],
+    "cost": 1200,
+    "damage": 30,
+    "health": 0,
+    "mana": 0,
+    "speed": 0,
+    "ability": 0
+  },
+  {
+    "id": "adamant_sword",
+    "name": "Adamant sword",
+    "obj": 1287,
+    "category": "melee",
+    "color": [
+      80,
+      150,
+      120
+    ],
+    "cost": 1700,
+    "damage": 38,
+    "health": 0,
+    "mana": 0,
+    "speed": 0,
+    "ability": 0
+  },
+  {
+    "id": "rune_sword",
+    "name": "Rune sword",
+    "obj": 1289,
+    "category": "melee",
+    "color": [
+      80,
+      140,
+      200
+    ],
+    "cost": 2400,
+    "damage": 48,
+    "health": 0,
+    "mana": 0,
+    "speed": 0,
+    "ability": 0
+  },
+  {
+    "id": "dragon_scimitar",
+    "name": "Dragon scimitar",
+    "obj": 4587,
+    "category": "melee",
+    "color": [
+      180,
+      80,
+      60
+    ],
+    "cost": 3200,
+    "damage": 58,
+    "health": 0,
+    "mana": 0,
+    "speed": 10,
+    "ability": 0
+  },
+  {
+    "id": "abyssal_whip",
+    "name": "Abyssal whip",
+    "obj": 4151,
+    "category": "melee",
+    "color": [
+      120,
+      60,
+      140
+    ],
+    "cost": 4200,
+    "damage": 68,
+    "health": 0,
+    "mana": 0,
+    "speed": 15,
+    "ability": 0
+  },
+  {
+    "id": "ghrazi_rapier",
+    "name": "Ghrazi rapier",
+    "obj": 22324,
+    "category": "melee",
+    "color": [
+      180,
+      180,
+      190
+    ],
+    "cost": 5200,
+    "damage": 72,
+    "health": 0,
+    "mana": 0,
+    "speed": 0,
+    "ability": 10
+  },
+  {
+    "id": "armadyl_godsword",
+    "name": "Armadyl godsword",
+    "obj": 11802,
+    "category": "melee",
+    "color": [
+      200,
+      200,
+      210
+    ],
+    "cost": 6500,
+    "damage": 85,
+    "health": 0,
+    "mana": 0,
+    "speed": 0,
+    "ability": 15
+  },
+  {
+    "id": "elder_maul",
+    "name": "Elder maul",
+    "obj": 21003,
+    "category": "melee",
+    "color": [
+      120,
+      110,
+      100
+    ],
+    "cost": 7000,
+    "damage": 92,
+    "health": 0,
+    "mana": 0,
+    "speed": -20,
+    "ability": 0
+  },
+  {
+    "id": "scythe_of_vitur",
+    "name": "Scythe of vitur",
+    "obj": 22325,
+    "category": "melee",
+    "color": [
+      140,
+      60,
+      60
+    ],
+    "cost": 8200,
+    "damage": 100,
+    "health": 0,
+    "mana": 0,
+    "speed": 0,
+    "ability": 20
+  },
+  {
+    "id": "dragon_dagger",
+    "name": "Dragon dagger",
+    "obj": 1215,
+    "category": "melee",
+    "color": [
+      180,
+      80,
+      60
+    ],
+    "cost": 1800,
+    "damage": 34,
+    "health": 0,
+    "mana": 0,
+    "speed": 0,
+    "ability": 25
+  },
+  {
+    "id": "rune_2h_sword",
+    "name": "Rune 2h sword",
+    "obj": 1319,
+    "category": "melee",
+    "color": [
+      80,
+      140,
+      200
+    ],
+    "cost": 2600,
+    "damage": 55,
+    "health": 0,
+    "mana": 0,
+    "speed": -15,
+    "ability": 0
+  },
+  {
+    "id": "granite_maul",
+    "name": "Granite maul",
+    "obj": 4153,
+    "category": "melee",
+    "color": [
+      120,
+      120,
+      110
+    ],
+    "cost": 2200,
+    "damage": 50,
+    "health": 0,
+    "mana": 0,
+    "speed": -10,
+    "ability": 0
+  },
+  {
+    "id": "zamorakian_spear",
+    "name": "Zamorakian spear",
+    "obj": 11824,
+    "category": "melee",
+    "color": [
+      140,
+      80,
+      80
+    ],
+    "cost": 2600,
+    "damage": 52,
+    "health": 0,
+    "mana": 0,
+    "speed": 0,
+    "ability": 0
+  },
+  {
+    "id": "abyssal_dagger",
+    "name": "Abyssal dagger",
+    "obj": 13265,
+    "category": "melee",
+    "color": [
+      120,
+      60,
+      140
+    ],
+    "cost": 3500,
+    "damage": 56,
+    "health": 0,
+    "mana": 0,
+    "speed": 0,
+    "ability": 20
+  },
+  {
+    "id": "shortbow",
+    "name": "Shortbow",
+    "obj": 841,
+    "category": "ranged",
+    "color": [
+      170,
+      130,
+      70
+    ],
+    "cost": 300,
+    "damage": 9,
+    "health": 0,
+    "mana": 0,
+    "speed": 0,
+    "ability": 0
+  },
+  {
+    "id": "oak_shortbow",
+    "name": "Oak shortbow",
+    "obj": 843,
+    "category": "ranged",
+    "color": [
+      150,
+      110,
+      60
+    ],
+    "cost": 500,
+    "damage": 15,
+    "health": 0,
+    "mana": 0,
+    "speed": 0,
+    "ability": 0
+  },
+  {
+    "id": "willow_shortbow",
+    "name": "Willow shortbow",
+    "obj": 849,
+    "category": "ranged",
+    "color": [
+      130,
+      100,
+      60
+    ],
+    "cost": 800,
+    "damage": 21,
+    "health": 0,
+    "mana": 0,
+    "speed": 0,
+    "ability": 0
+  },
+  {
+    "id": "maple_shortbow",
+    "name": "Maple shortbow",
+    "obj": 853,
+    "category": "ranged",
+    "color": [
+      120,
+      90,
+      50
+    ],
+    "cost": 1200,
+    "damage": 27,
+    "health": 0,
+    "mana": 0,
+    "speed": 0,
+    "ability": 0
+  },
+  {
+    "id": "yew_shortbow",
+    "name": "Yew shortbow",
+    "obj": 857,
+    "category": "ranged",
+    "color": [
+      100,
+      80,
+      50
+    ],
+    "cost": 1700,
+    "damage": 34,
+    "health": 0,
+    "mana": 0,
+    "speed": 0,
+    "ability": 0
+  },
+  {
+    "id": "magic_shortbow",
+    "name": "Magic shortbow",
+    "obj": 861,
+    "category": "ranged",
+    "color": [
+      90,
+      80,
+      120
+    ],
+    "cost": 2400,
+    "damage": 42,
+    "health": 0,
+    "mana": 0,
+    "speed": 10,
+    "ability": 0
+  },
+  {
+    "id": "rune_crossbow",
+    "name": "Rune crossbow",
+    "obj": 9185,
+    "category": "ranged",
+    "color": [
+      80,
+      140,
+      200
+    ],
+    "cost": 3200,
+    "damage": 50,
+    "health": 0,
+    "mana": 0,
+    "speed": 0,
+    "ability": 0
+  },
+  {
+    "id": "dragon_crossbow",
+    "name": "Dragon crossbow",
+    "obj": 21902,
+    "category": "ranged",
+    "color": [
+      180,
+      80,
+      60
+    ],
+    "cost": 4200,
+    "damage": 58,
+    "health": 0,
+    "mana": 0,
+    "speed": 0,
+    "ability": 0
+  },
+  {
+    "id": "armadyl_crossbow",
+    "name": "Armadyl crossbow",
+    "obj": 11785,
+    "category": "ranged",
+    "color": [
+      200,
+      200,
+      210
+    ],
+    "cost": 5200,
+    "damage": 64,
+    "health": 0,
+    "mana": 0,
+    "speed": 0,
+    "ability": 10
+  },
+  {
+    "id": "toxic_blowpipe",
+    "name": "Toxic blowpipe",
+    "obj": 12926,
+    "category": "ranged",
+    "color": [
+      90,
+      170,
+      90
+    ],
+    "cost": 6000,
+    "damage": 70,
+    "health": 0,
+    "mana": 0,
+    "speed": 15,
+    "ability": 0
+  },
+  {
+    "id": "heavy_ballista",
+    "name": "Heavy ballista",
+    "obj": 19481,
+    "category": "ranged",
+    "color": [
+      110,
+      100,
+      90
+    ],
+    "cost": 6500,
+    "damage": 88,
+    "health": 0,
+    "mana": 0,
+    "speed": -25,
+    "ability": 0
+  },
+  {
+    "id": "twisted_bow",
+    "name": "Twisted bow",
+    "obj": 20997,
+    "category": "ranged",
+    "color": [
+      140,
+      190,
+      120
+    ],
+    "cost": 8000,
+    "damage": 82,
+    "health": 0,
+    "mana": 0,
+    "speed": 0,
+    "ability": 25
+  },
+  {
+    "id": "bow_of_faerdhinen",
+    "name": "Bow of faerdhinen",
+    "obj": 25865,
+    "category": "ranged",
+    "color": [
+      190,
+      210,
+      190
+    ],
+    "cost": 7500,
+    "damage": 78,
+    "health": 0,
+    "mana": 0,
+    "speed": 10,
+    "ability": 0
+  },
+  {
+    "id": "staff_of_air",
+    "name": "Staff of air",
+    "obj": 1381,
+    "category": "magic",
+    "color": [
+      160,
+      190,
+      220
+    ],
+    "cost": 300,
+    "damage": 8,
+    "health": 0,
+    "mana": 20,
+    "speed": 0,
+    "ability": 0
+  },
+  {
+    "id": "staff_of_water",
+    "name": "Staff of water",
+    "obj": 1383,
+    "category": "magic",
+    "color": [
+      80,
+      130,
+      200
+    ],
+    "cost": 450,
+    "damage": 12,
+    "health": 0,
+    "mana": 30,
+    "speed": 0,
+    "ability": 0
+  },
+  {
+    "id": "staff_of_earth",
+    "name": "Staff of earth",
+    "obj": 1385,
+    "category": "magic",
+    "color": [
+      120,
+      100,
+      60
+    ],
+    "cost": 650,
+    "damage": 16,
+    "health": 0,
+    "mana": 40,
+    "speed": 0,
+    "ability": 0
+  },
+  {
+    "id": "staff_of_fire",
+    "name": "Staff of fire",
+    "obj": 1387,
+    "category": "magic",
+    "color": [
+      200,
+      90,
+      60
+    ],
+    "cost": 850,
+    "damage": 20,
+    "health": 0,
+    "mana": 50,
+    "speed": 0,
+    "ability": 0
+  },
+  {
+    "id": "mystic_fire_staff",
+    "name": "Mystic fire staff",
+    "obj": 1401,
+    "category": "magic",
+    "color": [
+      90,
+      60,
+      140
+    ],
+    "cost": 1400,
+    "damage": 26,
+    "health": 0,
+    "mana": 70,
+    "speed": 0,
+    "ability": 15
+  },
+  {
+    "id": "ancient_staff",
+    "name": "Ancient staff",
+    "obj": 4675,
+    "category": "magic",
+    "color": [
+      120,
+      80,
+      170
+    ],
+    "cost": 2200,
+    "damage": 34,
+    "health": 0,
+    "mana": 90,
+    "speed": 0,
+    "ability": 20
+  },
+  {
+    "id": "ahrims_staff",
     "name": "Ahrim's staff",
+    "obj": 4710,
+    "category": "magic",
     "color": [
       120,
       80,
       200
     ],
-    "cost": 900,
+    "cost": 3000,
+    "damage": 40,
+    "health": 0,
+    "mana": 110,
+    "speed": 0,
+    "ability": 30
+  },
+  {
+    "id": "trident_of_the_seas",
+    "name": "Trident of the seas",
+    "obj": 11907,
+    "category": "magic",
+    "color": [
+      80,
+      150,
+      190
+    ],
+    "cost": 3800,
+    "damage": 46,
+    "health": 0,
+    "mana": 120,
+    "speed": 0,
+    "ability": 20
+  },
+  {
+    "id": "sanguinesti_staff",
+    "name": "Sanguinesti staff",
+    "obj": 22323,
+    "category": "magic",
+    "color": [
+      140,
+      50,
+      70
+    ],
+    "cost": 5000,
+    "damage": 54,
+    "health": 0,
+    "mana": 140,
+    "speed": 0,
+    "ability": 30
+  },
+  {
+    "id": "kodai_wand",
+    "name": "Kodai wand",
+    "obj": 21006,
+    "category": "magic",
+    "color": [
+      170,
+      170,
+      200
+    ],
+    "cost": 6200,
+    "damage": 60,
+    "health": 0,
+    "mana": 160,
+    "speed": 0,
+    "ability": 35
+  },
+  {
+    "id": "tumekens_shadow",
+    "name": "Tumeken's shadow",
+    "obj": 27275,
+    "category": "magic",
+    "color": [
+      190,
+      150,
+      100
+    ],
+    "cost": 8500,
+    "damage": 72,
+    "health": 0,
+    "mana": 180,
+    "speed": 0,
+    "ability": 45
+  },
+  {
+    "id": "bronze_platebody",
+    "name": "Bronze platebody",
+    "obj": 1117,
+    "category": "armour",
+    "color": [
+      180,
+      120,
+      60
+    ],
+    "cost": 350,
+    "damage": 0,
+    "health": 80,
+    "mana": 0,
+    "speed": 0,
+    "ability": 0
+  },
+  {
+    "id": "iron_plate",
+    "name": "Iron platebody",
+    "obj": 1115,
+    "category": "armour",
+    "color": [
+      160,
+      160,
+      170
+    ],
+    "cost": 550,
+    "damage": 0,
+    "health": 120,
+    "mana": 0,
+    "speed": 0,
+    "ability": 0
+  },
+  {
+    "id": "steel_platebody",
+    "name": "Steel platebody",
+    "obj": 1119,
+    "category": "armour",
+    "color": [
+      150,
+      150,
+      160
+    ],
+    "cost": 850,
+    "damage": 0,
+    "health": 170,
+    "mana": 0,
+    "speed": 0,
+    "ability": 0
+  },
+  {
+    "id": "mithril_platebody",
+    "name": "Mithril platebody",
+    "obj": 1121,
+    "category": "armour",
+    "color": [
+      90,
+      130,
+      180
+    ],
+    "cost": 1200,
+    "damage": 0,
+    "health": 230,
+    "mana": 0,
+    "speed": 0,
+    "ability": 0
+  },
+  {
+    "id": "adamant_platebody",
+    "name": "Adamant platebody",
+    "obj": 1123,
+    "category": "armour",
+    "color": [
+      80,
+      150,
+      120
+    ],
+    "cost": 1700,
+    "damage": 0,
+    "health": 300,
+    "mana": 0,
+    "speed": 0,
+    "ability": 0
+  },
+  {
+    "id": "rune_platebody",
+    "name": "Rune platebody",
+    "obj": 1127,
+    "category": "armour",
+    "color": [
+      80,
+      140,
+      200
+    ],
+    "cost": 2500,
+    "damage": 0,
+    "health": 390,
+    "mana": 0,
+    "speed": 0,
+    "ability": 0
+  },
+  {
+    "id": "dragon_platebody",
+    "name": "Dragon platebody",
+    "obj": 21892,
+    "category": "armour",
+    "color": [
+      180,
+      80,
+      60
+    ],
+    "cost": 3500,
+    "damage": 0,
+    "health": 480,
+    "mana": 0,
+    "speed": 0,
+    "ability": 0
+  },
+  {
+    "id": "fighter_torso",
+    "name": "Fighter torso",
+    "obj": 10551,
+    "category": "armour",
+    "color": [
+      160,
+      120,
+      80
+    ],
+    "cost": 2800,
+    "damage": 5,
+    "health": 420,
+    "mana": 0,
+    "speed": 0,
+    "ability": 0
+  },
+  {
+    "id": "bandos_chestplate",
+    "name": "Bandos chestplate",
+    "obj": 11832,
+    "category": "armour",
+    "color": [
+      180,
+      170,
+      140
+    ],
+    "cost": 4500,
+    "damage": 8,
+    "health": 540,
+    "mana": 0,
+    "speed": 0,
+    "ability": 0
+  },
+  {
+    "id": "armadyl_chestplate",
+    "name": "Armadyl chestplate",
+    "obj": 11828,
+    "category": "armour",
+    "color": [
+      200,
+      200,
+      210
+    ],
+    "cost": 4500,
+    "damage": 0,
+    "health": 500,
+    "mana": 0,
+    "speed": 0,
+    "ability": 10
+  },
+  {
+    "id": "ancestral_robe_top",
+    "name": "Ancestral robe top",
+    "obj": 21021,
+    "category": "armour",
+    "color": [
+      150,
+      80,
+      80
+    ],
+    "cost": 4800,
+    "damage": 0,
+    "health": 460,
+    "mana": 50,
+    "speed": 0,
+    "ability": 25
+  },
+  {
+    "id": "torva_platebody",
+    "name": "Torva platebody",
+    "obj": 26384,
+    "category": "armour",
+    "color": [
+      120,
+      80,
+      80
+    ],
+    "cost": 6500,
+    "damage": 12,
+    "health": 650,
+    "mana": 0,
+    "speed": 0,
+    "ability": 0
+  },
+  {
+    "id": "rune_platelegs",
+    "name": "Rune platelegs",
+    "obj": 1079,
+    "category": "armour",
+    "color": [
+      80,
+      140,
+      200
+    ],
+    "cost": 2200,
+    "damage": 0,
+    "health": 320,
+    "mana": 0,
+    "speed": 0,
+    "ability": 0
+  },
+  {
+    "id": "dragon_platelegs",
+    "name": "Dragon platelegs",
+    "obj": 4087,
+    "category": "armour",
+    "color": [
+      180,
+      80,
+      60
+    ],
+    "cost": 3000,
+    "damage": 0,
+    "health": 400,
+    "mana": 0,
+    "speed": 0,
+    "ability": 0
+  },
+  {
+    "id": "bandos_tassets",
+    "name": "Bandos tassets",
+    "obj": 11834,
+    "category": "armour",
+    "color": [
+      180,
+      170,
+      140
+    ],
+    "cost": 4000,
+    "damage": 6,
+    "health": 450,
+    "mana": 0,
+    "speed": 0,
+    "ability": 0
+  },
+  {
+    "id": "armadyl_chainskirt",
+    "name": "Armadyl chainskirt",
+    "obj": 11830,
+    "category": "armour",
+    "color": [
+      200,
+      200,
+      210
+    ],
+    "cost": 4000,
+    "damage": 0,
+    "health": 420,
+    "mana": 0,
+    "speed": 0,
+    "ability": 8
+  },
+  {
+    "id": "ahrims_robetop",
+    "name": "Ahrim's robetop",
+    "obj": 4712,
+    "category": "armour",
+    "color": [
+      120,
+      80,
+      200
+    ],
+    "cost": 3200,
+    "damage": 0,
+    "health": 360,
+    "mana": 40,
+    "speed": 0,
+    "ability": 20
+  },
+  {
+    "id": "ahrims_robeskirt",
+    "name": "Ahrim's robeskirt",
+    "obj": 4714,
+    "category": "armour",
+    "color": [
+      120,
+      80,
+      200
+    ],
+    "cost": 3000,
+    "damage": 0,
+    "health": 320,
+    "mana": 30,
+    "speed": 0,
+    "ability": 15
+  },
+  {
+    "id": "mystic_robe_top",
+    "name": "Mystic robe top",
+    "obj": 4091,
+    "category": "armour",
+    "color": [
+      90,
+      80,
+      150
+    ],
+    "cost": 1400,
+    "damage": 0,
+    "health": 200,
+    "mana": 30,
+    "speed": 0,
+    "ability": 10
+  },
+  {
+    "id": "mystic_robe_bottom",
+    "name": "Mystic robe bottom",
+    "obj": 4093,
+    "category": "armour",
+    "color": [
+      90,
+      80,
+      150
+    ],
+    "cost": 1200,
+    "damage": 0,
+    "health": 180,
+    "mana": 25,
+    "speed": 0,
+    "ability": 8
+  },
+  {
+    "id": "black_dhide_body",
+    "name": "Black d'hide body",
+    "obj": 2503,
+    "category": "armour",
+    "color": [
+      80,
+      80,
+      90
+    ],
+    "cost": 1800,
+    "damage": 0,
+    "health": 260,
+    "mana": 0,
+    "speed": 5,
+    "ability": 0
+  },
+  {
+    "id": "karils_leathertop",
+    "name": "Karil's leathertop",
+    "obj": 4736,
+    "category": "armour",
+    "color": [
+      120,
+      90,
+      70
+    ],
+    "cost": 3000,
+    "damage": 0,
+    "health": 340,
+    "mana": 0,
+    "speed": 10,
+    "ability": 0
+  },
+  {
+    "id": "ring_of_life",
+    "name": "Ring of life",
+    "obj": 2570,
+    "category": "jewellery",
+    "color": [
+      200,
+      200,
+      210
+    ],
+    "cost": 500,
+    "damage": 0,
+    "health": 60,
+    "mana": 0,
+    "speed": 0,
+    "ability": 0
+  },
+  {
+    "id": "ring_of_wealth",
+    "name": "Ring of wealth",
+    "obj": 2572,
+    "category": "jewellery",
+    "color": [
+      210,
+      190,
+      100
+    ],
+    "cost": 600,
+    "damage": 0,
+    "health": 40,
+    "mana": 0,
+    "speed": 0,
+    "ability": 5
+  },
+  {
+    "id": "warrior_ring",
+    "name": "Warrior ring",
+    "obj": 6735,
+    "category": "jewellery",
+    "color": [
+      180,
+      120,
+      70
+    ],
+    "cost": 1800,
+    "damage": 10,
+    "health": 0,
+    "mana": 0,
+    "speed": 0,
+    "ability": 0
+  },
+  {
+    "id": "berserker",
+    "name": "Berserker ring",
+    "obj": 6737,
+    "category": "jewellery",
+    "color": [
+      220,
+      80,
+      80
+    ],
+    "cost": 2200,
+    "damage": 12,
+    "health": 0,
+    "mana": 0,
+    "speed": 0,
+    "ability": 10
+  },
+  {
+    "id": "seers_ring",
+    "name": "Seers ring",
+    "obj": 6731,
+    "category": "jewellery",
+    "color": [
+      100,
+      120,
+      200
+    ],
+    "cost": 2000,
+    "damage": 0,
+    "health": 0,
+    "mana": 30,
+    "speed": 0,
+    "ability": 15
+  },
+  {
+    "id": "archers_ring",
+    "name": "Archers ring",
+    "obj": 6733,
+    "category": "jewellery",
+    "color": [
+      120,
+      170,
+      100
+    ],
+    "cost": 2000,
+    "damage": 8,
+    "health": 0,
+    "mana": 0,
+    "speed": 5,
+    "ability": 0
+  },
+  {
+    "id": "ring_of_suffering",
+    "name": "Ring of suffering",
+    "obj": 19550,
+    "category": "jewellery",
+    "color": [
+      120,
+      60,
+      80
+    ],
+    "cost": 3500,
+    "damage": 0,
+    "health": 180,
+    "mana": 0,
+    "speed": 0,
+    "ability": 0
+  },
+  {
+    "id": "lightbearer",
+    "name": "Lightbearer",
+    "obj": 25975,
+    "category": "jewellery",
+    "color": [
+      210,
+      200,
+      150
+    ],
+    "cost": 3000,
+    "damage": 0,
+    "health": 0,
+    "mana": 20,
+    "speed": 0,
+    "ability": 15
+  },
+  {
+    "id": "ultor_ring",
+    "name": "Ultor ring",
+    "obj": 25485,
+    "category": "jewellery",
+    "color": [
+      190,
+      90,
+      70
+    ],
+    "cost": 5000,
+    "damage": 18,
+    "health": 0,
+    "mana": 0,
+    "speed": 0,
+    "ability": 0
+  },
+  {
+    "id": "venator_ring",
+    "name": "Venator ring",
+    "obj": 25487,
+    "category": "jewellery",
+    "color": [
+      110,
+      170,
+      130
+    ],
+    "cost": 5000,
+    "damage": 15,
+    "health": 0,
+    "mana": 0,
+    "speed": 5,
+    "ability": 0
+  },
+  {
+    "id": "magus_ring",
+    "name": "Magus ring",
+    "obj": 25486,
+    "category": "jewellery",
+    "color": [
+      120,
+      100,
+      200
+    ],
+    "cost": 5000,
     "damage": 0,
     "health": 0,
     "mana": 40,
     "speed": 0,
-    "ability": 30,
-    "category": "weapon"
+    "ability": 25
+  },
+  {
+    "id": "amulet_of_accuracy",
+    "name": "Amulet of accuracy",
+    "obj": 1478,
+    "category": "jewellery",
+    "color": [
+      180,
+      160,
+      120
+    ],
+    "cost": 300,
+    "damage": 5,
+    "health": 0,
+    "mana": 0,
+    "speed": 0,
+    "ability": 0
+  },
+  {
+    "id": "amulet_of_glory",
+    "name": "Amulet of glory",
+    "obj": 1704,
+    "category": "jewellery",
+    "color": [
+      200,
+      190,
+      150
+    ],
+    "cost": 900,
+    "damage": 6,
+    "health": 40,
+    "mana": 10,
+    "speed": 0,
+    "ability": 0
+  },
+  {
+    "id": "fury",
+    "name": "Amulet of fury",
+    "obj": 6585,
+    "category": "jewellery",
+    "color": [
+      80,
+      200,
+      220
+    ],
+    "cost": 1800,
+    "damage": 10,
+    "health": 70,
+    "mana": 15,
+    "speed": 0,
+    "ability": 10
+  },
+  {
+    "id": "amulet_of_torture",
+    "name": "Amulet of torture",
+    "obj": 19553,
+    "category": "jewellery",
+    "color": [
+      180,
+      60,
+      80
+    ],
+    "cost": 3200,
+    "damage": 20,
+    "health": 0,
+    "mana": 0,
+    "speed": 0,
+    "ability": 0
+  },
+  {
+    "id": "necklace_of_anguish",
+    "name": "Necklace of anguish",
+    "obj": 19547,
+    "category": "jewellery",
+    "color": [
+      190,
+      150,
+      80
+    ],
+    "cost": 3200,
+    "damage": 16,
+    "health": 0,
+    "mana": 0,
+    "speed": 5,
+    "ability": 0
+  },
+  {
+    "id": "occult_necklace",
+    "name": "Occult necklace",
+    "obj": 12002,
+    "category": "jewellery",
+    "color": [
+      160,
+      80,
+      120
+    ],
+    "cost": 2800,
+    "damage": 0,
+    "health": 0,
+    "mana": 50,
+    "speed": 0,
+    "ability": 25
+  },
+  {
+    "id": "leather_boots",
+    "name": "Leather boots",
+    "obj": 1061,
+    "category": "boots",
+    "color": [
+      140,
+      100,
+      60
+    ],
+    "cost": 200,
+    "damage": 0,
+    "health": 0,
+    "mana": 0,
+    "speed": 10,
+    "ability": 0
+  },
+  {
+    "id": "mystic_boots",
+    "name": "Mystic boots",
+    "obj": 4097,
+    "category": "boots",
+    "color": [
+      90,
+      80,
+      150
+    ],
+    "cost": 900,
+    "damage": 0,
+    "health": 0,
+    "mana": 20,
+    "speed": 0,
+    "ability": 8
+  },
+  {
+    "id": "ranger_boots",
+    "name": "Ranger boots",
+    "obj": 2577,
+    "category": "boots",
+    "color": [
+      120,
+      170,
+      100
+    ],
+    "cost": 1500,
+    "damage": 5,
+    "health": 0,
+    "mana": 0,
+    "speed": 15,
+    "ability": 0
   },
   {
     "id": "boots",
     "name": "Dragon boots",
+    "obj": 11840,
+    "category": "boots",
     "color": [
       200,
       60,
       60
     ],
-    "cost": 600,
-    "damage": 0,
-    "health": 30,
+    "cost": 1800,
+    "damage": 8,
+    "health": 50,
     "mana": 0,
-    "speed": 40,
-    "ability": 0,
-    "category": "boots"
+    "speed": 0,
+    "ability": 0
+  },
+  {
+    "id": "bandos_boots",
+    "name": "Bandos boots",
+    "obj": 11836,
+    "category": "boots",
+    "color": [
+      180,
+      170,
+      140
+    ],
+    "cost": 2200,
+    "damage": 0,
+    "health": 80,
+    "mana": 0,
+    "speed": 0,
+    "ability": 0
+  },
+  {
+    "id": "guardian_boots",
+    "name": "Guardian boots",
+    "obj": 21733,
+    "category": "boots",
+    "color": [
+      200,
+      200,
+      210
+    ],
+    "cost": 3000,
+    "damage": 0,
+    "health": 140,
+    "mana": 0,
+    "speed": 0,
+    "ability": 0
+  },
+  {
+    "id": "primordial_boots",
+    "name": "Primordial boots",
+    "obj": 13239,
+    "category": "boots",
+    "color": [
+      180,
+      80,
+      60
+    ],
+    "cost": 4200,
+    "damage": 12,
+    "health": 100,
+    "mana": 0,
+    "speed": 0,
+    "ability": 0
+  },
+  {
+    "id": "pegasian_boots",
+    "name": "Pegasian boots",
+    "obj": 13237,
+    "category": "boots",
+    "color": [
+      200,
+      180,
+      120
+    ],
+    "cost": 4200,
+    "damage": 8,
+    "health": 80,
+    "mana": 0,
+    "speed": 10,
+    "ability": 0
+  },
+  {
+    "id": "eternal_boots",
+    "name": "Eternal boots",
+    "obj": 13235,
+    "category": "boots",
+    "color": [
+      120,
+      100,
+      200
+    ],
+    "cost": 4200,
+    "damage": 0,
+    "health": 80,
+    "mana": 40,
+    "speed": 0,
+    "ability": 12
   }
 ]

@@ -64,32 +64,42 @@ pub fn draw(
         }
         match items.get(n).and_then(Option::as_ref) {
             Some(item) => {
-                // An item's colour stands in for its picture until item
-                // sprites are wired.
-                list.rect(
-                    Rect::new(
-                        cell.x + 4 * s,
-                        cell.y + 4 * s,
-                        (CELL - 8) * s,
-                        (CELL - 8) * s,
-                    ),
-                    [
-                        item.colour[0] as f32 / 255.0,
-                        item.colour[1] as f32 / 255.0,
-                        item.colour[2] as f32 / 255.0,
-                        1.0,
-                    ],
-                );
-                if let Some(font) = bold {
-                    let initial = item.name.chars().next().unwrap_or('?').to_string();
-                    let width = font.width(&initial) * s;
-                    list.text(
-                        font,
-                        &initial,
-                        cell.x + (cell.w - width) / 2,
-                        cell.y + cell.h / 2 + font.ascent * s / 2,
-                        ink(item.colour),
+                let icon = item
+                    .icon
+                    .as_deref()
+                    .filter(|role| theme.has_sprite(role))
+                    .map(|role| theme.sprite(role));
+                if let Some(icon) = icon {
+                    let (w, h) = list.size_of(icon);
+                    list.sprite(icon, cell.x + (cell.w - w) / 2, cell.y + (cell.h - h) / 2);
+                } else {
+                    // The colour and initial stand in only when the cache
+                    // could not bake this item's icon.
+                    list.rect(
+                        Rect::new(
+                            cell.x + 4 * s,
+                            cell.y + 4 * s,
+                            (CELL - 8) * s,
+                            (CELL - 8) * s,
+                        ),
+                        [
+                            item.colour[0] as f32 / 255.0,
+                            item.colour[1] as f32 / 255.0,
+                            item.colour[2] as f32 / 255.0,
+                            1.0,
+                        ],
                     );
+                    if let Some(font) = bold {
+                        let initial = item.name.chars().next().unwrap_or('?').to_string();
+                        let width = font.width(&initial) * s;
+                        list.text(
+                            font,
+                            &initial,
+                            cell.x + (cell.w - width) / 2,
+                            cell.y + cell.h / 2 + font.ascent * s / 2,
+                            ink(item.colour),
+                        );
+                    }
                 }
             }
             None => {

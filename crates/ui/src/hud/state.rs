@@ -123,8 +123,10 @@ pub struct KillFeedEntry {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InventoryItem {
     pub name: String,
-    /// The item's colour, until item sprites are wired.
+    /// The item's colour, used when its cache icon is absent.
     pub colour: [u8; 3],
+    /// Theme role of the cache-baked inventory icon, when one was made.
+    pub icon: Option<String>,
 }
 
 /// One item in the shop's list.
@@ -133,6 +135,8 @@ pub struct ShopItem {
     pub name: String,
     pub price: u32,
     pub colour: [u8; 3],
+    /// Theme role of the cache-baked inventory icon, when one was made.
+    pub icon: Option<String>,
     pub stats: Vec<String>,
     /// What this item builds into, when the item system has upgrades.
     pub builds_into: Option<String>,

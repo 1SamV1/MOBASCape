@@ -41,6 +41,7 @@
   "colours": {
     "text": "#ffffff",
     "text.quiet": "#c8c8c8",
+    "text.dim": "#b0b0b0",
     "text.title": "#ff981f",
     "text.team.blue": "#8cb8ff",
     "text.team.red": "#ff8080",

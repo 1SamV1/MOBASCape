@@ -135,17 +135,18 @@ fn clicks_hit_categories_rows_buy_and_close() {
     let mut state = sample::state();
     state.shop.categories = [
         "ALL",
-        "WEAPONS",
+        "MELEE",
+        "RANGED",
+        "MAGIC",
         "ARMOUR",
         "JEWELLERY",
         "BOOTS",
-        "CONSUMABLES",
     ]
     .iter()
     .map(|label| (*label).to_string())
     .collect();
     let area = shop::rect(Rect::new(0, 0, 1920, 1080), 1);
-    for index in 0..6 {
+    for index in 0..7 {
         let y = area.y + 48 + 26 + index as i32 * 27 + 5;
         assert_eq!(
             shop::hit(area, 1, &state.shop, (600, y)),
@@ -155,6 +156,11 @@ fn clicks_hit_categories_rows_buy_and_close() {
     assert_eq!(
         shop::hit(area, 1, &state.shop, (760, 485)),
         Some(ShopHit::Row(3))
+    );
+    state.shop.scroll = 44;
+    assert_eq!(
+        shop::hit(area, 1, &state.shop, (760, 485)),
+        Some(ShopHit::Row(4))
     );
     assert_eq!(
         shop::hit(area, 1, &state.shop, (1228, 697)),

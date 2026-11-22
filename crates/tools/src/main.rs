@@ -6,7 +6,8 @@ use clap::{Parser, Subcommand};
 use rift_cache::font::FONT_INDEX;
 use rift_cache::sprite::SPRITE_INDEX;
 use rift_cache::{
-    Cache, Font, Model, ObjectDefinition, SpriteDefinition, SpriteSheet, Terrain, TextureDefinition,
+    Cache, Font, ItemDefinition, Model, ObjectDefinition, SpriteDefinition, SpriteSheet, Terrain,
+    TextureDefinition,
 };
 use rift_sim::Match as BattleMatch;
 
@@ -55,6 +56,8 @@ enum Command {
         #[arg(long, default_value_t = 20)]
         limit: usize,
     },
+    /// Print an item definition and its inventory-icon fields.
+    Item { id: u32 },
     /// Print an object definition.
     Object { id: u32 },
     /// Search object definitions by name substring.
@@ -163,6 +166,7 @@ fn main() -> Result<()> {
         Command::Overlay { id } => overlay(&cache, id)?,
         Command::Npc { id } => npc(&cache, id)?,
         Command::FindNpc { query, limit } => find_npc(&cache, &query, limit)?,
+        Command::Item { id } => item(&cache, id)?,
         Command::Object { id } => object(&cache, id)?,
         Command::FindObject { query, limit } => find_object(&cache, &query, limit)?,
         Command::Sequence { id } => sequence(&cache, id)?,
@@ -616,6 +620,35 @@ fn find_npc(cache: &Cache, query: &str, limit: usize) -> Result<()> {
         }
     }
     println!("{found} match(es)");
+    Ok(())
+}
+
+fn item(cache: &Cache, id: u32) -> Result<()> {
+    let data = cache.config(10, id)?;
+    let def = ItemDefinition::parse(id, &data)?;
+    println!(
+        "item {id}: {:?} model={} zoom={} rot={}/{}/{} offset={},{} scale={}/{}/{}",
+        def.name,
+        def.model,
+        def.zoom,
+        def.rotation_x,
+        def.rotation_y,
+        def.rotation_z,
+        def.offset_x,
+        def.offset_y,
+        def.scale_x,
+        def.scale_y,
+        def.scale_z
+    );
+    println!(
+        "  len={} complete={} value={} stackable={} members={} recolors={:?}",
+        data.len(),
+        def.complete,
+        def.value,
+        def.stackable,
+        def.members,
+        def.recolors
+    );
     Ok(())
 }
 

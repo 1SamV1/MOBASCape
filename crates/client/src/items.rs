@@ -5,6 +5,9 @@ use serde::Deserialize;
 pub struct ItemConfig {
     pub id: String,
     pub name: String,
+    /// Cache item id, used to bake the OSRS inventory icon.
+    #[serde(default)]
+    pub obj: Option<u32>,
     #[serde(default = "default_category")]
     pub category: String,
     pub color: [u8; 3],
@@ -31,15 +34,18 @@ pub struct ItemShop {
     pub open: bool,
     pub selected: Option<usize>,
     pub category: usize,
+    /// The live overlay's item-list scroll, in interface pixels.
+    pub scroll: i32,
 }
 
-pub const CATEGORY_LABELS: [&str; 6] = [
+pub const CATEGORY_LABELS: [&str; 7] = [
     "ALL",
-    "WEAPONS",
+    "MELEE",
+    "RANGED",
+    "MAGIC",
     "ARMOUR",
     "JEWELLERY",
     "BOOTS",
-    "CONSUMABLES",
 ];
 
 impl ItemShop {
@@ -52,6 +58,7 @@ impl ItemShop {
             open: false,
             selected: Some(0),
             category: 0,
+            scroll: 0,
         })
     }
 
@@ -61,6 +68,7 @@ impl ItemShop {
         self.open = false;
         self.selected = Some(0);
         self.category = 0;
+        self.scroll = 0;
     }
 
     pub fn is_owned(&self, index: usize) -> bool {
@@ -95,8 +103,8 @@ impl ItemShop {
         }
     }
 
-    pub fn affordable(&self, gold: u32) -> [bool; 6] {
-        std::array::from_fn(|i| self.items.get(i).is_some_and(|item| item.cost <= gold))
+    pub fn affordable(&self, gold: u32) -> Vec<bool> {
+        self.items.iter().map(|item| item.cost <= gold).collect()
     }
 
     pub fn item_count(&self) -> usize {
@@ -108,11 +116,12 @@ impl ItemShop {
             .iter()
             .enumerate()
             .filter(|(_, item)| match self.category {
-                1 => item.category == "weapon",
-                2 => item.category == "armour",
-                3 => item.category == "jewellery",
-                4 => item.category == "boots",
-                5 => item.category == "consumable",
+                1 => item.category == "melee",
+                2 => item.category == "ranged",
+                3 => item.category == "magic",
+                4 => item.category == "armour",
+                5 => item.category == "jewellery",
+                6 => item.category == "boots",
                 _ => true,
             })
             .map(|(index, _)| index)
@@ -218,12 +227,12 @@ mod tests {
 
     fn test_shop() -> ItemShop {
         let json = r#"[
-            {"id":"a","name":"A","category":"weapon","color":[1,2,3],"cost":100},
+            {"id":"a","name":"A","category":"melee","color":[1,2,3],"cost":100},
             {"id":"b","name":"B","category":"armour","color":[4,5,6],"cost":200},
-            {"id":"c","name":"C","category":"weapon","color":[7,8,9],"cost":300},
-            {"id":"d","name":"D","category":"jewellery","color":[10,11,12],"cost":400},
-            {"id":"e","name":"E","category":"boots","color":[13,14,15],"cost":500},
-            {"id":"f","name":"F","category":"consumable","color":[16,17,18],"cost":600}
+            {"id":"c","name":"C","category":"ranged","color":[7,8,9],"cost":300},
+            {"id":"d","name":"D","category":"magic","color":[10,11,12],"cost":400},
+            {"id":"e","name":"E","category":"jewellery","color":[13,14,15],"cost":500},
+            {"id":"f","name":"F","category":"boots","color":[16,17,18],"cost":600}
         ]"#;
         ItemShop {
             items: serde_json::from_str(json).expect("item fixture"),
@@ -231,6 +240,7 @@ mod tests {
             open: false,
             selected: Some(0),
             category: 0,
+            scroll: 0,
         }
     }
 
@@ -290,14 +300,16 @@ mod tests {
         let mut shop = test_shop();
         assert_eq!(shop.filtered_items(), vec![0, 1, 2, 3, 4, 5]);
         shop.category = 1;
-        assert_eq!(shop.filtered_items(), vec![0, 2]);
+        assert_eq!(shop.filtered_items(), vec![0]);
         shop.category = 2;
-        assert_eq!(shop.filtered_items(), vec![1]);
+        assert_eq!(shop.filtered_items(), vec![2]);
         shop.category = 3;
         assert_eq!(shop.filtered_items(), vec![3]);
         shop.category = 4;
-        assert_eq!(shop.filtered_items(), vec![4]);
+        assert_eq!(shop.filtered_items(), vec![1]);
         shop.category = 5;
+        assert_eq!(shop.filtered_items(), vec![4]);
+        shop.category = 6;
         assert_eq!(shop.filtered_items(), vec![5]);
     }
 
@@ -322,11 +334,11 @@ mod tests {
         let shop = test_shop();
         assert_eq!(
             shop.affordable(300),
-            [true, true, true, false, false, false]
+            vec![true, true, true, false, false, false]
         );
         assert_eq!(
             shop.affordable(0),
-            [false, false, false, false, false, false]
+            vec![false, false, false, false, false, false]
         );
     }
 }

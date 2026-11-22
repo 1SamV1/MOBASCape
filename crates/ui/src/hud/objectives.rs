@@ -24,6 +24,7 @@ pub fn draw(theme: &Theme, list: &mut DrawList, area: Rect, state: &ObjectivesSt
 
     let text = theme.colour("text");
     let quiet = theme.colour("text.quiet");
+    let dim = theme.colour("text.dim");
     let title = theme.colour("text.title");
     let good = theme.colour("text.good");
     let blue = theme.colour("text.team.blue");
@@ -120,6 +121,7 @@ pub fn draw(theme: &Theme, list: &mut DrawList, area: Rect, state: &ObjectivesSt
             state_text,
             colour,
             state_colour(state_text, good, quiet, title),
+            dim,
             &[],
             area.right(),
         );
@@ -137,6 +139,7 @@ pub fn draw(theme: &Theme, list: &mut DrawList, area: Rect, state: &ObjectivesSt
             &format!("{}  {}", camp.grant, camp.state),
             camp_colour(&camp.grant, good, title, quiet),
             state_colour(&camp.state, good, quiet, title),
+            dim,
             &second,
             area.right(),
         );
@@ -160,6 +163,7 @@ fn objective_line(
     state: &str,
     mark: crate::Colour,
     state_colour: crate::Colour,
+    dim: crate::Colour,
     second: &[&str],
     right: i32,
 ) {
@@ -175,7 +179,7 @@ fn objective_line(
         list.text(font, state, right - 12 * s - width, baseline, state_colour);
         for (n, line) in second.iter().enumerate() {
             let (x, baseline) = at(22, y + 17 + (n as i32 + 1) * 24);
-            list.text(font, line, x, baseline, [0.72, 0.72, 0.66, 1.0]);
+            list.text(font, line, x, baseline, dim);
         }
     }
 }

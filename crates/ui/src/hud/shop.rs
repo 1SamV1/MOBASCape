@@ -192,25 +192,39 @@ pub fn draw(theme: &Theme, list: &mut DrawList, shop: &ShopState, gold: u32) {
         }
         let frame = Rect::new(view.x + 8 * s, y + 5 * s, 36 * s, 32 * s);
         slot(theme, list, frame);
-        list.rect(
-            Rect::new(
-                frame.x + 4 * s,
-                frame.y + 4 * s,
-                frame.w - 8 * s,
-                frame.h - 8 * s,
-            ),
-            swatch(item),
-        );
-        if let Some(font) = bold {
-            let initial = item.name.chars().next().unwrap_or('?').to_string();
-            let width = font.width(&initial) * s;
-            list.text(
-                font,
-                &initial,
-                frame.x + (frame.w - width) / 2,
-                frame.y + (frame.h + font.ascent * s) / 2,
-                ink(item.colour),
+        let icon = item
+            .icon
+            .as_deref()
+            .filter(|role| theme.has_sprite(role))
+            .map(|role| theme.sprite(role));
+        if let Some(icon) = icon {
+            let (w, h) = list.size_of(icon);
+            list.sprite(
+                icon,
+                frame.x + (frame.w - w) / 2,
+                frame.y + (frame.h - h) / 2,
             );
+        } else {
+            list.rect(
+                Rect::new(
+                    frame.x + 4 * s,
+                    frame.y + 4 * s,
+                    frame.w - 8 * s,
+                    frame.h - 8 * s,
+                ),
+                swatch(item),
+            );
+            if let Some(font) = bold {
+                let initial = item.name.chars().next().unwrap_or('?').to_string();
+                let width = font.width(&initial) * s;
+                list.text(
+                    font,
+                    &initial,
+                    frame.x + (frame.w - width) / 2,
+                    frame.y + (frame.h + font.ascent * s) / 2,
+                    ink(item.colour),
+                );
+            }
         }
         if let Some(font) = body {
             list.text(font, &item.name, view.x + 54 * s, y + 25 * s, text);

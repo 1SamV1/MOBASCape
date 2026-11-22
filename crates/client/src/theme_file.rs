@@ -61,7 +61,15 @@ struct FontRef {
     font: u32,
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
 pub fn load(cache: &Cache, path: &Path) -> Result<Theme> {
+    load_with_items(cache, path, &[])
+}
+
+/// Load the theme and bake the OSRS inventory icon for every item in `items`.
+/// The role is `icon.item.<key>`; a failed bake leaves the role out, and the
+/// component falls back to its colour swatch instead of a missing image.
+pub fn load_with_items(cache: &Cache, path: &Path, items: &[(String, u32)]) -> Result<Theme> {
     let text = std::fs::read_to_string(path)
         .with_context(|| format!("reading theme {}", path.display()))?;
     let file: ThemeFile =
@@ -102,6 +110,12 @@ pub fn load(cache: &Cache, path: &Path) -> Result<Theme> {
             role,
             parse_colour(colour).with_context(|| format!("colour role {role}"))?,
         );
+    }
+    for (key, item_id) in items {
+        match crate::item_icons::bake(cache, *item_id) {
+            Ok(image) => builder.sprite(&format!("icon.item.{key}"), image),
+            Err(err) => tracing::warn!("item icon {key} ({item_id}): {err:#}"),
+        }
     }
     Ok(builder.build())
 }
@@ -266,6 +280,8 @@ mod tests {
         }
         for role in [
             "text",
+            "text.quiet",
+            "text.dim",
             "text.title",
             "announcement",
             "bar.health",
@@ -280,6 +296,30 @@ mod tests {
             "the theme sheet has {} quads",
             sheet.len()
         );
+    }
+
+    #[test]
+    fn every_item_with_a_cache_id_gets_a_cache_baked_icon() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let cache_path = root.join(".cache/osrs-235/cache");
+        if !cache_path.join("main_file_cache.dat2").exists() {
+            return;
+        }
+        let cache = Cache::open(&cache_path).expect("the pinned cache opens");
+        let text = std::fs::read_to_string(root.join("data/items/items.json")).expect("items");
+        let items: Vec<crate::items::ItemConfig> = serde_json::from_str(&text).expect("item data");
+        let icon_items: Vec<(String, u32)> = items
+            .iter()
+            .filter_map(|item| item.obj.map(|obj| (item.id.clone(), obj)))
+            .collect();
+        let theme = load_with_items(&cache, &root.join("data/ui/theme.json"), &icon_items)
+            .expect("theme with item icons");
+        for item in &items {
+            if item.obj.is_some() {
+                let role = format!("icon.item.{}", item.id);
+                assert!(theme.has_sprite(&role), "missing {role}");
+            }
+        }
     }
 
     /// Write the theme sheet to `target/theme-sheet.ppm` for the eye, under

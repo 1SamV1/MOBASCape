@@ -455,7 +455,7 @@ pub fn shop(shop: &ItemShop) -> ShopState {
         search: "Search items".to_string(),
         items,
         selected,
-        scroll: 0,
+        scroll: shop.scroll,
         hint: "Click a row, then Buy.".to_string(),
     }
 }
@@ -481,6 +481,7 @@ pub fn shop_item(item: &ItemConfig) -> ShopItem {
         name: item.name.clone(),
         price: item.cost,
         colour: item.color,
+        icon: item.obj.map(|_| format!("icon.item.{}", item.id)),
         stats,
         builds_into: None,
     }
@@ -502,6 +503,7 @@ pub fn inventory_item(item: &ItemConfig) -> InventoryItem {
     InventoryItem {
         name: item.name.clone(),
         colour: item.color,
+        icon: item.obj.map(|_| format!("icon.item.{}", item.id)),
     }
 }
 
@@ -748,7 +750,8 @@ mod tests {
         let item = ItemConfig {
             id: "test".to_string(),
             name: "Test blade".to_string(),
-            category: "weapon".to_string(),
+            obj: None,
+            category: "melee".to_string(),
             color: [10, 20, 30],
             cost: 700,
             damage: 8.0,
@@ -769,11 +772,12 @@ mod tests {
             open: true,
             selected: Some(0),
             category: 1,
+            scroll: 0,
         };
         let state = shop(&catalog);
         assert!(state.open);
         assert_eq!(state.category, 1);
-        assert_eq!(state.categories[1], "WEAPONS");
+        assert_eq!(state.categories[1], "MELEE");
         assert_eq!(state.categories.len(), CATEGORY_LABELS.len());
         assert_eq!(state.items.len(), 1);
         assert_eq!(state.selected, 0);
@@ -784,6 +788,7 @@ mod tests {
         let item = |name: &str, color: [u8; 3]| ItemConfig {
             id: name.to_lowercase(),
             name: name.to_string(),
+            obj: None,
             category: "weapon".to_string(),
             color,
             cost: 100,
@@ -799,6 +804,7 @@ mod tests {
             open: false,
             selected: None,
             category: 0,
+            scroll: 0,
         };
         let slots = inventory(&catalog);
         assert_eq!(slots.len(), 6);
@@ -807,6 +813,7 @@ mod tests {
             Some(InventoryItem {
                 name: "Shield".to_string(),
                 colour: [4, 5, 6],
+                icon: None,
             })
         );
         assert_eq!(slots[1], None);
@@ -838,6 +845,7 @@ mod tests {
         let item = ItemConfig {
             id: "test".to_string(),
             name: "Test ring".to_string(),
+            obj: None,
             category: "jewellery".to_string(),
             color: [1, 2, 3],
             cost: 900,
@@ -853,6 +861,7 @@ mod tests {
             open: true,
             selected: Some(0),
             category: 0,
+            scroll: 0,
         };
         let tooltip = tooltip(&catalog, (400, 250)).expect("a tooltip");
         assert_eq!(tooltip.title, "Test ring");

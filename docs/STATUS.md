@@ -1,6 +1,45 @@
 # Status
 
-Last updated: live stage 4 interface state, 2026-11-21.
+Last updated: cache-native stage 4 items and icons, 2026-11-21.
+
+## 2026-11-21 — Cache-native item icons and expanded item pool
+
+- Added `crates/cache/src/item.rs`: the item definition decoder reads the
+  inventory model, zoom, rotations, offsets, resize, light/contrast and
+  palette swaps from config archive 10. `rift-tools item <id>` prints them.
+- Added `crates/client/src/item_icons.rs`: each item's inventory model is
+  rendered to a 32 by 32 OSRS-style icon with its recolours, scale and
+  rotation, plus the one-pixel dark edge.
+- `theme_file::load_with_items` bakes an `icon.item.<key>` role for every
+  item in `data/items/items.json` that has a cache `obj` id. The stage 4
+  inventory and shop rows draw those cache icons; the colour/initial remains
+  only as a missing-asset fallback.
+- The item pool grew from 6 to 89 entries: bronze-to-dragon melee, shortbows
+  to twisted bow, air staves to Tumeken's shadow, platebodies and robes,
+  rings, amulets and boots from early to end game. Every entry carries its
+  real OSRS cache item id.
+- The live shop list now scrolls with the mouse wheel and resets on category
+  change; the footer reads the live gold and the item rows carry live icons.
+- Added the `text.dim` OSRS palette role and used it for objective detail
+  lines instead of a raw colour.
+- The old HUD's legacy shop grid still shows the first six entries of a
+  category; the full list is browsable in `--ui-live` until that grid retires.
+  Its affordability table is now sized to the whole pool, so the extra items
+  cannot index past the old six.
+- Verified: `cargo test --workspace` 253 tests pass, 4 ignored; workspace
+  clippy is clean. Capture: `/tmp/opencode/ui_live_osrs_final.png` (six
+  categories, cache-baked icons, live gold and the scrolled melee list).
+
+## 2026-11-21 — Live shop capture and clean layer
+
+- Captured `--ui-live --demo-shop` at 1280×720: the six category rows, live
+  item list and detail, gold `413`, and the assembled inventory's Shop button
+  all come from the match.
+- While the assembled interface is live, the old HUD no longer draws its own
+  shop window or tooltip. The duplicate old tooltip that floated over the new
+  item rows is gone; the old HUD remains for the components not yet replaced.
+- Verified capture: `/tmp/opencode/ui_live_categories_clean.png`.
+- Tests are unchanged at 250 passing, 3 ignored; workspace clippy is clean.
 
 ## 2026-11-21 — Live shop categories
 
@@ -493,8 +532,10 @@ Last updated: live stage 4 interface state, 2026-11-21.
 - Progression: levels 1–11, XP, gold; level-ups raise health, mana, damage.
 - Economy/base: passive gold 8/s; fountain heals 6% max HP/MP/s within 900
   units of spawn; two persistent rings mark the fountain.
-- Item shop: six data-driven items, six inventory slots, fountain-range
-  purchase, gold spending, stat/ability-power application, hover tooltips.
+- Item shop: 89 data-driven OSRS items across melee, ranged, magic, armour,
+  rings, amulets and boots; six inventory slots, fountain-range purchase,
+  gold spending, stat/ability-power application, hover tooltips, and
+  cache-baked inventory icons.
 - **Terrain smoothing/detail (M5.3a)**: the per-tile color field is box-blurred
   twice and assigned to shared grid-corner vertices; `scene.wgsl` adds
   procedural ground detail for terrain. Tile outlines are gone.

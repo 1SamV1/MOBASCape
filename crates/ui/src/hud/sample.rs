@@ -339,14 +339,17 @@ fn base() -> HudState {
             Some(InventoryItem {
                 name: "Bronze sword".to_string(),
                 colour: [170, 112, 66],
+                icon: None,
             }),
             Some(InventoryItem {
                 name: "Iron platebody".to_string(),
                 colour: [150, 150, 160],
+                icon: None,
             }),
             Some(InventoryItem {
                 name: "Amulet of fury".to_string(),
                 colour: [210, 170, 60],
+                icon: None,
             }),
             None,
             None,
@@ -583,6 +586,7 @@ fn shop_item(name: &str, price: u32, colour: [u8; 3], stats: &[&str]) -> ShopIte
         name: name.to_string(),
         price,
         colour,
+        icon: None,
         stats: stats.iter().map(|line| (*line).to_string()).collect(),
         builds_into: None,
     }
