@@ -160,6 +160,10 @@ fn map_point(p: Vec3, min: Vec2, max: Vec2) -> MapPoint {
     }
 }
 
+fn is_objective_camp(kind: UnitKind, buff: Option<CampBuff>) -> bool {
+    kind == UnitKind::Camp && buff.is_some()
+}
+
 pub fn objectives(scene: &SceneData, animated: &AnimatedScene) -> ObjectivesState {
     let lanes = animated
         .lanes
@@ -204,7 +208,9 @@ pub fn objectives(scene: &SceneData, animated: &AnimatedScene) -> ObjectivesStat
     let camps = animated
         .units
         .iter()
-        .filter(|unit| unit.kind == UnitKind::Camp)
+        // Scattered critter camps are gameplay camps internally but carry no
+        // team buff. The objectives panel lists the eight buff camps only.
+        .filter(|unit| is_objective_camp(unit.kind, unit.camp_buff))
         .map(|unit| {
             let grant = match unit.camp_buff.unwrap_or(CampBuff::Might) {
                 CampBuff::Might => "Might",
@@ -685,6 +691,14 @@ mod tests {
         assert_eq!(outside, MapPoint { x: 0, y: 252 });
         let flat = map_point(Vec3::new(1.0, 0.0, 1.0), min, min);
         assert_eq!(flat, MapPoint { x: 127, y: 126 });
+    }
+
+    #[test]
+    fn only_buff_camps_are_objectives() {
+        assert!(is_objective_camp(UnitKind::Camp, Some(CampBuff::Might)));
+        assert!(is_objective_camp(UnitKind::Camp, Some(CampBuff::Swift)));
+        assert!(!is_objective_camp(UnitKind::Camp, None));
+        assert!(!is_objective_camp(UnitKind::Player, None));
     }
 
     #[test]

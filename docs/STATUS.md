@@ -1,6 +1,18 @@
 # Status
 
-Last updated: live HUD panel fast path, 2026-11-21.
+Last updated: live objectives camp filter, 2026-11-21.
+
+## 2026-11-21 — Live objectives list buff camps only
+
+- The live objectives panel was listing every `UnitKind::Camp`, including the
+  scattered critter camps whose `camp_buff` is `None`. That produced fifteen
+  camp lines and pushed the panel past its layout box.
+- The bridge now includes only the eight real buff camps (`camp_buff` is
+  `Some(Might|Swift)`), so the panel is the intended ten objective lines plus
+  its second lines and fits the screen.
+- Added a pure `is_objective_camp` regression test.
+- Verified: `cargo test --workspace` 257 tests pass, 4 ignored; workspace
+  clippy is clean. Capture: `/tmp/opencode/ui_live_camps.png`.
 
 ## 2026-11-21 — UI: flat panels are one rectangle
 
