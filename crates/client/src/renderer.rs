@@ -450,10 +450,16 @@ impl Renderer {
         gpu_timing: bool,
     ) -> Result<Self> {
         let msaa_samples = if msaa_samples >= 4 { 4 } else { 1 };
-        let render_scale = render_scale.clamp(0.5, 1.0);
         let size = window.inner_size();
         let width = size.width.max(1);
         let height = size.height.max(1);
+        // The window's inner size (not the requested size, which can include
+        // decorations) decides the auto scale.
+        let render_scale = if render_scale_auto {
+            auto_render_scale(width, height)
+        } else {
+            render_scale.clamp(0.5, 1.0)
+        };
         let render_size = scaled_extent(width, height, render_scale);
 
         let instance = wgpu::Instance::default();
@@ -2415,7 +2421,9 @@ pub(crate) fn create_dynamic_buffer(
 
 fn auto_render_scale(width: u32, height: u32) -> f32 {
     let pixels = (width as f32 * height as f32).max(1.0);
-    (1_400_000.0 / pixels).sqrt().clamp(0.62, 1.0)
+    // 1.6M scene pixels keeps a comfortable 60 fps margin on the 680M now
+    // that the point-light gate removed the scene's biggest wasted cost.
+    (1_600_000.0 / pixels).sqrt().clamp(0.62, 1.0)
 }
 
 fn scaled_extent(width: u32, height: u32, scale: f32) -> (u32, u32) {
@@ -2606,6 +2614,19 @@ mod tests {
         assert!(chunk_within(min, max, Vec3::ZERO, 1000.0));
         assert!(!chunk_within(min, max, Vec3::ZERO, 998.0));
         assert!(chunk_within(min, max, Vec3::new(1000.0, 0.0, 0.0), 1.0));
+    }
+
+    #[test]
+    fn auto_scale_aims_at_the_new_scene_pixel_budget() {
+        let (width, height) = (1920, 1008);
+        let scale = auto_render_scale(width, height);
+        let (scene_width, scene_height) = scaled_extent(width, height, scale);
+        let pixels = scene_width as f32 * scene_height as f32;
+        assert!(
+            (pixels - 1_600_000.0).abs() < 20_000.0,
+            "{scene_width}x{scene_height} = {pixels}"
+        );
+        assert_eq!(auto_render_scale(1280, 720), 1.0);
     }
 
     #[test]

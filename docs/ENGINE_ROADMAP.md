@@ -1,7 +1,8 @@
 # Engine road map
 
-Last updated: 2026-11-21, after per-pass GPU timings and the point-light
-radius gate that pushed native 1080p past 60 fps.
+Last updated: 2026-11-22, after per-pass GPU timings, the point-light radius
+gate and the larger auto-scale budget that spends the new headroom on world
+sharpness.
 
 This is the working performance/architecture backlog. It records what the
 engine does today, what was measured, and the next changes that should give
@@ -19,7 +20,7 @@ the largest wins per unit of risk.
 - Simulation: click-to-move, A* pathing, hybrid dynamic-unit meshes, three
   lanes, minions, camps, towers and inhibitors.
 - Renderer: one offscreen HDR target, bloom bright/blur/final passes, FXAA +
-  grade + dither post, HUD after post. `--render-scale auto` targets 1.4M
+  grade + dither post, HUD after post. `--render-scale auto` targets 1.6M
   scene pixels; post and HUD stay at native window resolution.
 
 ### Measured (release, `--present-mode immediate`, 1280×720)
@@ -119,9 +120,10 @@ What moved the number:
   converted from HSL every frame, per-unit animation pose buffers are reused,
   and sRGB byte colours use a 256-entry lookup instead of `powf` per channel.
   Mesh build fell from ~10.4 ms to ~3.5–4.1 ms.
-- **Resolution**: `--render-scale auto` targets 1.4M scene pixels, so a
-  1920×1008 window renders the scene at 1578×828 and upscales through the
-  linear post sampler. The HUD and post chain stay native.
+- **Resolution**: that pass's `--render-scale auto` targeted 1.4M scene
+  pixels, so a 1920×1008 window rendered the scene at 1578×828 and upscaled
+  through the linear post sampler. The HUD and post chain stay native. The
+  budget is now 1.6M; see 2d.
 - **Post**: with 4× MSAA the resolved scene is already antialiased, so the
   post pass skips its FXAA taps on that path. `--msaa 1` keeps FXAA.
 - **Profiling**: `--benchmark` now prints `sim`, `mesh`, `hud`, `ui` and
@@ -133,11 +135,12 @@ What moved the number:
   draw as one rectangle, so the live 1080p HUD dropped from 162,830 quads to
   2,327 and from 46.7 ms to ~0.9 ms of build time.
 
-Timestamp queries put the 1920×1008 auto-scale frame at **10.76 ms GPU**:
-scene **9.11 ms**, bloom **0.73 ms**, post **0.79 ms**, shadow **0.04 ms**,
-HUD/interface **0.09 ms**. The old HUD's GPU pass is only **0.06 ms**; its
-remaining cost is the 0.6 ms CPU build. The scene pass is still the only
-large GPU cost, but native-resolution 1080p now clears 60 (details below).
+Timestamp queries put the 1920×1008 auto-scale frame at **11.51 ms GPU**
+after the larger budget below: scene **9.82 ms**, bloom **0.78 ms**, post
+**0.77 ms**, shadow **0.05 ms**, HUD/interface **0.09 ms**. The old HUD's GPU
+pass is only **0.06 ms**; its remaining cost is the 0.6 ms CPU build. The
+scene pass is still the only large GPU cost, but native-resolution 1080p now
+clears 60 (details below).
 
 ### 2c. 2026-11-21 — Point-light radius gate
 
@@ -165,16 +168,38 @@ the 60 fps target no longer depends on the auto scene scale. Tried and not
 kept: a direct one-light fast path (no measurable change) and gradient-based
 grass mip selection (no measurable change; reverted).
 
+### 2d. 2026-11-22 — Auto scale spends the headroom on sharpness
+
+The gate above left the auto path at the pre-optimization 1.4M-pixel budget,
+so the default frame was still 1578×828. The budget is now **1.6M** and the
+startup scale is derived from the window's actual inner size, not the
+requested size. A 1920×1080 request with a 1008px client area now renders
+**1746×917 (0.91×)** instead of undershooting at 0.82×.
+
+| 1920×1008 auto, MSAA 4, shadows | 1.4M (0.82×) | 1.6M (0.91×) |
+|---|---:|---:|
+| Scene pixels | 1578×828 | **1746×917** |
+| p50 | 11.11 ms | **12.32 ms / 81.1 fps** |
+| p95 | 12.28 ms | **13.58 ms** |
+| GPU frame | 10.76 ms | **11.51 ms** |
+| Scene pass | 9.11 ms | **9.82 ms** |
+
+Native 1920×1008 is unchanged at p50 14.35 ms / 69.7 fps, so `--render-scale
+1.0` remains the maximum-sharpness path. Captures:
+`/tmp/opencode/scene_auto16.png` against `/tmp/opencode/scene_lightgate.png`.
+Tried and not kept: a one-tap castle grain projection, which did not move the
+scene time (12.14 → 12.29 ms) and was reverted.
+
 ## 3. Current hot spots
 
-1. **Scene fill**: the scene pass is ~9.1 ms at auto scale and ~12.1 ms
-   native. The normal-only view costs ~4.0 ms, so 4× MSAA raster plus terrain
-   and scenery fragments dominate; the shadow map is effectively free at
-   ~0.04 ms.
+1. **Scene fill**: the scene pass is ~9.8 ms at the 0.91× auto scale and
+   ~12.1 ms native. The normal-only view costs ~4.0 ms at 0.82×, so 4× MSAA
+   raster plus terrain and scenery fragments dominate; the shadow map is
+   effectively free at ~0.05 ms.
 2. **Terrain fragment cost**: the fast path samples grass, dirt and stone;
-   sand reuses dirt. Albedo alone adds ~2.1 ms over the normal view, before
-   lighting and fog.
-3. **Post and bloom**: the full-screen chain is ~1.5 ms at native resolution
+   sand reuses dirt. At 0.82× albedo alone added ~2.1 ms over the normal
+   view, before lighting and fog.
+3. **Post and bloom**: the full-screen chain is ~1.55 ms at native resolution
    and is the next fixed cost after the scene.
 4. **HUD geometry**: the old HUD is rebuilt and uploaded every frame. The
    live HUD now draws flat panels as one rectangle instead of tiling a 1×1

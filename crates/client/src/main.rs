@@ -2865,7 +2865,7 @@ fn camera_cull_radius(size: (u32, u32), camera: &Camera) -> f32 {
 fn resolve_render_scale(text: &str, window: (u32, u32)) -> Option<f32> {
     if text.eq_ignore_ascii_case("auto") {
         let pixels = (window.0 as f32 * window.1 as f32).max(1.0);
-        Some((1_400_000.0 / pixels).sqrt().clamp(0.62, 1.0))
+        Some((1_600_000.0 / pixels).sqrt().clamp(0.62, 1.0))
     } else {
         let scale: f32 = text.parse().ok()?;
         (0.5..=1.0).contains(&scale).then_some(scale)
@@ -2942,7 +2942,7 @@ mod tests {
 
         assert_eq!(resolve_render_scale("auto", (1280, 720)), Some(1.0));
         let scale = resolve_render_scale("auto", (1920, 1080)).unwrap();
-        assert!((scale - 0.822).abs() < 0.01, "{scale}");
+        assert!((scale - 0.878).abs() < 0.01, "{scale}");
         assert_eq!(resolve_render_scale("0.85", (1920, 1080)), Some(0.85));
         assert_eq!(resolve_render_scale("0.4", (1920, 1080)), None);
         assert_eq!(resolve_render_scale("1.2", (1920, 1080)), None);

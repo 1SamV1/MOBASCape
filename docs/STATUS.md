@@ -1,6 +1,30 @@
 # Status
 
-Last updated: point-light radius gate, 2026-11-21.
+Last updated: sharper auto-scale budget, 2026-11-22.
+
+## 2026-11-22 — Auto scale spends the new headroom on sharpness
+
+- `--render-scale auto` now targets **1.6M scene pixels** instead of 1.4M.
+  On a 1920×1008 inner window that is 0.91× (1746×917), up from 0.82×
+  (1578×828), so the default world is visibly sharper while keeping a
+  comfortable margin.
+- Startup now derives the auto scale from the window's actual inner size,
+  not the requested size. A 1920×1080 request with a 1008px client area no
+  longer undershoots the pixel budget.
+- Measured at 1920×1008, live interface, MSAA 4, shadows, immediate:
+  p50 **12.32 ms / 81.1 fps**, p95 **13.58 ms**, p99 14.63 ms, GPU frame
+  **11.51 ms** (scene 9.82, bloom 0.78, post 0.77, shadow 0.05). The 0.82×
+  frame was p50 11.11 ms / 89.7 fps; the extra ~0.7 ms of scene work buys a
+  22% larger scene image.
+- Native 1920×1008 is unchanged at p50 14.35 ms / 69.7 fps, so `--render-scale
+  1.0` remains available for maximum sharpness.
+- Visual A/B: `/tmp/opencode/scene_auto16.png` (0.91×) against
+  `/tmp/opencode/scene_lightgate.png` (0.82×). Both use the same scraped cache
+  terrain and models; no visual assets were added.
+- Added a test that the auto scale lands on the 1.6M-pixel budget. Tried and
+  not kept: a one-tap castle grain projection, which did not move the scene
+  time (12.14 → 12.29 ms) and was reverted. Verified: 263 tests pass, 4
+  ignored; workspace clippy clean.
 
 ## 2026-11-21 — Point lights only shade fragments inside their radius
 

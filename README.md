@@ -50,12 +50,12 @@ designed for fast-paced low-team-count matches.
 > not built. The old HUD remains the running default and its legacy grid still
 > shows six entries per
 > category while the last interaction gaps and final parity are finished.
-> Release on the 680M measures p50 9.3 ms at 1280×720 and p50 11.1 ms /
-> 90 fps at 1920×1008 with `--render-scale auto`, the live interface and the
-> HUD at native resolution. Native 1920×1008 scene resolution now holds p50
-> 14.4 ms / 69 fps and p95 15.5 ms with 4× MSAA and sun shadows. Timestamp
-> queries put the auto GPU frame at 10.8 ms: scene 9.1 ms, bloom 0.7 ms, post
-> 0.8 ms and the shadow map 0.04 ms. See
+> Release on the 680M measures p50 7.7 ms / 130 fps at 1280×720 and p50
+> 12.3 ms / 81 fps at 1920×1008 with `--render-scale auto` (0.91×,
+> 1746×917), the live interface and the HUD at native resolution. Native 1920×1008 scene
+> resolution now holds p50 14.4 ms / 69 fps and p95 15.5 ms with 4× MSAA and
+> sun shadows. Timestamp queries put the auto GPU frame at 11.5 ms: scene
+> 9.8 ms, bloom 0.8 ms, post 0.8 ms and the shadow map 0.05 ms. See
 > [docs/STATUS.md](docs/STATUS.md),
 > [docs/UI_ASSETS.md](docs/UI_ASSETS.md) and
 > [docs/INTERFACE_STAGE3_REVIEW.md](docs/INTERFACE_STAGE3_REVIEW.md).
