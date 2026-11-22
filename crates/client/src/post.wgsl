@@ -81,12 +81,8 @@ fn fxaa(uv: vec2<f32>, texel: vec2<f32>) -> vec3<f32> {
     return rgbB;
 }
 
-@fragment
-fn fs(input: VsOut) -> @location(0) vec4<f32> {
-    let dimensions = vec2<f32>(textureDimensions(scene_texture));
-    let texel = 1.0 / dimensions;
-
-    var color = fxaa(input.uv, texel);
+fn grade(uv: vec2<f32>, base: vec3<f32>, dimensions: vec2<f32>) -> vec3<f32> {
+    var color = base;
 
     // ---- Reference grade -------------------------------------------------
     // The clip is graded like a foggy late-afternoon painting: low saturation,
@@ -118,11 +114,27 @@ fn fs(input: VsOut) -> @location(0) vec4<f32> {
 
     // Heavy painterly vignette: the corners fade into the same fog colour as
     // the horizon, pulling the eye to the centre of the fight.
-    let centred = input.uv - vec2<f32>(0.5);
+    let centred = uv - vec2<f32>(0.5);
     let vignette = 1.0 - smoothstep(0.28, 1.00, length(centred * vec2<f32>(1.0, 1.22)));
     color *= mix(0.72, 1.0, vignette);
 
-    let dither = fract(sin(dot(input.uv * dimensions, vec2<f32>(12.9898, 78.233))) * 43758.5453);
+    let dither = fract(sin(dot(uv * dimensions, vec2<f32>(12.9898, 78.233))) * 43758.5453);
     color += (dither - 0.5) / 255.0;
-    return vec4<f32>(clamp(color, vec3<f32>(0.0), vec3<f32>(1.0)), 1.0);
+    return clamp(color, vec3<f32>(0.0), vec3<f32>(1.0));
+}
+
+@fragment
+fn fs(input: VsOut) -> @location(0) vec4<f32> {
+    let dimensions = vec2<f32>(textureDimensions(scene_texture));
+    let texel = 1.0 / dimensions;
+    let color = fxaa(input.uv, texel);
+    return vec4<f32>(grade(input.uv, color, dimensions), 1.0);
+}
+
+/// The 4x MSAA path has already resolved its edges; skip the FXAA taps.
+@fragment
+fn fs_no_fxaa(input: VsOut) -> @location(0) vec4<f32> {
+    let dimensions = vec2<f32>(textureDimensions(scene_texture));
+    let color = composite(input.uv);
+    return vec4<f32>(grade(input.uv, color, dimensions), 1.0);
 }

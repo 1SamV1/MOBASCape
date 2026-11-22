@@ -23,7 +23,7 @@ pub use font::{Font, Glyph};
 pub use item::ItemDefinition;
 pub use keys::XteaKeys;
 pub use locations::{Location, Locations};
-pub use model::Model;
+pub use model::{AnimationScratch, Model};
 pub use reference::IndexData;
 pub use sequence::{AnimationClip, Frame, Framemap, Sequence};
 pub use sprite::{RgbaFrame, SpriteDefinition, SpriteFrame, SpriteSheet};

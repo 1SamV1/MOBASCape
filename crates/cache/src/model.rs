@@ -22,6 +22,16 @@ pub struct Model {
     pub priority: i8,
 }
 
+/// Reusable scratch buffers for [`Model::animated_positions_into`]. One per
+/// animated unit; the hot path no longer allocates a fresh position Vec for
+/// every frame of every unit.
+#[derive(Debug, Default)]
+pub struct AnimationScratch {
+    original: Vec<[i32; 3]>,
+    frame_a: Vec<[i32; 3]>,
+    frame_b: Vec<[i32; 3]>,
+}
+
 impl Model {
     pub fn load(id: u32, data: &[u8]) -> Result<Self> {
         if data.len() < 2 {
@@ -435,9 +445,13 @@ impl Model {
 
     /// Animate the model with a sequence clip and return cache-space positions.
     /// The caller converts Y to engine space (engine Y is up; cache Y is negative
-    /// up).
+    /// up). This convenience form allocates; hot loops should use
+    /// [`Self::animated_positions_into`].
     pub fn animated_positions(&self, clip: &AnimationClip, time_ms: f32) -> Vec<[f32; 3]> {
-        self.animated_positions_impl(clip, time_ms, None)
+        let mut out = Vec::new();
+        let mut scratch = AnimationScratch::default();
+        self.animated_positions_into(clip, time_ms, &mut out, &mut scratch);
+        out
     }
 
     /// Animate while ignoring local transforms for `masked_groups`. Root and
@@ -449,28 +463,63 @@ impl Model {
         time_ms: f32,
         masked_groups: &[u8],
     ) -> Vec<[f32; 3]> {
-        self.animated_positions_impl(clip, time_ms, Some(masked_groups))
+        let mut out = Vec::new();
+        let mut scratch = AnimationScratch::default();
+        self.animated_positions_masked_into(clip, time_ms, masked_groups, &mut out, &mut scratch);
+        out
     }
 
-    fn animated_positions_impl(
+    /// Animate into a caller-owned output Vec, reusing its allocation and the
+    /// per-unit scratch buffers.
+    pub fn animated_positions_into(
+        &self,
+        clip: &AnimationClip,
+        time_ms: f32,
+        out: &mut Vec<[f32; 3]>,
+        scratch: &mut AnimationScratch,
+    ) {
+        self.animated_positions_impl_into(clip, time_ms, None, out, scratch);
+    }
+
+    pub fn animated_positions_masked_into(
+        &self,
+        clip: &AnimationClip,
+        time_ms: f32,
+        masked_groups: &[u8],
+        out: &mut Vec<[f32; 3]>,
+        scratch: &mut AnimationScratch,
+    ) {
+        self.animated_positions_impl_into(clip, time_ms, Some(masked_groups), out, scratch);
+    }
+
+    fn animated_positions_impl_into(
         &self,
         clip: &AnimationClip,
         time_ms: f32,
         masked_groups: Option<&[u8]>,
-    ) -> Vec<[f32; 3]> {
-        let original = self
-            .vertex_x
-            .iter()
-            .zip(&self.vertex_y)
-            .zip(&self.vertex_z)
-            .map(|((&x, &y), &z)| [x, y, z])
-            .collect::<Vec<_>>();
+        out: &mut Vec<[f32; 3]>,
+        scratch: &mut AnimationScratch,
+    ) {
+        out.clear();
+        out.reserve(self.vertex_count);
+        let AnimationScratch {
+            original,
+            frame_a,
+            frame_b,
+        } = scratch;
+        original.clear();
+        original.reserve(self.vertex_count);
+        for ((&x, &y), &z) in self.vertex_x.iter().zip(&self.vertex_y).zip(&self.vertex_z) {
+            original.push([x, y, z]);
+        }
 
         if clip.frames.is_empty() || clip.sequence.frame_lengths.is_empty() {
-            return original
-                .into_iter()
-                .map(|p| [p[0] as f32, p[1] as f32, p[2] as f32])
-                .collect();
+            out.extend(
+                original
+                    .iter()
+                    .map(|p| [p[0] as f32, p[1] as f32, p[2] as f32]),
+            );
+            return;
         }
 
         let total_ticks: u32 = clip
@@ -500,26 +549,25 @@ impl Model {
         }
 
         let next_index = (frame_index + 1) % clip.frames.len();
-        let frame_a = &clip.frames[frame_index.min(clip.frames.len() - 1)];
+        let frame_a_ref = &clip.frames[frame_index.min(clip.frames.len() - 1)];
         let framemap_a = &clip.framemaps[frame_index.min(clip.framemaps.len() - 1)];
-        let frame_b = &clip.frames[next_index.min(clip.frames.len() - 1)];
+        let frame_b_ref = &clip.frames[next_index.min(clip.frames.len() - 1)];
         let framemap_b = &clip.framemaps[next_index.min(clip.framemaps.len() - 1)];
 
-        let mut a = original.clone();
-        let mut b = original;
-        self.apply_frame(frame_a, framemap_a, &mut a, masked_groups);
-        self.apply_frame(frame_b, framemap_b, &mut b, masked_groups);
+        frame_a.clear();
+        frame_a.extend_from_slice(original);
+        frame_b.clear();
+        frame_b.extend_from_slice(original);
+        self.apply_frame(frame_a_ref, framemap_a, frame_a, masked_groups);
+        self.apply_frame(frame_b_ref, framemap_b, frame_b, masked_groups);
 
-        a.iter()
-            .zip(&b)
-            .map(|(p, q)| {
-                [
-                    p[0] as f32 + (q[0] - p[0]) as f32 * frame_progress,
-                    p[1] as f32 + (q[1] - p[1]) as f32 * frame_progress,
-                    p[2] as f32 + (q[2] - p[2]) as f32 * frame_progress,
-                ]
-            })
-            .collect()
+        out.extend(frame_a.iter().zip(frame_b).map(|(p, q)| {
+            [
+                p[0] as f32 + (q[0] - p[0]) as f32 * frame_progress,
+                p[1] as f32 + (q[1] - p[1]) as f32 * frame_progress,
+                p[2] as f32 + (q[2] - p[2]) as f32 * frame_progress,
+            ]
+        }));
     }
 
     /// Apply an NPC palette swap. Values are cache HSL palette indices; the

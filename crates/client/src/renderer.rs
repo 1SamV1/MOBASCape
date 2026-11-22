@@ -330,6 +330,7 @@ pub struct Renderer {
     _model_texture: wgpu::Texture,
     _model_sampler: wgpu::Sampler,
     post_pipeline: wgpu::RenderPipeline,
+    post_no_fxaa_pipeline: wgpu::RenderPipeline,
     post_bind_group: wgpu::BindGroup,
     post_bind_group_layout: wgpu::BindGroupLayout,
     _post_sampler: wgpu::Sampler,
@@ -1188,6 +1189,15 @@ impl Renderer {
             &post_pipeline_layout,
             format,
             "post pipeline",
+            "fs",
+        );
+        let post_no_fxaa_pipeline = create_fullscreen_pipeline(
+            &device,
+            &post_shader,
+            &post_pipeline_layout,
+            format,
+            "post no-fxaa pipeline",
+            "fs_no_fxaa",
         );
 
         let bloom_bright_bind_group_layout =
@@ -1262,6 +1272,7 @@ impl Renderer {
             &bloom_bright_pipeline_layout,
             wgpu::TextureFormat::Rgba16Float,
             "bloom bright pipeline",
+            "fs",
         );
         let bloom_blur_pipeline = create_fullscreen_pipeline(
             &device,
@@ -1269,6 +1280,7 @@ impl Renderer {
             &bloom_blur_pipeline_layout,
             wgpu::TextureFormat::Rgba16Float,
             "bloom blur pipeline",
+            "fs",
         );
 
         let post_sampler = create_post_sampler(&device);
@@ -1450,6 +1462,7 @@ impl Renderer {
             _model_texture: model_texture,
             _model_sampler: model_sampler,
             post_pipeline,
+            post_no_fxaa_pipeline,
             post_bind_group,
             post_bind_group_layout,
             _post_sampler: post_sampler,
@@ -2113,7 +2126,14 @@ impl Renderer {
                 occlusion_query_set: None,
                 multiview_mask: None,
             });
-            post_pass.set_pipeline(&self.post_pipeline);
+            // 4x MSAA already resolves the scene edges; FXAA on top is mostly
+            // extra full-screen taps. Keep it only for the 1x path.
+            let post_pipeline = if self.msaa_samples > 1 {
+                &self.post_no_fxaa_pipeline
+            } else {
+                &self.post_pipeline
+            };
+            post_pass.set_pipeline(post_pipeline);
             post_pass.set_bind_group(0, &self.post_bind_group, &[]);
             post_pass.draw(0..3, 0..1);
         }
@@ -2293,7 +2313,7 @@ pub(crate) fn create_dynamic_buffer(
 
 fn auto_render_scale(width: u32, height: u32) -> f32 {
     let pixels = (width as f32 * height as f32).max(1.0);
-    (1_200_000.0 / pixels).sqrt().clamp(0.62, 1.0)
+    (1_400_000.0 / pixels).sqrt().clamp(0.62, 1.0)
 }
 
 fn scaled_extent(width: u32, height: u32, scale: f32) -> (u32, u32) {
@@ -2359,6 +2379,7 @@ fn create_fullscreen_pipeline(
     layout: &wgpu::PipelineLayout,
     format: wgpu::TextureFormat,
     label: &str,
+    fragment_entry: &str,
 ) -> wgpu::RenderPipeline {
     device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
         label: Some(label),
@@ -2371,7 +2392,7 @@ fn create_fullscreen_pipeline(
         },
         fragment: Some(wgpu::FragmentState {
             module: shader,
-            entry_point: Some("fs"),
+            entry_point: Some(fragment_entry),
             compilation_options: wgpu::PipelineCompilationOptions::default(),
             targets: &[Some(wgpu::ColorTargetState {
                 format,

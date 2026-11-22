@@ -4,7 +4,7 @@ use std::time::Instant;
 
 use anyhow::Result;
 use glam::{Mat3, Vec3};
-use rift_cache::{AnimationClip, Cache, Model, model::hsl_to_rgb};
+use rift_cache::{AnimationClip, AnimationScratch, Cache, Model, model::hsl_to_rgb};
 
 use crate::champion::ChampionConfig;
 use crate::items::ItemConfig;
@@ -100,6 +100,10 @@ pub struct AnimatedUnit {
     pub model: Arc<Model>,
     pub idle: Arc<AnimationClip>,
     pub walk: Option<Arc<AnimationClip>>,
+    /// Reused animation output and frame scratch, so a unit that does not
+    /// blend clips does not allocate every tick.
+    pose: Vec<[f32; 3]>,
+    pose_scratch: AnimationScratch,
     pub pos: Vec3,
     pub yaw: f32,
     /// Model-space forward correction (usually 0 or PI).
@@ -4106,6 +4110,8 @@ impl AnimatedScene {
                 model: template.model.clone(),
                 idle: template.idle.clone(),
                 walk: Some(template.walk.clone()),
+                pose: Vec::new(),
+                pose_scratch: AnimationScratch::default(),
                 pos,
                 yaw: if team == 0 { 0.0 } else { std::f32::consts::PI },
                 model_yaw_offset: 0.0,
@@ -4297,9 +4303,13 @@ impl AnimatedScene {
         self.caster_vertices.clear();
         self.caster_indices.clear();
 
-        let units = std::mem::take(&mut self.units);
+        let mut units = std::mem::take(&mut self.units);
         let mut mesh_units = 0usize;
-        for unit in &units {
+        // Indexed so the pose buffer can be borrowed mutably, then the same
+        // unit borrowed immutably for append_unit after the animation writes.
+        #[allow(clippy::needless_range_loop)]
+        for index in 0..units.len() {
+            let unit = &units[index];
             let alive = unit.health > 0.0;
             if (alive || unit.death_anim > 0.0)
                 && (unit.visible || unit.death_anim > 0.0)
@@ -4307,6 +4317,25 @@ impl AnimatedScene {
                 && in_mesh_range(unit.pos, camera_target)
             {
                 mesh_units += 1;
+                let blends = unit.walk.is_some()
+                    && ((unit.kind == UnitKind::Player && unit.walk_arm < 0.999)
+                        || (unit.walk_blend > 0.001 && unit.walk_blend < 0.999));
+                if !blends {
+                    let clip = if !alive || !unit.moving {
+                        unit.idle.clone()
+                    } else {
+                        unit.walk.clone().unwrap_or_else(|| unit.idle.clone())
+                    };
+                    let unit = &mut units[index];
+                    unit.model.animated_positions_into(
+                        &clip,
+                        unit.anim_time_ms,
+                        &mut unit.pose,
+                        &mut unit.pose_scratch,
+                    );
+                    append_unit(self, &units[index], &units[index].pose);
+                    continue;
+                }
                 let positions = if !alive {
                     unit.model.animated_positions(&unit.idle, unit.anim_time_ms)
                 } else if let Some(walk) = unit.walk.as_ref() {
@@ -4911,6 +4940,8 @@ fn load_unit(
         model,
         idle,
         walk,
+        pose: Vec::new(),
+        pose_scratch: AnimationScratch::default(),
         pos,
         yaw: 0.0,
         model_yaw_offset: 0.0,

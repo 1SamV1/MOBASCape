@@ -19,7 +19,7 @@ the largest wins per unit of risk.
 - Simulation: click-to-move, A* pathing, hybrid dynamic-unit meshes, three
   lanes, minions, camps, towers and inhibitors.
 - Renderer: one offscreen HDR target, bloom bright/blur/final passes, FXAA +
-  grade + dither post, HUD after post. `--render-scale auto` targets 1.2M
+  grade + dither post, HUD after post. `--render-scale auto` targets 1.4M
   scene pixels; post and HUD stay at native window resolution.
 
 ### Measured (release, `--present-mode immediate`, 1280×720)
@@ -98,12 +98,12 @@ Release, immediate present, MSAA 4, sun shadows on, Ryzen 5 6600U / 680M:
 
 | Window | Scene | p50 | p95 | fps |
 |---|---|---:|---:|---:|
-| 1280×720 | 1280×720 (1.00×) | **10.62 ms** | 11.76 ms | 93.9 |
-| 1920×1008 | 1461×767 (0.76×) | **14.13 ms** | 15.86 ms | 70.2 |
+| 1280×720 | 1280×720 (1.00×) | **9.30 ms** | 10.44 ms | 106.8 |
+| 1920×1008 | 1578×828 (0.82×) | **13.22 ms** | 14.77 ms | 75.2 |
 
 The same 1920×1008 run before this pass measured p50 61.5 ms. Native
-1920×1008 with `--msaa 1 --render-scale 1.0` is p50 17.3 ms; the auto scene
-scale is what produces the 60 fps margin on this iGPU.
+1920×1008 with `--msaa 1 --render-scale 1.0` remains around p50 17.2 ms; the
+auto scene scale is what produces the 60 fps margin on this iGPU.
 
 What moved the number:
 
@@ -115,40 +115,40 @@ What moved the number:
 - **Animated mesh culling**: units farther than 9,000 units from the camera
   focus skip animation, mesh and blob-shadow construction. At the default
   camera this leaves roughly 18 units instead of 157.
-- **Mesh CPU**: face palette RGB is cached per model instead of converted
-  from HSL every frame, and sRGB byte colours use a 256-entry lookup instead
-  of `powf` per channel. Mesh build fell from ~10.4 ms to ~3.3–4.0 ms.
-- **Resolution**: `--render-scale auto` targets 1.2M scene pixels, so a
-  1920×1008 window renders the scene at 1461×767 and upscales through the
+- **Mesh CPU**: face palette RGB is cached per model instance instead of
+  converted from HSL every frame, per-unit animation pose buffers are reused,
+  and sRGB byte colours use a 256-entry lookup instead of `powf` per channel.
+  Mesh build fell from ~10.4 ms to ~3.5–4.1 ms.
+- **Resolution**: `--render-scale auto` targets 1.4M scene pixels, so a
+  1920×1008 window renders the scene at 1578×828 and upscales through the
   linear post sampler. The HUD and post chain stay native.
+- **Post**: with 4× MSAA the resolved scene is already antialiased, so the
+  post pass skips its FXAA taps on that path. `--msaa 1` keeps FXAA.
 - **Profiling**: `--benchmark` now prints `sim`, `mesh`, `hud`, `ui` and
   `submit` phase averages, plus the mesh shadow/build split and unit count.
 
 The remaining frame is dominated by `submit` (scene + shadow + post) at
-~9.0 ms, then mesh ~3.9 ms and HUD ~0.7 ms on this run. Native-resolution
+~8.3 ms, then mesh ~4.1 ms and HUD ~0.7 ms on this run. Native-resolution
 1080p still needs a further ~0.7 ms from the scene pass to clear 60 without
 the auto scale.
 
 ## 3. Current hot spots
 
-1. **Shadow pass**: full static casters plus dynamic casters are submitted into
-   a camera-relative 1024 map every other frame. Disabling shadows recovers
-   roughly 5 ms in the release build.
-2. **Terrain fragment cost**: base classification now samples four ground
-   textures after dropping the redundant water fetch; dirt patch, road soil,
-   slope and noise remain. 4× MSAA multiplies the cost.
-3. **No GPU timing**: frame rate was measured through the window title. We need
-   GPU timestamps and a repeatable benchmark scene before optimizing blind.
-4. **CPU-side animation allocations**: `Model::animated_positions` allocates a
-   fresh vector for each visible unit every frame. At current unit counts this
-   is small, but it will matter for 10 heroes plus large waves.
-5. **HUD geometry**: the HUD is rebuilt and uploaded every frame. Static
+1. **Shadow pass**: static and dynamic casters still go into the 1024 map every
+   other frame. Shadow-off now saves only a few tenths of a millisecond at the
+   current view because the casters are small and cached by chunk.
+2. **Terrain fragment cost**: the fast path samples grass, dirt and stone;
+   sand reuses dirt. The remaining cost is 4× MSAA resolve plus the lit
+   fragment work, not the old noise stack.
+3. **No GPU timing yet**: CPU phases now show where the frame goes, but GPU
+   timestamps and pass-level costs still need a wgpu timestamp query path.
+4. **HUD geometry**: the HUD is rebuilt and uploaded every frame. Static
    panels and glyph runs could be cached; dynamic numbers still update.
-6. **Repeated model draws**: the static mesh is merged, not instanced. Future
+5. **Repeated model draws**: the static mesh is merged, not instanced. Future
    scenery at larger draw distances will benefit from instancing and batching.
-7. **No streaming/LOD**: the whole 5×5 block is resident. Chunk culling hides
+6. **No streaming/LOD**: the whole 5×5 block is resident. Chunk culling hides
    off-screen chunks, but there is no distance LOD or async load/unload.
-8. **Startup cost**: decoding models, building chunk meshes and baking portraits
+7. **Startup cost**: decoding models, building chunk meshes and baking portraits
    is synchronous. Move to background jobs when the lobby and map streaming
    arrive.
 
@@ -218,8 +218,8 @@ visible chunk popping at the default camera.
   camera focus.
 - ✅ Cache per-model face palette RGB and use an sRGB byte LUT; mesh build
   fell from ~10.4 ms to ~3.5–4.0 ms in the 1080p benchmark.
-- [ ] Reuse per-unit vertex position buffers (`animated_positions` should
-  write into a caller-owned Vec).
+- ✅ Reuse per-unit vertex position and frame scratch buffers
+  (`animated_positions_into`).
 - [ ] Move unit updates to a fixed 30 Hz deterministic sim tick; interpolate
   render transforms between ticks.
 - [ ] Convert the unit array to stable slots/IDs with deferred removal; avoid

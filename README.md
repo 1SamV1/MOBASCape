@@ -46,7 +46,7 @@ designed for fast-paced low-team-count matches.
 > buys items, and the assembled inventory's Shop button opens it. The old HUD
 > remains the running default and its legacy grid still shows six entries per
 > category while the last interaction gaps and final parity are finished.
-> Release on the 680M measures p50 10.6 ms at 1280×720 and p50 14.1 ms at
+> Release on the 680M measures p50 9.3 ms at 1280×720 and p50 13.2 ms at
 > 1920×1008 with `--render-scale auto` and the HUD at native resolution. See
 > [docs/STATUS.md](docs/STATUS.md),
 > [docs/UI_ASSETS.md](docs/UI_ASSETS.md) and
@@ -153,7 +153,7 @@ cargo run -p rift-client -- --demo-watchtower
 cargo run -p rift-client -- --graphics 117hd
 cargo run -p rift-client -- --graphics classic
 
-# Benchmark/quality overrides (auto scene scale targets 1.2M pixels)
+# Benchmark/quality overrides (auto scene scale targets 1.4M pixels)
 cargo run --release -p rift-client -- --present-mode immediate --benchmark 8
 cargo run --release -p rift-client -- --window-size 1920x1080 --present-mode immediate --benchmark 8
 cargo run --release -p rift-client -- --present-mode immediate --msaa 1
