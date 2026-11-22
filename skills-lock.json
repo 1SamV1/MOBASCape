@@ -1,0 +1,125 @@
+{
+  "version": 2,
+  "skills": {
+    "codebase-design": {
+      "source": "mattpocock/skills",
+      "commit": "abeeaf95660ba9e8b7c753eb38f441ca707a8823",
+      "sourceType": "github",
+      "skillPath": "skills/engineering/codebase-design/SKILL.md",
+      "computedHash": "d40f025dc1b0f2020663260f38f2bcb8d6ed3523afb11e5fda624b01238677e8",
+      "installMode": "copy"
+    },
+    "diagnosing-bugs": {
+      "source": "mattpocock/skills",
+      "commit": "abeeaf95660ba9e8b7c753eb38f441ca707a8823",
+      "sourceType": "github",
+      "skillPath": "skills/engineering/diagnosing-bugs/SKILL.md",
+      "computedHash": "87c78ae966e591f9ceb177789cc5cc9de69277cd26679ffd36ca5300f430d513",
+      "installMode": "copy"
+    },
+    "gamedev-assets": {
+      "source": "sunsided/gamedev-skills",
+      "commit": "83dd8ec31d8d2d1e911dba27bfa8687e1b49d880",
+      "sourceType": "github",
+      "skillPath": "gamedev/gamedev-assets/SKILL.md",
+      "computedHash": "6718ef48ea493abfcad6a670fbb9f5837776cbd5620fbb32d3f485f7f3c196ea",
+      "installMode": "copy"
+    },
+    "gamedev-debug-ui": {
+      "source": "sunsided/gamedev-skills",
+      "commit": "83dd8ec31d8d2d1e911dba27bfa8687e1b49d880",
+      "sourceType": "github",
+      "skillPath": "gamedev/gamedev-debug-ui/SKILL.md",
+      "computedHash": "c8f1dd0dd75894b4f2b40d993fa59a49f4d25991ecfc6b2e00c487f1b7b256bd",
+      "installMode": "copy"
+    },
+    "gamedev-ecs": {
+      "source": "sunsided/gamedev-skills",
+      "commit": "83dd8ec31d8d2d1e911dba27bfa8687e1b49d880",
+      "sourceType": "github",
+      "skillPath": "gamedev/gamedev-ecs/SKILL.md",
+      "computedHash": "2d835d59ec5c9e1d7c324fc3e77593da4977f404f66accd393562e6319aaf391",
+      "installMode": "copy"
+    },
+    "gamedev-profiling": {
+      "source": "sunsided/gamedev-skills",
+      "commit": "83dd8ec31d8d2d1e911dba27bfa8687e1b49d880",
+      "sourceType": "github",
+      "skillPath": "gamedev/gamedev-profiling/SKILL.md",
+      "computedHash": "45fc04796f8aee30300a3485cd8c5ac0a5d382712f5abfd65556ed1fa1768ae9",
+      "installMode": "copy"
+    },
+    "gamedev-project-setup": {
+      "source": "sunsided/gamedev-skills",
+      "commit": "83dd8ec31d8d2d1e911dba27bfa8687e1b49d880",
+      "sourceType": "github",
+      "skillPath": "gamedev/gamedev-project-setup/SKILL.md",
+      "computedHash": "092c22601762725efae93f8d6f634ff3822f28e8a95638a0e4649c3bdf7c406c",
+      "installMode": "copy"
+    },
+    "gamedev-rust-workspace": {
+      "source": "sunsided/gamedev-skills",
+      "commit": "83dd8ec31d8d2d1e911dba27bfa8687e1b49d880",
+      "sourceType": "github",
+      "skillPath": "gamedev/gamedev-rust-workspace/SKILL.md",
+      "computedHash": "2c7a6c1643e63d90a9c6c1ca901d250069accda25bcd478887791848bfa60a4a",
+      "installMode": "copy"
+    },
+    "gamedev-wgpu-rendering": {
+      "source": "sunsided/gamedev-skills",
+      "commit": "83dd8ec31d8d2d1e911dba27bfa8687e1b49d880",
+      "sourceType": "github",
+      "skillPath": "gamedev/gamedev-wgpu-rendering/SKILL.md",
+      "computedHash": "2cc6e03ec095ecd9cc2b501813a7661483c99794990fc71c25648b7fcff4f7cf",
+      "installMode": "copy"
+    },
+    "gamedev-wgsl-shaders": {
+      "source": "sunsided/gamedev-skills",
+      "commit": "83dd8ec31d8d2d1e911dba27bfa8687e1b49d880",
+      "sourceType": "github",
+      "skillPath": "gamedev/gamedev-wgsl-shaders/SKILL.md",
+      "computedHash": "e47eef8eb1114ddfa2ed1a7d0239c991c033321de40101d0e9e47e2b01ea6fa5",
+      "installMode": "copy"
+    },
+    "gamedev-winit-loop": {
+      "source": "sunsided/gamedev-skills",
+      "commit": "83dd8ec31d8d2d1e911dba27bfa8687e1b49d880",
+      "sourceType": "github",
+      "skillPath": "gamedev/gamedev-winit-loop/SKILL.md",
+      "computedHash": "5ac4011ae4c2089a048ebbe6b8dd4d036086d022748a1f6493cf4c5766472e31",
+      "installMode": "copy"
+    },
+    "research": {
+      "source": "mattpocock/skills",
+      "commit": "abeeaf95660ba9e8b7c753eb38f441ca707a8823",
+      "sourceType": "github",
+      "skillPath": "skills/engineering/research/SKILL.md",
+      "computedHash": "7662666af51f8b1672ed7d88360d4b82656da21bb7b11c49e956eeb3036b85d5",
+      "installMode": "copy"
+    },
+    "systematic-debugging": {
+      "source": "obra/superpowers",
+      "commit": "22f0b463e7a5e579904dd6211a520321035526f7",
+      "sourceType": "github",
+      "skillPath": "skills/systematic-debugging/SKILL.md",
+      "computedHash": "79ff0583175346e39431b0dc713b223edd1bd7a7ea2b6c8b78b2fb9a3fed6782",
+      "installMode": "copy"
+    },
+    "verification-before-completion": {
+      "source": "obra/superpowers",
+      "commit": "22f0b463e7a5e579904dd6211a520321035526f7",
+      "sourceType": "github",
+      "skillPath": "skills/verification-before-completion/SKILL.md",
+      "computedHash": "09b0e3a4689c1c38a3b8fc6ef57a1d4165aa33c0013d546dbde9dd348941a319",
+      "installMode": "copy"
+    },
+    "writing-plans": {
+      "source": "obra/superpowers",
+      "commit": "22f0b463e7a5e579904dd6211a520321035526f7",
+      "sourceType": "github",
+      "skillPath": "skills/writing-plans/SKILL.md",
+      "computedHash": "ef082ddb5354d736059397133b3682e8a0c85c57906affe47c9da354cbb7c91e",
+      "installMode": "copy"
+    }
+  }
+}
