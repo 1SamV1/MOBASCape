@@ -85,6 +85,9 @@ pub struct AllyState {
     pub dead: bool,
     /// Seconds until respawn, when `dead`.
     pub respawn_seconds: Option<u32>,
+    /// Theme sprite role for this row's portrait, when one was baked from
+    /// the cache. The component falls back to the team-coloured initial.
+    pub portrait: Option<String>,
 }
 
 /// One figure in the target panel's two columns.

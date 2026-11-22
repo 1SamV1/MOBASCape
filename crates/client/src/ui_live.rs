@@ -362,32 +362,47 @@ fn kind_name(kind: UnitKind) -> &'static str {
     }
 }
 
-/// The player's allied champions, excluding the player. The current match is
-/// one hero a side, so this is empty until more allied champions are spawned.
+/// The team frames: the player first, then any other allied champions. The
+/// current match is one hero a side, so the player is the row that keeps the
+/// panel populated; the live theme carries a cache-baked `portrait.self`.
 pub fn allies(animated: &AnimatedScene) -> Vec<AllyState> {
-    animated
-        .units
-        .iter()
-        .enumerate()
-        .filter(|(index, unit)| {
-            *index != animated.player_index && unit.is_champion && unit.team == 0
-        })
-        .map(|(index, unit)| {
-            let name = animated
-                .unit_info(index)
-                .map(|(name, _, _)| name)
-                .unwrap_or_else(|| "Ally".to_string());
-            ally_from(
-                name,
-                unit.health,
-                unit.max_health,
-                unit.mana,
-                unit.max_mana,
-                unit.level,
-                unit.dead_timer,
-            )
-        })
-        .collect()
+    let mut rows = Vec::new();
+    if let Some(unit) = animated.units.get(animated.player_index) {
+        let name = animated
+            .unit_info(animated.player_index)
+            .map(|(name, _, _)| name)
+            .unwrap_or_else(|| "You".to_string());
+        let mut row = ally_from(
+            name,
+            unit.health,
+            unit.max_health,
+            unit.mana,
+            unit.max_mana,
+            unit.level,
+            unit.dead_timer,
+        );
+        row.portrait = Some("portrait.self".to_string());
+        rows.push(row);
+    }
+    for (index, unit) in animated.units.iter().enumerate() {
+        if index == animated.player_index || !unit.is_champion || unit.team != 0 {
+            continue;
+        }
+        let name = animated
+            .unit_info(index)
+            .map(|(name, _, _)| name)
+            .unwrap_or_else(|| "Ally".to_string());
+        rows.push(ally_from(
+            name,
+            unit.health,
+            unit.max_health,
+            unit.mana,
+            unit.max_mana,
+            unit.level,
+            unit.dead_timer,
+        ));
+    }
+    rows
 }
 
 fn ally_from(
@@ -409,6 +424,7 @@ fn ally_from(
         level: level.clamp(0, u8::MAX as u32) as u8,
         dead,
         respawn_seconds: dead.then(|| dead_timer.max(0.0).ceil() as u32),
+        portrait: None,
     }
 }
 

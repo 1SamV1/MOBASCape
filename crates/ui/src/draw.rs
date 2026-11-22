@@ -174,6 +174,27 @@ impl DrawList {
         self.image(region, x, y, times.max(1) as i32, None, colour);
     }
 
+    /// An image stretched to an exact area, keeping its whole source. Used
+    /// for cache-baked champion portraits, whose shelf size does not match
+    /// the small team-frame slot.
+    pub fn sprite_fit(&mut self, region: Region, area: Rect) {
+        if region.w == 0 || region.h == 0 || area.is_empty() {
+            return;
+        }
+        let dest = area.intersect(&self.clip());
+        if dest.is_empty() {
+            return;
+        }
+        let u = |px: i32| region.x as f32 + (px - area.x) as f32 / area.w as f32 * region.w as f32;
+        let v = |py: i32| region.y as f32 + (py - area.y) as f32 / area.h as f32 * region.h as f32;
+        self.quads.push(Quad {
+            layer: self.layer,
+            dest,
+            uv: [u(dest.x), v(dest.y), u(dest.right()), v(dest.bottom())],
+            colour: WHITE,
+        });
+    }
+
     /// The size an image covers at the interface's scale.
     pub fn size_of(&self, region: Region) -> (i32, i32) {
         (region.w as i32 * self.scale, region.h as i32 * self.scale)
@@ -374,5 +395,58 @@ impl DrawList {
             indices.extend_from_slice(&[base, base + 1, base + 2, base + 2, base + 1, base + 3]);
         }
         (vertices, indices)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::atlas::Image;
+    use crate::theme::ThemeBuilder;
+
+    fn sprite_theme() -> crate::Theme {
+        let mut builder = ThemeBuilder::new();
+        builder.sprite("test", Image::filled(4, 2, [255, 255, 255, 255]));
+        builder.build()
+    }
+
+    #[test]
+    fn a_fitted_sprite_maps_the_whole_region_to_the_area() {
+        let theme = sprite_theme();
+        let region = theme.sprite("test");
+        let mut list = DrawList::new((100, 100), 1, &theme.atlas);
+        let area = Rect::new(10, 20, 40, 10);
+        list.sprite_fit(region, area);
+        let (vertices, indices) = list.finish();
+        assert_eq!(indices.len(), 6);
+        assert_eq!(vertices.len(), 4);
+        assert_eq!(vertices[0].pos, [10.0, 20.0]);
+        assert_eq!(vertices[1].pos, [50.0, 20.0]);
+        assert_eq!(vertices[2].pos, [10.0, 30.0]);
+        assert_eq!(vertices[3].pos, [50.0, 30.0]);
+        let (x, y) = (region.x as f32, region.y as f32);
+        let (w, h) = (region.w as f32, region.h as f32);
+        assert_eq!(vertices[0].uv, [x, y]);
+        assert_eq!(vertices[1].uv, [x + w, y]);
+        assert_eq!(vertices[2].uv, [x, y + h]);
+        assert_eq!(vertices[3].uv, [x + w, y + h]);
+    }
+
+    #[test]
+    fn a_fitted_sprite_clips_its_source_with_the_area() {
+        let theme = sprite_theme();
+        let region = theme.sprite("test");
+        let mut list = DrawList::new((100, 100), 1, &theme.atlas);
+        let area = Rect::new(10, 20, 40, 10);
+        list.push_clip(Rect::new(30, 20, 20, 10));
+        list.sprite_fit(region, area);
+        let (vertices, _) = list.finish();
+        let (x, y) = (region.x as f32, region.y as f32);
+        let (w, h) = (region.w as f32, region.h as f32);
+        assert_eq!(vertices[0].pos, [30.0, 20.0]);
+        assert_eq!(vertices[1].pos, [50.0, 20.0]);
+        assert_eq!(vertices[0].uv, [x + w * 0.5, y]);
+        assert_eq!(vertices[1].uv, [x + w, y]);
+        assert_eq!(vertices[2].uv, [x + w * 0.5, y + h]);
     }
 }

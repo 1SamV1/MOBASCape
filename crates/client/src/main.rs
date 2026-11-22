@@ -308,6 +308,7 @@ fn main() -> Result<()> {
     });
 
     let mut ui_atlas = ui_assets::UiAtlas::load()?;
+    let mut live_portrait = None;
     if hero_select_open {
         for champion in &champions {
             match portraits::bake_portrait(
@@ -319,6 +320,17 @@ fn main() -> Result<()> {
                 Ok(image) => ui_atlas.add_hero_portrait(&champion.id, &image),
                 Err(err) => tracing::warn!("hero portrait {}: {err:#}", champion.id),
             }
+        }
+    } else if cli.ui_live {
+        // One cache-baked portrait fills the player's team frame without
+        // forcing every champion through the CPU rasteriser.
+        match portraits::bake_portrait(&cache, champion.model, &champion.attachments, champion.idle)
+        {
+            Ok(image) => {
+                tracing::info!("team portrait: {} baked for the live frames", champion.id);
+                live_portrait = Some(image);
+            }
+            Err(err) => tracing::warn!("team portrait {}: {err:#}", champion.id),
         }
     }
     // Bake a real terrain map for the minimap from the scene colours.
@@ -335,11 +347,12 @@ fn main() -> Result<()> {
         Vec::new()
     };
     let ui_theme = if cli.ui_test || cli.ui_theme_sheet || cli.ui_layout || cli.ui_live {
-        let theme = theme_file::load_with_items_and_minimap(
+        let theme = theme_file::load_with_items_minimap_and_portrait(
             &cache,
             &cli.ui_theme,
             &item_icons,
             Some(&minimap_image),
+            live_portrait.as_ref(),
         )
         .with_context(|| format!("loading theme {}", cli.ui_theme.display()))?;
         tracing::info!(

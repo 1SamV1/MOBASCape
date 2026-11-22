@@ -47,20 +47,32 @@ pub fn draw(theme: &Theme, list: &mut DrawList, area: Rect, allies: &[AllyState]
         let y = n as i32 * ROW;
         let portrait = slot(list, 6, y + 5, 36, 36);
         let colour = if ally.dead { quiet } else { blue };
+        let inner = Rect::new(
+            portrait.x + 4 * s,
+            portrait.y + 4 * s,
+            portrait.w - 8 * s,
+            portrait.h - 8 * s,
+        );
         list.rect(
-            Rect::new(
-                portrait.x + 4 * s,
-                portrait.y + 4 * s,
-                portrait.w - 8 * s,
-                portrait.h - 8 * s,
-            ),
+            inner,
             if ally.dead {
                 [0.18, 0.18, 0.18, 0.95]
             } else {
                 [0.24, 0.38, 0.68, 0.95]
             },
         );
-        if let Some(font) = bold {
+        // A cache-baked champion portrait fills the slot when the live theme
+        // carries one. The sample theme and unpainted allies keep the
+        // team-coloured initial so the row never reads as a missing image.
+        let mut drew_portrait = false;
+        if !ally.dead
+            && let Some(role) = ally.portrait.as_deref()
+            && theme.has_sprite(role)
+        {
+            list.sprite_fit(theme.sprite(role), inner);
+            drew_portrait = true;
+        }
+        if !drew_portrait && let Some(font) = bold {
             let initial = ally.name.chars().next().unwrap_or('?').to_string();
             let width = font.width(&initial) * s;
             list.text(

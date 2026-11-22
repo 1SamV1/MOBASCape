@@ -1,6 +1,21 @@
 # Status
 
-Last updated: smaller bloom chain, 2026-11-22.
+Last updated: live team frames, 2026-11-22.
+
+## 2026-11-22 — Live team frames show the player with a cache-baked portrait
+
+- `ui_live::allies` now returns the player first, then any other allied
+  champions. With one hero a side the team panel is no longer empty.
+- Under `--ui-live` the selected champion is baked once through the existing
+  cache-model portrait rasteriser and added as the `portrait.self` theme
+  sprite. `team_frames` stretches it into the 36px slot with the new
+  `DrawList::sprite_fit`; unpainted allies and the sample theme keep the
+  team-coloured initial fallback.
+- No new visual assets: the portrait is rendered from the scraped cache model.
+  Capture: `/tmp/opencode/team_frame_self.png`.
+- Added two `sprite_fit` primitive tests, a portrait-fit test and a
+  team-frame portrait pixel test. Verified: 267 tests pass, 4 ignored;
+  workspace clippy clean.
 
 ## 2026-11-22 — Bloom runs at 320×180
 

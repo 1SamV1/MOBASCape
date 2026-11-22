@@ -80,6 +80,17 @@ pub fn load_with_items_and_minimap(
     items: &[(String, u32)],
     minimap: Option<&image::RgbaImage>,
 ) -> Result<Theme> {
+    load_with_items_minimap_and_portrait(cache, path, items, minimap, None)
+}
+
+/// The same, plus the cache-baked champion portrait for the live team frames.
+pub fn load_with_items_minimap_and_portrait(
+    cache: &Cache,
+    path: &Path,
+    items: &[(String, u32)],
+    minimap: Option<&image::RgbaImage>,
+    portrait: Option<&image::RgbaImage>,
+) -> Result<Theme> {
     let text = std::fs::read_to_string(path)
         .with_context(|| format!("reading theme {}", path.display()))?;
     let file: ThemeFile =
@@ -129,7 +140,25 @@ pub fn load_with_items_and_minimap(
     if let Some(minimap) = minimap {
         builder.sprite("minimap.terrain", minimap_sprite_image(minimap));
     }
+    if let Some(portrait) = portrait {
+        builder.sprite("portrait.self", portrait_sprite_image(portrait));
+    }
     Ok(builder.build())
+}
+
+/// Fit a baked 256px champion portrait to the team frame's 36px slot. The
+/// component scales it again with the interface, so 64px keeps the atlas
+/// small without losing the face at scale 4.
+fn portrait_sprite_image(portrait: &image::RgbaImage) -> Image {
+    let resized = image::imageops::resize(portrait, 64, 64, image::imageops::FilterType::Lanczos3);
+    Image::new(
+        64,
+        64,
+        resized
+            .pixels()
+            .map(|pixel| [pixel[0], pixel[1], pixel[2], pixel[3]])
+            .collect(),
+    )
 }
 
 /// Fit the baked terrain map to the live minimap's 254 by 252 picture.
@@ -243,6 +272,14 @@ mod tests {
         let image = minimap_sprite_image(&minimap);
         assert_eq!((image.width, image.height), (254, 254));
         assert_eq!(image.pixels[0], [4, 8, 12, 255]);
+    }
+
+    #[test]
+    fn the_live_portrait_is_fitted_to_the_team_slot() {
+        let portrait = image::RgbaImage::from_pixel(256, 256, image::Rgba([40, 80, 120, 255]));
+        let image = portrait_sprite_image(&portrait);
+        assert_eq!((image.width, image.height), (64, 64));
+        assert_eq!(image.pixels[0], [40, 80, 120, 255]);
     }
 
     #[test]

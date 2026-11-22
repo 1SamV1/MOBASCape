@@ -39,7 +39,8 @@ designed for fast-paced low-team-count matches.
 > assembled whole, accepted at PR #1. Stage 4 has started: `--ui-live` reads
 > the live score strip, ability bar, minimap, objectives, unit plates, chat,
 > kill feed, shop, shop tooltip, announcements, death overlay (with real
-> damage breakdown bars), team frames, a click-selected target panel, the
+> damage breakdown bars), team frames (now including the player with a
+> cache-baked portrait), a click-selected target panel, the
 > six-slot inventory, the live gold count from the match, cache-baked OSRS
 > item icons and the cache-terrain minimap picture. Every `HudState` slice now
 > reads live data. The live shop

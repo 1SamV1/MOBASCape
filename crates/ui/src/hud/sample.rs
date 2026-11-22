@@ -260,6 +260,7 @@ fn base() -> HudState {
                 level: 7,
                 dead: false,
                 respawn_seconds: None,
+                portrait: None,
             },
             AllyState {
                 name: "Jad".to_string(),
@@ -270,6 +271,7 @@ fn base() -> HudState {
                 level: 6,
                 dead: false,
                 respawn_seconds: None,
+                portrait: None,
             },
             AllyState {
                 name: "Kree".to_string(),
@@ -280,6 +282,7 @@ fn base() -> HudState {
                 level: 6,
                 dead: true,
                 respawn_seconds: Some(12),
+                portrait: None,
             },
             AllyState {
                 name: "Monkey".to_string(),
@@ -290,6 +293,7 @@ fn base() -> HudState {
                 level: 7,
                 dead: false,
                 respawn_seconds: None,
+                portrait: None,
             },
         ],
         plates: Vec::new(),

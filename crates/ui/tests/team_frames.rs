@@ -36,7 +36,7 @@ fn boxes() -> Vec<GlyphSource> {
         .collect()
 }
 
-fn theme() -> Theme {
+fn theme_builder() -> ThemeBuilder {
     let mut builder = ThemeBuilder::new();
     builder
         .panel("panel.stone", numbered(20, 20), [5, 5, 5, 5])
@@ -56,7 +56,11 @@ fn theme() -> Theme {
     ] {
         builder.colour(role, [1.0; 4]);
     }
-    builder.build()
+    builder
+}
+
+fn theme() -> Theme {
+    theme_builder().build()
 }
 
 #[test]
@@ -103,6 +107,25 @@ fn nothing_is_drawn_outside_the_rectangle() {
             }
         }
     }
+}
+
+#[test]
+fn a_baked_portrait_fills_the_first_slot() {
+    let mut builder = theme_builder();
+    builder.sprite("portrait.self", Image::filled(8, 8, [255, 0, 255, 255]));
+    let theme = builder.build();
+    let mut state = sample::state();
+    state.allies.truncate(1);
+    state.allies[0].portrait = Some("portrait.self".to_string());
+    let area = Rect::new(20, 20, team_frames::SIZE.0, team_frames::SIZE.1);
+    let mut list = DrawList::new((260, 260), 1, &theme.atlas);
+    team_frames::draw(&theme, &mut list, area, &state.allies);
+    let (vertices, indices) = list.finish();
+    let mut picture = vec![GROUND; 260 * 260];
+    raster::render(&vertices, &indices, &theme.atlas, 260, 260, &mut picture);
+    // Slot 6,5 + 4 inset, at the test scale of 1.
+    let pixel = picture[(20 + 5 + 4) as usize * 260 + (20 + 6 + 4) as usize];
+    assert_eq!(pixel, [255, 0, 255, 255]);
 }
 
 #[test]
