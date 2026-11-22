@@ -143,7 +143,10 @@ pub struct ShopItem {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ShopState {
     pub open: bool,
-    pub category: String,
+    /// The category rows drawn down the left side.
+    pub categories: Vec<String>,
+    /// The selected category's index into `categories`.
+    pub category: usize,
     pub search: String,
     pub items: Vec<ShopItem>,
     pub selected: usize,

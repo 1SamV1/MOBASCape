@@ -2,6 +2,17 @@
 
 Last updated: live stage 4 interface state, 2026-11-21.
 
+## 2026-11-21 — Live shop categories
+
+- `ShopState` now carries the category rows and the selected index instead of
+  a single category label. The stage 3 sample still shows its one category;
+  the live bridge fills the six item categories.
+- The live shop overlay draws the category rows down the left panel, highlights
+  the current one and hit-tests them above the item rows. Choosing a category
+  re-filters the list and selects its first item, matching the old HUD.
+- Verified: `cargo test --workspace` 250 tests pass, 3 ignored; workspace
+  clippy is clean.
+
 ## 2026-11-21 — Assembled inventory opens the shop
 
 - The live interface now caches the `Layout` from its draw pass, so click
@@ -69,9 +80,10 @@ Last updated: live stage 4 interface state, 2026-11-21.
   follows the selected item and the live cursor while the shop is open. The
   new shop overlay now takes clicks: a row selects its item, Buy purchases
   the selection through the same item path as the old HUD, and the close
-  button closes the shop; category switching stays in the old HUD. The
-  remaining components stayed on the stage 3 sample until their own bridges
-  were added; the last of them, inventory and gold, are in the latest entry.
+  button closes the shop; category switching still belonged to the old HUD at
+  that point. The remaining components stayed on the stage 3 sample until
+  their own bridges were added; the last of them, inventory and gold, are in
+  the latest entries.
   Team frames are bridged too, but the current match is one hero a side, so
   they stay empty until allied champions are spawned. Clicking a unit now
   selects it and fills the target panel with its live name, kind, health,

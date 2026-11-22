@@ -131,9 +131,27 @@ fn a_theme_with_only_fonts_still_draws_the_shop() {
 }
 
 #[test]
-fn clicks_hit_rows_buy_and_close() {
-    let state = sample::state();
+fn clicks_hit_categories_rows_buy_and_close() {
+    let mut state = sample::state();
+    state.shop.categories = [
+        "ALL",
+        "WEAPONS",
+        "ARMOUR",
+        "JEWELLERY",
+        "BOOTS",
+        "CONSUMABLES",
+    ]
+    .iter()
+    .map(|label| (*label).to_string())
+    .collect();
     let area = shop::rect(Rect::new(0, 0, 1920, 1080), 1);
+    for index in 0..6 {
+        let y = area.y + 48 + 26 + index as i32 * 27 + 5;
+        assert_eq!(
+            shop::hit(area, 1, &state.shop, (600, y)),
+            Some(ShopHit::Category(index))
+        );
+    }
     assert_eq!(
         shop::hit(area, 1, &state.shop, (760, 485)),
         Some(ShopHit::Row(3))

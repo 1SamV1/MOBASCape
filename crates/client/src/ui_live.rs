@@ -447,11 +447,11 @@ pub fn shop(shop: &ItemShop) -> ShopState {
         .unwrap_or(0);
     ShopState {
         open: shop.open,
-        category: CATEGORY_LABELS
-            .get(shop.category)
-            .copied()
-            .unwrap_or("ALL")
-            .to_string(),
+        categories: CATEGORY_LABELS
+            .iter()
+            .map(|label| (*label).to_string())
+            .collect(),
+        category: shop.category.min(CATEGORY_LABELS.len() - 1),
         search: "Search items".to_string(),
         items,
         selected,
@@ -772,7 +772,9 @@ mod tests {
         };
         let state = shop(&catalog);
         assert!(state.open);
-        assert_eq!(state.category, "WEAPONS");
+        assert_eq!(state.category, 1);
+        assert_eq!(state.categories[1], "WEAPONS");
+        assert_eq!(state.categories.len(), CATEGORY_LABELS.len());
         assert_eq!(state.items.len(), 1);
         assert_eq!(state.selected, 0);
     }

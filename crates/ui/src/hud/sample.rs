@@ -418,7 +418,8 @@ fn base() -> HudState {
         }),
         shop: ShopState {
             open: true,
-            category: "Items".to_string(),
+            categories: vec!["Items".to_string()],
+            category: 0,
             search: "Search items".to_string(),
             items: vec![
                 shop_item("Bronze sword", 300, [180, 120, 60], &["+10 damage"]),

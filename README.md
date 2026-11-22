@@ -40,10 +40,10 @@ designed for fast-paced low-team-count matches.
 > kill feed, shop, shop tooltip, announcements, death overlay (with real
 > damage breakdown bars), team frames, a click-selected target panel, the
 > six-slot inventory and the live gold count from the match. Every
-> `HudState` slice now reads live data. The live shop overlay selects and
-> buys items, and the assembled inventory's Shop button opens it. The old
-> HUD remains the running default while the last interaction gaps and final
-> parity are finished. See [docs/STATUS.md](docs/STATUS.md),
+> `HudState` slice now reads live data. The live shop overlay switches
+> categories, selects and buys items, and the assembled inventory's Shop
+> button opens it. The old HUD remains the running default while the last
+> interaction gaps and final parity are finished. See [docs/STATUS.md](docs/STATUS.md),
 > [docs/UI_ASSETS.md](docs/UI_ASSETS.md) and
 > [docs/INTERFACE_STAGE3_REVIEW.md](docs/INTERFACE_STAGE3_REVIEW.md).
 

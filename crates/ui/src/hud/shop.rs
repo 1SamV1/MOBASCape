@@ -1,12 +1,11 @@
 //! The shop overlay (docs/INTERFACE_STAGE3_PLAN.md, section 5.11): a centred
-//! 782 by 580 stone frame over a dimmed match, with one category, a search
+//! 782 by 580 stone frame over a dimmed match, with category rows, a search
 //! line, the item rows, the chosen item's detail and a Buy button, and the
 //! "Your items" foot line with the gold count.
 //!
 //! Stage 3 draws the frame and our six sample items; stage 4 fills it from
-//! the item system. Rows, Buy and Close are routed; category switching still
-//! belongs to the old HUD. The item list is clipped and scrolled, so a longer
-//! list cannot draw outside its panel.
+//! the item system. Categories, rows, Buy and Close are routed. The item list
+//! is clipped and scrolled, so a longer list cannot draw outside its panel.
 
 use crate::Colour;
 use crate::draw::{DrawList, Rect};
@@ -35,6 +34,7 @@ pub fn rect(screen: Rect, scale: i32) -> Rect {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ShopHit {
     Close,
+    Category(usize),
     Row(usize),
     Buy,
 }
@@ -48,6 +48,18 @@ pub fn hit(area: Rect, scale: i32, state: &ShopState, mouse: (i32, i32)) -> Opti
     };
     if point(area.right() - 40 * s, area.y + 10 * s, 24 * s, 24 * s) {
         return Some(ShopHit::Close);
+    }
+    let left = Rect::new(area.x + 14 * s, area.y + 48 * s, 150 * s, 432 * s);
+    for (index, _) in state.categories.iter().enumerate() {
+        let row = Rect::new(
+            left.x + 6 * s,
+            left.y + (26 + index as i32 * 27) * s,
+            left.w - 12 * s,
+            24 * s,
+        );
+        if point(row.x, row.y, row.w, row.h) {
+            return Some(ShopHit::Category(index));
+        }
     }
     let view = Rect::new(area.x + 178 * s, area.y + 82 * s, 360 * s, 398 * s);
     for (index, _) in state.items.iter().enumerate() {
@@ -123,24 +135,31 @@ pub fn draw(theme: &Theme, list: &mut DrawList, shop: &ShopState, gold: u32) {
         );
     }
 
-    // Categories on the left: ours has one, under its heading.
+    // Categories down the left, under their heading.
     let left = Rect::new(area.x + 14 * s, area.y + 48 * s, 150 * s, 432 * s);
     dark(theme, list, left);
     if let Some(font) = small {
         list.text(font, "Categories", left.x + 12 * s, left.y + 18 * s, quiet);
     }
-    list.rect(
-        Rect::new(left.x + 6 * s, left.y + 26 * s, left.w - 12 * s, 24 * s),
-        [0.26, 0.21, 0.10, 0.90],
-    );
-    if let Some(font) = body {
-        list.text(
-            font,
-            &shop.category,
-            left.x + 12 * s,
-            left.y + 44 * s,
-            title,
+    for (index, label) in shop.categories.iter().enumerate() {
+        let row = Rect::new(
+            left.x + 6 * s,
+            left.y + (26 + index as i32 * 27) * s,
+            left.w - 12 * s,
+            24 * s,
         );
+        if index == shop.category {
+            list.rect(row, [0.26, 0.21, 0.10, 0.90]);
+        }
+        if let Some(font) = body {
+            list.text(
+                font,
+                label,
+                left.x + 12 * s,
+                row.y + 18 * s,
+                if index == shop.category { title } else { text },
+            );
+        }
     }
 
     // The search line.

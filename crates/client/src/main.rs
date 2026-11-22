@@ -2263,6 +2263,12 @@ impl App {
             let live = crate::ui_live::shop(&self.shop);
             if let Some(hit) = rift_ui::hud::shop::hit(area, scale, &live, mouse) {
                 match hit {
+                    rift_ui::hud::shop::ShopHit::Category(index) => {
+                        if index < crate::items::CATEGORY_LABELS.len() {
+                            self.shop.category = index;
+                            self.shop.selected = self.shop.filtered_items().first().copied();
+                        }
+                    }
                     rift_ui::hud::shop::ShopHit::Row(index) => {
                         if let Some(&item) = self.shop.filtered_items().get(index) {
                             self.shop.selected = Some(item);
