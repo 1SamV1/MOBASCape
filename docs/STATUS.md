@@ -1,6 +1,39 @@
 # Status
 
-Last updated: live team frames, 2026-11-22.
+Last updated: world-art first slice, 2026-11-22.
+
+## 2026-11-22 — World-art first slice: cache ground, sculpted terrain, ground cover
+
+- **Ground sprites now come from the cache directly.** `GrassTextures` and
+  `TerrainTextures` resolve cache index 9 → index 8 (`129/203/18/197/195/205`
+  for the six grasses and `129/32/10/38/1/126` for the base layers); the local
+  `assets/osrs-ground` folder is only an override. Verified by moving that
+  folder away and rendering the cache path successfully.
+- **Sculpted terrain.** Replaced the ±26/±9 rolling relief with warped broad
+  hills, medium, ridged and fine octaves, a castle wall/base settlement mask,
+  and 88% lane grading. Water and base flattening remain authoritative.
+- **Grass and soil detail.** One mip-correct grass sample at a 384-unit repeat
+  with per-sample tone, triplanar soil/rock projection at 128 units,
+  slope-driven grass/soil/rock classification and a steeper cliff override.
+  The post grade is less desaturated and the sun/ambient balance is slightly
+  more directional.
+- **Cache-only ground cover.** 1,839 deterministic low-poly flowers, ferns,
+  grass and mushrooms, plus 244 slope boulders, all selected from cache object
+  definitions. No new visual assets; the static model mesh is 835k triangles
+  (674k before).
+- **Performance.** Auto 1920×1008: p50 **12.79 ms / 79 fps**, p95 13.53 ms,
+  GPU **12.21 ms** (scene 10.99). Native: p50 **14.82 ms / 69 fps**, p95
+  15.59 ms, GPU **14.14 ms** (scene 12.92). The texture/sculpt/shader pass
+  costs about +0.9 ms GPU against the previous flat fallback frame; the
+  external AppRun/Brave desktop load still makes some CPU runs noisy.
+- Captures: `/tmp/opencode/terrain_before_realtex.png` (flat fallback),
+  `/tmp/opencode/terrain_v7_mid.png`, `/tmp/opencode/terrain_grade_spawn.png`
+  and `/tmp/opencode/terrain_river.png`.
+- Added deterministic relief/water and castle-settlement tests. Verified:
+  269 tests pass, 4 ignored; workspace clippy clean.
+- Full reference audit and revised milestone order:
+  `docs/REFERENCE_AUDIT_2026-11-22.md`; the world-art plan is in
+  `docs/MILESTONE_PLAN.md`.
 
 ## 2026-11-22 — Live team frames show the player with a cache-baked portrait
 

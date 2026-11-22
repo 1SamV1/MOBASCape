@@ -3,6 +3,7 @@ use std::path::Path;
 use anyhow::{Context, Result};
 use image::RgbaImage;
 use image::imageops::FilterType;
+use rift_cache::Cache;
 
 const SIZE: u32 = 512;
 const MIPS: u32 = 10;
@@ -22,6 +23,34 @@ pub struct GrassTextures {
 }
 
 impl GrassTextures {
+    /// Prefer the cache's own texture definitions. The six documented
+    /// grass IDs cover classic, lush, dry, steppe, dire and straw.
+    pub fn load_from_cache(cache: &Cache) -> Result<Self> {
+        const IDS: [u32; LAYERS as usize] = [129, 203, 18, 197, 195, 205];
+        let files = crate::model_textures::texture_files(cache)?;
+        let mut sources = Vec::with_capacity(IDS.len());
+        for id in IDS {
+            let source = crate::model_textures::texture_image(&files, cache, id)?
+                .with_context(|| format!("grass texture {id} missing from cache"))?;
+            sources.push(source);
+        }
+        Self::from_sources(sources)
+    }
+
+    /// Cache first, then the local override/procedural fallback. A clean
+    /// checkout still renders grass even if a texture definition is missing.
+    pub fn load_with_fallback(cache: &Cache) -> Result<Self> {
+        match Self::load_from_cache(cache) {
+            Ok(textures) => Ok(textures),
+            Err(err) => {
+                tracing::warn!("cache grass textures: {err:#}; using local/fallback");
+                Self::load()
+            }
+        }
+    }
+
+    /// Local PNG override or procedural fallback, used when a cache texture
+    /// definition is unavailable.
     pub fn load() -> Result<Self> {
         let names = [
             "grass",
@@ -31,7 +60,7 @@ impl GrassTextures {
             "grass_dire",
             "grass_straw",
         ];
-        let mut pixels = Vec::new();
+        let mut sources = Vec::with_capacity(names.len());
         for (index, name) in names.iter().enumerate() {
             let path = format!("assets/osrs-ground/{name}.png");
             let source = if Path::new(&path).exists() {
@@ -41,6 +70,15 @@ impl GrassTextures {
             } else {
                 fallback(index)
             };
+            sources.push(source);
+        }
+        Self::from_sources(sources)
+    }
+
+    fn from_sources(sources: Vec<RgbaImage>) -> Result<Self> {
+        debug_assert_eq!(sources.len(), LAYERS as usize);
+        let mut pixels = Vec::new();
+        for source in sources {
             let source = if source.width() == SOURCE && source.height() == SOURCE {
                 source
             } else {

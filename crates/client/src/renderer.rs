@@ -451,6 +451,8 @@ impl Renderer {
         render_scale_auto: bool,
         draw_distance: f32,
         model_textures: ModelTextures,
+        terrain_textures: TerrainTextures,
+        grass_textures: GrassTextures,
         ui_atlas: Arc<UiAtlas>,
         gpu_timing: bool,
     ) -> Result<Self> {
@@ -575,7 +577,6 @@ impl Renderer {
             source: wgpu::ShaderSource::Wgsl(include_str!("shadow.wgsl").into()),
         });
 
-        let terrain_textures = TerrainTextures::load()?;
         let terrain_texture = device.create_texture_with_data(
             &queue,
             &wgpu::TextureDescriptor {
@@ -612,7 +613,6 @@ impl Renderer {
             ..Default::default()
         });
 
-        let grass_textures = GrassTextures::load()?;
         let grass_texture = device.create_texture_with_data(
             &queue,
             &wgpu::TextureDescriptor {

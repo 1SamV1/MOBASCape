@@ -147,12 +147,12 @@ fn lighting(input: VsOut) -> vec3<f32> {
     );
     // Keep a fifth of the sunlight inside shadow so the shadowed ground
     // retains its albedo instead of collapsing to a black polygon.
-    let sun = scene.sun_color.rgb * 0.60 * mix(0.55, 1.0, shadow);
+    let sun = scene.sun_color.rgb * 0.72 * mix(0.52, 1.0, shadow);
     // Camera facing fill keeps the fronts of models readable even when the
     // sun is behind them, which a top down MOBA camera hits constantly.
     let unit_fill = select(0.24, 0.40, input.material == 3u);
     let fill = max(dot(N, V), 0.0) * unit_fill;
-    let ambient = select(1.78, 1.86, input.material == 3u);
+    let ambient = select(1.64, 1.74, input.material == 3u);
     var lit = albedo(input) * (hemi * ambient + sun * ndotl + fill) * input.ao * 1.02;
 
     lit += input.color.rgb * dynamic_lighting(input);
@@ -333,19 +333,45 @@ fn albedo(input: VsOut) -> vec3<f32> {
         return tex.rgb * input.color.rgb;
     }
     if (input.material == 4u) {
-        // Stable world-space planar UVs. The low-frequency variation lives
-        // in the vertex colour and the cache grass sprites; the fragment
-        // shader only samples and classifies, which keeps 1080p playable.
+        // Stable world-space planar UVs. Two grass scales break the 4-tile
+        // repeat: the 512-unit macro layer carries the field, and the
+        // 192-unit detail layer restores close-up grass grain. Both use
+        // derivatives so the mip chain is finally used at distance.
         let slope = clamp(input.uv.x, 0.0, 1.0);
-        let uv = input.world.xz / 512.0;
+        // 384 units per repeat is a compromise between the old 512-unit
+        // macro tile (too soft) and a second detail sample (too expensive).
+        let uv = input.world.xz / 384.0;
         let variant = min(input.texture_id, 5u);
-        let grass_a =
-            textureSampleLevel(grass_textures, terrain_sampler, uv, variant, 0.0).rgb;
-        let grass_raw = grass_a;
+        let grass_macro = textureSampleGrad(
+            grass_textures,
+            terrain_sampler,
+            uv,
+            variant,
+            dpdx(uv),
+            dpdy(uv)
+        ).rgb;
+        // Reuse the sampled grass luma for patch variation instead of four
+        // extra hash evaluations per fragment.
+        let field_tone = clamp(
+            dot(grass_macro, vec3<f32>(0.9, 1.1, 0.7)) * 1.8,
+            0.0,
+            1.0
+        );
+        let grass_raw = grass_macro * (0.88 + field_tone * 0.24);
         let grass_luma = dot(grass_raw, vec3<f32>(0.299, 0.587, 0.114));
         let grass = mix(vec3<f32>(grass_luma), grass_raw, 1.18) * vec3<f32>(0.98, 1.10, 1.02);
-        let dirt = textureSample(terrain_textures, terrain_sampler, uv, 1).rgb;
-        let stone = textureSample(terrain_textures, terrain_sampler, uv, 2).rgb;
+
+        // Project the soil and rock sprites onto the face closest to the
+        // camera. A flat xz projection stretches one texel over four world
+        // units and turns every hillside into a smooth brown blob.
+        let n = normalize(input.normal);
+        let ground_uv = select(
+            select(input.world.xy, input.world.zy, n.x >= n.z),
+            input.world.xz,
+            n.y >= max(n.x, n.z)
+        ) / 128.0;
+        let dirt = textureSample(terrain_textures, terrain_sampler, ground_uv, 1).rgb;
+        let stone = textureSample(terrain_textures, terrain_sampler, ground_uv, 2).rgb;
         let sand = dirt;
         // The river mesh covers these tiles, so a flat deep tint is enough.
         let water = vec3<f32>(0.018, 0.060, 0.105);
@@ -364,11 +390,29 @@ fn albedo(input: VsOut) -> vec3<f32> {
             * smoothstep(0.045, 0.20, slope);
         let sandy = max(d.r - d.b, 0.0) * max(d.g - d.b, 0.0) * 4.0;
         let total = max(green + brown + blue + gray + sandy, 0.0001);
-        var tex = grass * (green / total)
-            + dirt * (brown / total)
-            + stone * (gray / total)
-            + sand * (sandy / total)
-            + water * (blue / total);
+        // Gentle hills should read as grass, not mud. Only genuinely steep
+        // faces become rock; weak brown tints are damped on open ground,
+        // while a strongly brown patch still reads as bare soil.
+        let rise = smoothstep(0.05, 0.28, slope);
+        let bare_patch = smoothstep(0.14, 0.36, max(d.r - d.g, 0.0));
+        let grass_weight = (green / total) * (1.0 + rise * 1.2);
+        let dirt_weight = (brown / total)
+            * mix(0.42, 1.0, bare_patch)
+            * (1.0 - rise * 0.80);
+        let stone_weight = gray / total;
+        let sand_weight = sandy / total;
+        let water_weight = blue / total;
+        let weight_total = max(
+            grass_weight + dirt_weight + stone_weight + sand_weight + water_weight,
+            0.0001
+        );
+        var tex = (grass * grass_weight
+            + dirt * dirt_weight
+            + stone * stone_weight
+            + sand * sand_weight
+            + water * water_weight) / weight_total;
+        let cliff = smoothstep(0.30, 0.62, slope);
+        tex = mix(tex, stone * (0.82 + 0.18 * c), cliff * 0.88);
 
         let steep = smoothstep(0.10, 0.38, slope);
         tex *= 1.0 - steep * 0.16;

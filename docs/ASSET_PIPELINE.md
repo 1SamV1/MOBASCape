@@ -187,8 +187,14 @@ Known caveats from the community quickstart:
 
 ## 6. Ground texture scrape
 
-The terrain texture array reads `assets/osrs-ground/*.png`. Scrape the cache and
-install the scraped sources locally (never commit them):
+The terrain and grass arrays now resolve their source sprites directly from
+the pinned cache (index 9 texture definition → index 8 sprite): grass IDs
+`129, 203, 18, 197, 195, 205`, base-layer IDs
+`129 (grass), 32 (dirt), 10 (stone), 38 (sand), 1 (water), 126 (path)`.
+A clean checkout therefore renders cache ground without any exported PNGs.
+
+`assets/osrs-ground/*.png` remains an override/fallback for art experiments.
+To regenerate that folder, scrape the cache (never commit it):
 
 ```sh
 cargo run -p rift-tools -- dump-textures --out assets/cache-scrape --sprites

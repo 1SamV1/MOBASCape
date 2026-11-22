@@ -1,11 +1,66 @@
 # Milestone plan — from vertical slice to 5v5
 
-Derived from the 2026-11-19 audit. Order is dependency-driven: presentation
-first because it makes every later playtest useful, then the simulation spine,
-then the network, then content and shipping. Each milestone ends with a
-playable artifact and a verification note in `docs/STATUS.md`.
+Derived from the 2026-11-19 audit and revised on 2026-11-22 against the
+reference video. Order is dependency-driven: bounded world/HUD art first
+because it makes every later playtest useful, then the simulation spine, then
+the network, then content and shipping. Each milestone ends with a playable
+artifact and a verification note in `docs/STATUS.md`.
 
-## M6 — Reference presentation (current)
+The full reference comparison, scorecard and gap matrix are in
+[`REFERENCE_AUDIT_2026-11-22.md`](REFERENCE_AUDIT_2026-11-22.md).
+
+## Revised order (2026-11-22)
+
+1. **M6.5 — World Art Foundation (current).** Cache-native ground/grass,
+   sculpted terrain, ground cover, slopes and lighting. Keep this slice
+   bounded; do not let it become an open-ended art project.
+2. **M6.6 — Live interface parity.** Cache ability/spell icons, portraits,
+   populated team frames, minimap/ability routing, stone/parchment panels,
+   results/settings. Make `--ui-live` the default once parity is reached.
+3. **M7 — Simulation authority.** Move the real match into deterministic
+   `rift-sim`; client becomes renderer/input/interpolation.
+4. **M8 — Networked 5v5.**
+5. **M9 — Content and audio.**
+6. **M10 — Ship.**
+
+Simulation authority remains the largest long-term gap. After M6.6, freeze
+visual scope except for regressions until M7 lands.
+
+## M6.5 — World Art Foundation (current)
+
+Goal: the base, lane, jungle and river read as the same kind of world as the
+reference, using only cache-scraped terrain, textures and models.
+
+- **Done:** cache-native ground and grass sprites resolved from cache index 9
+  → index 8; no local asset folder required.
+- **Done:** sculpted broad/medium/ridge/fine terrain with a castle settlement
+  mask, stronger lane grading and deterministic tests.
+- **Done:** mip-correct 384-unit grass, per-sample tone, triplanar soil/rock
+  at 128 units, slope-driven grass/soil/rock and a steeper cliff override.
+- **Done:** deterministic cache-only ground cover (1,839 plants, 244 slope
+  boulders) and a less muted grade/sun balance.
+- **Next:** per-tile cache overlay textures, alpha-tested foliage, finer
+  terrain/water banks, water props, tree variety, LOD/instancing, received
+  shadows and contact AO.
+- **Exit:** base/lane/jungle/river captures read as the reference's world;
+  1920×1008 holds 60 fps; no invented visual assets.
+
+## M6.6 — Live interface parity
+
+Goal: the live interface carries the reference's information hierarchy and
+interaction, not just its panels.
+
+- Cache QWER/battle-spell icons, item detail icon, target/kill-feed portraits.
+- Populate team frames for a real roster; objective/boss timers and ward count.
+- Route ability bar, minimap, team frames and target panel clicks.
+- Use stone/parchment panels for objectives/target/kill feed.
+- Results, rematch, settings, keybinds and chat input.
+- Then make `--ui-live` the running default.
+
+Exit: five live screenshots (base, lane, teamfight, shop, death/results) match
+the reference hierarchy; the legacy HUD is no longer the default.
+
+## M6 — Reference presentation
 
 Goal: a first-time viewer cannot tell the build apart from the reference at a
 glance, minus the networked players.

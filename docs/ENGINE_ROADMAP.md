@@ -212,15 +212,39 @@ Native 1920×1008: bloom 0.80 → **0.31 ms**, GPU frame 13.86 → **13.68 ms**.
 Tried and not kept: a cheaper hash for the post-pass dither; the post time did
 not move, so the existing dither stayed.
 
+### 2f. 2026-11-22 — World-art first slice
+
+- Ground/grass sprites now load from cache index 9 → index 8; the local
+  `assets/osrs-ground` tree is an override, not a requirement.
+- Replaced the ±26/±9 relief with warped broad, medium, ridged and fine
+  octaves plus a castle settlement mask; lane grading is 88%.
+- Grass uses one mip-correct 384-unit sample with per-sample tone; dirt and
+  stone use triplanar 128-unit projection. Slope drives a grass → soil →
+  rock/cliff blend.
+- 1,839 deterministic cache plants and 244 slope boulders add ground cover;
+  the static model mesh is now 835k triangles (674k before).
+- Post grade is less desaturated; sun/ambient is slightly more directional.
+
+| 1920×1008 | Auto (0.91×) | Native |
+|---|---:|---:|
+| p50 | **12.79 ms / 79 fps** | **14.82 ms / 69 fps** |
+| p95 | 13.53 ms | 15.59 ms |
+| GPU frame | **12.21 ms** | **14.14 ms** |
+| Scene pass | **10.99 ms** | **12.92 ms** |
+
+The art slice costs about +0.9 ms GPU against the flat fallback frame.
+Reference audit, gap matrix and milestone order:
+`docs/REFERENCE_AUDIT_2026-11-22.md`.
+
 ## 3. Current hot spots
 
-1. **Scene fill**: the scene pass is ~9.8 ms at the 0.91× auto scale and
-   ~12.1 ms native. The normal-only view costs ~4.0 ms at 0.82×, so 4× MSAA
-   raster plus terrain and scenery fragments dominate; the shadow map is
-   effectively free at ~0.05 ms.
-2. **Terrain fragment cost**: the fast path samples grass, dirt and stone;
-   sand reuses dirt. At 0.82× albedo alone added ~2.1 ms over the normal
-   view, before lighting and fog.
+1. **Scene fill**: the scene pass is ~11.0 ms at the 0.91× auto scale and
+   ~12.9 ms native. 4× MSAA raster plus terrain and scenery fragments
+   dominate; the shadow map is effectively free at ~0.05 ms.
+2. **Terrain fragment cost**: one grass sample plus triplanar dirt/stone and
+   the slope classifier. The world-art slice added roughly 0.9 ms GPU;
+   per-tile cache overlay textures and finer terrain/water meshes are the
+   next art costs.
 3. **Post**: the native-resolution composite/grade/dither pass is ~0.78 ms
    and is now the larger half of the former post/bloom chain; bloom is down to
    ~0.28 ms at auto scale.

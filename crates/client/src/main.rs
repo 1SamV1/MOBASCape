@@ -36,6 +36,7 @@ use winit::window::{Window, WindowId};
 
 use crate::animated::{AnimatedScene, BuyOutcome, UnitKind};
 use crate::champion::ChampionConfig;
+use crate::grass_textures::GrassTextures;
 use crate::hero_select::HeroSelect;
 use crate::hud::{HeroMarker, HoverInfo, Hud, PlayerHud, minimap_world_at};
 use crate::items::{
@@ -44,6 +45,7 @@ use crate::items::{
 };
 use crate::renderer::{Camera, Renderer};
 use crate::scene::{CampBuff, HeightGrid, SceneData, WorldCollision};
+use crate::terrain_textures::TerrainTextures;
 
 #[derive(Parser, Debug)]
 #[command(name = "rift-client", about = "Rift native client (M1 vertical slice)")]
@@ -658,6 +660,22 @@ impl ApplicationHandler for App {
                 return;
             }
         };
+        let terrain_textures = match TerrainTextures::load_with_fallback(&self.cache) {
+            Ok(textures) => textures,
+            Err(err) => {
+                tracing::error!("failed to load ground textures: {err:#}");
+                event_loop.exit();
+                return;
+            }
+        };
+        let grass_textures = match GrassTextures::load_with_fallback(&self.cache) {
+            Ok(textures) => textures,
+            Err(err) => {
+                tracing::error!("failed to load grass textures: {err:#}");
+                event_loop.exit();
+                return;
+            }
+        };
         let mut renderer = match pollster::block_on(Renderer::new(
             window.clone(),
             &scene,
@@ -669,6 +687,8 @@ impl ApplicationHandler for App {
             self.render_scale_auto,
             self.draw_distance,
             model_textures,
+            terrain_textures,
+            grass_textures,
             self.hud.atlas.clone(),
             self.gpu_timing,
         )) {

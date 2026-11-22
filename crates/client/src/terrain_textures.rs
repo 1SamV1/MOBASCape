@@ -3,6 +3,7 @@ use std::path::Path;
 use anyhow::{Context, Result};
 use image::RgbaImage;
 use image::imageops::FilterType;
+use rift_cache::Cache;
 
 const SIZE: u32 = 128;
 const MIPS: u32 = 8;
@@ -20,9 +21,37 @@ pub struct TerrainTextures {
 }
 
 impl TerrainTextures {
+    /// The same cache-scraped ground sprites, resolved directly from the
+    /// pinned cache. Layer order stays grass, dirt, stone, sand, water, path.
+    pub fn load_from_cache(cache: &Cache) -> Result<Self> {
+        const IDS: [u32; LAYERS as usize] = [129, 32, 10, 38, 1, 126];
+        let files = crate::model_textures::texture_files(cache)?;
+        let mut sources = Vec::with_capacity(IDS.len());
+        for id in IDS {
+            let source = crate::model_textures::texture_image(&files, cache, id)?
+                .with_context(|| format!("ground texture {id} missing from cache"))?;
+            sources.push(source);
+        }
+        Self::from_sources(sources)
+    }
+
+    /// Cache first, then the local override/procedural fallback. A clean
+    /// checkout still renders ground even if a texture definition is missing.
+    pub fn load_with_fallback(cache: &Cache) -> Result<Self> {
+        match Self::load_from_cache(cache) {
+            Ok(textures) => Ok(textures),
+            Err(err) => {
+                tracing::warn!("cache ground textures: {err:#}; using local/fallback");
+                Self::load()
+            }
+        }
+    }
+
+    /// Local PNG override or procedural fallback, used when a cache texture
+    /// definition is unavailable.
     pub fn load() -> Result<Self> {
         let names = ["grass", "dirt", "stone", "sand", "water", "path"];
-        let mut pixels = Vec::new();
+        let mut sources = Vec::with_capacity(names.len());
         for (index, name) in names.iter().enumerate() {
             let path = format!("assets/osrs-ground/{name}.png");
             let image = if Path::new(&path).exists() {
@@ -32,6 +61,15 @@ impl TerrainTextures {
             } else {
                 fallback_texture(index)
             };
+            sources.push(image);
+        }
+        Self::from_sources(sources)
+    }
+
+    fn from_sources(sources: Vec<RgbaImage>) -> Result<Self> {
+        debug_assert_eq!(sources.len(), LAYERS as usize);
+        let mut pixels = Vec::new();
+        for image in sources {
             let image = if image.width() == SIZE && image.height() == SIZE {
                 image
             } else {

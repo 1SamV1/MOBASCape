@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use anyhow::{Context, Result};
 use image::imageops::FilterType;
 use image::{Rgba, RgbaImage};
@@ -62,6 +64,37 @@ impl ModelTextures {
             pixels,
         })
     }
+}
+
+/// The decoded texture-definition archive, loaded once so the ground
+/// loaders can resolve several cache texture IDs without rescanning index 9.
+pub fn texture_files(cache: &Cache) -> Result<HashMap<u32, Vec<u8>>> {
+    Ok(cache
+        .archive_files_with_ids(9, 0)
+        .context("loading texture definitions")?
+        .into_iter()
+        .collect())
+}
+
+/// Resolve one cache texture definition to its sprite image. The same
+/// index-9 definition -> index-8 sprite path used by the model atlas.
+pub fn texture_image(
+    files: &HashMap<u32, Vec<u8>>,
+    cache: &Cache,
+    id: u32,
+) -> Result<Option<RgbaImage>> {
+    let Some(data) = files.get(&id) else {
+        return Ok(None);
+    };
+    let definition = TextureDefinition::load(id, data)?;
+    let group = cache
+        .group(8, definition.sprite_id)
+        .with_context(|| format!("loading texture sprite {}", definition.sprite_id))?;
+    let sprite = SpriteDefinition::load(definition.sprite_id, &group.data)?;
+    let Some(frame) = sprite.frames.first() else {
+        return Ok(None);
+    };
+    Ok(Some(frame_image(frame)))
 }
 
 fn layer_stride() -> usize {

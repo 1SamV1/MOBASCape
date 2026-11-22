@@ -1528,12 +1528,13 @@ pub fn build(
     // relief, and level the team courtyards so bases read as built plazas
     // instead of rocky fields. Lanes are re-levelled by the pass below.
     relax_heights(&mut heights, size, &water_mask, 2);
-    add_rolling_relief(
+    sculpt_terrain(
         &mut heights,
         size,
         origin_tile_x,
         origin_tile_y,
         &water_mask,
+        map.castle.as_ref(),
     );
     flatten_bases(
         &mut heights,
@@ -1584,7 +1585,7 @@ pub fn build(
                     * size
                     + (nearest.x / 128.0 - origin_tile_x as f32).clamp(0.0, size as f32 - 1.0)
                         as usize];
-                heights[idx] = heights[idx] * (1.0 - mask * 0.65) + centre * mask * 0.65;
+                heights[idx] = heights[idx] * (1.0 - mask * 0.88) + centre * mask * 0.88;
             }
         }
     }
@@ -2041,6 +2042,176 @@ pub fn build(
         }
     }
     tracing::info!("ground decor: {} props", decor_placements);
+
+    // ------------------------------------------------------------------
+    // Open-ground scatter. The cache location list is sparse (about one
+    // decoration every sixty tiles), while the reference ground is
+    // carpeted. Seed small cache-native flowers, ferns, grass, mushrooms
+    // and thistles over eligible grass, using a deterministic meadow mask
+    // to cluster them and leaving lanes, water, courtyards and structure
+    // clearings bare.
+    // ------------------------------------------------------------------
+    // Low-poly cache plants only: the lush look needs thousands of props,
+    // and the 200+ face flower/grass variants are reserved for the sparser
+    // location-driven decor above.
+    let clutter_objects: &[u32] = &[1187, 1192, 1173, 1298, 1299, 1300, 1163, 5135, 5136, 3795];
+    let mut clutter_templates: Vec<(u32, GroundDecor)> = Vec::new();
+    for id in clutter_objects {
+        let Some(data) = object_files.get(id) else {
+            continue;
+        };
+        let Ok(def) = ObjectDefinition::parse(*id, data) else {
+            continue;
+        };
+        let Some(kind) = GroundDecor::from_definition(&def) else {
+            continue;
+        };
+        let Some(model_id) = def.first_model() else {
+            continue;
+        };
+        if !clutter_templates
+            .iter()
+            .any(|(existing, _)| *existing == model_id)
+        {
+            clutter_templates.push((model_id, kind));
+        }
+    }
+    let mut scattered = 0usize;
+    if !clutter_templates.is_empty() {
+        for gy in 4..size.saturating_sub(4) {
+            for gx in 4..size.saturating_sub(4) {
+                let seed = (gx as u32)
+                    .wrapping_mul(0x9E37_79B9)
+                    .wrapping_add((gy as u32) << 16)
+                    .wrapping_add(0x51ED_270B);
+                let wx = (origin_tile_x + gx as i32) as f32 * 128.0 + (hash01(seed) - 0.5) * 118.0;
+                let wz = (origin_tile_y + gy as i32) as f32 * 128.0
+                    + (hash01(seed ^ 0xA53C_9E71) - 0.5) * 118.0;
+                let idx = gy * size + gx;
+                if water_mask[idx] > 0.03 {
+                    continue;
+                }
+                let meadow = value_noise(wx * 0.0013 + 19.0, wz * 0.0013 - 7.0);
+                let chance = 0.010 + meadow * 0.030;
+                if hash01(seed ^ 0xD1B5_4A35) > chance {
+                    continue;
+                }
+                if map.distance_to_lane(wx, wz) < 2.2 * 128.0 {
+                    continue;
+                }
+                if point_in_tile_rects(&castle_keep, wx / 128.0, wz / 128.0) {
+                    continue;
+                }
+                if base_keep_clear
+                    .iter()
+                    .any(|p| p.distance(Vec3::new(wx, p.y, wz)) < 2.4 * 128.0)
+                {
+                    continue;
+                }
+                // Keep steep cliff faces clean; scattered plants belong on
+                // soil and grass shelves.
+                let h = height.height_at(wx, wz);
+                let slope = ((height.height_at(wx + 128.0, wz) - h).abs()
+                    + (height.height_at(wx - 128.0, wz) - h).abs()
+                    + (height.height_at(wx, wz + 128.0) - h).abs()
+                    + (height.height_at(wx, wz - 128.0) - h).abs())
+                    / (4.0 * 128.0);
+                if slope > 0.48 {
+                    continue;
+                }
+                let template_index = ((hash01(seed ^ 0x2F6E_2B1D) * clutter_templates.len() as f32)
+                    as usize)
+                    .min(clutter_templates.len() - 1);
+                let (model_id, kind) = clutter_templates[template_index];
+                let model = cached_model(cache, &mut model_cache, model_id)?;
+                let (model_min, model_max) = model.bounds();
+                let raw_height = (model_max[1] - model_min[1]).max(0) as f32;
+                let scale = 0.72 + hash01(seed ^ 0x8A5C_D3E9) * 0.52;
+                if raw_height * scale > 150.0 {
+                    continue;
+                }
+                let base = Vec3::new(wx, height.height_at(wx, wz), wz);
+                let angle = hash01(seed ^ 0x7B1D_3C4F) * std::f32::consts::TAU;
+                append_ground_decor(&mut model_mesh, model, base, angle, scale, kind, seed);
+                let shadow = kind.shadow_size() * scale;
+                if shadow > 0.0 {
+                    push_blob_quad(&mut shadow_mesh, base, shadow, 0.14);
+                }
+                scattered += 1;
+            }
+        }
+    }
+    tracing::info!("open-ground scatter: {} props", scattered);
+    decor_placements += scattered;
+
+    // Boulders break up the sculpted hills. They belong on slopes, unlike
+    // the flower/fern layer above, so they get their own cheaper pass.
+    let boulder_models = [685u32, 1805, 1773];
+    let mut boulders = 0usize;
+    for gy in 4..size.saturating_sub(4) {
+        for gx in 4..size.saturating_sub(4) {
+            let seed = (gx as u32)
+                .wrapping_mul(0x85EB_CA6B)
+                .wrapping_add((gy as u32) << 17)
+                .wrapping_add(0x27D4_EB2F);
+            let idx = gy * size + gx;
+            if water_mask[idx] > 0.03 {
+                continue;
+            }
+            let wx = (origin_tile_x + gx as i32) as f32 * 128.0 + (hash01(seed) - 0.5) * 96.0;
+            let wz = (origin_tile_y + gy as i32) as f32 * 128.0
+                + (hash01(seed ^ 0x51ED_270B) - 0.5) * 96.0;
+            if map.distance_to_lane(wx, wz) < 2.4 * 128.0 {
+                continue;
+            }
+            if point_in_tile_rects(&castle_keep, wx / 128.0, wz / 128.0) {
+                continue;
+            }
+            if base_keep_clear
+                .iter()
+                .any(|p| p.distance(Vec3::new(wx, p.y, wz)) < 2.4 * 128.0)
+            {
+                continue;
+            }
+            let h = height.height_at(wx, wz);
+            let slope = ((height.height_at(wx + 128.0, wz) - h).abs()
+                + (height.height_at(wx - 128.0, wz) - h).abs()
+                + (height.height_at(wx, wz + 128.0) - h).abs()
+                + (height.height_at(wx, wz - 128.0) - h).abs())
+                / (4.0 * 128.0);
+            if !(0.10..=0.58).contains(&slope) {
+                continue;
+            }
+            if hash01(seed ^ 0xD1B5_4A35) > 0.0045 {
+                continue;
+            }
+            let model_index = ((hash01(seed ^ 0x2F6E_2B1D) * boulder_models.len() as f32) as usize)
+                .min(boulder_models.len() - 1);
+            let model_id = boulder_models[model_index];
+            let model = cached_model(cache, &mut model_cache, model_id)?;
+            let scale = 0.62 + hash01(seed ^ 0x8A5C_D3E9) * 0.72;
+            let base = Vec3::new(wx, h, wz);
+            let angle = hash01(seed ^ 0x7B1D_3C4F) * std::f32::consts::TAU;
+            append_ground_decor(
+                &mut model_mesh,
+                model,
+                base,
+                angle,
+                scale,
+                GroundDecor::Rock,
+                seed,
+            );
+            push_blob_quad(
+                &mut shadow_mesh,
+                base,
+                GroundDecor::Rock.shadow_size() * scale,
+                0.16,
+            );
+            boulders += 1;
+        }
+    }
+    tracing::info!("slope boulders: {} props", boulders);
+    decor_placements += boulders;
 
     // ------------------------------------------------------------------
     // Biome pocket scenery: real OSRS objects taken from each pocket's
@@ -3057,16 +3228,24 @@ fn relax_heights(heights: &mut [f32], size: usize, water: &[f32], passes: usize)
     }
 }
 
-/// Add two octaves of very low frequency relief so large flat fields read as
-/// rolling ground instead of a tabletop. Amplitudes stay well under a tile so
-/// pathing, collision and the lane levelling pass are unaffected.
-fn add_rolling_relief(
+/// Sculpt organic terrain over the cache heightfield. The cache base is often
+/// either dead flat or noisy at one-tile scale; broad valley/hill shapes,
+/// a ridged component and a little fine undulation give the map readable
+/// elevation without turning every field into a rock garden.
+///
+/// Castle wall bands and base courtyards are held nearly level so wall
+/// pieces do not step up and down between tiles. Lanes are graded after this
+/// pass, and the river/water mask is left alone.
+fn sculpt_terrain(
     heights: &mut [f32],
     size: usize,
     origin_tile_x: i32,
     origin_tile_y: i32,
     water: &[f32],
+    castle: Option<&CastleSpec>,
 ) {
+    // The broad shape is warped by another low-frequency field so hills do
+    // not read as round blobs on a grid.
     for gy in 0..size {
         for gx in 0..size {
             let i = gy * size + gx;
@@ -3075,11 +3254,72 @@ fn add_rolling_relief(
             }
             let wx = (origin_tile_x + gx as i32) as f32 * 128.0;
             let wz = (origin_tile_y + gy as i32) as f32 * 128.0;
-            let broad = (value_noise(wx * 0.00042, wz * 0.00042) - 0.5) * 52.0;
-            let medium = (value_noise(wx * 0.0011 + 31.0, wz * 0.0011 + 7.0) - 0.5) * 18.0;
-            heights[i] += broad + medium;
+            let warp_x = (value_noise(wx * 0.00017 + 13.1, wz * 0.00017 + 7.7) - 0.5) * 2.4;
+            let warp_z = (value_noise(wx * 0.00017 - 5.3, wz * 0.00017 + 19.2) - 0.5) * 2.4;
+
+            let broad = (value_noise(wx * 0.00023 + warp_x, wz * 0.00023 + warp_z) - 0.5) * 520.0;
+            let medium = (value_noise(
+                wx * 0.00072 + 31.0 + warp_x * 0.35,
+                wz * 0.00072 + 7.0 + warp_z * 0.35,
+            ) - 0.5)
+                * 170.0;
+            let ridge = (1.0
+                - (value_noise(wx * 0.00039 + 61.0, wz * 0.00039 - 23.0) * 2.0 - 1.0).abs()
+                - 0.5)
+                * 190.0;
+            let fine = (value_noise(wx * 0.0022 - 9.0, wz * 0.0022 + 4.0) - 0.5) * 36.0;
+
+            let settle = castle_settlement_mask(
+                (origin_tile_x + gx as i32) as f32,
+                (origin_tile_y + gy as i32) as f32,
+                castle,
+            );
+            heights[i] += (broad + medium + ridge + fine) * settle;
         }
     }
+
+    // One light relaxation pass removes any one-tile stair the fine octave
+    // leaves behind without flattening the broad shapes.
+    relax_heights(heights, size, water, 1);
+}
+
+/// 0 on castle wall bands and base courtyards, 1 in open country. The
+/// transition is wide enough that the plateau blends into the hills.
+fn castle_settlement_mask(tx: f32, tz: f32, castle: Option<&CastleSpec>) -> f32 {
+    let Some(castle) = castle else {
+        return 1.0;
+    };
+    let (x0, z0, x1, z1) = castle.bounds;
+    let mut distance = distance_to_rect_border(tx, tz, x0, z0, x1, z1);
+    for base in &castle.bases {
+        let (bx0, bz0, bx1, bz1) = castle.base_rect(base);
+        distance = distance.min(distance_to_rect_edge(tx, tz, bx0, bz0, bx1, bz1));
+    }
+    smoothstep(2.0, 11.0, distance)
+}
+
+/// Distance to a rectangle's border, including from inside it. Used for the
+/// perimeter wall, which encloses nearly the whole map.
+fn distance_to_rect_border(x: f32, z: f32, x0: f32, z0: f32, x1: f32, z1: f32) -> f32 {
+    if x >= x0 && x <= x1 && z >= z0 && z <= z1 {
+        return (x - x0).min(x1 - x).min(z - z0).min(z1 - z).max(0.0);
+    }
+    outside_rect_distance(x, z, x0, z0, x1, z1)
+}
+
+/// Distance to a rectangle, or 0 when the point is inside it. Used for the
+/// base courtyards, which should be level throughout.
+fn distance_to_rect_edge(x: f32, z: f32, x0: f32, z0: f32, x1: f32, z1: f32) -> f32 {
+    if x >= x0 && x <= x1 && z >= z0 && z <= z1 {
+        return 0.0;
+    }
+    outside_rect_distance(x, z, x0, z0, x1, z1)
+}
+
+fn outside_rect_distance(x: f32, z: f32, x0: f32, z0: f32, x1: f32, z1: f32) -> f32 {
+    let dx = (x0 - x).max(x - x1).max(0.0);
+    let dz = (z0 - z).max(z - z1).max(0.0);
+    (dx * dx + dz * dz).sqrt()
 }
 
 /// Level each team courtyard to its centre height with a soft skirt at the
@@ -4411,6 +4651,55 @@ mod tests {
         let blob = SceneVertex::blob(Vec3::ZERO, 0.4, [0.0, 0.0]);
         assert_eq!(blob.material, 2);
         assert!((blob.color[3] - 0.4).abs() < 1e-6);
+    }
+
+    #[test]
+    fn terrain_sculpting_is_deterministic_and_preserves_water() {
+        let size = 64usize;
+        let mut heights = vec![0.0f32; size * size];
+        let mut water = vec![0.0f32; size * size];
+        water[20 * size + 20] = 1.0;
+        heights[20 * size + 20] = -37.0;
+
+        let mut first = heights.clone();
+        sculpt_terrain(&mut first, size, 0, 0, &water, None);
+        let mut second = heights.clone();
+        sculpt_terrain(&mut second, size, 0, 0, &water, None);
+        assert_eq!(first, second);
+        assert_eq!(first[20 * size + 20], -37.0);
+
+        let min = first.iter().copied().fold(f32::MAX, f32::min);
+        let max = first.iter().copied().fold(f32::MIN, f32::max);
+        assert!(max - min > 100.0, "relief too flat: {}", max - min);
+        assert!(max - min < 1_200.0, "relief too extreme: {}", max - min);
+        assert!(first.iter().all(|height| height.is_finite()));
+    }
+
+    #[test]
+    fn castle_settlement_mask_levels_bases_and_wall_bands() {
+        let castle = CastleSpec {
+            bounds: (0.0, 0.0, 120.0, 120.0),
+            wall_model: 16918,
+            wall_scale: 1.0,
+            tower_model: 1412,
+            tower_scale: 1.0,
+            gate_model: 3996,
+            gate_scale: 1.0,
+            platform_model: None,
+            statue_model: None,
+            tower_spacing: 0.25,
+            bases: vec![CastleBase {
+                team: 0,
+                center: (18.0, 102.0),
+                size: 28.0,
+                corner: CastleCorner::BottomLeft,
+            }],
+        };
+        assert_eq!(castle_settlement_mask(0.0, 60.0, Some(&castle)), 0.0);
+        assert_eq!(castle_settlement_mask(18.0, 102.0, Some(&castle)), 0.0);
+        assert_eq!(castle_settlement_mask(60.0, 60.0, Some(&castle)), 1.0);
+        assert_eq!(castle_settlement_mask(200.0, 60.0, Some(&castle)), 1.0);
+        assert_eq!(castle_settlement_mask(0.0, 0.0, None), 1.0);
     }
 
     #[test]
