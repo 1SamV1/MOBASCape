@@ -74,9 +74,17 @@ fn dynamic_lighting(input: VsOut) -> vec3<f32> {
     let count = min(scene.light_count.x, 16u);
     for (var i = 0u; i < count; i = i + 1u) {
         let light = scene.lights[i];
+        let radius = max(light.params.x, 1.0);
         let to_light = light.position.xyz - input.world;
-        let dist = length(to_light);
-        let atten = clamp(1.0 - dist / max(light.params.x, 1.0), 0.0, 1.0);
+        // Most fragments are outside a point light's small radius (the
+        // fountain is the usual one). Test squared distance first so those
+        // fragments never pay for the normalize and dot.
+        let dist2 = dot(to_light, to_light);
+        if (dist2 >= radius * radius) {
+            continue;
+        }
+        let dist = sqrt(dist2);
+        let atten = 1.0 - dist / radius;
         let lndotl = max(dot(N, normalize(to_light)), 0.0);
         sum += light.color.rgb * light.color.a * atten * atten * lndotl;
     }

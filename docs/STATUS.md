@@ -1,6 +1,26 @@
 # Status
 
-Last updated: per-pass GPU timings, 2026-11-21.
+Last updated: point-light radius gate, 2026-11-21.
+
+## 2026-11-21 — Point lights only shade fragments inside their radius
+
+- `dynamic_lighting` now compares squared distance against the light radius
+  and skips `normalize`/`dot` for every fragment outside it. Previously those
+  fragments still ran the full computation and multiplied by an attenuation
+  that was already zero. The fountain is the usual single light, so this was
+  a large per-fragment cost across most of the screen.
+- Visuals are unchanged by construction: the contribution outside the radius
+  was already zero. Capture: `/tmp/opencode/scene_lightgate.png`. No new
+  visual assets were introduced.
+- Native 1920×1008, MSAA 4, shadows, immediate: p50 **16.23 → 14.35 ms**,
+  p95 **17.17 → 15.47 ms**, GPU frame **15.90 → 13.86 ms**, scene pass
+  **14.19 → 12.14 ms**. Native is now comfortably above 60 fps.
+- Auto scale 1920×1008: p50 **12.61 → 11.11 ms** / **89.7 fps**, GPU frame
+  **12.00 → 10.76 ms**, scene pass **10.33 → 9.11 ms**.
+- Tried and not kept: a direct one-light shader fast path and gradient-based
+  grass mip selection; neither moved the measured scene time, so both were
+  reverted rather than kept as unmeasured complexity.
+- Verified: 262 tests pass, 4 ignored; workspace clippy clean.
 
 ## 2026-11-21 — Per-pass GPU timings from timestamp queries
 

@@ -1,8 +1,7 @@
 # Engine road map
 
-Last updated: 2026-11-21, after the 1080p 60 fps pass (albedo simplification,
-dynamic-unit culling, coarse distance culling, colour LUTs and automatic scene
-resolution).
+Last updated: 2026-11-21, after per-pass GPU timings and the point-light
+radius gate that pushed native 1080p past 60 fps.
 
 This is the working performance/architecture backlog. It records what the
 engine does today, what was measured, and the next changes that should give
@@ -38,11 +37,10 @@ numbers. Background applications and compositor scheduling add noise, so run
 the benchmark with a clean desktop before using these as hard budgets.
 
 Interpretation: static vertex load was the biggest single bottleneck and chunk
-culling recovered most of it. The shadow map is now the next large cost
-(roughly 5 ms at these settings), followed by 4× MSAA (roughly 1.5 ms) and the
-terrain fragment shader. The current numbers are a dev-laptop measurement, not
-a certified benchmark; use the harness described below before treating them as
-budgets.
+culling recovered most of it. These early 720p numbers predate the GPU timing
+harness; sections 2b and 2c hold the current 1080p budgets. They remain a
+dev-laptop measurement, not a certified benchmark; use the harness described
+below before treating them as budgets.
 
 ## 2. What M5.22 changed
 
@@ -135,24 +133,49 @@ What moved the number:
   draw as one rectangle, so the live 1080p HUD dropped from 162,830 quads to
   2,327 and from 46.7 ms to ~0.9 ms of build time.
 
-Timestamp queries put the 1920×1008 auto-scale frame at **12.00 ms GPU**:
-scene **10.33 ms**, bloom **0.74 ms**, post **0.79 ms**, shadow **0.05 ms**,
+Timestamp queries put the 1920×1008 auto-scale frame at **10.76 ms GPU**:
+scene **9.11 ms**, bloom **0.73 ms**, post **0.79 ms**, shadow **0.04 ms**,
 HUD/interface **0.09 ms**. The old HUD's GPU pass is only **0.06 ms**; its
-remaining cost is the 0.6 ms CPU build. The scene pass is therefore the only
-large GPU cost, and native-resolution 1080p needs the scene pass reduced by
-roughly 2 ms to hold 60 without the auto scale.
+remaining cost is the 0.6 ms CPU build. The scene pass is still the only
+large GPU cost, but native-resolution 1080p now clears 60 (details below).
+
+### 2c. 2026-11-21 — Point-light radius gate
+
+The lighting debug view showed dynamic point lights costing ~1.9 ms even
+though the only active light (the fountain) covered a small part of the
+screen. Fragments outside a light's radius still ran `normalize` and `dot`
+before multiplying by an attenuation that was already zero.
+`dynamic_lighting` now tests squared distance against the radius, skips the
+rest for outside fragments, and computes `sqrt` only for covered fragments.
+Visuals are identical because the old attenuation clamped to zero at exactly
+the same radius.
+
+| 1920×1008, MSAA 4, shadows, immediate | Before | After |
+|---|---:|---:|
+| Auto scale (0.82×) p50 | 12.61 ms | **11.11 ms** |
+| Auto scale GPU frame | 12.00 ms | **10.76 ms** |
+| Auto scale scene pass | 10.33 ms | **9.11 ms** |
+| Native scale (1.00×) p50 | 16.23 ms | **14.35 ms** |
+| Native scale p95 | 17.17 ms | **15.47 ms** |
+| Native scale GPU frame | 15.90 ms | **13.86 ms** |
+| Native scale scene pass | 14.19 ms | **12.14 ms** |
+
+Native 1920×1008 now holds p50 14.35 ms / **69.7 fps** with p95 15.47 ms, so
+the 60 fps target no longer depends on the auto scene scale. Tried and not
+kept: a direct one-light fast path (no measurable change) and gradient-based
+grass mip selection (no measurable change; reverted).
 
 ## 3. Current hot spots
 
-1. **Shadow pass**: static and dynamic casters still go into the 1024 map every
-   other frame. Shadow-off now saves only a few tenths of a millisecond at the
-   current view because the casters are small and cached by chunk.
+1. **Scene fill**: the scene pass is ~9.1 ms at auto scale and ~12.1 ms
+   native. The normal-only view costs ~4.0 ms, so 4× MSAA raster plus terrain
+   and scenery fragments dominate; the shadow map is effectively free at
+   ~0.04 ms.
 2. **Terrain fragment cost**: the fast path samples grass, dirt and stone;
-   sand reuses dirt. The remaining cost is 4× MSAA resolve plus the lit
-   fragment work, not the old noise stack.
-3. **Scene fill**: GPU timestamps show the scene pass at ~10.3 ms, with bloom
-   and post another ~1.5 ms. MSAA 4 resolve, terrain and merged scenery
-   fragments dominate; the shadow map is now effectively free at ~0.05 ms.
+   sand reuses dirt. Albedo alone adds ~2.1 ms over the normal view, before
+   lighting and fog.
+3. **Post and bloom**: the full-screen chain is ~1.5 ms at native resolution
+   and is the next fixed cost after the scene.
 4. **HUD geometry**: the old HUD is rebuilt and uploaded every frame. The
    live HUD now draws flat panels as one rectangle instead of tiling a 1×1
    image, cutting its 1080p build from 46.7 ms to ~0.9 ms.
