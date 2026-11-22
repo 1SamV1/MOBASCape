@@ -1,6 +1,24 @@
 # Status
 
-Last updated: cache overlay ground textures, 2026-11-22.
+Last updated: 64-unit river surface, 2026-11-22.
+
+## 2026-11-22 — 64-unit river surface
+
+- The river was one quad per terrain tile, so every bank read as a 128-unit
+  staircase. It now builds from the water mask at half-tile (64-unit)
+  resolution: 111,318 vertices / 37,106 triangles, with mask-driven opacity
+  at the shoreline.
+- The surface covers the full carved mask again, including bends; a
+  centreline ribbon was tried first but left dry wedges on the inside of
+  bends, so it was discarded.
+- Visual capture: `/tmp/opencode/subwater1.png`. A known remaining gap is
+  the dry bridge/ford presentation (`/tmp/opencode/subwater2.png`); a proper
+  cache-textured bridge deck is the next water task.
+- Performance is unchanged: auto 1920×1008 p50 **12.99 ms / 77 fps**, p95
+  13.67 ms, GPU **12.43 ms** (scene 11.22); native p50 **15.21 ms / 66 fps**,
+  p95 16.05 ms, GPU **14.56 ms** (scene 13.34).
+- Added a bilinear grid test. Verified: 271 tests pass, 4 ignored; workspace
+  clippy clean.
 
 ## 2026-11-22 — Cache overlay ground textures
 

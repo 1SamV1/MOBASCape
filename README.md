@@ -59,8 +59,9 @@ designed for fast-paced low-team-count matches.
 > 0.78 ms and the shadow map at 0.05 ms; the scene remains the dominant pass.
 > Ground and grass sprites are resolved from the cache at runtime, textured
 > cache overlays are blended per tile, the terrain is sculpted with
-> deterministic relief, and 1,839 cache-only plants plus 244 slope boulders
-> break up the fields. See
+> deterministic relief, the river surface follows the water mask at 64-unit
+> resolution, and 1,839 cache-only plants plus 244 slope boulders break up
+> the fields. See
 > [docs/STATUS.md](docs/STATUS.md),
 > [docs/UI_ASSETS.md](docs/UI_ASSETS.md) and
 > [docs/INTERFACE_STAGE3_REVIEW.md](docs/INTERFACE_STAGE3_REVIEW.md).

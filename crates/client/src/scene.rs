@@ -1513,7 +1513,6 @@ pub fn build(
                     levels[index] = levels[index - 1] - 0.5;
                 }
             }
-
             for gy in 0..size - 1 {
                 for gx in 0..size - 1 {
                     let tx = (origin_tile_x + gx as i32) as f32;
@@ -1715,82 +1714,19 @@ pub fn build(
     // River water surface. The terrain carves the bed and keeps the water
     // colour; this mesh draws the actual reflective sheet on top. It is a
     // separate blended draw so the shader can do fresnel, sky reflection and
-    // animated ripples without changing the opaque terrain path.
+    // animated ripples without changing the opaque terrain path. Build it at
+    // half-tile resolution from the water mask so banks are 64 units instead
+    // of a 128-unit staircase.
     // ------------------------------------------------------------------
     let mut water_mesh = MeshData::new();
-    for gy in 0..size - 1 {
-        for gx in 0..size - 1 {
-            let i00 = gy * size + gx;
-            let i10 = i00 + 1;
-            let i01 = i00 + size;
-            let i11 = i01 + 1;
-            let masks = [
-                water_mask[i00],
-                water_mask[i10],
-                water_mask[i01],
-                water_mask[i11],
-            ];
-            let max_mask = masks.iter().copied().fold(0.0f32, f32::max);
-            if max_mask < 0.03 {
-                continue;
-            }
-            let mut level_sum = 0.0;
-            let mut level_count = 0.0;
-            for (index, mask) in [i00, i10, i01, i11].iter().zip(masks) {
-                if mask > 0.001 {
-                    level_sum += water_level[*index];
-                    level_count += 1.0;
-                }
-            }
-            let fallback = if level_count > 0.0 {
-                level_sum / level_count
-            } else {
-                continue;
-            };
-            let level_at = |index: usize, mask: f32| {
-                if mask > 0.001 {
-                    water_level[index]
-                } else {
-                    fallback
-                }
-            };
-            let x0 = (origin_tile_x + gx as i32) as f32 * 128.0;
-            let z0 = (origin_tile_y + gy as i32) as f32 * 128.0;
-            let x1 = x0 + 128.0;
-            let z1 = z0 + 128.0;
-            let opacity = |mask: f32| (smoothstep(0.0, 0.35, mask) * 0.88).clamp(0.0, 0.88);
-            let mut v00 = SceneVertex::new(
-                Vec3::new(x0, level_at(i00, masks[0]), z0),
-                Vec3::Y,
-                [255, 255, 255],
-            );
-            let mut v10 = SceneVertex::new(
-                Vec3::new(x1, level_at(i10, masks[1]), z0),
-                Vec3::Y,
-                [255, 255, 255],
-            );
-            let mut v01 = SceneVertex::new(
-                Vec3::new(x0, level_at(i01, masks[2]), z1),
-                Vec3::Y,
-                [255, 255, 255],
-            );
-            let mut v11 = SceneVertex::new(
-                Vec3::new(x1, level_at(i11, masks[3]), z1),
-                Vec3::Y,
-                [255, 255, 255],
-            );
-            v00.color[3] = opacity(masks[0]);
-            v10.color[3] = opacity(masks[1]);
-            v01.color[3] = opacity(masks[2]);
-            v11.color[3] = opacity(masks[3]);
-            v00.material = 6;
-            v10.material = 6;
-            v01.material = 6;
-            v11.material = 6;
-            water_mesh.push_triangle(v00, v01, v10);
-            water_mesh.push_triangle(v10, v01, v11);
-        }
-    }
+    build_water_surface(
+        &mut water_mesh,
+        size,
+        origin_tile_x,
+        origin_tile_y,
+        &water_mask,
+        &water_level,
+    );
     tracing::info!(
         "water surface: {} verts, {} tris",
         water_mesh.vertices.len(),
@@ -3568,6 +3504,79 @@ fn smoothstep(edge0: f32, edge1: f32, x: f32) -> f32 {
     t * t * (3.0 - 2.0 * t)
 }
 
+/// Build the river surface from the water mask at half-tile resolution.
+/// The old 128-unit quads produced stair-stepped banks; 64-unit cells with a
+/// mask-driven alpha fade give a softer shoreline without the bridge gaps a
+/// centreline ribbon can leave on bends.
+fn build_water_surface(
+    mesh: &mut MeshData,
+    size: usize,
+    origin_tile_x: i32,
+    origin_tile_y: i32,
+    water: &[f32],
+    levels: &[f32],
+) {
+    const SUB: usize = 2;
+    let span = (size - 1) * SUB;
+    let step = 128.0 / SUB as f32;
+    for gy in 0..span {
+        for gx in 0..span {
+            let tx = gx as f32 / SUB as f32;
+            let ty = gy as f32 / SUB as f32;
+            let mut masks = [0.0f32; 4];
+            let mut level_sum = 0.0;
+            let mut level_weight = 0.0;
+            for (index, (dx, dy)) in [(0, 0), (1, 0), (0, 1), (1, 1)].iter().enumerate() {
+                let px = tx + *dx as f32 / SUB as f32;
+                let py = ty + *dy as f32 / SUB as f32;
+                let mask = bilinear(water, size, px, py);
+                masks[index] = mask;
+                if mask > 0.001 {
+                    level_sum += bilinear(levels, size, px, py) * mask;
+                    level_weight += mask;
+                }
+            }
+            if masks.iter().copied().fold(0.0, f32::max) < 0.02 || level_weight <= 0.0 {
+                continue;
+            }
+            let level = level_sum / level_weight;
+            let x0 = (origin_tile_x as f32 + tx) * 128.0;
+            let z0 = (origin_tile_y as f32 + ty) * 128.0;
+            let x1 = x0 + step;
+            let z1 = z0 + step;
+            let opacity = |mask: f32| (smoothstep(0.0, 0.35, mask) * 0.88).clamp(0.0, 0.88);
+            let mut v00 = SceneVertex::new(Vec3::new(x0, level, z0), Vec3::Y, [255, 255, 255]);
+            let mut v10 = SceneVertex::new(Vec3::new(x1, level, z0), Vec3::Y, [255, 255, 255]);
+            let mut v01 = SceneVertex::new(Vec3::new(x0, level, z1), Vec3::Y, [255, 255, 255]);
+            let mut v11 = SceneVertex::new(Vec3::new(x1, level, z1), Vec3::Y, [255, 255, 255]);
+            v00.color[3] = opacity(masks[0]);
+            v10.color[3] = opacity(masks[1]);
+            v01.color[3] = opacity(masks[2]);
+            v11.color[3] = opacity(masks[3]);
+            v00.material = 6;
+            v10.material = 6;
+            v01.material = 6;
+            v11.material = 6;
+            mesh.push_triangle(v00, v01, v10);
+            mesh.push_triangle(v10, v01, v11);
+        }
+    }
+}
+
+fn bilinear(values: &[f32], size: usize, x: f32, y: f32) -> f32 {
+    let max = size as f32 - 1.0;
+    let x = x.clamp(0.0, max);
+    let y = y.clamp(0.0, max);
+    let x0 = (x.floor() as usize).min(size - 2);
+    let y0 = (y.floor() as usize).min(size - 2);
+    let fx = x - x0 as f32;
+    let fy = y - y0 as f32;
+    let i = y0 * size + x0;
+    let top = values[i] * (1.0 - fx) + values[i + 1] * fx;
+    let bottom = values[i + size] * (1.0 - fx) + values[i + size + 1] * fx;
+    top * (1.0 - fy) + bottom * fy
+}
+
 /// Distance to a polyline plus the index of the closest segment and how far
 /// along that segment the closest point sits.
 fn nearest_on_polyline(points: &[(f32, f32)], x: f32, y: f32) -> (f32, usize, f32) {
@@ -4695,6 +4704,14 @@ mod tests {
         let blob = SceneVertex::blob(Vec3::ZERO, 0.4, [0.0, 0.0]);
         assert_eq!(blob.material, 2);
         assert!((blob.color[3] - 0.4).abs() < 1e-6);
+    }
+
+    #[test]
+    fn bilinear_samples_the_water_grid_corners_and_center() {
+        let values = [0.0, 1.0, 2.0, 3.0];
+        assert_eq!(bilinear(&values, 2, 0.0, 0.0), 0.0);
+        assert_eq!(bilinear(&values, 2, 1.0, 1.0), 3.0);
+        assert!((bilinear(&values, 2, 0.5, 0.5) - 1.5).abs() < 1e-6);
     }
 
     #[test]

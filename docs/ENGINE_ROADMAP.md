@@ -224,6 +224,8 @@ not move, so the existing dither stayed.
 - Terrain vertices pack a per-tile cache overlay texture and weight alongside
   the grass variant; the shader samples the real overlay art from the model
   texture array and blends it over the classifier.
+- The river surface is generated from the water mask at 64-unit resolution
+  with soft shoreline opacity (111k vertices / 37k triangles).
 - 1,839 deterministic cache plants and 244 slope boulders add ground cover;
   the static model mesh is now 835k triangles (674k before).
 - Post grade is less desaturated; sun/ambient is slightly more directional.

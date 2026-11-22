@@ -136,6 +136,9 @@ Implemented:
 - **Per-tile cache overlay textures.** Terrain vertices pack overlay texture
   ID and weight alongside the grass variant; base tiles and biome pockets
   feed real OSRS path/dirt/ground art into the shader.
+- **64-unit river surface.** The water sheet now follows the carved water
+  mask at half-tile resolution with soft shoreline opacity, removing the
+  128-unit bank staircase. Bridge/ford decks are still a follow-up.
 - **Cache-only ground cover.** 1,839 deterministic low-poly flowers, ferns,
   grass and mushrooms, plus 244 slope boulders, all selected from cache object
   definitions. No new art assets; the model mesh rose from 674k to 835k
@@ -147,20 +150,22 @@ Implemented:
 
 Known limits and follow-ups:
 
-1. **Terrain and water banks are one tile (128 units) per vertex.** Fine
-   cliffs, smooth riverbanks and natural water edges need a finer mesh or a
-   slope-aware skirt.
-2. **Ground cover is still sparse at the reference density.** LOD/instancing
+1. **Terrain banks are still one tile (128 units) per vertex.** The water
+   surface is now 64 units, but the land side of the bank still needs a finer
+   mesh or a slope-aware skirt.
+2. **Bridge/ford crossings need decks.** The water mask intentionally leaves
+   a dry crossing; it currently reads as a green wedge instead of a bridge.
+3. **Ground cover is still sparse at the reference density.** LOD/instancing
    should precede a large density increase.
-3. **Lighting/grade still lacks strong contact/SSAO and received shadows on
+4. **Lighting/grade still lacks strong contact/SSAO and received shadows on
    cache scenery.** The castle and trees currently skip the sun shadow lookup.
-4. **No water props.** Reeds, lilies, shore rocks and driftwood are missing.
-5. **Foliage cutouts do not work with this cache.** Alpha-testing canopy
+5. **No water props.** Reeds, lilies, shore rocks and driftwood are missing.
+6. **Foliage cutouts do not work with this cache.** Alpha-testing canopy
    sprites punched sky holes; keep the opaque fill and pursue tree model
    variety/geometry instead.
-6. **Big dirt/rock hills still read as broad smooth masses.** Add rock
-   outcrops, tree variety and finer terrain/water mesh resolution before
-   more amplitude.
+7. **Big dirt/rock hills still read as broad smooth masses.** Add rock
+   outcrops, tree variety and finer terrain mesh resolution before more
+   amplitude.
 
 ## 6. Skills installed for this project
 

@@ -41,10 +41,11 @@ reference, using only cache-scraped terrain, textures and models.
   boulders) and a less muted grade/sun balance.
 - **Done:** per-tile cache overlay textures packed into the terrain vertex
   ID and blended over the classifier.
+- **Done:** 64-unit mask-driven river surface with soft shoreline opacity.
 - **Tried and reverted:** alpha-tested foliage cutouts. This cache's canopy
   alphas are not cutout masks; preserving them punched sky holes through the
   canopies. Keep the opaque average-colour fill.
-- **Next:** finer terrain/water banks, water props, tree variety,
+- **Next:** cache-textured bridge decks, water props, tree variety,
   LOD/instancing, received shadows and contact AO.
 - **Exit:** base/lane/jungle/river captures read as the reference's world;
   1920×1008 holds 60 fps; no invented visual assets.
