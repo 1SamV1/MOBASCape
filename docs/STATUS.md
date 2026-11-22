@@ -1,6 +1,29 @@
 # Status
 
-Last updated: cache-native stage 4 items and icons, 2026-11-21.
+Last updated: 1080p 60 fps engine pass, 2026-11-21.
+
+## 2026-11-21 — Engine: 1080p 60 fps pass
+
+- Terrain albedo no longer does the per-fragment multi-octave noise stack:
+  the cache grass sprites, vertex biome tint and the existing classification
+  carry the ground. Fog banks and grass normal noise were removed, and the
+  sun shadow PCF went from four taps to two.
+- Dynamic unit animation is culled to 9,000 units around the camera focus;
+  the remaining units animate into a reused face-colour cache and an sRGB
+  lookup table instead of paying HSL and `powf` per vertex.
+- Added `--window-size WIDTHxHEIGHT`, `--render-scale auto|0.5..1.0`, and a
+  five-phase benchmark split (`sim`, `mesh`, `hud`, `ui`, `submit`). `auto`
+  targets 1.2M scene pixels and leaves post and HUD at native resolution.
+- Measured on the Ryzen 5 6600U / Radeon 680M, release, immediate present,
+  MSAA 4 and sun shadows on:
+  - 1280×720: p50 **10.62 ms**, p95 11.76 ms, 93.9 fps (scene 1.00×).
+  - 1920×1008: p50 **14.13 ms**, p95 15.86 ms, 70.2 fps (scene 1461×767,
+    0.76×; HUD native).
+  - Before this pass the same 1920×1008 run was p50 61.5 ms.
+- Native 1920×1008 with `--render-scale 1.0 --msaa 1` is p50 17.3 ms
+  (57 fps); the auto scale is what buys the 60 fps margin on this iGPU.
+- Verified: `cargo test --workspace` 254 tests pass, 4 ignored; workspace
+  clippy is clean. Capture: `/tmp/opencode/perf1080_final.png`.
 
 ## 2026-11-21 — Cache-native item icons and expanded item pool
 

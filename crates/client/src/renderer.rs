@@ -398,6 +398,11 @@ pub struct Renderer {
     ui: Option<UiPass>,
     pub camera: Camera,
     pub size: (u32, u32),
+    /// The scene is rendered at this fraction of the window; post and HUD stay
+    /// native. Values below 1 trade a little softness for fill-rate headroom.
+    pub render_scale: f32,
+    pub render_scale_auto: bool,
+    pub render_size: (u32, u32),
 }
 
 impl Renderer {
@@ -409,13 +414,17 @@ impl Renderer {
         present_mode: wgpu::PresentMode,
         msaa_samples: u32,
         chunk_tiles: u32,
+        render_scale: f32,
+        render_scale_auto: bool,
         model_textures: ModelTextures,
         ui_atlas: Arc<UiAtlas>,
     ) -> Result<Self> {
         let msaa_samples = if msaa_samples >= 4 { 4 } else { 1 };
+        let render_scale = render_scale.clamp(0.5, 1.0);
         let size = window.inner_size();
         let width = size.width.max(1);
         let height = size.height.max(1);
+        let render_size = scaled_extent(width, height, render_scale);
 
         let instance = wgpu::Instance::default();
         let surface = instance
@@ -1265,9 +1274,14 @@ impl Renderer {
         let post_sampler = create_post_sampler(&device);
         let bloom_sampler = create_post_sampler(&device);
         let (scene_color_texture, scene_color_view) =
-            create_hdr_target(&device, width, height, "hdr scene");
-        let (scene_msaa_texture, scene_msaa_view) =
-            create_msaa_target(&device, width, height, msaa_samples, "hdr scene msaa");
+            create_hdr_target(&device, render_size.0, render_size.1, "hdr scene");
+        let (scene_msaa_texture, scene_msaa_view) = create_msaa_target(
+            &device,
+            render_size.0,
+            render_size.1,
+            msaa_samples,
+            "hdr scene msaa",
+        );
         let (bloom_half_texture, bloom_half_view) =
             create_hdr_target(&device, 640, 360, "bloom half");
         let (bloom_temp_texture, bloom_temp_view) =
@@ -1350,7 +1364,7 @@ impl Renderer {
             &post_sampler,
         );
 
-        let depth_view = create_depth_view(&device, width, height, msaa_samples);
+        let depth_view = create_depth_view(&device, render_size.0, render_size.1, msaa_samples);
         let chunk_size = chunk_tiles.max(4) as f32 * 128.0;
         let terrain = ChunkedMesh::upload(&device, &scene.terrain, chunk_size, "terrain");
         let models = ChunkedMesh::upload(&device, &scene.models, chunk_size, "models");
@@ -1500,6 +1514,9 @@ impl Renderer {
             ui: None,
             camera: initial_camera,
             size: (width, height),
+            render_scale,
+            render_scale_auto,
+            render_size,
         };
         renderer.update_camera();
 
@@ -1521,14 +1538,21 @@ impl Renderer {
         self.config.width = width;
         self.config.height = height;
         self.surface.configure(&self.device, &self.config);
-        self.depth_view = create_depth_view(&self.device, width, height, self.msaa_samples);
-        let (texture, view) = create_hdr_target(&self.device, width, height, "hdr scene");
+        if self.render_scale_auto {
+            self.render_scale = auto_render_scale(width, height);
+        }
+        self.render_size = scaled_extent(width, height, self.render_scale);
+        let (render_width, render_height) = self.render_size;
+        self.depth_view =
+            create_depth_view(&self.device, render_width, render_height, self.msaa_samples);
+        let (texture, view) =
+            create_hdr_target(&self.device, render_width, render_height, "hdr scene");
         self._scene_color_texture = texture;
         self.scene_color_view = view;
         let (msaa_texture, msaa_view) = create_msaa_target(
             &self.device,
-            width,
-            height,
+            render_width,
+            render_height,
             self.msaa_samples,
             "hdr scene msaa",
         );
@@ -2265,6 +2289,19 @@ pub(crate) fn create_dynamic_buffer(
         usage: usage | wgpu::BufferUsages::COPY_DST,
         mapped_at_creation: false,
     })
+}
+
+fn auto_render_scale(width: u32, height: u32) -> f32 {
+    let pixels = (width as f32 * height as f32).max(1.0);
+    (1_200_000.0 / pixels).sqrt().clamp(0.62, 1.0)
+}
+
+fn scaled_extent(width: u32, height: u32, scale: f32) -> (u32, u32) {
+    let scale = scale.clamp(0.5, 1.0);
+    (
+        ((width as f32 * scale).round() as u32).max(1),
+        ((height as f32 * scale).round() as u32).max(1),
+    )
 }
 
 fn create_hdr_target(

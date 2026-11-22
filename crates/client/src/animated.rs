@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::Instant;
 
 use anyhow::Result;
 use glam::{Mat3, Vec3};
@@ -465,6 +466,13 @@ pub struct AnimatedScene {
     pub minimap_bounds: (glam::Vec2, glam::Vec2),
     pub visibility: VisibilityGrid,
     pub visibility_timer: f32,
+    /// Last frame's CPU split, for the benchmark phase log.
+    pub last_shadow_ms: f32,
+    pub last_mesh_ms: f32,
+    pub last_mesh_units: usize,
+    /// Base palette RGB per model, so face colours are not re-converted from
+    /// HSL on every frame.
+    face_rgb_cache: HashMap<usize, Vec<[u8; 3]>>,
     pub visibility_dirty: bool,
     pub brush: Vec<(f32, f32, f32, f32)>,
     /// Biome pockets the map is built from, used for the HUD label.
@@ -921,6 +929,10 @@ impl AnimatedScene {
             visibility,
             visibility_timer: 0.0,
             visibility_dirty: true,
+            last_shadow_ms: 0.0,
+            last_mesh_ms: 0.0,
+            last_mesh_units: 0,
+            face_rgb_cache: HashMap::new(),
             brush: scene.map.brush.clone(),
             biomes: scene.map.biomes.clone(),
             delivery_pending: Vec::new(),
@@ -3771,15 +3783,29 @@ impl AnimatedScene {
         }
     }
 
+    /// Dynamic units farther than 9000 units from the camera focus are off
+    /// screen at every supported camera pitch. Skipping their animation and
+    /// mesh build is the cheapest large win on the CPU side.
     pub fn prepare_render(
         &mut self,
         height: &HeightGrid,
+        camera_target: Vec3,
         camera_right: Vec3,
         camera_up: Vec3,
         camera_forward: Vec3,
     ) {
-        self.rebuild_shadows(height);
-        self.rebuild_mesh(height, camera_right, camera_up, camera_forward);
+        let shadows = Instant::now();
+        self.rebuild_shadows(height, camera_target);
+        self.last_shadow_ms = shadows.elapsed().as_secs_f32() * 1000.0;
+        let mesh = Instant::now();
+        self.rebuild_mesh(
+            height,
+            camera_target,
+            camera_right,
+            camera_up,
+            camera_forward,
+        );
+        self.last_mesh_ms = mesh.elapsed().as_secs_f32() * 1000.0;
     }
 
     /// True when a world position is inside the team's line of sight.
@@ -4171,11 +4197,15 @@ impl AnimatedScene {
         }
     }
 
-    fn rebuild_shadows(&mut self, height: &HeightGrid) {
+    fn rebuild_shadows(&mut self, height: &HeightGrid, camera_target: Vec3) {
         self.shadow_vertices.clear();
         self.shadow_indices.clear();
         for unit in &self.units {
-            if unit.health <= 0.0 || !unit.visible || unit.spawn_delay > 0.0 {
+            if unit.health <= 0.0
+                || !unit.visible
+                || unit.spawn_delay > 0.0
+                || !in_mesh_range(unit.pos, camera_target)
+            {
                 continue;
             }
             let size = (unit.hit_radius * 1.15).clamp(55.0, 480.0);
@@ -4253,6 +4283,7 @@ impl AnimatedScene {
     fn rebuild_mesh(
         &mut self,
         height: &HeightGrid,
+        camera_target: Vec3,
         camera_right: Vec3,
         camera_up: Vec3,
         camera_forward: Vec3,
@@ -4267,12 +4298,15 @@ impl AnimatedScene {
         self.caster_indices.clear();
 
         let units = std::mem::take(&mut self.units);
+        let mut mesh_units = 0usize;
         for unit in &units {
             let alive = unit.health > 0.0;
             if (alive || unit.death_anim > 0.0)
                 && (unit.visible || unit.death_anim > 0.0)
                 && unit.spawn_delay <= 0.0
+                && in_mesh_range(unit.pos, camera_target)
             {
+                mesh_units += 1;
                 let positions = if !alive {
                     unit.model.animated_positions(&unit.idle, unit.anim_time_ms)
                 } else if let Some(walk) = unit.walk.as_ref() {
@@ -4334,6 +4368,7 @@ impl AnimatedScene {
             }
         }
         self.units = units;
+        self.last_mesh_units = mesh_units;
 
         // Minions and camps keep cheap world-space bars. Champions,
         // structures and dummies use the readable screen-space plates built
@@ -5025,6 +5060,12 @@ fn planar_delta(from: Vec3, to: Vec3) -> Vec3 {
 /// Shortest horizontal distance from a point to a line segment. Used by fast
 /// skillshots so a low frame rate or a high timescale cannot tunnel through a
 /// target between two sampled positions.
+fn in_mesh_range(pos: Vec3, center: Vec3) -> bool {
+    let dx = pos.x - center.x;
+    let dz = pos.z - center.z;
+    dx * dx + dz * dz <= 9000.0 * 9000.0
+}
+
 fn segment_distance_xz(point: Vec3, from: Vec3, to: Vec3) -> f32 {
     let ab = planar_delta(from, to);
     let ap = planar_delta(from, point);
@@ -5193,6 +5234,16 @@ fn append_unit_model(
 ) {
     let rot = Mat3::from_rotation_y(unit.yaw + unit.model_yaw_offset);
     let dominant_texture = model_dominant_texture(model);
+    // Key by the model instance, not the cache id: a recoloured camp/champion
+    // can share the id while carrying a different palette.
+    let model_key = model as *const Model as usize;
+    scene.face_rgb_cache.entry(model_key).or_insert_with(|| {
+        model
+            .face_colors
+            .iter()
+            .map(|&hsl| hsl_to_rgb(hsl, 1.0))
+            .collect()
+    });
     // The step spring is drawing only: bars and selection rings remain on
     // the ground while the body lifts. Corpses shrink and sink briefly.
     let death = if unit.health <= 0.0 && unit.death_anim > 0.0 {
@@ -5239,10 +5290,13 @@ fn append_unit_model(
         } else if model.face_colors[face_idx] == 127 {
             [84, 142, 58]
         } else {
-            // Use the cache palette unchanged. An old darkening clamp here
+            // Use the cached cache-palette RGB. An old darkening clamp here
             // turned bright NPC palettes (the snakeling's white hood, for
             // example) into muddy near-black shapes.
-            hsl_to_rgb(model.face_colors[face_idx], 1.0)
+            scene.face_rgb_cache[&model_key]
+                .get(face_idx)
+                .copied()
+                .unwrap_or([84, 142, 58])
         };
         if unit.kind.is_minion() {
             let tint = if unit.team == 0 {

@@ -41,6 +41,13 @@ pub fn srgb_to_linear(c: f32) -> f32 {
     }
 }
 
+/// Byte-at-a-time sRGB conversion for the per-frame dynamic mesh. A powf per
+/// colour channel per vertex was a measurable part of the mesh build.
+fn srgb_u8_to_linear(value: u8) -> f32 {
+    static LUT: std::sync::OnceLock<[f32; 256]> = std::sync::OnceLock::new();
+    LUT.get_or_init(|| std::array::from_fn(|i| srgb_to_linear(i as f32 / 255.0)))[value as usize]
+}
+
 #[repr(C)]
 #[derive(Debug, Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct SceneVertex {
@@ -59,9 +66,9 @@ impl SceneVertex {
             position: position.to_array(),
             normal: normal.normalize_or_zero().to_array(),
             color: [
-                srgb_to_linear(color[0] as f32 / 255.0),
-                srgb_to_linear(color[1] as f32 / 255.0),
-                srgb_to_linear(color[2] as f32 / 255.0),
+                srgb_u8_to_linear(color[0]),
+                srgb_u8_to_linear(color[1]),
+                srgb_u8_to_linear(color[2]),
                 1.0,
             ],
             uv: [0.0, 0.0],

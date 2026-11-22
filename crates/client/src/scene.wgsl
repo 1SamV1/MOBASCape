@@ -104,12 +104,10 @@ fn shadow_factor(input: VsOut) -> f32 {
     // Wide four-tap PCF. The static tree casters are coarse boxes, and a
     // single bilinear tap gave their canopy shadows a hard, stencilled edge
     // that read as a hole in the ground rather than an out-of-focus shadow.
-    let o = texel * 1.6;
+    let o = texel * 1.8;
     let sum = textureSampleCompare(shadow_map, shadow_sampler, uv + vec2<f32>(-o, -o), depth)
-        + textureSampleCompare(shadow_map, shadow_sampler, uv + vec2<f32>(o, -o), depth)
-        + textureSampleCompare(shadow_map, shadow_sampler, uv + vec2<f32>(-o, o), depth)
         + textureSampleCompare(shadow_map, shadow_sampler, uv + vec2<f32>(o, o), depth);
-    return sum * 0.25;
+    return sum * 0.5;
 }
 
 fn lighting(input: VsOut) -> vec3<f32> {
@@ -122,17 +120,6 @@ fn lighting(input: VsOut) -> vec3<f32> {
         N = -N;
     }
     let L = normalize(scene.sun_dir.xyz);
-
-    // Grass micro-relief: perturb the smooth heightfield normal with a
-    // high-frequency gradient so the field catches the sun in blades and
-    // hollows instead of reading as one flat shaded plane.
-    if (input.material == 4u) {
-        let g = vec2<f32>(
-            noise2(input.world.xz * 0.030),
-            noise2(input.world.zx * 0.030 + 9.0)
-        ) - vec2<f32>(0.5);
-        N = normalize(N + vec3<f32>(g.x, 0.0, g.y) * 0.22);
-    }
 
     var ndotl = max(dot(N, L), 0.0);
     if (scene.tuning.y > 0.0) {
@@ -167,22 +154,13 @@ fn lighting(input: VsOut) -> vec3<f32> {
 fn fog_factor(input: VsOut) -> f32 {
     let dist = length(input.world - scene.camera_pos.xyz);
     let base = 1.0 - exp(-scene.fog_params.x * dist);
-    // Two octaves of very low frequency noise drift across the ground so the
-    // haze forms banks and clearings instead of a uniform lens. The reference
-    // clip is full of these soft mist pockets.
-    let time = scene.tuning.z;
-    let drift = vec2<f32>(time * 0.018, time * 0.009);
-    let bank = noise2(input.world.xz / 2100.0 + drift) * 0.66
-        + noise2(input.world.xz / 680.0 - drift * 1.7) * 0.34;
-    let banks = smoothstep(0.36, 0.74, bank);
+    // Distance and height haze. The old two-octave mist banks cost several
+    // noise fetches on every fragment for a difference only visible in
+    // motion; keep the depth cue and spend the budget on frame rate.
     let height = exp(
         -max(input.world.y - scene.fog_params.z, 0.0) * scene.fog_params.y
     );
-    return clamp(
-        base * (0.70 + banks * 0.62) + height * scene.fog_params.w * (0.45 + banks * 1.55),
-        0.0,
-        0.90
-    );
+    return clamp(base * 1.02 + height * scene.fog_params.w, 0.0, 0.90);
 }
 
 fn hash21(p: vec2<f32>) -> f32 {
@@ -200,12 +178,6 @@ fn noise2(p: vec2<f32>) -> f32 {
         mix(hash21(i + vec2<f32>(0.0, 1.0)), hash21(i + vec2<f32>(1.0, 1.0)), u.x),
         u.y
     );
-}
-
-fn rotate2(p: vec2<f32>, angle: f32) -> vec2<f32> {
-    let c = cos(angle);
-    let s = sin(angle);
-    return vec2<f32>(p.x * c - p.y * s, p.x * s + p.y * c);
 }
 
 fn is_leaf_texture(id: u32) -> bool {
@@ -353,47 +325,21 @@ fn albedo(input: VsOut) -> vec3<f32> {
         return tex.rgb * input.color.rgb;
     }
     if (input.material == 4u) {
-        // Stable world-space planar UVs. Scaling UVs by the fragment normal
-        // warps the sprite into ripples, so the slope is baked per vertex
-        // instead and only used to blend in cliff detail.
+        // Stable world-space planar UVs. The low-frequency variation lives
+        // in the vertex colour and the cache grass sprites; the fragment
+        // shader only samples and classifies, which keeps 1080p playable.
         let slope = clamp(input.uv.x, 0.0, 1.0);
-        // Warp the tiling so the 1.5-tile repeat never lines up into a grid
-        // in the near field.
-        let uv = input.world.xz / 512.0
-            + vec2<f32>(
-                noise2(input.world.xz / 780.0),
-                noise2(input.world.zx / 910.0 + 17.0)
-            ) * 0.05;
-        // Biome variants: 0 classic, 1 lush, 2 dry, 3 steppe, 4 dire, 5 straw.
+        let uv = input.world.xz / 512.0;
         let variant = min(input.texture_id, 5u);
-        // Two grass samples at different scales and rotations, blended by a
-        // slow selector. The 512px mirror-tiled array repeats every four
-        // tiles, so the pattern is far less obvious at the MOBA camera.
         let grass_a =
             textureSampleLevel(grass_textures, terrain_sampler, uv, variant, 0.0).rgb;
-        let alt_uv = rotate2(input.world.xz / 903.0, 2.1)
-            + vec2<f32>(0.17, 0.31)
-            + vec2<f32>(
-                noise2(input.world.xz / 900.0 + 41.0),
-                noise2(input.world.zx / 1010.0 + 23.0)
-            ) * 0.04;
-        // Classic ground borrows the lush layer as a sparse detail pass so
-        // its repeat never lines up into a visible weave.
-        let detail_layer = select(1u, variant, variant > 0u);
-        let grass_b =
-            textureSampleLevel(grass_textures, terrain_sampler, alt_uv, detail_layer, 0.0).rgb;
-        let selector = smoothstep(0.25, 0.75, noise2(input.world.xz / 1270.0));
-        let grass_raw = mix(grass_a, grass_b, 0.20 + selector * 0.16);
-        // Keep the scraped sprite's own green; lift saturation slightly
-        // because the HDR/tonemap chain compresses it.
+        let grass_raw = grass_a;
         let grass_luma = dot(grass_raw, vec3<f32>(0.299, 0.587, 0.114));
         let grass = mix(vec3<f32>(grass_luma), grass_raw, 1.18) * vec3<f32>(0.98, 1.10, 1.02);
         let dirt = textureSample(terrain_textures, terrain_sampler, uv, 1).rgb;
         let stone = textureSample(terrain_textures, terrain_sampler, uv, 2).rgb;
-        let sand = textureSample(terrain_textures, terrain_sampler, uv, 3).rgb;
-        // No water-layer sample: the river water mesh covers these tiles.
-        // A flat deep-water tint is enough underneath and saves one texture
-        // fetch for every terrain fragment on the map.
+        let sand = dirt;
+        // The river mesh covers these tiles, so a flat deep tint is enough.
         let water = vec3<f32>(0.018, 0.060, 0.105);
 
         // Classify in display space: linear values compress saturation and
@@ -403,9 +349,6 @@ fn albedo(input: VsOut) -> vec3<f32> {
         let brown = max(d.r - d.g, 0.0) * 2.0 + max(d.g - d.b, 0.0) * 0.15;
         let blue = max(d.b - d.g, 0.0) * 2.0 + max(d.b - d.r, 0.0);
         let sat = max(max(d.r, d.g), d.b) - min(min(d.r, d.g), d.b);
-        // Green ground must never inherit the cobblestone layer just because
-        // the cache underlay is slightly desaturated. Stone is only allowed
-        // when the colour is genuinely grey/white.
         let green_dominance = smoothstep(0.015, 0.11, green);
         let gray = (1.0 - smoothstep(0.05, 0.25, sat))
             * (1.0 - smoothstep(0.12, 0.30, d.r - d.b))
@@ -419,80 +362,30 @@ fn albedo(input: VsOut) -> vec3<f32> {
             + sand * (sandy / total)
             + water * (blue / total);
 
-        // Lanes are baked into the terrain: the vertex alpha carries the
-        // road mask and the OSRS road sprites are blended into the ground
-        // so there is no ribbon hovering over the terrain.
-        // Steep ground used to blend a projected stone sprite over cliffs.
-        // That projection stacked the sprite into horizontal bands whenever
-        // the hill climbed, so the ground now keeps its natural grass/dirt
-        // texture on slopes and only takes a light contact-darkening term.
         let steep = smoothstep(0.10, 0.38, slope);
         tex *= 1.0 - steep * 0.16;
 
-        // Roads fade out on steep ground instead of stretching up cliffs.
+        // Lanes are baked into the terrain; the road sprites are blended in
+        // world space so there is no ribbon hovering over the ground.
         let water_mask = clamp(input.uv.y, 0.0, 1.0);
         let lane = clamp(input.color.a, 0.0, 1.0)
             * (1.0 - smoothstep(0.08, 0.30, slope))
             * (1.0 - smoothstep(0.02, 0.35, water_mask));
         if (lane > 0.002) {
-            // The road is the cache's brown soil textures rather than the
-            // cobbled path sprite. Two scales and a slow warp keep the dirt
-            // continuous and natural, with no repeating dark border.
             let road_uv = input.world.xz / 240.0;
-            let warp = vec2<f32>(
-                noise2(input.world.xz / 500.0),
-                noise2(input.world.zx / 590.0 + 31.0)
-            ) * 0.035;
             let soil = textureSample(
-                model_textures, model_sampler, road_uv + warp, 32
+                model_textures, model_sampler, road_uv, 32
             ).rgb;
             let dark_soil = textureSample(
-                model_textures, model_sampler, road_uv * 0.63 - warp * 0.7, 11
+                model_textures, model_sampler, road_uv * 0.63, 11
             ).rgb;
             let road = mix(soil, dark_soil, 0.38);
             tex = mix(tex, road * (0.90 + c * 0.35), lane * 0.96);
         }
 
-        // A second, much larger noise scale lays broad dirt patches over the
-        // repeating ground sprites. 117HD's fields are never a single tiled
-        // texture; this breaks up the visible repeat without another mesh.
-        let patch_noise = noise2(input.world.xz / 900.0);
-        let dirt_patch = smoothstep(0.53, 0.80, patch_noise);
-        if (dirt_patch > 0.01) {
-            let patch_dirt = textureSample(
-                terrain_textures, terrain_sampler, input.world.xz / 220.0, 1
-            ).rgb;
-            tex = mix(tex, patch_dirt * (0.70 + c * 0.62), dirt_patch * 0.22);
-        }
-
-        // The sprite carries the palette; the vertex colour only nudges it
-        // so the ground never blows out into a flat highlighter band.
+        // The sprite carries the palette; the vertex colour only nudges it.
         let tint = 0.86 + c * 1.05;
-        let p = input.world.xz / 128.0;
-        let fine = noise2(p * 7.0) * 0.55 + noise2(p * 19.0) * 0.30;
-        let broad = noise2(input.world.xz / 1150.0);
-        c = tex * tint * (0.92 + fine * 0.14) * (0.95 + broad * 0.10);
-
-        // Large-scale field variation. 117HD-style ground is never one flat
-        // green: dry tan meadows and dark mossy hollows break the map into
-        // readable regions even before any props are placed on it.
-        let meadow = smoothstep(0.46, 0.78, noise2(input.world.xz / 3100.0));
-        let dry_patch = mix(grass, dirt, 0.55) * (0.72 + c * 0.55);
-        c = mix(c, dry_patch, meadow * 0.40);
-        // Dark canopy pockets: the reference's fields are broken up by broad
-        // mossy shadows under tree masses, not just uniform grass.
-        let hollow = smoothstep(0.48, 0.78, noise2(input.world.xz / 1450.0 + 71.0));
-        c = mix(c, c * vec3<f32>(0.62, 0.76, 0.52), hollow * 0.40);
-        let thicket = smoothstep(0.60, 0.82, noise2(input.world.xz / 430.0 + 13.0));
-        c = mix(c, c * vec3<f32>(0.68, 0.78, 0.58), thicket * 0.22);
-        // Fine speckle: individual blades, stones and flowers in the sprite
-        // should read at this camera distance instead of blurring to a wash.
-        let speck = noise2(p * 41.0) * 0.65 + noise2(p * 83.0) * 0.35;
-        c *= 0.94 + speck * 0.10;
-        // Keep the sprite's own grain instead of adding a synthetic mown
-        // direction; the scraped OSRS grass already has blade detail.
-        let ground_luma = dot(c, vec3<f32>(0.299, 0.587, 0.114));
-        c = mix(vec3<f32>(ground_luma), c, 0.98);
+        c = tex * tint;
     }
     return c;
 }

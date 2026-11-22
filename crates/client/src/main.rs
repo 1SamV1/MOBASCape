@@ -59,6 +59,13 @@ struct Cli {
     /// Initial camera distance in world units.
     #[arg(long, default_value_t = 3200.0)]
     distance: f32,
+    /// Initial window size in pixels, e.g. 1280x720 or 1920x1080.
+    #[arg(long, default_value = "1280x720")]
+    window_size: String,
+    /// Scene render scale: `auto` targets 1.2M scene pixels, or a factor
+    /// from 0.5 to 1.0. Post and HUD stay at native window resolution.
+    #[arg(long, default_value = "auto")]
+    render_scale: String,
     /// Optional initial camera pitch in radians (dev screenshots).
     #[arg(long)]
     pitch: Option<f32>,
@@ -193,6 +200,15 @@ fn main() -> Result<()> {
         .init();
 
     let cli = Cli::parse();
+    let window_size = parse_window_size(&cli.window_size)
+        .with_context(|| format!("window size {:?} (expected WIDTHxHEIGHT)", cli.window_size))?;
+    let render_scale = resolve_render_scale(&cli.render_scale, window_size).with_context(|| {
+        format!(
+            "render scale {:?} (expected auto or 0.5..1.0)",
+            cli.render_scale
+        )
+    })?;
+    let render_scale_auto = cli.render_scale.eq_ignore_ascii_case("auto");
     let cache = Cache::open_with_keys(&cli.cache, None::<&PathBuf>)
         .with_context(|| format!("opening cache at {}", cli.cache.display()))?;
 
@@ -352,6 +368,9 @@ fn main() -> Result<()> {
         lobby_open: false,
         lobby_deadline: None,
         window: None,
+        window_size,
+        render_scale,
+        render_scale_auto,
         renderer: None,
         held: HashSet::new(),
         focused: false,
@@ -434,6 +453,12 @@ fn main() -> Result<()> {
         chunk_tiles: cli.chunk_tiles,
         benchmark_remaining: cli.benchmark,
         benchmark_samples: Vec::new(),
+        benchmark_sim_ms: 0.0,
+        benchmark_mesh_ms: 0.0,
+        benchmark_hud_ms: 0.0,
+        benchmark_ui_ms: 0.0,
+        benchmark_submit_ms: 0.0,
+        benchmark_phase_frames: 0,
         benchmark_done: false,
         screenshot_request: cli
             .screenshot
@@ -462,6 +487,9 @@ struct App {
     /// real time even when the frame rate drops.
     lobby_deadline: Option<Instant>,
     window: Option<Arc<Window>>,
+    window_size: (u32, u32),
+    render_scale: f32,
+    render_scale_auto: bool,
     renderer: Option<Renderer>,
     held: HashSet<KeyCode>,
     focused: bool,
@@ -550,6 +578,12 @@ struct App {
     chunk_tiles: u32,
     benchmark_remaining: Option<f32>,
     benchmark_samples: Vec<f32>,
+    benchmark_sim_ms: f32,
+    benchmark_mesh_ms: f32,
+    benchmark_hud_ms: f32,
+    benchmark_ui_ms: f32,
+    benchmark_submit_ms: f32,
+    benchmark_phase_frames: u32,
     benchmark_done: bool,
     screenshot_request: Option<(std::path::PathBuf, u32)>,
     app_time: f32,
@@ -567,7 +601,10 @@ impl ApplicationHandler for App {
 
         let attributes = Window::default_attributes()
             .with_title("Rift - Karamja")
-            .with_inner_size(winit::dpi::LogicalSize::new(1280, 720));
+            .with_inner_size(winit::dpi::LogicalSize::new(
+                self.window_size.0,
+                self.window_size.1,
+            ));
         let window = match event_loop.create_window(attributes) {
             Ok(window) => Arc::new(window),
             Err(err) => {
@@ -595,6 +632,8 @@ impl ApplicationHandler for App {
             parse_present_mode(&self.present_mode),
             self.msaa,
             self.chunk_tiles,
+            self.render_scale,
+            self.render_scale_auto,
             model_textures,
             self.hud.atlas.clone(),
         )) {
@@ -606,6 +645,14 @@ impl ApplicationHandler for App {
             }
         };
 
+        tracing::info!(
+            "renderer: window {}x{}, scene {}x{} ({:.2}x)",
+            renderer.size.0,
+            renderer.size.1,
+            renderer.render_size.0,
+            renderer.render_size.1,
+            renderer.render_scale
+        );
         self.scene = Some(scene);
         renderer.camera.distance = if self.demo_anim {
             780.0
@@ -896,11 +943,19 @@ impl ApplicationHandler for App {
             }
             WindowEvent::RedrawRequested => {
                 self.tick();
+                let render_start = Instant::now();
+                let mut render_error = None;
                 if let Some(renderer) = self.renderer.as_mut() {
                     if let Err(err) = renderer.render() {
-                        tracing::error!("render error: {err:#}");
-                        event_loop.exit();
+                        render_error = Some(err);
                     }
+                }
+                if self.benchmark_remaining.is_some() && self.app_time > 1.0 {
+                    self.benchmark_submit_ms += render_start.elapsed().as_secs_f32() * 1000.0;
+                }
+                if let Some(err) = render_error {
+                    tracing::error!("render error: {err:#}");
+                    event_loop.exit();
                 }
                 if let Some(window) = self.window.as_ref() {
                     window.request_redraw();
@@ -927,6 +982,11 @@ impl App {
         let dt = (now - self.last_frame).as_secs_f32().min(0.1);
         self.last_frame = now;
         self.app_time += dt;
+        let profiling = self.benchmark_remaining.is_some() && self.app_time > 1.0;
+        let mut phase_sim = 0.0f32;
+        let mut phase_mesh = 0.0f32;
+        let mut phase_hud = 0.0f32;
+        let mut phase_ui = 0.0f32;
 
         if let Some(remaining) = self.benchmark_remaining.as_mut() {
             *remaining -= dt;
@@ -957,6 +1017,23 @@ impl App {
                     percentile(0.95),
                     percentile(0.99),
                     1000.0 / avg.max(0.001)
+                );
+                let frames = self.benchmark_phase_frames.max(1) as f32;
+                let (shadow_ms, mesh_build_ms, mesh_units) = self
+                    .animated
+                    .as_ref()
+                    .map(|a| (a.last_shadow_ms, a.last_mesh_ms, a.last_mesh_units))
+                    .unwrap_or((0.0, 0.0, 0));
+                tracing::info!(
+                    "benchmark phases: sim={:.2}ms mesh={:.2}ms hud={:.2}ms ui={:.2}ms submit={:.2}ms shadow={:.2}ms build={:.2}ms units={}",
+                    self.benchmark_sim_ms / frames,
+                    self.benchmark_mesh_ms / frames,
+                    self.benchmark_hud_ms / frames,
+                    self.benchmark_ui_ms / frames,
+                    self.benchmark_submit_ms / frames,
+                    shadow_ms,
+                    mesh_build_ms,
+                    mesh_units
                 );
                 self.benchmark_remaining = None;
                 self.benchmark_done = true;
@@ -1462,6 +1539,7 @@ impl App {
                 }
             }
             let steps = self.timescale.round().clamp(1.0, 20.0) as u32;
+            let sim_start = Instant::now();
             for _ in 0..steps {
                 animated.update(dt, height, collision);
                 if self.demo_fx {
@@ -1469,6 +1547,7 @@ impl App {
                     animated.demo_fx();
                 }
             }
+            phase_sim = sim_start.elapsed().as_secs_f32() * 1000.0;
             let current_health = animated.player_stats().health;
             if self.last_health > current_health + 0.5 {
                 self.damage_flash = (self.damage_flash + 0.55).min(0.9);
@@ -1476,7 +1555,14 @@ impl App {
             self.last_health = current_health;
             self.damage_flash = (self.damage_flash - dt * 2.4).max(0.0);
             animated.refresh_visibility(dt, collision);
-            animated.prepare_render(height, camera_right, camera_up, camera_forward);
+            let mesh_start = Instant::now();
+            animated.prepare_render(
+                height,
+                renderer.camera.target,
+                camera_right,
+                camera_up,
+                camera_forward,
+            );
             renderer.set_dynamic_mesh(&animated.vertices, &animated.indices);
             renderer.set_shadow_mesh(&animated.shadow_vertices, &animated.shadow_indices);
             renderer.set_caster_mesh(&animated.caster_vertices, &animated.caster_indices);
@@ -1486,6 +1572,7 @@ impl App {
             // no geometry to fight with the terrain's z levels.
             renderer.set_vision(animated.player_pos(), 2600.0);
             animated.visibility_dirty = false;
+            phase_mesh = mesh_start.elapsed().as_secs_f32() * 1000.0;
 
             let nexus0 = animated.nexus_health(0).unwrap_or((0.0, 1.0));
             let nexus1 = animated.nexus_health(1).unwrap_or((0.0, 1.0));
@@ -1800,6 +1887,7 @@ impl App {
                     .map(|(_, item)| item.id.clone())
                     .collect(),
             };
+            let hud_start = Instant::now();
             self.hud.build(
                 renderer.size.0 as f32,
                 renderer.size.1 as f32,
@@ -1825,12 +1913,14 @@ impl App {
                 &heroes,
             );
             renderer.set_hud_mesh(&self.hud.vertices, &self.hud.indices);
+            phase_hud = hud_start.elapsed().as_secs_f32() * 1000.0;
             let ui_camera = (
                 renderer.camera.target.x,
                 renderer.camera.target.z,
                 renderer.camera.distance,
                 renderer.camera.pitch,
             );
+            let ui_start = Instant::now();
             let placed = draw_ui_overlay(
                 renderer,
                 self.ui_theme.as_ref(),
@@ -1850,6 +1940,7 @@ impl App {
             if self.ui_live {
                 self.ui_placed = placed;
             }
+            phase_ui = ui_start.elapsed().as_secs_f32() * 1000.0;
             if let Some(index) = self.spectator {
                 if let Some(unit) = animated.units.get(index) {
                     renderer.camera.target = unit.pos + Vec3::Y * 140.0;
@@ -1950,6 +2041,13 @@ impl App {
             }
         }
 
+        if profiling {
+            self.benchmark_sim_ms += phase_sim;
+            self.benchmark_mesh_ms += phase_mesh;
+            self.benchmark_hud_ms += phase_hud;
+            self.benchmark_ui_ms += phase_ui;
+            self.benchmark_phase_frames += 1;
+        }
         self.update_camera(dt);
     }
 
@@ -1975,7 +2073,7 @@ impl App {
             let right = forward.cross(Vec3::Y).normalize_or_zero();
             let up = right.cross(forward).normalize_or_zero();
             animated.refresh_visibility(dt.min(0.05), collision);
-            animated.prepare_render(height, right, up, forward);
+            animated.prepare_render(height, renderer.camera.target, right, up, forward);
             renderer.set_dynamic_mesh(&animated.vertices, &animated.indices);
             renderer.set_shadow_mesh(&animated.shadow_vertices, &animated.shadow_indices);
             renderer.set_caster_mesh(&animated.caster_vertices, &animated.caster_indices);
@@ -2030,7 +2128,7 @@ impl App {
             let right = forward.cross(Vec3::Y).normalize_or_zero();
             let up = right.cross(forward).normalize_or_zero();
             animated.refresh_visibility(dt.min(0.05), collision);
-            animated.prepare_render(height, right, up, forward);
+            animated.prepare_render(height, renderer.camera.target, right, up, forward);
             renderer.set_dynamic_mesh(&animated.vertices, &animated.indices);
             renderer.set_shadow_mesh(&animated.shadow_vertices, &animated.shadow_indices);
             renderer.set_caster_mesh(&animated.caster_vertices, &animated.caster_indices);
@@ -2666,6 +2764,24 @@ fn log_event(events: &mut Vec<String>, message: String) {
     events.truncate(5);
 }
 
+fn parse_window_size(text: &str) -> Option<(u32, u32)> {
+    let lower = text.to_ascii_lowercase();
+    let (width, height) = lower.split_once('x')?;
+    let width = width.parse().ok()?;
+    let height = height.parse().ok()?;
+    (width > 0 && height > 0).then_some((width, height))
+}
+
+fn resolve_render_scale(text: &str, window: (u32, u32)) -> Option<f32> {
+    if text.eq_ignore_ascii_case("auto") {
+        let pixels = (window.0 as f32 * window.1 as f32).max(1.0);
+        Some((1_200_000.0 / pixels).sqrt().clamp(0.62, 1.0))
+    } else {
+        let scale: f32 = text.parse().ok()?;
+        (0.5..=1.0).contains(&scale).then_some(scale)
+    }
+}
+
 fn parse_present_mode(name: &str) -> wgpu::PresentMode {
     match name.to_ascii_lowercase().as_str() {
         "immediate" => wgpu::PresentMode::Immediate,
@@ -2719,4 +2835,26 @@ fn print_camera(renderer: &Renderer) {
         renderer.camera.pitch,
         renderer.camera.distance
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn window_sizes_parse_only_positive_width_and_height() {
+        assert_eq!(parse_window_size("1280x720"), Some((1280, 720)));
+        assert_eq!(parse_window_size("1920X1080"), Some((1920, 1080)));
+        assert_eq!(parse_window_size("0x720"), None);
+        assert_eq!(parse_window_size("1280x0"), None);
+        assert_eq!(parse_window_size("1280"), None);
+        assert_eq!(parse_window_size("wide x high"), None);
+
+        assert_eq!(resolve_render_scale("auto", (1280, 720)), Some(1.0));
+        let scale = resolve_render_scale("auto", (1920, 1080)).unwrap();
+        assert!((scale - 0.762).abs() < 0.01, "{scale}");
+        assert_eq!(resolve_render_scale("0.85", (1920, 1080)), Some(0.85));
+        assert_eq!(resolve_render_scale("0.4", (1920, 1080)), None);
+        assert_eq!(resolve_render_scale("1.2", (1920, 1080)), None);
+    }
 }
