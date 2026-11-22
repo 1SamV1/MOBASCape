@@ -1,7 +1,8 @@
 # Engine road map
 
 Last updated: 2026-11-21, after the 1080p 60 fps pass (albedo simplification,
-dynamic-unit culling, colour LUTs and automatic scene resolution).
+dynamic-unit culling, coarse distance culling, colour LUTs and automatic scene
+resolution).
 
 This is the working performance/architecture backlog. It records what the
 engine does today, what was measured, and the next changes that should give
@@ -147,8 +148,9 @@ the auto scale.
    panels and glyph runs could be cached; dynamic numbers still update.
 5. **Repeated model draws**: the static mesh is merged, not instanced. Future
    scenery at larger draw distances will benefit from instancing and batching.
-6. **No streaming/LOD**: the whole 5×5 block is resident. Chunk culling hides
-   off-screen chunks, but there is no distance LOD or async load/unload.
+6. **No streaming/LOD**: the whole 5×5 block is resident. Frustum and coarse
+   distance culling hide off-screen chunks, but there is no distance LOD or
+   async load/unload.
 7. **Startup cost**: decoding models, building chunk meshes and baking portraits
    is synchronous. Move to background jobs when the lobby and map streaming
    arrive.
@@ -203,7 +205,10 @@ indistinguishable in A/B captures.
   terrain and model draw counts dropped by roughly half without a visual
   regression at the default camera.
 
-- Add distance LODs for trees, ruins and ground decor (low-poly proxy meshes).
+- ✅ Coarse distance culling: models/water 16k, blob shadows 14k and static
+  shadow casters 9k by default (`--draw-distance`). Terrain draws to the
+  horizon.
+- [ ] Add distance LODs for trees, ruins and ground decor (low-poly proxy meshes).
 - Stream chunks around the camera instead of keeping the 5×5 block resident.
 - Add terrain skirts at block/chunk boundaries to hide seams.
 - Instance repeated scenery models and batch static draws.

@@ -159,6 +159,9 @@ cargo run --release -p rift-client -- --window-size 1920x1080 --present-mode imm
 cargo run --release -p rift-client -- --present-mode immediate --msaa 1
 cargo run --release -p rift-client -- --window-size 1920x1080 --render-scale 1.0 --present-mode immediate --benchmark 8
 
+# Static models/water distance-cull at 16k by default; tune it
+cargo run --release -p rift-client -- --draw-distance 12000 --benchmark 8
+
 # Inspect lighting, normals, albedo, fog, shadows, or AO
 cargo run -p rift-client -- --graphics 117hd --debug-view lighting
 cargo run -p rift-client -- --graphics 117hd --debug-view normal

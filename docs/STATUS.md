@@ -14,6 +14,9 @@ Last updated: 1080p 60 fps engine pass, 2026-11-21.
   an sRGB lookup table instead of paying HSL and `powf` per vertex.
 - MSAA 4 already resolves edges, so the post pass now skips its full-screen
   FXAA taps on that path; `--msaa 1` still uses FXAA.
+- Static model and water chunks now distance-cull at 16,000 units, scenery
+  blob shadows at 14,000 and static shadow casters at 9,000. Terrain still
+  draws to the horizon. `--draw-distance` overrides the model/water value.
 - Added `--window-size WIDTHxHEIGHT`, `--render-scale auto|0.5..1.0`, and a
   five-phase benchmark split (`sim`, `mesh`, `hud`, `ui`, `submit`). `auto`
   targets 1.4M scene pixels and leaves post and HUD at native resolution.
@@ -26,8 +29,9 @@ Last updated: 1080p 60 fps engine pass, 2026-11-21.
 - Native 1920×1008 with `--render-scale 1.0 --msaa 1` remains around
   p50 17.2 ms (58 fps); the auto scale is what buys the 60 fps margin on
   this iGPU.
-- Verified: `cargo test --workspace` 254 tests pass, 4 ignored; workspace
-  clippy is clean. Capture: `/tmp/opencode/perf1080_final.png`.
+- Verified: `cargo test --workspace` 255 tests pass, 4 ignored; workspace
+  clippy is clean. Captures: `/tmp/opencode/perf1080_final.png` and
+  `/tmp/opencode/draw16k.png`.
 
 ## 2026-11-21 — Cache-native item icons and expanded item pool
 

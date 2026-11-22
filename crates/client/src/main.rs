@@ -66,6 +66,9 @@ struct Cli {
     /// from 0.5 to 1.0. Post and HUD stay at native window resolution.
     #[arg(long, default_value = "auto")]
     render_scale: String,
+    /// Static model and water draw distance in world units.
+    #[arg(long, default_value_t = 16_000.0)]
+    draw_distance: f32,
     /// Optional initial camera pitch in radians (dev screenshots).
     #[arg(long)]
     pitch: Option<f32>,
@@ -371,6 +374,7 @@ fn main() -> Result<()> {
         window_size,
         render_scale,
         render_scale_auto,
+        draw_distance: cli.draw_distance,
         renderer: None,
         held: HashSet::new(),
         focused: false,
@@ -490,6 +494,7 @@ struct App {
     window_size: (u32, u32),
     render_scale: f32,
     render_scale_auto: bool,
+    draw_distance: f32,
     renderer: Option<Renderer>,
     held: HashSet<KeyCode>,
     focused: bool,
@@ -634,6 +639,7 @@ impl ApplicationHandler for App {
             self.chunk_tiles,
             self.render_scale,
             self.render_scale_auto,
+            self.draw_distance,
             model_textures,
             self.hud.atlas.clone(),
         )) {

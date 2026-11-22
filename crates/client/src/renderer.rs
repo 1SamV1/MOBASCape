@@ -260,6 +260,29 @@ impl ChunkedMesh {
             }
         }
     }
+
+    fn draw_within(
+        &self,
+        pass: &mut wgpu::RenderPass<'_>,
+        frustum: &Frustum,
+        eye: Vec3,
+        max_distance: f32,
+    ) {
+        for chunk in &self.chunks {
+            if chunk.always
+                || (frustum.intersects_aabb(chunk.min, chunk.max)
+                    && chunk_within(chunk.min, chunk.max, eye, max_distance))
+            {
+                chunk.mesh.draw(pass);
+            }
+        }
+    }
+}
+
+fn chunk_within(min: Vec3, max: Vec3, eye: Vec3, max_distance: f32) -> bool {
+    let center = (min + max) * 0.5;
+    let radius = (max - min).length() * 0.5;
+    center.distance(eye) - radius <= max_distance
 }
 
 fn mesh_bounds(mesh: &MeshData) -> (Vec3, Vec3) {
@@ -404,6 +427,7 @@ pub struct Renderer {
     pub render_scale: f32,
     pub render_scale_auto: bool,
     pub render_size: (u32, u32),
+    pub draw_distance: f32,
 }
 
 impl Renderer {
@@ -417,6 +441,7 @@ impl Renderer {
         chunk_tiles: u32,
         render_scale: f32,
         render_scale_auto: bool,
+        draw_distance: f32,
         model_textures: ModelTextures,
         ui_atlas: Arc<UiAtlas>,
     ) -> Result<Self> {
@@ -1530,6 +1555,7 @@ impl Renderer {
             render_scale,
             render_scale_auto,
             render_size,
+            draw_distance: draw_distance.max(4_000.0),
         };
         renderer.update_camera();
 
@@ -1949,7 +1975,12 @@ impl Renderer {
             let shadow_frustum = Frustum::from_view_proj(Mat4::from_cols_array_2d(
                 &self.scene_globals.light_view_proj,
             ));
-            self.static_casters.draw(&mut shadow_pass, &shadow_frustum);
+            self.static_casters.draw_within(
+                &mut shadow_pass,
+                &shadow_frustum,
+                self.camera.eye(),
+                9_000.0,
+            );
             if self.caster_index_count > 0 {
                 shadow_pass.set_vertex_buffer(0, self.caster_vertex_buffer.slice(..));
                 shadow_pass.set_index_buffer(
@@ -2013,11 +2044,14 @@ impl Renderer {
             pass.set_bind_group(0, &self.bind_group, &[]);
             let scene_frustum =
                 Frustum::from_view_proj(Mat4::from_cols_array_2d(&self.scene_globals.view_proj));
+            let eye = self.camera.eye();
             self.terrain.draw(&mut pass, &scene_frustum);
-            self.models.draw(&mut pass, &scene_frustum);
+            self.models
+                .draw_within(&mut pass, &scene_frustum, eye, self.draw_distance);
             pass.set_pipeline(&self.water_pipeline);
             pass.set_bind_group(0, &self.bind_group, &[]);
-            self.water.draw(&mut pass, &scene_frustum);
+            self.water
+                .draw_within(&mut pass, &scene_frustum, eye, self.draw_distance);
             pass.set_pipeline(&self.scene_pipeline);
             pass.set_bind_group(0, &self.bind_group, &[]);
             if self.dynamic_index_count > 0 {
@@ -2032,7 +2066,12 @@ impl Renderer {
                 pass.set_pipeline(&self.blob_pipeline);
                 pass.set_bind_group(0, &self.bind_group, &[]);
             }
-            self.static_shadows.draw(&mut pass, &scene_frustum);
+            self.static_shadows.draw_within(
+                &mut pass,
+                &scene_frustum,
+                eye,
+                (self.draw_distance * 0.45).min(14_000.0),
+            );
             if self.shadow_index_count > 0 {
                 pass.set_vertex_buffer(0, self.shadow_vertex_buffer.slice(..));
                 pass.set_index_buffer(
@@ -2495,6 +2534,15 @@ mod tests {
         assert!(ndc.x.abs() < 1e-4);
         assert!(ndc.y.abs() < 1e-4);
         assert!((0.0..=1.0).contains(&ndc.z));
+    }
+
+    #[test]
+    fn chunk_distance_uses_the_near_boundary() {
+        let min = Vec3::new(1000.0, 0.0, 0.0);
+        let max = Vec3::new(1001.0, 1.0, 1.0);
+        assert!(chunk_within(min, max, Vec3::ZERO, 1000.0));
+        assert!(!chunk_within(min, max, Vec3::ZERO, 998.0));
+        assert!(chunk_within(min, max, Vec3::new(1000.0, 0.0, 0.0), 1.0));
     }
 
     #[test]
