@@ -128,6 +128,9 @@ What moved the number:
   post pass skips its FXAA taps on that path. `--msaa 1` keeps FXAA.
 - **Profiling**: `--benchmark` now prints `sim`, `mesh`, `hud`, `ui` and
   `submit` phase averages, plus the mesh shadow/build split and unit count.
+- **UI cost**: solid theme panels were being tiled as 1×1 images. They now
+  draw as one rectangle, so the live 1080p HUD dropped from 162,830 quads to
+  2,327 and from 46.7 ms to ~0.9 ms of build time.
 
 The remaining frame is dominated by `submit` (scene + shadow + post) at
 ~8.3 ms, then mesh ~4.1 ms and HUD ~0.7 ms on this run. Native-resolution
@@ -144,8 +147,9 @@ the auto scale.
    fragment work, not the old noise stack.
 3. **No GPU timing yet**: CPU phases now show where the frame goes, but GPU
    timestamps and pass-level costs still need a wgpu timestamp query path.
-4. **HUD geometry**: the HUD is rebuilt and uploaded every frame. Static
-   panels and glyph runs could be cached; dynamic numbers still update.
+4. **HUD geometry**: the old HUD is rebuilt and uploaded every frame. The
+   live HUD now draws flat panels as one rectangle instead of tiling a 1×1
+   image, cutting its 1080p build from 46.7 ms to ~0.9 ms.
 5. **Repeated model draws**: the static mesh is merged, not instanced. Future
    scenery at larger draw distances will benefit from instancing and batching.
 6. **No streaming/LOD**: the whole 5×5 block is resident. Frustum and coarse

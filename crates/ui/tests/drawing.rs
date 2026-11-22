@@ -47,6 +47,17 @@ fn one_image(image: &Image) -> (rift_ui::Atlas, Region) {
 }
 
 #[test]
+fn a_solid_panel_is_one_quad_not_a_tiled_pixel() {
+    let mut builder = ThemeBuilder::new();
+    builder.solid_panel("panel.solid", [0.1, 0.2, 0.3, 0.5]);
+    let theme = builder.build();
+    let panel = theme.panel("panel.solid").expect("solid panel");
+    let mut list = DrawList::new((1024, 768), 1, &theme.atlas);
+    list.panel(panel, Rect::new(0, 0, 1024, 768));
+    assert_eq!(list.len(), 1, "a flat panel is one rectangle");
+}
+
+#[test]
 fn a_sprite_at_each_scale_is_its_own_pixels_made_into_squares() {
     let image = numbered(7, 5);
     let (atlas, region) = one_image(&image);

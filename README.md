@@ -47,7 +47,9 @@ designed for fast-paced low-team-count matches.
 > remains the running default and its legacy grid still shows six entries per
 > category while the last interaction gaps and final parity are finished.
 > Release on the 680M measures p50 9.3 ms at 1280×720 and p50 13.2 ms at
-> 1920×1008 with `--render-scale auto` and the HUD at native resolution. See
+> 1920×1008 with `--render-scale auto` and the HUD at native resolution.
+> `--ui-live` measures p50 12.7 ms / 78 fps at 1920×1008 after the flat-panel
+> fast path. See
 > [docs/STATUS.md](docs/STATUS.md),
 > [docs/UI_ASSETS.md](docs/UI_ASSETS.md) and
 > [docs/INTERFACE_STAGE3_REVIEW.md](docs/INTERFACE_STAGE3_REVIEW.md).

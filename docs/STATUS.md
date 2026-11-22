@@ -1,6 +1,22 @@
 # Status
 
-Last updated: 1080p 60 fps engine pass, 2026-11-21.
+Last updated: live HUD panel fast path, 2026-11-21.
+
+## 2026-11-21 — UI: flat panels are one rectangle
+
+- Solid theme panels used a 1×1 image and repeated it once per interface
+  pixel. At 1080p the live HUD built **162,830 quads / 651,320 vertices** and
+  spent ~46.7 ms building plus 23–27 ms uploading them every frame.
+- `Panel` now carries an optional solid colour, `ThemeBuilder::solid_panel`
+  stores flat roles directly, and `DrawList::panel` draws them as one
+  rectangle. The same live HUD frame is **2,327 quads / 9,308 vertices**, with
+  the UI build at ~0.9 ms and the upload under 1 ms.
+- `--ui-live` at 1920×1008, auto scene scale, MSAA 4 and sun shadows is
+  **p50 12.71 ms / 78.1 fps** (`ui=0.88 ms`, `submit=8.05 ms`). This was
+  ~19 fps before the fast path.
+- Added a regression test that a solid 1024×768 panel is one quad.
+- Verified: `cargo test --workspace` 256 tests pass, 4 ignored; workspace
+  clippy is clean. Capture: `/tmp/opencode/ui_live_fast.png`.
 
 ## 2026-11-21 — Engine: 1080p 60 fps pass
 

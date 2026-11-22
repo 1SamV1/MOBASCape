@@ -10,13 +10,15 @@ use crate::font::{Font, Glyph};
 
 /// An image that grows by repetition: so much of each side is kept as it
 /// is, and what is between is repeated.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Panel {
     pub region: Region,
     pub left: u32,
     pub top: u32,
     pub right: u32,
     pub bottom: u32,
+    /// A flat panel is one solid rectangle, not a repeated 1x1 image.
+    pub solid: Option<Colour>,
 }
 
 /// One character of a font being added to a theme.
@@ -100,6 +102,7 @@ pub struct ThemeBuilder {
     missing: usize,
     sprites: Vec<(String, usize)>,
     panels: Vec<(String, usize, [u32; 4])>,
+    solids: BTreeMap<String, Colour>,
     #[allow(clippy::type_complexity)]
     fonts: Vec<(String, Vec<(char, Option<usize>, i32, i32, i32)>, i32, i32)>,
     colours: BTreeMap<String, Colour>,
@@ -129,6 +132,7 @@ impl ThemeBuilder {
             missing,
             sprites: Vec::new(),
             panels: Vec::new(),
+            solids: BTreeMap::new(),
             fonts: Vec::new(),
             colours: BTreeMap::new(),
         }
@@ -152,6 +156,12 @@ impl ThemeBuilder {
         let id = self.atlas.add(image);
         self.panels.push((role.to_string(), id, insets));
         Ok(())
+    }
+
+    /// A flat panel drawn as one rectangle. Avoids building a 1x1 image and
+    /// repeating it once per screen pixel.
+    pub fn solid_panel(&mut self, role: &str, colour: Colour) {
+        self.solids.insert(role.to_string(), colour);
     }
 
     /// A font. `ascent` is from the top of a line to its baseline and
@@ -183,6 +193,7 @@ impl ThemeBuilder {
 
     pub fn build(self) -> Theme {
         let (atlas, regions) = self.atlas.build();
+        let missing = self.missing;
         let fonts = self
             .fonts
             .into_iter()
@@ -218,13 +229,27 @@ impl ThemeBuilder {
                         top,
                         right,
                         bottom,
+                        solid: None,
                     };
                     (role, panel)
                 })
+                .chain(self.solids.into_iter().map(|(role, colour)| {
+                    (
+                        role,
+                        Panel {
+                            region: regions[missing],
+                            left: 0,
+                            top: 0,
+                            right: 0,
+                            bottom: 0,
+                            solid: Some(colour),
+                        },
+                    )
+                }))
                 .collect(),
             fonts,
             colours: self.colours,
-            missing: regions[self.missing],
+            missing: regions[missing],
             atlas,
         }
     }

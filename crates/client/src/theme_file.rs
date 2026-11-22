@@ -82,24 +82,23 @@ pub fn load_with_items(cache: &Cache, path: &Path, items: &[(String, u32)]) -> R
         builder.sprite(role, image);
     }
     for (role, panel) in &file.panels {
-        let (image, insets) = match panel {
+        match panel {
             PanelRef::Sprite {
                 sprite,
                 frame,
                 insets,
-            } => (
-                frame_image(cache, *sprite, *frame)
-                    .with_context(|| format!("panel role {role}"))?,
-                *insets,
-            ),
-            PanelRef::Solid { solid } => (
-                solid_image(solid).with_context(|| format!("panel role {role}"))?,
-                [0, 0, 0, 0],
-            ),
-        };
-        builder
-            .panel(role, image, insets)
-            .map_err(|why| anyhow!(why))?;
+            } => {
+                let image = frame_image(cache, *sprite, *frame)
+                    .with_context(|| format!("panel role {role}"))?;
+                builder
+                    .panel(role, image, *insets)
+                    .map_err(|why| anyhow!(why))?;
+            }
+            PanelRef::Solid { solid } => {
+                let colour = parse_colour(solid).with_context(|| format!("panel role {role}"))?;
+                builder.solid_panel(role, colour);
+            }
+        }
     }
     for (role, font) in &file.fonts {
         add_font(cache, &mut builder, role, font.font)
@@ -188,23 +187,6 @@ fn add_font(cache: &Cache, builder: &mut ThemeBuilder, role: &str, id: u32) -> R
     Ok(())
 }
 
-/// A one-pixel image of one colour. A panel of it repeats that one pixel,
-/// which is how a flat, see-through panel is made.
-fn solid_image(text: &str) -> Result<Image> {
-    let colour = parse_colour(text)?;
-    let byte = |value: f32| (value.clamp(0.0, 1.0) * 255.0).round() as u8;
-    Ok(Image::filled(
-        1,
-        1,
-        [
-            byte(colour[0]),
-            byte(colour[1]),
-            byte(colour[2]),
-            byte(colour[3]),
-        ],
-    ))
-}
-
 fn parse_colour(text: &str) -> Result<rift_ui::Colour> {
     let hex = text
         .strip_prefix('#')
@@ -230,13 +212,21 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_flat_panel_is_one_pixel_of_its_colour() {
-        let image = solid_image("#10203080").unwrap();
-        assert_eq!((image.width, image.height), (1, 1));
-        assert_eq!(image.pixels[0], [16, 32, 48, 128]);
-        assert!(solid_image("#12345").is_err());
-        assert!(solid_image("102030").is_err());
-        assert!(solid_image("#zzzzzz").is_err());
+    fn flat_panel_colours_parse() {
+        let colour = parse_colour("#10203080").unwrap();
+        let byte = |value: f32| (value * 255.0).round() as u8;
+        assert_eq!(
+            [
+                byte(colour[0]),
+                byte(colour[1]),
+                byte(colour[2]),
+                byte(colour[3])
+            ],
+            [16, 32, 48, 128]
+        );
+        assert!(parse_colour("#12345").is_err());
+        assert!(parse_colour("102030").is_err());
+        assert!(parse_colour("#zzzzzz").is_err());
     }
 
     /// The real theme, when the pinned cache has been unpacked; `None` in a

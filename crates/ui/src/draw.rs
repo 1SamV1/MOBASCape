@@ -237,6 +237,10 @@ impl DrawList {
         if area.is_empty() {
             return;
         }
+        if let Some(colour) = panel.solid {
+            self.rect(area, colour);
+            return;
+        }
         let s = self.scale;
         let r = panel.region;
         let (l, t) = (panel.left, panel.top);
