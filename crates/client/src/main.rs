@@ -1895,30 +1895,33 @@ impl App {
                     .collect(),
             };
             let hud_start = Instant::now();
-            self.hud.build(
-                renderer.size.0 as f32,
-                renderer.size.1 as f32,
-                &player_hud,
-                &self.shop,
-                nexus0,
-                nexus1,
-                animated.wave_timer,
-                animated.wave_interval,
-                animated.match_over,
-                self.mouse_pos,
-            );
+            // The assembled interface owns the screen under --ui-live. Do
+            // not build the legacy HUD, which would duplicate the same
+            // panels and bars underneath it.
             if !self.ui_live {
+                self.hud.build(
+                    renderer.size.0 as f32,
+                    renderer.size.1 as f32,
+                    &player_hud,
+                    &self.shop,
+                    nexus0,
+                    nexus1,
+                    animated.wave_timer,
+                    animated.wave_interval,
+                    animated.match_over,
+                    self.mouse_pos,
+                );
                 self.hud.build_shop(hud_w, hud_h, &player_hud, &self.shop);
+                self.hud.build_minimap(
+                    renderer.size.0 as f32,
+                    renderer.size.1 as f32,
+                    animated,
+                    (renderer.camera.target.x, renderer.camera.target.z),
+                    renderer.camera.distance,
+                    renderer.camera.pitch,
+                    &heroes,
+                );
             }
-            self.hud.build_minimap(
-                renderer.size.0 as f32,
-                renderer.size.1 as f32,
-                animated,
-                (renderer.camera.target.x, renderer.camera.target.z),
-                renderer.camera.distance,
-                renderer.camera.pitch,
-                &heroes,
-            );
             renderer.set_hud_mesh(&self.hud.vertices, &self.hud.indices);
             phase_hud = hud_start.elapsed().as_secs_f32() * 1000.0;
             let ui_camera = (

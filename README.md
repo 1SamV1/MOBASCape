@@ -43,8 +43,10 @@ designed for fast-paced low-team-count matches.
 > six-slot inventory, the live gold count from the match and cache-baked OSRS
 > item icons. Every `HudState` slice now reads live data. The live shop
 > overlay switches categories, scrolls the expanded item list, selects and
-> buys items, and the assembled inventory's Shop button opens it. The old HUD
-> remains the running default and its legacy grid still shows six entries per
+> buys items, and the assembled inventory's Shop button opens it. Under
+> `--ui-live` the assembled interface owns the screen and the legacy HUD is
+> not built. The old HUD remains the running default and its legacy grid still
+> shows six entries per
 > category while the last interaction gaps and final parity are finished.
 > Release on the 680M measures p50 9.3 ms at 1280×720 and p50 13.2 ms at
 > 1920×1008 with `--render-scale auto` and the HUD at native resolution.

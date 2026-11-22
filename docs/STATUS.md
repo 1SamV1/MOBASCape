@@ -1,6 +1,20 @@
 # Status
 
-Last updated: live objectives camp filter, 2026-11-21.
+Last updated: live interface owns the screen, 2026-11-21.
+
+## 2026-11-21 — Live interface suppresses the legacy HUD
+
+- Under `--ui-live` the client no longer builds the old `hud.rs` HUD, its
+  shop or its minimap. The assembled interface is the only interface drawn,
+  so panels and bars are not duplicated underneath it.
+- The benchmark's `hud` phase is now 0 ms in that mode; `--ui-live` at
+  1920×1008 still measures p50 12.84 ms / 78 fps with auto scene scale,
+  MSAA 4 and sun shadows.
+- The old HUD remains the running default outside `--ui-live`. Known live-HUD
+  gaps are the empty team frames (one hero a side), neutral camp plates, the
+  delivery control and the old HUD's debug/stats surfaces.
+- Verified: 257 tests pass, 4 ignored; workspace clippy clean. Capture:
+  `/tmp/opencode/ui_live_clean.png`.
 
 ## 2026-11-21 — Live objectives list buff camps only
 
