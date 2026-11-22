@@ -3790,21 +3790,24 @@ impl AnimatedScene {
     /// Dynamic units farther than 9000 units from the camera focus are off
     /// screen at every supported camera pitch. Skipping their animation and
     /// mesh build is the cheapest large win on the CPU side.
+    #[allow(clippy::too_many_arguments)]
     pub fn prepare_render(
         &mut self,
         height: &HeightGrid,
         camera_target: Vec3,
+        cull_radius: f32,
         camera_right: Vec3,
         camera_up: Vec3,
         camera_forward: Vec3,
     ) {
         let shadows = Instant::now();
-        self.rebuild_shadows(height, camera_target);
+        self.rebuild_shadows(height, camera_target, cull_radius);
         self.last_shadow_ms = shadows.elapsed().as_secs_f32() * 1000.0;
         let mesh = Instant::now();
         self.rebuild_mesh(
             height,
             camera_target,
+            cull_radius,
             camera_right,
             camera_up,
             camera_forward,
@@ -4203,14 +4206,14 @@ impl AnimatedScene {
         }
     }
 
-    fn rebuild_shadows(&mut self, height: &HeightGrid, camera_target: Vec3) {
+    fn rebuild_shadows(&mut self, height: &HeightGrid, camera_target: Vec3, cull_radius: f32) {
         self.shadow_vertices.clear();
         self.shadow_indices.clear();
         for unit in &self.units {
             if unit.health <= 0.0
                 || !unit.visible
                 || unit.spawn_delay > 0.0
-                || !in_mesh_range(unit.pos, camera_target)
+                || !in_mesh_range(unit.pos, camera_target, cull_radius)
             {
                 continue;
             }
@@ -4290,6 +4293,7 @@ impl AnimatedScene {
         &mut self,
         height: &HeightGrid,
         camera_target: Vec3,
+        cull_radius: f32,
         camera_right: Vec3,
         camera_up: Vec3,
         camera_forward: Vec3,
@@ -4314,7 +4318,7 @@ impl AnimatedScene {
             if (alive || unit.death_anim > 0.0)
                 && (unit.visible || unit.death_anim > 0.0)
                 && unit.spawn_delay <= 0.0
-                && in_mesh_range(unit.pos, camera_target)
+                && in_mesh_range(unit.pos, camera_target, cull_radius)
             {
                 mesh_units += 1;
                 let blends = unit.walk.is_some()
@@ -5091,10 +5095,10 @@ fn planar_delta(from: Vec3, to: Vec3) -> Vec3 {
 /// Shortest horizontal distance from a point to a line segment. Used by fast
 /// skillshots so a low frame rate or a high timescale cannot tunnel through a
 /// target between two sampled positions.
-fn in_mesh_range(pos: Vec3, center: Vec3) -> bool {
+fn in_mesh_range(pos: Vec3, center: Vec3, radius: f32) -> bool {
     let dx = pos.x - center.x;
     let dz = pos.z - center.z;
-    dx * dx + dz * dz <= 9000.0 * 9000.0
+    dx * dx + dz * dz <= radius * radius
 }
 
 fn segment_distance_xz(point: Vec3, from: Vec3, to: Vec3) -> f32 {

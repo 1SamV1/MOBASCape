@@ -1559,6 +1559,7 @@ impl App {
             animated.prepare_render(
                 height,
                 renderer.camera.target,
+                camera_cull_radius(renderer.size, &renderer.camera),
                 camera_right,
                 camera_up,
                 camera_forward,
@@ -2073,7 +2074,14 @@ impl App {
             let right = forward.cross(Vec3::Y).normalize_or_zero();
             let up = right.cross(forward).normalize_or_zero();
             animated.refresh_visibility(dt.min(0.05), collision);
-            animated.prepare_render(height, renderer.camera.target, right, up, forward);
+            animated.prepare_render(
+                height,
+                renderer.camera.target,
+                camera_cull_radius(renderer.size, &renderer.camera),
+                right,
+                up,
+                forward,
+            );
             renderer.set_dynamic_mesh(&animated.vertices, &animated.indices);
             renderer.set_shadow_mesh(&animated.shadow_vertices, &animated.shadow_indices);
             renderer.set_caster_mesh(&animated.caster_vertices, &animated.caster_indices);
@@ -2128,7 +2136,14 @@ impl App {
             let right = forward.cross(Vec3::Y).normalize_or_zero();
             let up = right.cross(forward).normalize_or_zero();
             animated.refresh_visibility(dt.min(0.05), collision);
-            animated.prepare_render(height, renderer.camera.target, right, up, forward);
+            animated.prepare_render(
+                height,
+                renderer.camera.target,
+                camera_cull_radius(renderer.size, &renderer.camera),
+                right,
+                up,
+                forward,
+            );
             renderer.set_dynamic_mesh(&animated.vertices, &animated.indices);
             renderer.set_shadow_mesh(&animated.shadow_vertices, &animated.shadow_indices);
             renderer.set_caster_mesh(&animated.caster_vertices, &animated.caster_indices);
@@ -2770,6 +2785,17 @@ fn parse_window_size(text: &str) -> Option<(u32, u32)> {
     let width = width.parse().ok()?;
     let height = height.parse().ok()?;
     (width > 0 && height > 0).then_some((width, height))
+}
+
+/// Radius around the camera focus that can contain visible dynamic units at
+/// this camera distance and pitch, plus a margin for tall models and shadow
+/// casters beyond the ground view.
+fn camera_cull_radius(size: (u32, u32), camera: &Camera) -> f32 {
+    let aspect = size.0 as f32 / size.1.max(1) as f32;
+    let pitch = camera.pitch.max(0.2);
+    let half_w = camera.distance * 0.466 * aspect;
+    let half_h = camera.distance * 0.466 / pitch.sin();
+    (half_w.hypot(half_h) + 2000.0).clamp(5000.0, 14_000.0)
 }
 
 fn resolve_render_scale(text: &str, window: (u32, u32)) -> Option<f32> {

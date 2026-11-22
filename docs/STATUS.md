@@ -8,10 +8,10 @@ Last updated: 1080p 60 fps engine pass, 2026-11-21.
   the cache grass sprites, vertex biome tint and the existing classification
   carry the ground. Fog banks and grass normal noise were removed, and the
   sun shadow PCF went from four taps to two.
-- Dynamic unit animation is culled to 9,000 units around the camera focus;
-  the remaining units animate into a reused face-colour cache, per-unit pose
-  scratch buffers and an sRGB lookup table instead of paying HSL and `powf`
-  per vertex.
+- Dynamic unit animation is culled to the camera view radius plus a 2,000-unit
+  margin (5,000–14,000 depending on distance and pitch); the remaining units
+  animate into a reused face-colour cache, per-unit pose scratch buffers and
+  an sRGB lookup table instead of paying HSL and `powf` per vertex.
 - MSAA 4 already resolves edges, so the post pass now skips its full-screen
   FXAA taps on that path; `--msaa 1` still uses FXAA.
 - Added `--window-size WIDTHxHEIGHT`, `--render-scale auto|0.5..1.0`, and a

@@ -112,9 +112,10 @@ What moved the number:
   sprites, biome vertex tint and classification remain. Fog banks and grass
   normal perturbation were removed for the same reason. The sun shadow lookup
   is now two taps instead of four.
-- **Animated mesh culling**: units farther than 9,000 units from the camera
-  focus skip animation, mesh and blob-shadow construction. At the default
-  camera this leaves roughly 18 units instead of 157.
+- **Animated mesh culling**: units outside the camera view radius plus a
+  2,000-unit margin (5,000–14,000 units depending on distance and pitch) skip
+  animation, mesh and blob-shadow construction. At the default camera this
+  leaves roughly 14–18 units instead of 157.
 - **Mesh CPU**: face palette RGB is cached per model instance instead of
   converted from HSL every frame, per-unit animation pose buffers are reused,
   and sRGB byte colours use a 256-entry lookup instead of `powf` per channel.
@@ -214,8 +215,8 @@ visible chunk popping at the default camera.
 
 ### P4 — Animation and simulation
 
-- ✅ Cull dynamic unit animation and mesh work past 9,000 units from the
-  camera focus.
+- ✅ Cull dynamic unit animation and mesh work outside the camera view radius
+  plus a 2,000-unit margin.
 - ✅ Cache per-model face palette RGB and use an sRGB byte LUT; mesh build
   fell from ~10.4 ms to ~3.5–4.0 ms in the 1080p benchmark.
 - ✅ Reuse per-unit vertex position and frame scratch buffers
