@@ -2865,6 +2865,107 @@ pub fn build(
     );
 
     // ------------------------------------------------------------------
+    // Cliff dressing. Terrace risers are steeper than the boulder pass's
+    // slope window, so cliffs were bare grey ramps and plateau tops were
+    // empty lawns. Half-buried cache boulders break up each riser, and tree
+    // clusters on the plateau tops give the raised jungle the dark canopy
+    // masses of the reference. Deterministic per tile.
+    // ------------------------------------------------------------------
+    let mut cliff_rocks = 0usize;
+    let mut plateau_trees = 0usize;
+    {
+        // Only the grey textured boulder: the other boulder models render as
+        // pale cream domes at outcrop scale.
+        const CLIFF_ROCKS: [u32; 1] = [1805];
+        let mut sink = ScenerySink {
+            model_cache: &mut model_cache,
+            model_mesh: &mut model_mesh,
+            shadow_mesh: &mut shadow_mesh,
+            shadow_caster_mesh: &mut shadow_caster_mesh,
+            collision_grid: &mut collision_grid,
+        };
+        let slope_at = |wx: f32, wz: f32| {
+            let h = height.height_at(wx, wz);
+            ((height.height_at(wx + 96.0, wz) - h).abs()
+                + (height.height_at(wx - 96.0, wz) - h).abs()
+                + (height.height_at(wx, wz + 96.0) - h).abs()
+                + (height.height_at(wx, wz - 96.0) - h).abs())
+                / (4.0 * 96.0)
+        };
+        for gy in 3..size.saturating_sub(4) {
+            for gx in 3..size.saturating_sub(4) {
+                let seed = (gx as u32)
+                    .wrapping_mul(0x9E37_79B1)
+                    .wrapping_add((gy as u32).wrapping_mul(0x85EB_CA77))
+                    .wrapping_add(0xC2B2_AE3D);
+                if water_mask[gy * size + gx] > 0.03 {
+                    continue;
+                }
+                let wx = ((origin_tile_x + gx as i32) as f32 + 0.5) * 128.0
+                    + (hash01(seed) - 0.5) * 96.0;
+                let wz = ((origin_tile_y + gy as i32) as f32 + 0.5) * 128.0
+                    + (hash01(seed ^ 0x51ED_270B) - 0.5) * 96.0;
+                if map.distance_to_lane(wx, wz) < 3.0 * 128.0
+                    || point_in_tile_rects(&castle_keep, wx / 128.0, wz / 128.0)
+                {
+                    continue;
+                }
+                let slope = slope_at(wx, wz);
+                if slope > 0.7 {
+                    if hash01(seed ^ 0xD1B5_4A35) > 0.07 {
+                        continue;
+                    }
+                    let model_id = CLIFF_ROCKS[(seed as usize >> 3) % CLIFF_ROCKS.len()];
+                    let model = cached_model(cache, sink.model_cache, model_id)?;
+                    let scale = 0.6 + hash01(seed ^ 0x8A5C_D3E9) * 0.55;
+                    let h = height.height_at(wx, wz);
+                    // Sink the rock into the face so it reads as an outcrop
+                    // rather than a ball resting on a ramp.
+                    let base = Vec3::new(wx, h - 30.0 * scale, wz);
+                    let angle = hash01(seed ^ 0x7B1D_3C4F) * std::f32::consts::TAU;
+                    append_ground_decor(
+                        sink.model_mesh,
+                        model,
+                        base,
+                        angle,
+                        scale,
+                        GroundDecor::Rock,
+                        seed,
+                    );
+                    cliff_rocks += 1;
+                } else if slope < 0.12 {
+                    // Plateau tops only: well above the floor and at least a
+                    // tile and a half back from the lip.
+                    let clearance = plateau_clearance(&map, wx, wz);
+                    if plateau_height(wx, wz, clearance) < TERRACE_STEP * 0.92 {
+                        continue;
+                    }
+                    let h = height.height_at(wx, wz);
+                    let back_from_lip = [(192.0, 0.0), (-192.0, 0.0), (0.0, 192.0), (0.0, -192.0)]
+                        .iter()
+                        .all(|(dx, dz)| height.height_at(wx + dx, wz + dz) > h - 40.0);
+                    if !back_from_lip {
+                        continue;
+                    }
+                    let cluster = value_noise(wx * 0.0011 + 5.0, wz * 0.0011 - 3.0);
+                    let density = smoothstep(0.42, 0.72, cluster) * 0.34;
+                    if hash01(seed ^ 0x2F6E_2B1D) > density {
+                        continue;
+                    }
+                    place_tree(
+                        &tree_context,
+                        &mut sink,
+                        Vec3::new(wx, h, wz),
+                        seed,
+                        &mut plateau_trees,
+                    );
+                }
+            }
+        }
+    }
+    tracing::info!("cliff dressing: {cliff_rocks} riser rocks, {plateau_trees} plateau trees");
+
+    // ------------------------------------------------------------------
     // Castle wall ruins: broken OSRS walls and ruin clusters ring the
     // outside of every lane, scattered with the same fixed seed.
     // ------------------------------------------------------------------
