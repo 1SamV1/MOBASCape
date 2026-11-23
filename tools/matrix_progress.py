@@ -38,7 +38,7 @@ def center(y, s, fg=BRIGHT, bg=BLACK):
 
 
 # --- digital rain --------------------------------------------------------
-rng = random.Random(1999)
+rng = random.Random(2000)
 GLYPHS = "0123456789ABCDEFZ:.=*+-<>|\"'^~$#@%&?!" + "ZQXJ7kTL"
 for x in range(W):
     if rng.random() < 0.18:
@@ -112,60 +112,62 @@ def big(y, word):
 
 panel(16, 1, W - 17, 11)
 big(3, "MOBASCAPE")
-center(9, "S Y S T E M   A U D I O   //   T H E   A R E N A   H A S   A   V O I C E", WHITE)
+center(9, "K I T   A U D I O   //   E V E R Y   S P E L L   H A S   A   S O U N D", WHITE)
 
 panel(6, 13, W - 7, 17, "TRANSMISSION")
-text(9, 14, "> Wake up, Champion...", BRIGHT)
-text(9, 15, "> The arena was silent. Fifteen of sixteen heroes made no sound at all.", MID)
-text(9, 16, "> Follow the white rabbit:  index 4  ->  opcode 14  ->  rodio  ->  your ears.", BRIGHT)
+text(9, 14, "> I know kung fu.", BRIGHT)
+text(9, 15, "> Show me.  Twelve kit champions cast with one shared whoosh. Now each action speaks for itself.", MID)
+text(9, 16, "> Buffs chant the OSRS prayer chimes. Slams land with an anvil. Pools roar with fire.", BRIGHT)
 
-# Left: what loaded.
-panel(6, 19, 74, 33, "CONSTRUCT LOADED")
+# Left: action -> sound.
+panel(6, 19, 74, 33, "KIT ACTION  ->  SOUND")
 rows = [
-    ("CACHE FRAME SOUNDS", "sounds_between: loops + one-shots"),
-    ("TICK SNAPSHOT", "AnimClock at the top of update()"),
-    ("SHARED TABLE", "data/sounds.json, 12 named sounds"),
-    ("OVERRIDES", "champion `sounds` wins by name"),
-    ("FOG SAFE", "hidden units never make a sound"),
-    ("LANE QUIET", "only your fights + champion duels hit"),
-    ("DE-DUPE", "one copy of each id per frame"),
-    ("KIT RESPECT", "Awowogei keeps his own q_/w_/e_/r_"),
-    ("PRELOAD", "table + every unit clip's frame sounds"),
+    ("projectile", "1930", "whoosh, pitched up"),
+    ("dash", "1930", "whoosh, pitched down"),
+    ("area (landing)", "3791", "SMITH_ANVIL_TONK, deep"),
+    ("zone", "2596", "FIRE_WOOSH"),
+    ("summon", " 200", "TELEPORT_VWOOP"),
+    ("transform", " 200", "TELEPORT_VWOOP, lower"),
+    ("channel", "2670", "prayer: Mystic Will"),
+    ("empower", "2691", "prayer: Ultimate Strength"),
 ]
-for i, (k, v) in enumerate(rows):
+for i, (k, n, v) in enumerate(rows):
     text(9, 21 + i, "[OK]", HEAD)
-    text(14, 21 + i, f"{k} ".ljust(20, "."), MID)
-    text(35, 21 + i, v, BRIGHT)
-text(9, 31, "every champion now: hits / shots / casts / buys / ranks", AMBER)
+    text(14, 21 + i, f"{k} ".ljust(18, "."), MID)
+    text(33, 21 + i, n, HEAD)
+    text(39, 21 + i, v, BRIGHT)
+text(9, 30, "names: kit_projectile ... kit_transform", DIM)
+text(9, 31, "champion `sounds` overrides by name; q_* keys", AMBER)
+text(9, 32, "silence a slot and play q_cast instead", AMBER)
 
-# Right: sound id table.
-panel(76, 19, W - 7, 33, "SOUND ID MATRIX  (RuneLite SoundEffectID)")
+# Right: buffs.
+panel(76, 19, W - 7, 33, "BUFF  ->  STRONGEST EFFECT  ->  PRAYER CHIME")
 ids = [
-    ("2498", "melee_hit / ranged_hit", "ATTACK_HIT"),
-    (" 511", "blocked_hit", "ZERO_DAMAGE_SPLAT"),
-    (" 510", "player_hurt", "TAKE_DAMAGE_SPLAT"),
-    ("1930", "release / cast (3 pitches)", "NPC_TELEPORT_WOOSH"),
-    ("3924", "shop_buy", "GE_COIN_TINKLE"),
-    ("3928", "shop_sell", "GE_COLLECT_BLOOP"),
-    ("2266", "skill_point", "UI_BOOP"),
-    ("2734", "structure_fall", "TREE_FALLING"),
-    ("3843", "Graardor swing   (cache frame 7)", "SEQ 7018"),
-    ("3834", "Graardor/K'ril stomp (cache)", "SEQ 7016/4070"),
-    ("3865", "K'ril claw       (cache frame 6)", "SEQ 6948"),
+    ("heal / heal_missing", "2678", "Rapid Heal"),
+    ("shield / dmg reduction", "2687", "Steel Skin"),
+    ("reflect / untargetable", "2687", "Steel Skin"),
+    ("attack / move speed", "2667", "Incredible Reflexes"),
+    ("anything else", "2690", "Thick Skin"),
 ]
-for i, (n, use, src) in enumerate(ids):
-    text(79, 21 + i, n, HEAD)
-    text(85, 21 + i, use.ljust(34), BRIGHT)
-    text(120, 21 + i, src, DIM if src.startswith("SEQ") else MID)
+for i, (use, n, src) in enumerate(ids):
+    text(79, 21 + i, use.ljust(26), BRIGHT)
+    text(106, 21 + i, n, HEAD)
+    text(112, 21 + i, src, MID)
+text(79, 27, "LIVE CUES   --demo-kit --timescale 4   (W / E / R)", WHITE)
+text(79, 28, "cerberus   2596  1930  3791", BRIGHT)
+text(79, 29, "graardor    200  2687+3791  1930", BRIGHT)
+text(79, 30, "venenatis  1930(+3791 pounce)  200  2596", BRIGHT)
+text(79, 31, "awowogei   own kit sounds kept, no shared noise", BRIGHT)
+text(79, 32, "rift-tools sounds --ids: 17 / 17 ids decode", AMBER)
 
 # Verification strip.
 panel(6, 35, W - 7, 42, "OPERATOR CHECKS")
 checks = [
-    ("TESTS", "cargo test --workspace", "359 PASS / 0 FAIL", "+3 new: frame windows, wrap, table"),
-    ("CLIPPY", "cargo clippy -D warnings", "CLEAN", ""),
-    ("LIVE", "--demo-duel --timescale 4", "CUES TRACED", "graardor 3843+2498+510 / kril 3834 / ranger 1930+510"),
-    ("COMMITS", "e82257f  audio: shared combat sounds + cache frame sounds", "", ""),
-    ("", "e1f21fb  docs: record shared combat sounds and cache frame sounds", "", ""),
+    ("TESTS", "cargo test --workspace", "361 PASS / 0 FAIL", "+2 new: kit actions covered, buff chime choice"),
+    ("CLIPPY", "cargo clippy -D warnings", "CLEAN", "cargo fmt --check clean"),
+    ("LIVE", "--demo-kit --timescale 4", "CUES TRACED", "3 kit heroes x W/E/R + hand-written king"),
+    ("COMMITS", "9105a06  audio: kit abilities sound by action type", "", ""),
+    ("", "d2a3733  docs: record kit action sounds", "", ""),
 ]
 for i, (k, cmd, res, note) in enumerate(checks):
     y = 36 + i
@@ -178,11 +180,11 @@ for i, (k, cmd, res, note) in enumerate(checks):
 
 # Next steps.
 panel(6, 44, W - 7, 48, "NEXT  //  THE ORACLE SAYS")
-text(9, 45, "1. Hand-pick ability sounds for the other 15 kits (needs your ear: creative call).", BRIGHT)
-text(9, 46, "2. Announcer + music hook (M9).   3. Tune volumes in data/sounds.json after a real playtest.", BRIGHT)
-text(9, 47, "Not playtested by ear yet: the code queues the right ids; nobody has listened to the mix.", AMBER)
+text(9, 45, "1. Signature sounds per champion (your ear, your call).   2. Announcer + music hook (M9).", BRIGHT)
+text(9, 46, "3. By-ear volume pass on data/sounds.json.   4. Item tree: components, upgrades, actives.", BRIGHT)
+text(9, 47, "Not heard by a person yet: the right ids fire at the right moments; the mix is untested.", AMBER)
 
-center(49, " THERE IS NO SPOON.  THERE IS ONLY SOUND 2498. ", HEAD)
+center(49, " DO NOT TRY TO BEND THE SPOON.  ONLY TRY TO REALISE THE PRAYER CHIME. ", HEAD)
 
 # --- outputs -------------------------------------------------------------
 with open(out + ".txt", "w") as f:

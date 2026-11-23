@@ -1,50 +1,50 @@
-      ? A    ^ T9| !  ~ *7  $ $    $       ?      B A ~$   D   + &               $      Q  ^    *   B+  !  4  #  $             ^C*  *     9#   k^$  5
-      - F    - ?+====================================================================================================================+    +X   <Z+  #
-      E 1    Z."|                                                                                                                    |    8#   97A  F
-      .      %<X|                               #   #  ###  ####   ###   ####  ####  ###  ####  #####                                |    FE   6#*  Q
-      +      "*<|                               ## ## #   # #   # #   # #     #     #   # #   # #                                    |    EC    0A  T
-             FT6|                               # # # #   # ####  #####  ###  #     ##### ####  ####                                 |    #+    Z"  |
-             D0T|                               #   # #   # #   # #   #     # #     #   # #     #                                    |    k?    >=  =
-             =?Z|                               #   #  ###  ####  #   # ####   #### #   # #     #####                                |    7A        &
-        2    ~#C|                                                                                                                    |  > %         &
-        Z    AZ>|                      S Y S T E M   A U D I O   //   T H E   A R E N A   H A S   A   V O I C E                      |  F D         X
-        -    '.8|                                                                                                                    | FZ .         :
-       1-    C"X+====================================================================================================================+ T% *         Q
-  9    ^@     |-'  -      ?  #7  JJD        Z           8    #  A.    Z    9   *       8  ^        > .  Z2       B    |  4     ^ C  Z  ~7 Q         +
-  %   +==[ TRANSMISSION ]======================================================================================================================+    Z
-  &   |  > Wake up, Champion...                                                                                                                |    !
-  4   |  > The arena was silent. Fifteen of sixteen heroes made no sound at all.                                                               |    .
-  2   |  > Follow the white rabbit:  index 4  ->  opcode 14  ->  rodio  ->  your ears.                                                         ||   !
-  9   +========================================================================================================================================+X   Z
-  %  = k87 8  >%L            "E  ^8 T       Z           !   .*  CZ        *6   #    !  ^- ~    Z  4  * & Dk       0   1  5     J ^  "  >2 +   L B   1
-  @  #+==[ CONSTRUCT LOADED ]=============================================+J+==[ SOUND ID MATRIX  (RuneLite SoundEffectID) ]===================+9   =
-  <  4|                                                                   |@|                                                                  |*   Z
-  B  D|  [OK] CACHE FRAME SOUNDS . sounds_between: loops + one-shots      |-|  2498  melee_hit / ranged_hit             ATTACK_HIT             |.   +
-  3  ~|  [OK] TICK SNAPSHOT ...... AnimClock at the top of update()       |:|   511  blocked_hit                        ZERO_DAMAGE_SPLAT      |+   Q
-  :  k|  [OK] SHARED TABLE ....... data/sounds.json, 12 named sounds      |||   510  player_hurt                        TAKE_DAMAGE_SPLAT      |Q
-  9  D|  [OK] OVERRIDES .......... champion `sounds` wins by name         |2|  1930  release / cast (3 pitches)         NPC_TELEPORT_WOOSH     ||
-  3  X|  [OK] FOG SAFE ........... hidden units never make a sound        | |  3924  shop_buy                           GE_COIN_TINKLE         |!
-  X  X|  [OK] LANE QUIET ......... only your fights + champion duels hit  | |  3928  shop_sell                          GE_COLLECT_BLOOP       |%
-  5  :|  [OK] DE-DUPE ............ one copy of each id per frame          | |  2266  skill_point                        UI_BOOP                |<
-  |  D|  [OK] KIT RESPECT ........ Awowogei keeps his own q_/w_/e_/r_     | |  2734  structure_fall                     TREE_FALLING           |* Q
-  |  9|  [OK] PRELOAD ............ table + every unit clip's frame sounds | |  3843  Graardor swing   (cache frame 7)   SEQ 7018               |6 '
-  3  '|                                                                   | |  3834  Graardor/K'ril stomp (cache)       SEQ 7016/4070          |> B
-  7  4|  every champion now: hits / shots / casts / buys / ranks          | |  3865  K'ril claw       (cache frame 6)   SEQ 6948               |? 3
-  D  =|                                                                   | |                                                                  |' T
-  Q  Z+===================================================================+ +==================================================================+E k
-  A  ^   Ak            J   7   0    FX 8     =3    A  @ FT      >  72        4Z  <kCk?  Q      E5 @             X Q F 7  #  ?1    Z=0D   4? 5   Q 7
-  C  8+==[ OPERATOR CHECKS ]===================================================================================================================+3 =
-     ?|  TESTS     cargo test --workspace         359 PASS / 0 FAIL   +3 new: frame windows, wrap, table                                       |$ Q
-     @|  CLIPPY    cargo clippy -D warnings       CLEAN                                                                                        |- 0
-     <|  LIVE      --demo-duel --timescale 4      CUES TRACED         graardor 3843+2498+510 / kril 3834 / ranger 1930+510                     |  1
-     0|  COMMITS   e82257f  audio: shared combat sounds + cache frame sounds                                                                   |  ^
-     -|            e1f21fb  docs: record shared combat sounds and cache frame sounds                                                           |  Q
-     7|                                                                                                                                        |  &
-      +========================================================================================================================================+  C
-     Q    6       3     -  F 1Z< |  ^3    %  4  |     | 8E          ~         J  <*!           :Z           k   " & @   ~E  *7A   JC .   5  ^     7
-     $+==[ NEXT  //  THE ORACLE SAYS ]=========================================================================================================+  C
-     $|  1. Hand-pick ability sounds for the other 15 kits (needs your ear: creative call).                                                    |  E
-     7|  2. Announcer + music hook (M9).   3. Tune volumes in data/sounds.json after a real playtest.                                          |  0
-     3|  Not playtested by ear yet: the code queues the right ids; nobody has listened to the mix.                                             |  !
-     =+========================================================================================================================================+  B
-     A            ~     %  6 E.  ^  @^    !  C  F   THERE IS NO SPOON.  THERE IS ONLY SOUND 2498.                 >     3     B | 7      k
+    <D   1   < C    QC     .   ^2  "        ! 7  D  Q      + 4      Q !       1  '  B      .    F   D ~'"    >!  8  9.   7 Q T 7 |   #A       @   Q  >
+    QQ       T .+====================================================================================================================+@       +   D  D
+    &1       9 B|                                                                                                                    |B       -   L  5
+    B9       @ 7|                               #   #  ###  ####   ###   ####  ####  ###  ####  #####                                |$       7  <-  =
+ C  #k       3 8|                               ## ## #   # #   # #   # #     #     #   # #   # #                                    |L       &  A5  E
+ ^  L:       *  |                               # # # #   # ####  #####  ###  #     ##### ####  ####                                 |X       ^  Z7  0
+ L  09       0  |                               #   # #   # #   # #   #     # #     #   # #     #                                    |L       B  TC  <
+ Z  E$       <  |                               #   #  ###  ####  #   # ####   #### #   # #     #####                                |=     | =  7=  Z
+ J  2'       E  |                                                                                                                    |#     # '  ~'  "
+ Q  C        Q  |                       K I T   A U D I O   //   E V E R Y   S P E L L   H A S   A   S O U N D                       |C     A Z  A0 03
+    J           |                                                                                                                    ||     Q &  *0 :5
+    9           +====================================================================================================================+9     E 7  96 7<
+    |            <|   A$  !         4. :      < Z         3    Z  Z-5 F 3C 7+ J     8   . @  ^  T66 Z  k               5%   J    =    "     7    &= D
+    " +==[ TRANSMISSION ]======================================================================================================================+ *9 1
+    & |  > I know kung fu.                                                                                                                     | Z? .
+      |  > Show me.  Twelve kit champions cast with one shared whoosh. Now each action speaks for itself.                                      | LA =
+      |  > Buffs chant the OSRS prayer chimes. Slams land with an anvil. Pools roar with fire.                                                 | %+ L
+      +========================================================================================================================================+ F: >
+        0     ?  F.   FC  <  :   |  A  2  X    <^   E     T 2  $  D"    TD -#Q0           k  =   ?: J  Z    8          B!   4    2 4    @%  5  7 @L A
+      +==[ KIT ACTION  ->  SOUND ]========================================+$+==[ BUFF  ->  STRONGEST EFFECT  ->  PRAYER CHIME ]================+  2
+      |                                                                   |F|                                                                  |  @
+      |  [OK] projectile ....... 1930  whoosh, pitched up                 |&|  heal / heal_missing        2678  Rapid Heal                     |  F
+  6   |  [OK] dash ............. 1930  whoosh, pitched down               |F|  shield / dmg reduction     2687  Steel Skin                     |  2
+  .&  |  [OK] area (landing) ... 3791  SMITH_ANVIL_TONK, deep             |$|  reflect / untargetable     2687  Steel Skin                     |  |
+  35  |  [OK] zone ............. 2596  FIRE_WOOSH                         |J|  attack / move speed        2667  Incredible Reflexes            |  Z
+  2X  |  [OK] summon ...........  200  TELEPORT_VWOOP                     |1|  anything else              2690  Thick Skin                     |  C
+  X?  |  [OK] transform ........  200  TELEPORT_VWOOP, lower              | |                                                                  |
+  ~F  |  [OK] channel .......... 2670  prayer: Mystic Will                | |  LIVE CUES   --demo-kit --timescale 4   (W / E / R)              |
+  |=> |  [OK] empower .......... 2691  prayer: Ultimate Strength          | |  cerberus   2596  1930  3791                                     |
+  C89 |                                                                   | |  graardor    200  2687+3791  1930                                |
+  B71 |  names: kit_projectile ... kit_transform                          | |  venenatis  1930(+3791 pounce)  200  2596                        |
+  @9+ |  champion `sounds` overrides by name; q_* keys                    | |  awowogei   own kit sounds kept, no shared noise                 |
+% +73 |  silence a slot and play q_cast instead                           | |  rift-tools sounds --ids: 17 / 17 ids decode                     |
+- 31* +===================================================================+ +==================================================================+
++ "0^ 2 & *      : B     .  .D + |A8D 0   FQ 5    F>  $  8C   ~        8? + L          >     $.7   7 6 @       k $8~.   $     :   1      '   5 F
+X ~&0 +==[ OPERATOR CHECKS ]===================================================================================================================+
+k .CQ |  TESTS     cargo test --workspace         361 PASS / 0 FAIL   +2 new: kit actions covered, buff chime choice                           |
+& 7DE |  CLIPPY    cargo clippy -D warnings       CLEAN               cargo fmt --check clean                                                  |
+9 %E  |  LIVE      --demo-kit --timescale 4       CUES TRACED         3 kit heroes x W/E/R + hand-written king                                 |
+7 E"  |  COMMITS   9105a06  audio: kit abilities sound by action type                                                                          |
+C Z@  |            d2a3733  docs: record kit action sounds                                                                                     |
+| 77  |                                                                                                                                        |
+8 L6  +========================================================================================================================================+
+J  2  @   2        1     .        E        ~      7Z  4   ^      Q   . 3  &        X   ^   3  E3     =         ! JL   F '     %        0 7
+!  7  +==[ NEXT  //  THE ORACLE SAYS ]=========================================================================================================+
+B  0  |  1. Signature sounds per champion (your ear, your call).   2. Announcer + music hook (M9).                                             |
+   Q  |  3. By-ear volume pass on data/sounds.json.   4. Item tree: components, upgrades, actives.                                             |
+      |  Not heard by a person yet: the right ids fire at the right moments; the mix is untested.                                              |
+      +========================================================================================================================================+
+                                  Z   &  DO NOT TRY TO BEND THE SPOON.  ONLY TRY TO REALISE THE PRAYER CHIME.         ?                0
