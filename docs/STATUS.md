@@ -1,6 +1,20 @@
 # Status
 
-Last updated: Jad and Kree on kits, 2026-11-23.
+Last updated: every model faces its movement, 2026-11-23.
+
+## 2026-11-23 — Every unit faces the way it moves
+
+- OSRS models are authored facing -Z, while a unit's `yaw` points +Z along
+  its movement. Only King Awowogei (`model_yaw: π`) and the imp template
+  carried a correction, so every other unit (the twelve new heroes, fairies,
+  camps, ambient creatures, summons) walked backwards. The earlier imp-only
+  fix treated a convention as an exception.
+- The renderer now adds `CACHE_MODEL_FORWARD` (π) for every unit; the two
+  special cases are removed. `model_yaw` remains for real exceptions.
+- Verified from geometry (Cerberus's heads sit at model -Z; Callisto's body
+  extends toward -Z) and in game: Cerberus and Callisto lead with their
+  heads walking left, right, toward and away from the camera; King Awowogei
+  still faces forward. Heavy champions take a moment to finish turning.
 
 ## 2026-11-23 — Jad and Kree'arra get the kits their descriptions promised
 
