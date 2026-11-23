@@ -1,6 +1,24 @@
 # Status
 
-Last updated: dark-slab fix (backdrop plane, cache sea, shore tint), 2026-11-23.
+Last updated: cliff dressing, 2026-11-23.
+
+## 2026-11-23 — Cliff dressing: riser outcrops and plateau tree masses
+
+- Terrace risers (slope 0.8–1.6) were outside the slope boulder window
+  (0.10–0.58), so cliffs were bare and plateau tops were empty lawns.
+- New deterministic per-tile pass after the lane tree lines:
+  - **Riser outcrops:** 191 grey cache boulders (model 1805) at 7% of tiles
+    steeper than 0.7, scaled 0.6–1.15× and sunk 30×scale into the face.
+    Boulders 685/1773 were dropped here: at outcrop scale they read as
+    pale cream domes (a first try at 24% density and 1–2.1× scale buried
+    the jungle in 1,212 of them).
+  - **Plateau tree masses:** 365 trees via `place_tree` (same species, tint,
+    shadow proxies and collision as the lane lines) on plateau tops at
+    least 1.5 tiles back from the lip, clustered by a slow noise field so
+    canopies form masses with clearings between them.
+- 1920×1008, live UI, auto scale: p50 **13.2 ms / 75.6 fps**, p95 14.2 ms,
+  GPU frame 12.7 ms (scene 11.45). Model mesh 979k triangles (was 860k).
+- Verified: 284 workspace tests pass; clippy clean.
 
 ## 2026-11-23 — Dark green slabs: backdrop plane, cache sea, shore tint
 

@@ -57,9 +57,10 @@ reference, using only cache-scraped terrain, textures and models.
   GPU 14.3 → 12.0 ms, 73 fps p50 at 1920×1008.
 - **Done (2026-11-23):** dark-slab fix: backdrop below terrain, cache sea
   reclaimed as land, wet-soil shore bands, grass variant normalisation.
-- **Next:** dress cliffs with
-  cache rocks and plateau tree clusters; decide cliff collision (user call);
-  water props, tree variety, LOD/instancing, contact AO.
+- **Done (2026-11-23):** cliff dressing: riser outcrops and plateau tree
+  masses; 75 fps at 1920×1008.
+- **Next:** decide cliff collision (user call); water props, tree variety,
+  LOD/instancing, contact AO; stray black rectangle near 2850,3040.
 - **Exit:** base/lane/jungle/river captures read as the reference's world;
   1920×1008 holds 60 fps at p95; no invented visual assets.
 
