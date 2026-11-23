@@ -1,0 +1,8 @@
+# Terrain/art review presets for `rift-client --shots`. One load, one PNG each.
+# name      tile_x tile_y [pitch=R] [yaw=R] [distance=U] [view=NAME]
+base        2730   3150
+lane        2790   2960
+jungle      2830   3080
+river       2850   3040
+low_angle   2860   3000   pitch=0.35 distance=2400
+jungle_ao   2830   3080   view=ao

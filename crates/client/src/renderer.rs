@@ -350,6 +350,13 @@ pub struct Renderer {
     config: wgpu::SurfaceConfiguration,
     scene_pipeline: wgpu::RenderPipeline,
     water_pipeline: wgpu::RenderPipeline,
+    /// Kept so `reload_scene_shader` can rebuild the scene pipelines.
+    scene_pipeline_layout: wgpu::PipelineLayout,
+    scene_format: wgpu::TextureFormat,
+    /// Dev hot reload: when set, `poll_shader_reload` watches this file.
+    shader_watch: Option<(std::path::PathBuf, Option<std::time::SystemTime>)>,
+    /// Number of dev screenshots written so far.
+    screenshots_written: u32,
     hud_pipeline: wgpu::RenderPipeline,
     hud_bind_group: wgpu::BindGroup,
     _ui_texture: wgpu::Texture,
@@ -940,105 +947,13 @@ impl Renderer {
         const HUD_ATTRS: [wgpu::VertexAttribute; 3] =
             wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x2, 2 => Float32x4];
 
-        let scene_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("scene pipeline"),
-            layout: Some(&scene_pipeline_layout),
-            vertex: wgpu::VertexState {
-                module: &scene_shader,
-                entry_point: Some("vs"),
-                compilation_options: wgpu::PipelineCompilationOptions::default(),
-                buffers: &[Some(wgpu::VertexBufferLayout {
-                    array_stride: std::mem::size_of::<SceneVertex>() as wgpu::BufferAddress,
-                    step_mode: wgpu::VertexStepMode::Vertex,
-                    attributes: &SCENE_ATTRS,
-                })],
-            },
-            fragment: Some(wgpu::FragmentState {
-                module: &scene_shader,
-                entry_point: Some("fs"),
-                compilation_options: wgpu::PipelineCompilationOptions::default(),
-                targets: &[Some(wgpu::ColorTargetState {
-                    format: scene_format,
-                    blend: Some(wgpu::BlendState::REPLACE),
-                    write_mask: wgpu::ColorWrites::ALL,
-                })],
-            }),
-            primitive: wgpu::PrimitiveState {
-                topology: wgpu::PrimitiveTopology::TriangleList,
-                strip_index_format: None,
-                front_face: wgpu::FrontFace::Ccw,
-                cull_mode: None,
-                polygon_mode: wgpu::PolygonMode::Fill,
-                unclipped_depth: false,
-                conservative: false,
-            },
-            depth_stencil: Some(wgpu::DepthStencilState {
-                format: wgpu::TextureFormat::Depth32Float,
-                depth_write_enabled: Some(true),
-                depth_compare: Some(wgpu::CompareFunction::Less),
-                stencil: wgpu::StencilState::default(),
-                bias: wgpu::DepthBiasState::default(),
-            }),
-            multisample: wgpu::MultisampleState {
-                count: msaa_samples,
-                ..Default::default()
-            },
-            multiview_mask: None,
-            cache: None,
-        });
-
-        let water_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("water pipeline"),
-            layout: Some(&scene_pipeline_layout),
-            vertex: wgpu::VertexState {
-                module: &scene_shader,
-                entry_point: Some("vs"),
-                compilation_options: wgpu::PipelineCompilationOptions::default(),
-                buffers: &[Some(wgpu::VertexBufferLayout {
-                    array_stride: std::mem::size_of::<SceneVertex>() as wgpu::BufferAddress,
-                    step_mode: wgpu::VertexStepMode::Vertex,
-                    attributes: &SCENE_ATTRS,
-                })],
-            },
-            fragment: Some(wgpu::FragmentState {
-                module: &scene_shader,
-                entry_point: Some("fs"),
-                compilation_options: wgpu::PipelineCompilationOptions::default(),
-                targets: &[Some(wgpu::ColorTargetState {
-                    format: scene_format,
-                    blend: Some(wgpu::BlendState::ALPHA_BLENDING),
-                    write_mask: wgpu::ColorWrites::ALL,
-                })],
-            }),
-            primitive: wgpu::PrimitiveState {
-                topology: wgpu::PrimitiveTopology::TriangleList,
-                strip_index_format: None,
-                front_face: wgpu::FrontFace::Ccw,
-                cull_mode: None,
-                polygon_mode: wgpu::PolygonMode::Fill,
-                unclipped_depth: false,
-                conservative: false,
-            },
-            depth_stencil: Some(wgpu::DepthStencilState {
-                format: wgpu::TextureFormat::Depth32Float,
-                depth_write_enabled: Some(false),
-                depth_compare: Some(wgpu::CompareFunction::Less),
-                stencil: wgpu::StencilState::default(),
-                // Bias the water toward the camera so a shallow riverbed and
-                // the sheet do not alternate depth winner as the view moves.
-                bias: wgpu::DepthBiasState {
-                    constant: -1,
-                    slope_scale: -1.0,
-                    clamp: 0.0,
-                },
-            }),
-            multisample: wgpu::MultisampleState {
-                count: msaa_samples,
-                ..Default::default()
-            },
-            multiview_mask: None,
-            cache: None,
-        });
+        let (scene_pipeline, water_pipeline) = build_scene_pipelines(
+            &device,
+            &scene_pipeline_layout,
+            &scene_shader,
+            scene_format,
+            msaa_samples,
+        );
 
         let shadow_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("sun shadow pipeline"),
@@ -1518,6 +1433,10 @@ impl Renderer {
             config,
             scene_pipeline,
             water_pipeline,
+            scene_pipeline_layout,
+            scene_format,
+            shader_watch: None,
+            screenshots_written: 0,
             hud_pipeline,
             hud_bind_group,
             _ui_texture: ui_texture,
@@ -1607,7 +1526,85 @@ impl Renderer {
     /// warm-up of `delay_frames` frames. Used by the visual-parity workflow;
     /// it has no effect on normal gameplay.
     pub fn request_screenshot(&mut self, path: std::path::PathBuf, delay_frames: u32) {
+        if let Some(parent) = path.parent().filter(|p| !p.as_os_str().is_empty()) {
+            if let Err(err) = std::fs::create_dir_all(parent) {
+                tracing::warn!("screenshot: cannot create {}: {err}", parent.display());
+            }
+        }
         self.screenshot = Some((path, delay_frames));
+    }
+
+    /// Whether a requested screenshot has not been captured yet.
+    pub fn screenshot_pending(&self) -> bool {
+        self.screenshot.is_some()
+    }
+
+    /// How many dev screenshots this renderer has written.
+    pub fn screenshots_written(&self) -> u32 {
+        self.screenshots_written
+    }
+
+    /// Recompile `scene.wgsl` from the source tree and swap the scene and
+    /// water pipelines. Invalid WGSL is reported and the old pipelines stay.
+    pub fn reload_scene_shader(&mut self) -> Result<()> {
+        let path = self
+            .shader_watch
+            .as_ref()
+            .map(|(path, _)| path.clone())
+            .unwrap_or_else(|| std::path::PathBuf::from(SCENE_SHADER_PATH));
+        let source = std::fs::read_to_string(&path)
+            .with_context(|| format!("reading {}", path.display()))?;
+        validate_wgsl(&source).with_context(|| format!("validating {}", path.display()))?;
+        let started = std::time::Instant::now();
+        let module = self
+            .device
+            .create_shader_module(wgpu::ShaderModuleDescriptor {
+                label: Some("rift scene shader (reloaded)"),
+                source: wgpu::ShaderSource::Wgsl(source.into()),
+            });
+        let (scene, water) = build_scene_pipelines(
+            &self.device,
+            &self.scene_pipeline_layout,
+            &module,
+            self.scene_format,
+            self.msaa_samples,
+        );
+        self.scene_pipeline = scene;
+        self.water_pipeline = water;
+        tracing::info!(
+            "reloaded {} in {:.0} ms",
+            path.display(),
+            started.elapsed().as_secs_f32() * 1000.0
+        );
+        Ok(())
+    }
+
+    /// Watch `scene.wgsl` and reload it whenever it changes on disk.
+    pub fn enable_shader_hot_reload(&mut self) {
+        let path = std::path::PathBuf::from(SCENE_SHADER_PATH);
+        let modified = std::fs::metadata(&path).and_then(|m| m.modified()).ok();
+        tracing::info!("shader hot reload: watching {}", path.display());
+        self.shader_watch = Some((path, modified));
+    }
+
+    /// Cheap mtime check; call it every frame or two while hot reload is on.
+    pub fn poll_shader_reload(&mut self) {
+        let Some((path, last)) = self.shader_watch.as_mut() else {
+            return;
+        };
+        let modified = std::fs::metadata(&*path).and_then(|m| m.modified()).ok();
+        if modified.is_none() || modified == *last {
+            return;
+        }
+        *last = modified;
+        if let Err(err) = self.reload_scene_shader() {
+            tracing::error!("shader reload failed, keeping the old shader:\n{err:#}");
+        }
+    }
+
+    /// Current debug view index (see `devtools::DEBUG_VIEWS`).
+    pub fn debug_view(&self) -> u32 {
+        self.scene_globals.tuning[3] as u32 & 15
     }
 
     /// Rolling per-pass GPU milliseconds, once a timestamp readback has
@@ -2359,10 +2356,151 @@ impl Renderer {
                 tracing::error!("screenshot: {err:#}");
             } else {
                 tracing::info!("screenshot written to {}", path.display());
+                self.screenshots_written += 1;
             }
         }
         Ok(())
     }
+}
+
+/// The two pipelines built from `scene.wgsl`: the opaque scene and the
+/// blended water sheet. Factored out so a dev shader reload can rebuild them
+/// without recreating the renderer.
+fn build_scene_pipelines(
+    device: &wgpu::Device,
+    layout: &wgpu::PipelineLayout,
+    scene_shader: &wgpu::ShaderModule,
+    scene_format: wgpu::TextureFormat,
+    msaa_samples: u32,
+) -> (wgpu::RenderPipeline, wgpu::RenderPipeline) {
+    const SCENE_ATTRS: [wgpu::VertexAttribute; 7] = wgpu::vertex_attr_array![
+        0 => Float32x3,
+        1 => Float32x3,
+        2 => Float32x4,
+        3 => Float32x2,
+        4 => Float32,
+        5 => Uint32,
+        6 => Uint32
+    ];
+    let scene_pipeline_layout = layout;
+    let scene = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        label: Some("scene pipeline"),
+        layout: Some(scene_pipeline_layout),
+        vertex: wgpu::VertexState {
+            module: scene_shader,
+            entry_point: Some("vs"),
+            compilation_options: wgpu::PipelineCompilationOptions::default(),
+            buffers: &[Some(wgpu::VertexBufferLayout {
+                array_stride: std::mem::size_of::<SceneVertex>() as wgpu::BufferAddress,
+                step_mode: wgpu::VertexStepMode::Vertex,
+                attributes: &SCENE_ATTRS,
+            })],
+        },
+        fragment: Some(wgpu::FragmentState {
+            module: scene_shader,
+            entry_point: Some("fs"),
+            compilation_options: wgpu::PipelineCompilationOptions::default(),
+            targets: &[Some(wgpu::ColorTargetState {
+                format: scene_format,
+                blend: Some(wgpu::BlendState::REPLACE),
+                write_mask: wgpu::ColorWrites::ALL,
+            })],
+        }),
+        primitive: wgpu::PrimitiveState {
+            topology: wgpu::PrimitiveTopology::TriangleList,
+            strip_index_format: None,
+            front_face: wgpu::FrontFace::Ccw,
+            cull_mode: None,
+            polygon_mode: wgpu::PolygonMode::Fill,
+            unclipped_depth: false,
+            conservative: false,
+        },
+        depth_stencil: Some(wgpu::DepthStencilState {
+            format: wgpu::TextureFormat::Depth32Float,
+            depth_write_enabled: Some(true),
+            depth_compare: Some(wgpu::CompareFunction::Less),
+            stencil: wgpu::StencilState::default(),
+            bias: wgpu::DepthBiasState::default(),
+        }),
+        multisample: wgpu::MultisampleState {
+            count: msaa_samples,
+            ..Default::default()
+        },
+        multiview_mask: None,
+        cache: None,
+    });
+    let water = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        label: Some("water pipeline"),
+        layout: Some(scene_pipeline_layout),
+        vertex: wgpu::VertexState {
+            module: scene_shader,
+            entry_point: Some("vs"),
+            compilation_options: wgpu::PipelineCompilationOptions::default(),
+            buffers: &[Some(wgpu::VertexBufferLayout {
+                array_stride: std::mem::size_of::<SceneVertex>() as wgpu::BufferAddress,
+                step_mode: wgpu::VertexStepMode::Vertex,
+                attributes: &SCENE_ATTRS,
+            })],
+        },
+        fragment: Some(wgpu::FragmentState {
+            module: scene_shader,
+            entry_point: Some("fs"),
+            compilation_options: wgpu::PipelineCompilationOptions::default(),
+            targets: &[Some(wgpu::ColorTargetState {
+                format: scene_format,
+                blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                write_mask: wgpu::ColorWrites::ALL,
+            })],
+        }),
+        primitive: wgpu::PrimitiveState {
+            topology: wgpu::PrimitiveTopology::TriangleList,
+            strip_index_format: None,
+            front_face: wgpu::FrontFace::Ccw,
+            cull_mode: None,
+            polygon_mode: wgpu::PolygonMode::Fill,
+            unclipped_depth: false,
+            conservative: false,
+        },
+        depth_stencil: Some(wgpu::DepthStencilState {
+            format: wgpu::TextureFormat::Depth32Float,
+            depth_write_enabled: Some(false),
+            depth_compare: Some(wgpu::CompareFunction::Less),
+            stencil: wgpu::StencilState::default(),
+            // Bias the water toward the camera so a shallow riverbed and
+            // the sheet do not alternate depth winner as the view moves.
+            bias: wgpu::DepthBiasState {
+                constant: -1,
+                slope_scale: -1.0,
+                clamp: 0.0,
+            },
+        }),
+        multisample: wgpu::MultisampleState {
+            count: msaa_samples,
+            ..Default::default()
+        },
+        multiview_mask: None,
+        cache: None,
+    });
+    (scene, water)
+}
+
+/// Where the dev shader reload reads `scene.wgsl` from: the source tree this
+/// binary was built from.
+pub const SCENE_SHADER_PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/src/scene.wgsl");
+
+/// Parse and validate WGSL with naga before handing it to wgpu, so a typo
+/// in a hot-reloaded shader is a log line instead of a device panic.
+pub fn validate_wgsl(source: &str) -> Result<()> {
+    use wgpu::naga;
+    let module = naga::front::wgsl::parse_str(source)
+        .map_err(|err| anyhow::anyhow!("{}", err.emit_to_string(source)))?;
+    naga::valid::Validator::new(
+        naga::valid::ValidationFlags::all(),
+        naga::valid::Capabilities::all(),
+    )
+    .validate(&module)
+    .map_err(|err| anyhow::anyhow!("{}", err.emit_to_string(source)))?;
+    Ok(())
 }
 
 /// Map the readback buffer, strip row padding, swap BGRA to RGBA when the

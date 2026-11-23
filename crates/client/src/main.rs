@@ -1,5 +1,6 @@
 mod animated;
 mod champion;
+mod devtools;
 mod font;
 mod gpu_timing;
 mod grass_textures;
@@ -19,7 +20,7 @@ mod ui_assets;
 mod ui_live;
 mod ui_pass;
 
-use std::collections::HashSet;
+use std::collections::{HashSet, VecDeque};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -162,8 +163,22 @@ struct Cli {
     #[arg(long)]
     screenshot: Option<PathBuf>,
     /// Dev: frames to draw before `--screenshot` captures (default 90).
+    /// Also the warm-up per shot in a `--shots` run.
     #[arg(long, default_value_t = 90)]
     screenshot_after: u32,
+    /// Dev: batch screenshots. A text file of camera presets, one per line:
+    /// `name tile_x tile_y [pitch=R] [yaw=R] [distance=U] [view=NAME]`.
+    /// The client loads once, captures every shot into `--shot-dir`, then
+    /// exits. See docs/DEV_TOOLS.md.
+    #[arg(long)]
+    shots: Option<PathBuf>,
+    /// Dev: output directory for `--shots` (gitignored by default).
+    #[arg(long, default_value = ".cache/shots")]
+    shot_dir: PathBuf,
+    /// Dev: watch crates/client/src/scene.wgsl and recompile it on save.
+    /// F5 reloads it on demand with or without this flag.
+    #[arg(long)]
+    hot_shaders: bool,
     /// Simulation speed multiplier for verification.
     #[arg(long, default_value_t = 1.0)]
     timescale: f32,
@@ -219,8 +234,21 @@ fn main() -> Result<()> {
         )
     })?;
     let render_scale_auto = cli.render_scale.eq_ignore_ascii_case("auto");
+    let startup = Instant::now();
+    let shot_queue: VecDeque<devtools::ShotSpec> = match cli.shots.as_ref() {
+        Some(path) => {
+            let text = std::fs::read_to_string(path)
+                .with_context(|| format!("reading shot list {}", path.display()))?;
+            devtools::parse_shot_list(&text)?.into()
+        }
+        None => VecDeque::new(),
+    };
     let cache = Cache::open_with_keys(&cli.cache, None::<&PathBuf>)
         .with_context(|| format!("opening cache at {}", cli.cache.display()))?;
+    tracing::info!(
+        "startup: cache open {:.0} ms",
+        startup.elapsed().as_secs_f32() * 1000.0
+    );
 
     tracing::info!(
         "building {0}x{0} region block around {1},{2}",
@@ -255,8 +283,18 @@ fn main() -> Result<()> {
     let champion = champions[selected_champion].clone();
     let hero_select_open = cli.champion.is_none() && !cli.skip_hero_select && !has_demo_flags(&cli);
     let shop = ItemShop::load()?;
+    let phase = Instant::now();
     let scene = scene::build(&cache, cli.region_x, cli.region_y, cli.radius, &cli.map)?;
+    tracing::info!(
+        "startup: scene build {:.0} ms",
+        phase.elapsed().as_secs_f32() * 1000.0
+    );
+    let phase = Instant::now();
     let animated = AnimatedScene::new(&cache, &scene, &champion)?;
+    tracing::info!(
+        "startup: animated scene {:.0} ms",
+        phase.elapsed().as_secs_f32() * 1000.0
+    );
     let height = scene.height.clone();
     let collision = scene.collision.clone();
     let mut animated = animated;
@@ -495,6 +533,15 @@ fn main() -> Result<()> {
             .screenshot
             .clone()
             .map(|path| (path, cli.screenshot_after)),
+        shot_queue,
+        shot_dir: cli.shot_dir.clone(),
+        shot_warmup: cli.screenshot_after,
+        exit_after_capture: false,
+        hot_shaders: cli.hot_shaders,
+        shader_poll_frames: 0,
+        paused: false,
+        startup,
+        first_frame_logged: false,
         app_time: 0.0,
         lane_log_timer: 0.0,
         last_frame: Instant::now(),
@@ -621,6 +668,18 @@ struct App {
     benchmark_profiling: bool,
     gpu_timing: bool,
     screenshot_request: Option<(std::path::PathBuf, u32)>,
+    /// Dev batch screenshots still to capture (`--shots`).
+    shot_queue: VecDeque<devtools::ShotSpec>,
+    shot_dir: PathBuf,
+    shot_warmup: u32,
+    /// `--screenshot` / `--shots`: exit once every capture is written.
+    exit_after_capture: bool,
+    hot_shaders: bool,
+    shader_poll_frames: u32,
+    /// F10: freeze the simulation while rendering continues.
+    paused: bool,
+    startup: Instant,
+    first_frame_logged: bool,
     app_time: f32,
     lane_log_timer: f32,
     last_frame: Instant,
@@ -652,6 +711,7 @@ impl ApplicationHandler for App {
         let scene = self.scene.take().expect("scene missing");
         let animated = self.animated.take().expect("animated scene missing");
         let camera = Camera::new(animated.player_pos() + Vec3::Y * 140.0);
+        let gpu_phase = Instant::now();
         let model_textures = match crate::model_textures::ModelTextures::load(&self.cache) {
             Ok(textures) => textures,
             Err(err) => {
@@ -701,6 +761,10 @@ impl ApplicationHandler for App {
         };
 
         tracing::info!(
+            "startup: textures + renderer {:.0} ms",
+            gpu_phase.elapsed().as_secs_f32() * 1000.0
+        );
+        tracing::info!(
             "renderer: window {}x{}, scene {}x{} ({:.2}x)",
             renderer.size.0,
             renderer.size.1,
@@ -731,6 +795,10 @@ impl ApplicationHandler for App {
         }
         if let Some((path, after)) = self.screenshot_request.take() {
             renderer.request_screenshot(path, after);
+            self.exit_after_capture = true;
+        }
+        if self.hot_shaders {
+            renderer.enable_shader_hot_reload();
         }
         renderer.update_camera();
         tracing::info!(
@@ -742,6 +810,16 @@ impl ApplicationHandler for App {
         self.renderer = Some(renderer);
         self.animated = Some(animated);
         self.last_frame = Instant::now();
+        tracing::info!("{}", devtools::HOTKEY_HELP);
+        if !self.shot_queue.is_empty() {
+            tracing::info!(
+                "shots: {} presets into {}",
+                self.shot_queue.len(),
+                self.shot_dir.display()
+            );
+            self.exit_after_capture = true;
+            self.next_shot();
+        }
     }
 
     fn window_event(
@@ -926,6 +1004,8 @@ impl ApplicationHandler for App {
                         } else {
                             event_loop.exit();
                         }
+                    } else if self.dev_hotkey(code) {
+                        // Developer keys work in play and spectator mode.
                     } else if code == KeyCode::KeyV {
                         self.toggle_spectator();
                     } else if code == KeyCode::KeyZ {
@@ -1012,6 +1092,42 @@ impl ApplicationHandler for App {
                     tracing::error!("render error: {err:#}");
                     event_loop.exit();
                 }
+                if !self.first_frame_logged && self.renderer.is_some() {
+                    self.first_frame_logged = true;
+                    tracing::info!(
+                        "startup: first frame after {:.1} s",
+                        self.startup.elapsed().as_secs_f32()
+                    );
+                }
+                if self.hot_shaders {
+                    self.shader_poll_frames += 1;
+                    if self.shader_poll_frames >= 15 {
+                        self.shader_poll_frames = 0;
+                        if let Some(renderer) = self.renderer.as_mut() {
+                            renderer.poll_shader_reload();
+                        }
+                    }
+                }
+                if self.exit_after_capture
+                    && self
+                        .renderer
+                        .as_ref()
+                        .is_some_and(|renderer| !renderer.screenshot_pending())
+                {
+                    if self.shot_queue.is_empty() {
+                        let written = self
+                            .renderer
+                            .as_ref()
+                            .map_or(0, |renderer| renderer.screenshots_written());
+                        tracing::info!(
+                            "captures done: {written} written in {:.1} s; exiting",
+                            self.startup.elapsed().as_secs_f32()
+                        );
+                        event_loop.exit();
+                    } else {
+                        self.next_shot();
+                    }
+                }
                 if let Some(window) = self.window.as_ref() {
                     window.request_redraw();
                 }
@@ -1032,6 +1148,94 @@ impl ApplicationHandler for App {
 }
 
 impl App {
+    /// Teleport to the next `--shots` preset, frame it and queue a capture.
+    fn next_shot(&mut self) {
+        let Some(shot) = self.shot_queue.pop_front() else {
+            return;
+        };
+        let (Some(renderer), Some(animated), Some(height)) = (
+            self.renderer.as_mut(),
+            self.animated.as_mut(),
+            self.height.as_ref(),
+        ) else {
+            return;
+        };
+        let x = (shot.tile.0 + 0.5) * 128.0;
+        let z = (shot.tile.1 + 0.5) * 128.0;
+        animated.teleport_player(Vec3::new(x, height.height_at(x, z), z));
+        self.follow = true;
+        renderer.camera.target = animated.player_pos() + Vec3::Y * 140.0;
+        renderer.camera.pitch = shot.pitch.or(self.initial_pitch).unwrap_or(0.95);
+        renderer.camera.yaw = shot.yaw.unwrap_or(0.0);
+        renderer.camera.distance = shot.distance.unwrap_or(self.initial_distance);
+        renderer.set_debug_view(shot.view.unwrap_or(self.debug_view));
+        renderer.update_camera();
+        let path = shot.output_path(&self.shot_dir);
+        tracing::info!("shot {}: {}", shot.name, shot.to_line());
+        renderer.request_screenshot(path, self.shot_warmup);
+    }
+
+    /// Developer function keys. Returns true when the key was handled.
+    fn dev_hotkey(&mut self, code: KeyCode) -> bool {
+        let shift =
+            self.held.contains(&KeyCode::ShiftLeft) || self.held.contains(&KeyCode::ShiftRight);
+        match code {
+            KeyCode::F1 => tracing::info!("{}", devtools::HOTKEY_HELP),
+            KeyCode::F2 => {
+                if let Some(renderer) = self.renderer.as_mut() {
+                    let count = devtools::DEBUG_VIEWS.len() as u32;
+                    let view = if shift {
+                        (renderer.debug_view() + count - 1) % count
+                    } else {
+                        (renderer.debug_view() + 1) % count
+                    };
+                    renderer.set_debug_view(view);
+                    self.debug_view = view;
+                    tracing::info!("debug view: {}", devtools::debug_view_name(view));
+                }
+            }
+            KeyCode::F5 => {
+                if let Some(renderer) = self.renderer.as_mut()
+                    && let Err(err) = renderer.reload_scene_shader()
+                {
+                    tracing::error!("shader reload failed, keeping the old shader:\n{err:#}");
+                }
+            }
+            KeyCode::F7 => {
+                if let (Some(renderer), Some(animated)) =
+                    (self.renderer.as_ref(), self.animated.as_ref())
+                {
+                    let pos = animated.player_pos();
+                    let shot = devtools::ShotSpec {
+                        name: format!("shot_{}", self.app_time as u32),
+                        tile: (pos.x / 128.0 - 0.5, pos.z / 128.0 - 0.5),
+                        pitch: Some(renderer.camera.pitch),
+                        yaw: Some(renderer.camera.yaw),
+                        distance: Some(renderer.camera.distance),
+                        view: (renderer.debug_view() != 0).then(|| renderer.debug_view()),
+                    };
+                    tracing::info!("position (paste into a --shots file): {}", shot.to_line());
+                }
+            }
+            KeyCode::F9 => {
+                if let Some(renderer) = self.renderer.as_mut() {
+                    let path = devtools::hotkey_screenshot_path();
+                    tracing::info!("capturing {}", path.display());
+                    renderer.request_screenshot(path, 0);
+                }
+            }
+            KeyCode::F10 => {
+                self.paused = !self.paused;
+                tracing::info!(
+                    "simulation {}",
+                    if self.paused { "paused" } else { "resumed" }
+                );
+            }
+            _ => return false,
+        }
+        true
+    }
+
     fn tick(&mut self) {
         let now = Instant::now();
         let dt = (now - self.last_frame).as_secs_f32().min(0.1);
@@ -1610,7 +1814,11 @@ impl App {
                     self.demo_target = None;
                 }
             }
-            let steps = self.timescale.round().clamp(1.0, 20.0) as u32;
+            let steps = if self.paused {
+                0
+            } else {
+                self.timescale.round().clamp(1.0, 20.0) as u32
+            };
             let sim_start = Instant::now();
             for _ in 0..steps {
                 animated.update(dt, height, collision);
@@ -2858,6 +3066,7 @@ fn has_demo_flags(cli: &Cli) -> bool {
         || cli.ui_live
         || cli.demo_target.is_some()
         || cli.spawn.is_some()
+        || cli.shots.is_some()
         || cli.demo_combat
         || cli.demo_anim
         || cli.demo_duel
@@ -2923,16 +3132,7 @@ fn parse_shadow_mode(name: &str) -> u32 {
 }
 
 fn parse_debug_view(name: &str) -> u32 {
-    match name.to_ascii_lowercase().as_str() {
-        "albedo" => 1,
-        "normal" => 2,
-        "lighting" => 3,
-        "fog" => 4,
-        "lights" => 5,
-        "shadow" => 6,
-        "ao" => 7,
-        _ => 0,
-    }
+    devtools::debug_view_index(name)
 }
 
 fn digit_index(code: KeyCode) -> Option<usize> {

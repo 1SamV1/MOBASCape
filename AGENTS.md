@@ -92,6 +92,10 @@ cargo run -p rift-client -- --demo-kit --timescale 4
 cargo run -p rift-client -- --timescale 20
 ```
 
+Visual checks: use `--shots tools/shots/terrain.txt --present-mode immediate`
+(one load, one PNG per preset, then exit) and `--hot-shaders`/F5 for
+shader iteration. See `docs/DEV_TOOLS.md`.
+
 Cache location: `.cache/osrs-235/cache` by default. Pass `--cache` and
 `--keys` to the tools if yours lives elsewhere. See
 `docs/ASSET_PIPELINE.md`.

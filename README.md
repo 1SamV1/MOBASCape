@@ -260,6 +260,7 @@ commands, and how to contribute without breaking determinism or leaking assets.
 - [docs/MOVEMENT.md](docs/MOVEMENT.md)
 - [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md)
 - [docs/UI_ASSETS.md](docs/UI_ASSETS.md)
+- [docs/DEV_TOOLS.md](docs/DEV_TOOLS.md) — batch screenshots, shader hot reload, F-key debug tools
 - [docs/DECISIONS.md](docs/DECISIONS.md)
 
 ## License
