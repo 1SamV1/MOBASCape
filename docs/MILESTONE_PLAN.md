@@ -50,10 +50,15 @@ reference, using only cache-scraped terrain, textures and models.
 - **Tried and reverted:** alpha-tested foliage cutouts. This cache's canopy
   alphas are not cutout masks; preserving them punched sky holes through the
   canopies. Keep the opaque average-colour fill.
-- **Next:** water props, tree variety, LOD/instancing, received shadows and
-  contact AO.
+- **Done (2026-11-23):** noise continuity fix, calm floor, terraced
+  plateaus with stone risers, 64-unit display terrain, per-cell overlay and
+  biome edges, grass anti-tiling/palette, imp facing.
+- **Next:** fix blanket sun shadows from oversized proxies; win back ~3 ms
+  scene GPU (baked noise texture, selective subdivision); dress cliffs with
+  cache rocks and plateau tree clusters; decide cliff collision (user call);
+  water props, tree variety, LOD/instancing, contact AO.
 - **Exit:** base/lane/jungle/river captures read as the reference's world;
-  1920×1008 holds 60 fps; no invented visual assets.
+  1920×1008 holds 60 fps at p95; no invented visual assets.
 
 ## M6.6 — Live interface parity
 

@@ -185,3 +185,55 @@ Project-level via `skills.sh` (`npx skills add … --copy`), pinned in
 - `mattpocock/skills`: `codebase-design`, `diagnosing-bugs`, `research`.
 - `obra/superpowers`: `writing-plans`, `verification-before-completion`,
   `systematic-debugging`.
+
+## 7. Pass 2 (2026-11-23): terrain rework, re-audit
+
+Reference frames re-sampled (one per 10 s plus full-resolution stops at
+1:35, 4:10, 7:10 and 9:05); kept out of the repo.
+
+### What the reference terrain actually does
+
+- The playable floor is **flat and calm**: lanes, river banks and fights
+  happen on level ground. Elevation is concentrated in **terraces**: flat
+  plateau tops, steep grey rock risers, flat ground at the foot.
+- Grass is a deep, saturated green (sampled ≈ rgb 26,58,26 lush,
+  70,82,28 open field) with irregular blade/speck variation, not a visible
+  tile. Lanes are wide dirt with soft shoulders.
+- Large dark tree masses and heavy fog of war carry most of the contrast.
+
+### What ours did wrong (before this pass)
+
+- Noise hills everywhere (a lumpy blanket), creased by a discontinuous
+  noise function; rock smeared over smooth hills; lime/olive grass with a
+  mirror-tile seam grid; square overlay and biome patches at 128 units.
+
+### Fixed this pass
+
+See `STATUS.md` 2026-11-23: noise fix, calm floor, terraced plateaus with
+stone risers, 64-unit display mesh, per-cell overlay/biome edges, grass
+anti-tiling and palette, imp facing.
+
+### Updated gaps (world art)
+
+1. **Sun shadows.** Oversized tree/wall shadow proxies blanket the ground
+   near the blue base in hard-edged dark regions. Needs tighter proxies,
+   softer PCF and a higher ambient floor in shadow.
+2. **Performance.** Scene GPU rose 11.3 → 14.3 ms at 1920×1008 (62 fps).
+   Bake the mottle/macro noise into a small tileable texture (one fetch
+   instead of three procedural noises) and consider 2× subdivision only
+   within plateau/riser chunks.
+3. **Cliff collision.** Units walk up risers. Making risers impassable (with
+   authored ramps) is a gameplay/map decision for the user.
+4. **Cliff dressing.** Cache rock/boulder objects along riser feet and lips,
+   tree clusters on plateau tops (the reference's dark canopy masses).
+5. **Default HUD.** `--ui-live` (cache-scraped OSRS interface) is still
+   opt-in; the legacy debug HUD remains the default.
+
+Milestone order is unchanged (M6.5 world art → M6.6 live interface parity →
+M7 simulation authority → M8 networked 5v5 → M9 content/audio → M10 ship).
+M6.5 exit now also requires shadows fixed and 60 fps p95 restored.
+
+### Skills added this pass
+
+- `gamedev-skills/awesome-gamedev-agent-skills@shader-programming`
+- `apollographql/skills@rust-best-practices`

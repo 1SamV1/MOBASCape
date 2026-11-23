@@ -1,6 +1,46 @@
 # Status
 
-Last updated: water flicker and low-ground readability, 2026-11-23.
+Last updated: terraced terrain, grass anti-tiling and imp facing, 2026-11-23.
+
+## 2026-11-23 — Terraced terrain, 64-unit ground mesh, grass anti-tiling, imp facing
+
+- **Noise bug fixed.** `value_noise` hashed the cell plus a corner flag
+  instead of the neighbouring lattice point, so the field jumped at every
+  integer line. Every noise-driven hill, lane wobble and biome edge had
+  creases. A regression test checks continuity across lattice lines.
+- **Calm floor.** `sculpt_terrain` no longer adds broad/medium/ridge/fine
+  hills everywhere. It compresses cache tile bumps to 30% around a 10-pass
+  relaxed copy and adds one very broad swell (±75) plus a ±17 medium octave.
+- **Terraced plateaus.** `plateau_height` cuts a warped low-frequency field
+  at two contour levels (210-unit steps) with narrow risers and rock noise
+  only on the riser band. `plateau_clearance` keeps lanes (4.5–9 tiles),
+  the river, camps, base courtyards and the castle wall bands on the floor.
+  About 13% of the map is raised.
+- **64-unit display terrain.** Heights are a Catmull-Rom upsample of the tile
+  grid plus plateaus at full resolution; colours and masks are bilinear; quads
+  split along the flatter diagonal. `HeightGrid` carries its sample step, so
+  units, decor and structures sit on the finer surface. 819k terrain
+  triangles (was 205k), chunk-culled.
+- **Softer ground edges.** Overlay weights blend between same-texture tile
+  centres per cell; biome grass variants are chosen per cell on a smooth
+  noise contour instead of dithering whole tiles (no more square patches).
+- **Grass shader.** Two grass samples at unrelated rotations and scales
+  (430/1030 units) cancel the mirror-tile seam grid; detail is pulled 30%
+  toward the sprite mean; a two-octave mottle and slow lush/dry patches give
+  scale; palette shifted from lime/olive toward the reference's deeper green.
+- **Cliffs read as stone.** Rock starts at slope 0.13–0.32, with horizontal
+  strata, and the vertex-colour tint no longer greens cliff faces.
+- **Imps walked backwards.** Imp model 19982 faces the opposite axis to the
+  fairy (like King Awowogei). `MinionTemplate::model_yaw` is now π for imps
+  and 0 for fairies; verified with timed captures of the first wave.
+- Performance (live UI, 1920×1008 auto scale): p50 **16.2 ms / 62 fps**,
+  p95 17.6 ms, GPU scene **14.3 ms** (was 11.3). Over budget headroom; the
+  extra grass samples/noise and the 4× terrain triangles are the cost.
+- Known: sun shadows from oversized tree/wall proxies blanket large areas
+  near the blue base in hard-edged dark green; units can walk up cliffs
+  (no cliff collision yet — a gameplay decision).
+- Verified: workspace tests pass (client 69 incl. 6 new terrain tests);
+  workspace clippy clean.
 
 ## 2026-11-23 — Stop shallow-water flicker and lift low-ground readability
 
