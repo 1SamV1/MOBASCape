@@ -115,6 +115,18 @@ it to see where load time goes before optimising.
   median (melee or ranged) are flagged. Re-run after changing champion
   numbers; the model is described at the top of
   `crates/client/src/balance.rs`.
+- `--demo-awowogei` (with `--champion monkey`): spawn a rival beside the
+  king and cast Bananarang at it (1 s), a Banana Peel under it (3.2 s),
+  Greegree (4.4 s) and Vine Swing past it (5.6 s); at 9 s it logs the
+  king's health and position, the rival's health and what is still in
+  play. Screenshot frames ~130 (banana in flight), ~310 (gorilla) and
+  ~386 (swinging).
+- `--mute`: no sound. `--shots` and `--benchmark` are always silent.
+- `rift-tools sound ID --out sound.wav` decodes a cache sound effect,
+  prints its instruments and writes it as a WAV to audition.
+  `rift-tools sounds` decodes all of them and lists every animation
+  that plays one; `rift-tools sounds --sequences A,B --out dir` lists
+  (and writes) the sounds of particular animations.
 - `--demo-ranks SLOT`: level the hero to 7, spend four skill points (Q
   twice, W and R once), leave two unspent so the slots glow, and hold the
   cursor on slot 0-3 so its ability tooltip is in the screenshot.

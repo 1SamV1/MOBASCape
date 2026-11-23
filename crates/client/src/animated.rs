@@ -6,6 +6,7 @@ use anyhow::Result;
 use glam::{Mat3, Vec3};
 use rift_cache::{AnimationClip, AnimationScratch, Cache, Model, model::hsl_to_rgb};
 
+pub mod awowogei;
 mod kit_runtime;
 pub mod ranks;
 
@@ -21,26 +22,7 @@ use crate::scene::{
 /// Highest champion level.
 const MAX_LEVEL: u32 = 11;
 const Q_COOLDOWN: f32 = 5.0;
-/// King Awowogei's Bananarang replaces the shared Q bolt.
-const BANANARANG_COOLDOWN: f32 = 8.0;
-/// King Awowogei's Trial by Combat replaces the shared R meteor.
-const TRIAL_COOLDOWN: f32 = 90.0;
 const PLAYER_RESPAWN: f32 = 5.0;
-/// Half-width of the Bananarang's start/end hands.
-const BANANARANG_HAND: f32 = 28.0;
-/// Forward depth of the trapezoid's long top face. The previous 1,733-unit
-/// oval reach is pulled in a little; the furthest top corner is ~1,516 units.
-const BANANARANG_DEPTH: f32 = 1_300.0;
-/// The launch leg leaves the facing direction 30 degrees to the left.
-const BANANARANG_SPLAY: f32 = std::f32::consts::PI / 6.0;
-/// Flight time. The original 1.0 s arc is slowed to 30% speed, so it takes
-/// about 3.33x longer to complete.
-const BANANARANG_DURATION: f32 = 1.0 / 0.3;
-/// Cache model 2387 is the banana NPC/item mesh. Scaling it 6.25x makes the
-/// 3D banana roughly three times the length of the old billboard fruit.
-const BANANARANG_MODEL_SCALE: f32 = 6.25;
-/// Trial by Combat unit-target range: 5x the original 15-tile range.
-const TRIAL_RANGE: f32 = 75.0 * 128.0;
 /// The shared meteor lands at the cursor, clamped to this cast range.
 const METEOR_RANGE: f32 = 1_100.0;
 /// While a committed attack winds up, the target may drift this much past
@@ -71,10 +53,8 @@ pub enum UnitKind {
     Nexus,
     Camp,
     Watchtower,
-    /// Enemy champion controlled by the duel/demo AI.
+    /// Enemy champion controlled by the demo AI.
     EnemyChampion,
-    /// Non-combat monkey watching a Trial by Combat.
-    Spectator,
     /// Chest near the team spawn that holds remotely purchased items.
     StorageChest,
     /// Flying Armadylean courier that delivers stored purchases.
@@ -94,7 +74,6 @@ fn short_unit_name(kind: UnitKind) -> &'static str {
         UnitKind::Watchtower => "A WATCHTOWER",
         UnitKind::Dummy => "A DUMMY",
         UnitKind::Ambient => "SCENERY",
-        UnitKind::Spectator => "A MONKEY",
         UnitKind::StorageChest => "THE CHEST",
         UnitKind::DeliveryGuard => "THE GUARD",
     }
@@ -158,13 +137,11 @@ pub struct AnimatedUnit {
     pub attack_pending: bool,
     pub attack_range: f32,
     pub attack_damage: f32,
-    /// Permanent Trial by Combat bonus to basic melee damage.
-    pub min_base_damage_bonus: f32,
     pub attack_interval: f32,
     pub speed: f32,
     /// Real armor: physical damage multiplier is 100 / (100 + armor).
     pub armor: f32,
-    /// Positive stacks of armor reduction (banana peels during a duel).
+    /// Positive stacks of armor reduction (kit shreds).
     pub armor_reduction: f32,
     pub armor_reduction_timer: f32,
     pub stun_timer: f32,
@@ -416,8 +393,11 @@ pub enum Indicator {
         backwards: bool,
         to_cursor: bool,
     },
-    /// Bananarang's rounded trapezoid path, in the caster's frame.
-    Path,
+    /// Bananarang's teardrop flight toward the aim: out on the right,
+    /// back on the left.
+    Boomerang { length: f32 },
+    /// Vine Swing's curved arc to the aim, at most `length` away.
+    Swing { length: f32 },
 }
 
 impl Indicator {
@@ -429,8 +409,10 @@ impl Indicator {
             Indicator::Range { radius } => *radius *= reach,
             Indicator::Line { length, .. } => *length *= reach,
             Indicator::Target { range, .. } => *range *= reach,
-            Indicator::Dash { length, .. } => *length *= reach,
-            Indicator::Cone { .. } | Indicator::SelfArea { .. } | Indicator::Path => {}
+            Indicator::Dash { length, .. }
+            | Indicator::Boomerang { length }
+            | Indicator::Swing { length } => *length *= reach,
+            Indicator::Cone { .. } | Indicator::SelfArea { .. } => {}
         }
     }
 }
@@ -557,22 +539,6 @@ pub struct TeamBuff {
     pub kind: CampBuff,
 }
 
-pub struct Bananarang {
-    /// World-space XZ samples of the rounded trapezoid. Y is filled from the
-    /// terrain every frame.
-    pub path: Vec<Vec3>,
-    /// Cumulative arc length at each path sample.
-    pub path_lengths: Vec<f32>,
-    pub path_length: f32,
-    pub t: f32,
-    pub duration: f32,
-    pub physical: f32,
-    pub pure: f32,
-    pub crit_chance: f32,
-    pub stun: f32,
-    pub hit: Vec<usize>,
-}
-
 /// A number that pops over a unit when it is hit, like the reference client.
 pub struct FloatText {
     pub pos: Vec3,
@@ -581,24 +547,6 @@ pub struct FloatText {
     pub life: f32,
     /// Text scale. Bigger hits pop larger, like the reference client.
     pub scale: f32,
-}
-
-pub struct DuelState {
-    pub target: usize,
-    pub center: Vec3,
-    pub radius: f32,
-    pub remaining: f32,
-    pub duration: f32,
-    pub peel_timer: f32,
-    pub peel_stacks: u32,
-    pub spectator_cursor: usize,
-}
-
-pub struct DuelPeel {
-    pub from: Vec3,
-    pub target: usize,
-    pub t: f32,
-    pub duration: f32,
 }
 
 pub struct Projectile {
@@ -611,8 +559,6 @@ pub struct Projectile {
     /// The unit that fired the projectile, so kills and camp aggro can be
     /// attributed correctly.
     pub attacker: Option<usize>,
-    /// Tower and watchtower bolts cannot reach Trial by Combat participants.
-    pub tower_shot: bool,
     /// Look from `fx::LOOKS`.
     pub look: usize,
     /// Homing basic attack: steers onto this unit and can hit nothing else.
@@ -652,7 +598,6 @@ impl Projectile {
             damage,
             team,
             attacker: None,
-            tower_shot: false,
             look,
             target: None,
             flight: speed * life,
@@ -746,14 +691,11 @@ pub struct AnimatedScene {
     pub indicator_aim: Option<Vec3>,
     /// Brief range flash after a cast: slot and seconds left.
     cast_flash: Option<(usize, f32)>,
-    pub bananarangs: Vec<Bananarang>,
-    /// Cache-native banana mesh used by the Bananarang; billboard fallback if
-    /// the cache revision lacks model 2387.
-    banana_model: Option<Arc<Model>>,
-    pub duel: Option<DuelState>,
-    pub duel_peels: Vec<DuelPeel>,
-    pub duel_wins: u32,
-    spectator_indices: Vec<usize>,
+    /// King Awowogei's bananas, vine, peels and Greegree form.
+    pub awowogei: awowogei::AwowogeiState,
+    /// The champion's named cache sounds, and sounds waiting to be played.
+    sounds: std::collections::BTreeMap<String, crate::champion::SoundSpec>,
+    pub sound_cues: Vec<crate::audio::SoundCue>,
     rng_state: u32,
     pub effects: Vec<Effect>,
     /// Billboard sparks emitted by abilities, impacts and deaths.
@@ -1142,33 +1084,6 @@ impl AnimatedScene {
             Vec::new(),
         )?);
 
-        let mut spectator_indices = Vec::new();
-        for _ in 0..8 {
-            if let Ok(mut spectator) = load_unit(
-                &mut assets,
-                4818,
-                Some(1386),
-                None,
-                Vec3::ZERO,
-                2.0,
-                UnitKind::Spectator,
-                2,
-                1.0,
-                0.0,
-                0.0,
-                0.0,
-                0.0,
-                0.0,
-                0.0,
-                Vec::new(),
-            ) {
-                spectator.health = 0.0;
-                spectator.visible = false;
-                units.push(spectator);
-                spectator_indices.push(units.len() - 1);
-            }
-        }
-
         let nexus_positions = [
             find_nexus(&units, 0).unwrap_or(scene.player_spawn),
             find_nexus(&units, 1).unwrap_or(scene.player_spawn),
@@ -1228,12 +1143,10 @@ impl AnimatedScene {
             height: scene.collision.height() as usize,
             tiles: vec![false; (scene.collision.width() * scene.collision.height()) as usize],
         };
-        let banana_model = match assets.model(2387) {
-            Ok(model) => Some(model),
-            Err(err) => {
-                tracing::warn!("bananarang model 2387 unavailable; using billboard: {err:#}");
-                None
-            }
+        let awowogei = if champion.id == "monkey" {
+            awowogei::AwowogeiState::load(&mut assets)
+        } else {
+            awowogei::AwowogeiState::default()
         };
 
         // Projectile and impact models for every look. A missing spot
@@ -1270,12 +1183,9 @@ impl AnimatedScene {
             last_cast_slot: None,
             indicator_aim: None,
             cast_flash: None,
-            bananarangs: Vec::new(),
-            banana_model,
-            duel: None,
-            duel_peels: Vec::new(),
-            duel_wins: 0,
-            spectator_indices,
+            awowogei,
+            sounds: champion.sounds.clone(),
+            sound_cues: Vec::new(),
             rng_state: 0x9E37_79B9,
             effects: Vec::new(),
             particles: Vec::new(),
@@ -1449,7 +1359,7 @@ impl AnimatedScene {
             cooldowns: p.cooldowns,
             shield: p.shield,
             shield_timer: p.shield_timer,
-            attack_damage: p.attack_damage + p.min_base_damage_bonus,
+            attack_damage: p.attack_damage,
             armor: p.armor,
             ranged: p.ranged,
             attack_interval: p.attack_interval,
@@ -1457,7 +1367,7 @@ impl AnimatedScene {
                 let fallback = if let Some(kit) = &self.kit {
                     kit.cooldowns()
                 } else if self.champion_id == "monkey" {
-                    [BANANARANG_COOLDOWN, 8.0, 12.0, TRIAL_COOLDOWN]
+                    awowogei::COOLDOWNS
                 } else {
                     [Q_COOLDOWN, 8.0, 12.0, 45.0]
                 };
@@ -1950,7 +1860,7 @@ impl AnimatedScene {
         let pi = self.player_index;
         let unit = &mut self.units[pi];
         unit.attack_cooldown = unit.attack_interval / unit.attack_speed_mult.max(0.1);
-        let mut damage = unit.attack_damage + unit.min_base_damage_bonus;
+        let mut damage = unit.attack_damage;
         if unit.ranged_auto {
             damage *= unit.ranged_scale();
         }
@@ -1974,6 +1884,9 @@ impl AnimatedScene {
         } else {
             self.melee_slash(pi, target, [255, 235, 200]);
             self.damage_unit_by(target, damage, 0, Some(pi));
+            if self.awowogei.greegree.is_some() {
+                self.greegree_slam(target);
+            }
             if self.units[target].health <= 0.0 {
                 self.units[pi].attack_target = None;
             }
@@ -2199,15 +2112,9 @@ impl AnimatedScene {
         ok
     }
 
-    /// Cast the R slot. King Awowogei challenges an enemy champion to Trial
-    /// by Combat; other champions keep the shared ground-targeted meteor.
-    pub fn cast_r(
-        &mut self,
-        target: Vec3,
-        target_index: Option<usize>,
-        height: &HeightGrid,
-    ) -> bool {
-        let ok = self.cast_r_inner(target, target_index, height);
+    /// Cast the R slot at the cursor (King Awowogei's Greegree ignores it).
+    pub fn cast_r(&mut self, target: Vec3) -> bool {
+        let ok = self.cast_r_inner(target);
         self.after_cast(3, ok);
         ok
     }
@@ -2258,10 +2165,7 @@ impl AnimatedScene {
         }
         let player = &self.units[self.player_index];
         match (self.champion_id.as_str(), slot) {
-            ("monkey", 0) => vec![Indicator::Path],
-            ("monkey", 3) => vec![Indicator::Range {
-                radius: TRIAL_RANGE,
-            }],
+            ("monkey", slot) => awowogei::indicators(slot),
             ("ranger", 0) => vec![Indicator::Line {
                 length: 1500.0 * 1.2,
                 width: 70.0,
@@ -2352,6 +2256,27 @@ impl AnimatedScene {
         }
     }
 
+    /// Queue the champion's sound `name` at `pos`. Unnamed sounds are
+    /// silently skipped, so kits can ask for sounds a file does not list.
+    pub(crate) fn play_sound(&mut self, name: &str, pos: Vec3) {
+        let Some(spec) = self.sounds.get(name).copied() else {
+            return;
+        };
+        if self.sound_cues.len() < 32 {
+            self.sound_cues.push(crate::audio::SoundCue {
+                id: spec.id,
+                pos,
+                volume: spec.volume,
+                speed: spec.speed,
+            });
+        }
+    }
+
+    /// Every sound id the champion file names, for preloading.
+    pub fn sound_ids(&self) -> Vec<u32> {
+        self.sounds.values().map(|spec| spec.id).collect()
+    }
+
     fn add_decal(&mut self, pos: Vec3, radius: f32, color: [u8; 3], duration: f32) {
         if self.decals.len() >= 48 {
             self.decals.remove(0);
@@ -2370,64 +2295,10 @@ impl AnimatedScene {
             return self.cast_kit(0, target);
         }
         match self.champion_id.as_str() {
-            "monkey" => self.cast_bananarang(),
+            "monkey" => self.cast_bananarang(target),
             "ranger" => self.cast_toxic_dart(target),
             _ => self.cast_arcane_bolt(target),
         }
-    }
-
-    fn cast_bananarang(&mut self) -> bool {
-        let pi = self.player_index;
-        // The Bananarang's path is fixed, so its rank changes damage and cooldown.
-        let (rank_damage, rank_cooldown) = (
-            self.hand_damage_mult(0),
-            self.rank_cooldown(0, BANANARANG_COOLDOWN),
-        );
-        let rank = self.ability_ranks[0];
-        let player = &mut self.units[pi];
-        if player.health <= 0.0
-            || player.stun_timer > 0.0
-            || player.cooldowns[0] > 0.0
-            || player.mana < 40.0
-        {
-            return false;
-        }
-        let base = player.q_damage * (1.0 + player.ability_power / 100.0) * rank_damage;
-        let forward = Vec3::new(player.yaw.sin(), 0.0, player.yaw.cos());
-        let right = Vec3::Y.cross(forward);
-        // The path is authored in local XZ space: +X right, +Z forward. It
-        // starts at the left hand, leaves 30 degrees left of facing, runs a
-        // long rounded top face, and closes back into the right hand.
-        let origin = Vec3::new(player.pos.x, 0.0, player.pos.z);
-        let path = bananarang_local_path()
-            .into_iter()
-            .map(|p| origin + right * p.x + forward * p.z)
-            .collect::<Vec<_>>();
-        let (path_lengths, path_length) = path_length_table(&path);
-        let start = player.pos + Vec3::Y * (player.scale * 55.0);
-        player.mana -= 40.0;
-        player.cooldowns[0] = rank_cooldown;
-        self.bananarangs.push(Bananarang {
-            path,
-            path_lengths,
-            path_length,
-            t: 0.0,
-            duration: BANANARANG_DURATION,
-            physical: base * 0.6,
-            pure: base * 0.4,
-            crit_chance: 0.10 + 0.04 * (rank.saturating_sub(1)) as f32,
-            stun: 0.10 + 0.05 * (rank.saturating_sub(1)) as f32,
-            hit: Vec::new(),
-        });
-        self.effects.push(Effect {
-            pos: start,
-            radius: 90.0,
-            remaining: 0.18,
-            duration: 0.18,
-            color: [255, 220, 60],
-        });
-        self.emit_burst(start, [255, 220, 60], 12, 230.0, 18.0, 0.45);
-        true
     }
 
     /// Blowpipe Ranger Q: a fast poisoned dart that stacks venom.
@@ -2676,6 +2547,9 @@ impl AnimatedScene {
         if self.champion_id == "ranger" {
             return self.cast_dart_volley(target);
         }
+        if self.champion_id == "monkey" {
+            return self.cast_vine_swing(target, collision, height);
+        }
         let (rank_reach, rank_cooldown) = (self.rank_reach_mult(1), self.rank_cooldown(1, 8.0));
         let pi = self.player_index;
         let player = &mut self.units[pi];
@@ -2737,6 +2611,10 @@ impl AnimatedScene {
         if self.champion_id == "ranger" {
             return self.cast_footwork(collision, height);
         }
+        if self.champion_id == "monkey" {
+            let target = self.kit_aim;
+            return self.cast_banana_peel(target, height);
+        }
         let (rank_damage, rank_cooldown) = (self.hand_damage_mult(2), self.rank_cooldown(2, 12.0));
         let pi = self.player_index;
         let player = &mut self.units[pi];
@@ -2766,106 +2644,15 @@ impl AnimatedScene {
         true
     }
 
-    fn cast_r_inner(
-        &mut self,
-        target: Vec3,
-        target_index: Option<usize>,
-        height: &HeightGrid,
-    ) -> bool {
+    fn cast_r_inner(&mut self, target: Vec3) -> bool {
         if self.kit.is_some() {
             return self.cast_kit(3, target);
         }
         match self.champion_id.as_str() {
-            "monkey" => self.cast_trial(target_index, height),
+            "monkey" => self.cast_greegree(),
             "ranger" => self.cast_deadshot(target),
             _ => self.cast_meteor(target),
         }
-    }
-
-    fn cast_trial(&mut self, target_index: Option<usize>, height: &HeightGrid) -> bool {
-        let Some(target_index) = target_index else {
-            return false;
-        };
-        let pi = self.player_index;
-        let rank_cooldown = self.rank_cooldown(3, TRIAL_COOLDOWN);
-        if self.duel.is_some() || target_index == pi || target_index >= self.units.len() {
-            return false;
-        }
-        let player = &self.units[pi];
-        let target = &self.units[target_index];
-        if player.health <= 0.0
-            || player.stun_timer > 0.0
-            || player.cooldowns[3] > 0.0
-            || player.mana < 100.0
-            || target.health <= 0.0
-            || !target.is_champion
-            || target.team == player.team
-            || !target.visible
-            || player.pos.distance(target.pos) > TRIAL_RANGE
-        {
-            return false;
-        }
-        let center = (player.pos + target.pos) * 0.5;
-        let distance = player.pos.distance(target.pos);
-        // The barrier forms where the fighters stand, so at maximum cast
-        // range it has to be wide enough to contain both of them.
-        let radius = (distance * 0.5 + 200.0).clamp(320.0, TRIAL_RANGE * 0.5 + 200.0);
-        {
-            let player = &mut self.units[pi];
-            player.mana -= 100.0;
-            player.cooldowns[3] = rank_cooldown;
-            player.path.clear();
-            player.path_index = 0;
-            player.target = None;
-            player.attack_pending = false;
-            player.attack_windup_timer = 0.0;
-            player.attack_target = Some(target_index);
-        }
-        {
-            let target = &mut self.units[target_index];
-            target.path.clear();
-            target.path_index = 0;
-            target.attack_target = Some(pi);
-        }
-        self.duel_peels.clear();
-        let spectator_count = self.spectator_indices.len();
-        for (index, &spectator_index) in self.spectator_indices.iter().enumerate() {
-            let angle = index as f32 / spectator_count.max(1) as f32 * std::f32::consts::TAU;
-            let mut pos = center + Vec3::new(angle.cos(), 0.0, angle.sin()) * (radius + 110.0);
-            pos.y = height.height_at(pos.x, pos.z);
-            let spectator = &mut self.units[spectator_index];
-            spectator.pos = pos;
-            spectator.health = 1.0;
-            spectator.max_health = 1.0;
-            spectator.visible = true;
-            spectator.death_anim = 0.0;
-            spectator.moving = false;
-            spectator.yaw = (center.x - pos.x).atan2(center.z - pos.z);
-            spectator.anim_time_ms = (index as f32 * 311.0) % 1400.0;
-        }
-        self.duel = Some(DuelState {
-            target: target_index,
-            center,
-            radius,
-            remaining: 10.0,
-            duration: 10.0,
-            peel_timer: 0.8,
-            peel_stacks: 0,
-            spectator_cursor: 0,
-        });
-        self.effects.push(Effect {
-            pos: center,
-            radius,
-            remaining: 0.6,
-            duration: 0.6,
-            color: [80, 220, 255],
-        });
-        self.emit_burst(center, [90, 220, 255], 34, 520.0, 22.0, 0.8);
-        tracing::info!(
-            "trial by combat: target {} arena radius {radius:.0}",
-            target_index
-        );
-        true
     }
 
     fn cast_meteor(&mut self, target: Vec3) -> bool {
@@ -2914,158 +2701,6 @@ impl AnimatedScene {
             color: [255, 190, 80],
         });
         true
-    }
-
-    fn end_duel(&mut self, won: bool) {
-        let Some(target) = self.duel.take().map(|duel| duel.target) else {
-            return;
-        };
-        self.duel_peels.clear();
-        for &index in &self.spectator_indices {
-            let spectator = &mut self.units[index];
-            spectator.health = 0.0;
-            spectator.visible = false;
-        }
-        if let Some(unit) = self.units.get_mut(target) {
-            unit.attack_target = None;
-            unit.path.clear();
-            unit.path_index = 0;
-        }
-        let pi = self.player_index;
-        if won {
-            let player = &mut self.units[pi];
-            player.min_base_damage_bonus += 4.0;
-            self.duel_wins += 1;
-            tracing::info!(
-                "trial by combat won: {} wins, +{:.0} base melee damage",
-                self.duel_wins,
-                player.min_base_damage_bonus
-            );
-        }
-    }
-
-    fn apply_duel_bounds(&mut self, height: &HeightGrid) {
-        let Some(duel) = self.duel.as_ref() else {
-            return;
-        };
-        let center = duel.center;
-        let radius = duel.radius;
-        let target = duel.target;
-        let player = self.player_index;
-        for (index, unit) in self.units.iter_mut().enumerate() {
-            if unit.health <= 0.0 || unit.kind.is_structure() || unit.kind == UnitKind::Spectator {
-                continue;
-            }
-            let dx = unit.pos.x - center.x;
-            let dz = unit.pos.z - center.z;
-            let distance = (dx * dx + dz * dz).sqrt();
-            let participant = index == player || index == target;
-            if participant {
-                if distance > radius - 24.0 {
-                    let scale = (radius - 24.0) / distance.max(0.001);
-                    unit.pos.x = center.x + dx * scale;
-                    unit.pos.z = center.z + dz * scale;
-                    unit.pos.y = height.height_at(unit.pos.x, unit.pos.z);
-                    unit.path.clear();
-                    unit.path_index = 0;
-                }
-            } else {
-                if distance < radius + 24.0 {
-                    let scale = (radius + 24.0) / distance.max(0.001);
-                    unit.pos.x = center.x + dx * scale;
-                    unit.pos.z = center.z + dz * scale;
-                    unit.pos.y = height.height_at(unit.pos.x, unit.pos.z);
-                    unit.path.clear();
-                    unit.path_index = 0;
-                }
-            }
-        }
-    }
-
-    fn update_duel(&mut self, dt: f32) {
-        let Some(duel) = self.duel.as_ref() else {
-            return;
-        };
-        let target_index = duel.target;
-        let player_alive = self.units[self.player_index].health > 0.0;
-        let target_alive = self
-            .units
-            .get(target_index)
-            .is_some_and(|unit| unit.health > 0.0);
-        if !player_alive {
-            self.end_duel(false);
-            return;
-        }
-        if !target_alive {
-            self.end_duel(true);
-            return;
-        }
-        let remaining = duel.remaining - dt;
-        if remaining <= 0.0 {
-            let player_fraction =
-                self.units[self.player_index].health / self.units[self.player_index].max_health;
-            let target_fraction =
-                self.units[target_index].health / self.units[target_index].max_health.max(1.0);
-            self.end_duel(player_fraction > target_fraction);
-            return;
-        }
-        let peel_due = {
-            let duel = self.duel.as_mut().expect("duel exists");
-            duel.remaining = remaining;
-            duel.peel_timer -= dt;
-            if duel.peel_timer <= 0.0 {
-                duel.peel_timer = 0.9;
-                true
-            } else {
-                false
-            }
-        };
-        if peel_due {
-            let (from, cursor) = {
-                let duel = self.duel.as_ref().expect("duel exists");
-                let cursor = duel.spectator_cursor;
-                let from = self
-                    .spectator_indices
-                    .get(cursor % self.spectator_indices.len().max(1))
-                    .and_then(|&index| self.units.get(index))
-                    .map_or(duel.center + Vec3::Y * 140.0, |unit| {
-                        unit.pos + Vec3::Y * 120.0
-                    });
-                (from, cursor + 1)
-            };
-            if let Some(duel) = self.duel.as_mut() {
-                duel.spectator_cursor = cursor;
-            }
-            self.duel_peels.push(DuelPeel {
-                from,
-                target: target_index,
-                t: 0.0,
-                duration: 0.45,
-            });
-        }
-        let mut peels = std::mem::take(&mut self.duel_peels);
-        peels.retain_mut(|peel| {
-            peel.t += dt / peel.duration.max(0.01);
-            if peel.t < 1.0 {
-                return true;
-            }
-            if let Some(unit) = self.units.get_mut(peel.target) {
-                unit.armor_reduction = (unit.armor_reduction + 2.0).min(16.0);
-                unit.armor_reduction_timer = 4.0;
-            }
-            if let Some(duel) = self.duel.as_mut() {
-                duel.peel_stacks = duel.peel_stacks.saturating_add(1);
-            }
-            self.effects.push(Effect {
-                pos: self.units[peel.target].pos,
-                radius: 90.0,
-                remaining: 0.3,
-                duration: 0.3,
-                color: [220, 180, 40],
-            });
-            false
-        });
-        self.duel_peels = peels;
     }
 
     pub fn pick_enemy_champion(&self, origin: Vec3, dir: Vec3) -> Option<usize> {
@@ -3350,7 +2985,6 @@ impl AnimatedScene {
                 }
             }
             UnitKind::EnemyChampion => "RIVAL CHAMPION".to_string(),
-            UnitKind::Spectator => "MONKEY SUBJECT".to_string(),
             UnitKind::StorageChest => "ITEM STORAGE".to_string(),
             UnitKind::DeliveryGuard => "ARMADYLEAN GUARD".to_string(),
         };
@@ -3373,8 +3007,7 @@ impl AnimatedScene {
             UnitKind::Watchtower => {
                 "FIRES A SLOW BOLT AT THE FIRST ENEMY IN RANGE AND KEEPS FIRING UNTIL IT LEAVES."
             }
-            UnitKind::EnemyChampion => "AN ENEMY CHAMPION. TRIAL BY COMBAT CAN TARGET IT.",
-            UnitKind::Spectator => "A LOYAL SUBJECT WATCHING THE KING'S TRIAL.",
+            UnitKind::EnemyChampion => "AN ENEMY CHAMPION.",
             UnitKind::StorageChest => "REMOTE PURCHASES WAIT HERE. CALL THE GUARD TO DELIVER THEM.",
             UnitKind::DeliveryGuard => {
                 "FLIES YOUR STORED ITEMS OUT TO YOU, THEN RETURNS TO THE CHEST."
@@ -3691,9 +3324,7 @@ impl AnimatedScene {
         }
 
         self.update_strikes(dt);
-        self.apply_duel_bounds(height);
-        self.update_duel(dt);
-        self.update_bananarangs(dt, height);
+        self.update_awowogei(dt, height, collision);
         self.update_projectiles(dt, height);
 
         for (index, damage, team) in venom_ticks {
@@ -3720,7 +3351,9 @@ impl AnimatedScene {
             self.units[pi].moving = false;
             return;
         }
-        if self.kit_rt.controls_player() && self.units[pi].health > 0.0 {
+        if (self.kit_rt.controls_player() || self.awowogei.controls_player())
+            && self.units[pi].health > 0.0
+        {
             // A dash, channel or rooted buff owns the champion's movement.
             return;
         }
@@ -3930,15 +3563,8 @@ impl AnimatedScene {
         height: &HeightGrid,
         _collision: &WorldCollision,
     ) {
-        let duel_target = self
-            .duel
-            .as_ref()
-            .filter(|duel| duel.target == index)
-            .map(|_| self.player_index);
         let team = self.units[index].team;
-        let target =
-            duel_target.filter(|&ti| self.units.get(ti).is_some_and(|unit| unit.health > 0.0));
-        let target = target.or_else(|| self.find_target(index, team, 600.0));
+        let target = self.find_target(index, team, 600.0);
         let Some(target) = target else {
             self.units[index].moving = false;
             self.units[index].attack_target = None;
@@ -4093,10 +3719,7 @@ impl AnimatedScene {
             unit.health > 0.0
                 && unit.team != team
                 && unit.pos.distance(tower_pos) <= lock_range
-                && !self
-                    .duel
-                    .as_ref()
-                    .is_some_and(|duel| ti == self.player_index || ti == duel.target)
+                && !(ti == self.player_index && self.player_untargetable())
         });
         if target.is_none() {
             target = self.find_watchtower_target(index, aggro_range);
@@ -4123,7 +3746,6 @@ impl AnimatedScene {
         let look = fx::look_by_name("watchtower");
         let mut shot = Projectile::new(from, shot_dir, 280.0, 3.5, damage, team, look);
         shot.attacker = Some(index);
-        shot.tower_shot = true;
         self.projectiles.push(shot);
         self.muzzle_flash(from, look);
     }
@@ -4136,10 +3758,7 @@ impl AnimatedScene {
             if i == index
                 || unit.health <= 0.0
                 || unit.team == tower.team
-                || self
-                    .duel
-                    .as_ref()
-                    .is_some_and(|duel| i == self.player_index || i == duel.target)
+                || (i == self.player_index && self.player_untargetable())
             {
                 continue;
             }
@@ -4186,9 +3805,8 @@ impl AnimatedScene {
                 let from = pos + Vec3::Y * 380.0;
                 // Tower shots home like basic attacks; the attacker stays
                 // unset so tower kills never pull a camp.
-                let mut shot =
+                let shot =
                     Projectile::homing(from, target, target_pos, 900.0, damage, team, None, look);
-                shot.tower_shot = true;
                 self.projectiles.push(shot);
                 self.muzzle_flash(from, look);
             }
@@ -4212,10 +3830,7 @@ impl AnimatedScene {
                 || unit.team == team
                 || unit.team == 2
                 || unit.health <= 0.0
-                || self
-                    .duel
-                    .as_ref()
-                    .is_some_and(|duel| i == self.player_index || i == duel.target)
+                || (i == self.player_index && self.player_untargetable())
                 || matches!(unit.kind, UnitKind::DeliveryGuard | UnitKind::StorageChest)
             {
                 continue;
@@ -4328,21 +3943,18 @@ impl AnimatedScene {
             return;
         }
         let incoming = if index == self.player_index {
-            self.kit_incoming_mult()
+            if self.player_untargetable() {
+                0.0
+            } else {
+                self.kit_incoming_mult()
+            }
         } else {
             1.0
         };
         if incoming <= 0.0 {
             return;
         }
-        let mut team_mult = self.team_damage_mult(attacker_team) * incoming;
-        if self.duel.as_ref().is_some_and(|duel| {
-            duel.target == index || duel.target == aggressor.unwrap_or(usize::MAX)
-        }) {
-            // A Trial is a fight to the finish: both combatants take
-            // amplified damage, so it cannot stall for the whole timer.
-            team_mult *= 3.0;
-        }
+        let team_mult = self.team_damage_mult(attacker_team) * incoming;
         let (target_kind, camp_buff, respawn_time, killed, amount) = {
             let unit = &mut self.units[index];
             if unit.health <= 0.0 {
@@ -4644,11 +4256,6 @@ impl AnimatedScene {
                 unit.visible = true;
             }
         }
-        for unit in &mut self.units {
-            if unit.kind == UnitKind::Spectator && self.duel.is_some() {
-                unit.visible = true;
-            }
-        }
         // Structures are permanent map features: the player always knows
         // where the towers, inhibitors, nexus and watchtowers stand, even
         // when they sit outside the current line of sight.
@@ -4712,7 +4319,6 @@ impl AnimatedScene {
                     && !u.kind.is_structure()
                     && u.kind != UnitKind::Watchtower
                     && u.kind != UnitKind::Ambient
-                    && u.kind != UnitKind::Spectator
             })
             .count()
     }
@@ -4738,82 +4344,6 @@ impl AnimatedScene {
             .get(team as usize)
             .and_then(|b| *b)
             .map(|b| (b.remaining, b.duration, b.kind))
-    }
-
-    fn update_bananarangs(&mut self, dt: f32, height: &HeightGrid) {
-        let mut active = std::mem::take(&mut self.bananarangs);
-        let pi = self.player_index;
-        let player_pos = self.units[pi].pos;
-        let player_right = Vec3::Y.cross(Vec3::new(
-            self.units[pi].yaw.sin(),
-            0.0,
-            self.units[pi].yaw.cos(),
-        ));
-        let return_target = player_pos + player_right * BANANARANG_HAND;
-        active.retain_mut(|banana| {
-            let previous = bananarang_position(banana, height, return_target);
-            banana.t += dt / banana.duration.max(0.01);
-            let pos = bananarang_position(banana, height, return_target);
-            if self.particles.len() < 300 {
-                self.particles.push(Particle {
-                    pos,
-                    vel: Vec3::new(0.0, 30.0, 0.0),
-                    color: [255, 225, 80],
-                    size: 9.0,
-                    remaining: 0.28,
-                    duration: 0.28,
-                    gravity: -20.0,
-                    drag: 1.0,
-                });
-            }
-            for index in 0..self.units.len() {
-                if banana.hit.contains(&index) {
-                    continue;
-                }
-                let unit = &self.units[index];
-                if unit.health <= 0.0
-                    || unit.team == 0
-                    || unit.kind.is_structure()
-                    || matches!(
-                        unit.kind,
-                        UnitKind::DeliveryGuard
-                            | UnitKind::StorageChest
-                            | UnitKind::Spectator
-                            | UnitKind::Ambient
-                    )
-                {
-                    continue;
-                }
-                if segment_distance_xz(unit.pos, previous, pos) > 80.0 + unit.hit_radius {
-                    continue;
-                }
-                banana.hit.push(index);
-                let crit = self.next_random() < banana.crit_chance;
-                let multiplier = if crit { 1.5 } else { 1.0 };
-                let stun = if crit { banana.stun } else { 0.0 };
-                self.damage_unit_mixed(
-                    index,
-                    banana.physical * multiplier,
-                    banana.pure * multiplier,
-                    0,
-                    Some(pi),
-                );
-                if stun > 0.0 {
-                    self.units[index].stun_timer = self.units[index].stun_timer.max(stun);
-                }
-                let hit_color = if crit { [255, 90, 40] } else { [255, 220, 60] };
-                self.effects.push(Effect {
-                    pos,
-                    radius: if crit { 150.0 } else { 90.0 },
-                    remaining: 0.25,
-                    duration: 0.25,
-                    color: hit_color,
-                });
-                self.emit_burst(pos, hit_color, if crit { 14 } else { 8 }, 260.0, 15.0, 0.45);
-            }
-            banana.t < 1.0
-        });
-        self.bananarangs = active;
     }
 
     fn update_projectiles(&mut self, dt: f32, height: &HeightGrid) {
@@ -4893,11 +4423,7 @@ impl AnimatedScene {
                     || unit.health <= 0.0
                     || (unit.team == 2 && unit.kind != UnitKind::Camp)
                     || projectile.hit.contains(&i)
-                    || (projectile.tower_shot
-                        && self
-                            .duel
-                            .as_ref()
-                            .is_some_and(|duel| i == self.player_index || i == duel.target))
+                    || (i == self.player_index && self.player_untargetable())
                 {
                     continue;
                 }
@@ -4926,12 +4452,7 @@ impl AnimatedScene {
 
     /// Damage, venom and execute from a projectile reaching `index`.
     fn apply_projectile_hit(&mut self, projectile: &Projectile, index: usize) {
-        if projectile.tower_shot
-            && self
-                .duel
-                .as_ref()
-                .is_some_and(|duel| index == self.player_index || index == duel.target)
-        {
+        if index == self.player_index && self.player_untargetable() {
             return;
         }
         let mut damage = projectile.damage;
@@ -5158,7 +4679,6 @@ impl AnimatedScene {
                 attack_pending: false,
                 attack_range: template.range,
                 attack_damage: damage,
-                min_base_damage_bonus: 0.0,
                 attack_interval: template.interval,
                 speed,
                 armor: 0.0,
@@ -5567,13 +5087,26 @@ impl AnimatedScene {
                     1.3 * intensity,
                 );
             }
-            Indicator::Path => {
-                let right = Vec3::Y.cross(facing);
-                let base = Vec3::new(origin.x, 0.0, origin.z);
-                let path = bananarang_local_path()
-                    .into_iter()
-                    .map(|p| base + right * p.x + facing * p.z)
-                    .collect::<Vec<_>>();
+            Indicator::Boomerang { length } => {
+                let (out, back) = awowogei::boomerang_preview(origin, aim_dir, length);
+                for (path, alpha) in [(out, 1.0), (back, 0.55)] {
+                    for pair in path.windows(2) {
+                        let delta = planar_delta(pair[0], pair[1]);
+                        self.fx.ground_strip(
+                            height,
+                            pair[0],
+                            delta,
+                            delta.length(),
+                            24.0,
+                            color,
+                            intensity * alpha,
+                        );
+                    }
+                }
+            }
+            Indicator::Swing { length } => {
+                let reach = to_aim.length().clamp(awowogei::VINE_MIN, length);
+                let path = awowogei::swing_preview(origin, aim_dir, reach);
                 for pair in path.windows(2) {
                     let delta = planar_delta(pair[0], pair[1]);
                     self.fx.ground_strip(
@@ -5581,11 +5114,18 @@ impl AnimatedScene {
                         pair[0],
                         delta,
                         delta.length(),
-                        26.0,
+                        34.0,
                         color,
-                        intensity,
+                        0.85 * intensity,
                     );
                 }
+                if let [.., before, last] = path.as_slice() {
+                    let dir = planar_delta(*before, *last).normalize_or_zero();
+                    self.fx
+                        .ground_arrow(height, *last, dir, 90.0, color, 1.3 * intensity);
+                }
+                self.fx
+                    .ground_ring(height, origin, length, 7.0, color, 0.4 * intensity);
             }
         }
     }
@@ -5885,73 +5425,7 @@ impl AnimatedScene {
             );
         }
 
-        let player_pos = self.units[self.player_index].pos;
-        let player_right = Vec3::Y.cross(Vec3::new(
-            self.units[self.player_index].yaw.sin(),
-            0.0,
-            self.units[self.player_index].yaw.cos(),
-        ));
-        let return_target = player_pos + player_right * BANANARANG_HAND;
-        let bananas = self
-            .bananarangs
-            .iter()
-            .map(|banana| {
-                (
-                    bananarang_position(banana, height, return_target),
-                    banana.t * std::f32::consts::TAU * 2.0,
-                )
-            })
-            .collect::<Vec<_>>();
-        let banana_model = self.banana_model.take();
-        for (pos, yaw) in bananas {
-            if let Some(model) = banana_model.as_ref() {
-                append_banana_model(self, model, pos, yaw, BANANARANG_MODEL_SCALE);
-            } else {
-                append_banana(self, pos, camera_right, camera_up);
-            }
-        }
-        self.banana_model = banana_model;
-
-        if let Some(duel) = self.duel.as_ref() {
-            let center = duel.center;
-            let radius = duel.radius;
-            let progress = 1.0 - (duel.remaining / duel.duration.max(0.01)).clamp(0.0, 1.0);
-            let pulse = (duel.remaining * 5.0).sin().abs() * 0.25 + 0.75 + progress * 0.1;
-            let color = [
-                (70.0 * pulse) as u8,
-                (210.0 * pulse) as u8,
-                (255.0 * pulse) as u8,
-            ];
-            append_ring(self, height, center, radius, color);
-            append_ring(self, height, center, radius * 0.97, [40, 120, 170]);
-            let segments = 48usize;
-            for i in 0..segments {
-                let angle = i as f32 / segments as f32 * std::f32::consts::TAU;
-                let x = center.x + angle.cos() * radius;
-                let z = center.z + angle.sin() * radius;
-                let y = height.height_at(x, z);
-                let tangent = Vec3::new(-angle.sin(), 0.0, angle.cos());
-                append_quad(
-                    self,
-                    Vec3::new(x, y + 145.0, z),
-                    tangent * 8.0,
-                    Vec3::Y * 145.0,
-                    color,
-                );
-            }
-        }
-        let peels = self
-            .duel_peels
-            .iter()
-            .filter_map(|peel| {
-                let target = self.units.get(peel.target)?;
-                let pos = peel.from + (target.pos - peel.from) * peel.t.clamp(0.0, 1.0);
-                Some(pos + Vec3::Y * 90.0)
-            })
-            .collect::<Vec<_>>();
-        for pos in peels {
-            append_billboard(self, pos, 28.0, [255, 210, 60], camera_right, camera_up);
-        }
+        self.draw_awowogei(height, camera_right, camera_up);
 
         let player = &self.units[self.player_index];
         let player_pos = player.pos;
@@ -6442,7 +5916,6 @@ fn build_unit(
         attack_pending: false,
         attack_range,
         attack_damage,
-        min_base_damage_bonus: 0.0,
         attack_interval,
         speed,
         armor: 0.0,
@@ -6699,7 +6172,7 @@ fn indicator_reach(indicator: &Indicator) -> f32 {
         Indicator::Target { range, radius } => range + radius,
         Indicator::Cone { radius, .. } | Indicator::SelfArea { radius } => radius,
         Indicator::Dash { length, .. } => length,
-        Indicator::Path => BANANARANG_DEPTH,
+        Indicator::Boomerang { length } | Indicator::Swing { length } => length,
     }
 }
 
@@ -6774,128 +6247,6 @@ fn armor_damage_multiplier(armor: f32) -> f32 {
     } else {
         2.0 - 100.0 / (100.0 - armor)
     }
-}
-
-/// Local-space path for the Bananarang. It starts at the left hand, travels
-/// forward-left at 30 degrees, runs across a long top face, then closes back
-/// down into the right hand. The control points are interpolated with a
-/// centripetal Catmull-Rom spline so the heading changes in gentle arcs rather
-/// than at hard corners.
-fn bananarang_local_path() -> Vec<Vec3> {
-    let hand = BANANARANG_HAND;
-    let depth = BANANARANG_DEPTH;
-    // The 30-degree launch leg sets how far the top face splays outward.
-    let top_half = hand + depth * BANANARANG_SPLAY.tan();
-    let left_hand = Vec3::new(-hand, 0.0, 0.0);
-    let right_hand = Vec3::new(hand, 0.0, 0.0);
-    let top_left = Vec3::new(-top_half, 0.0, depth);
-    let top_right = Vec3::new(top_half, 0.0, depth);
-    let left_leg = top_left - left_hand;
-    let right_leg = right_hand - top_right;
-    let controls = [
-        left_hand,
-        left_hand + left_leg * 0.55,
-        top_left,
-        Vec3::new(-top_half * 0.45, 0.0, depth),
-        Vec3::new(top_half * 0.45, 0.0, depth),
-        top_right,
-        top_right + right_leg * 0.45,
-        right_hand,
-    ];
-    catmull_rom(&controls, 18)
-}
-
-/// Centripetal Catmull-Rom interpolation. The virtual points beyond the first
-/// and last controls make the input and output tangents follow the launch and
-/// closing legs exactly while the interior stays smooth and overshoot-free.
-fn catmull_rom(points: &[Vec3], samples: usize) -> Vec<Vec3> {
-    if points.len() < 2 {
-        return points.to_vec();
-    }
-    let n = points.len();
-    let mut out = Vec::with_capacity((n - 1) * samples + 1);
-    out.push(points[0]);
-    for i in 0..n - 1 {
-        let p0 = if i == 0 {
-            points[0] * 2.0 - points[1]
-        } else {
-            points[i - 1]
-        };
-        let p1 = points[i];
-        let p2 = points[i + 1];
-        let p3 = if i + 2 >= n {
-            points[n - 1] * 2.0 - points[n - 2]
-        } else {
-            points[i + 2]
-        };
-        let t0 = 0.0;
-        let t1 = t0 + (p1 - p0).length().sqrt().max(1e-4);
-        let t2 = t1 + (p2 - p1).length().sqrt().max(1e-4);
-        let t3 = t2 + (p3 - p2).length().sqrt().max(1e-4);
-        for sample in 1..=samples {
-            let t = t1 + (t2 - t1) * (sample as f32 / samples as f32);
-            let a1 = (t1 - t) / (t1 - t0) * p0 + (t - t0) / (t1 - t0) * p1;
-            let a2 = (t2 - t) / (t2 - t1) * p1 + (t - t1) / (t2 - t1) * p2;
-            let a3 = (t3 - t) / (t3 - t2) * p2 + (t - t2) / (t3 - t2) * p3;
-            let b1 = (t2 - t) / (t2 - t0) * a1 + (t - t0) / (t2 - t0) * a2;
-            let b2 = (t3 - t) / (t3 - t1) * a2 + (t - t1) / (t3 - t1) * a3;
-            let c = (t2 - t) / (t2 - t1) * b1 + (t - t1) / (t2 - t1) * b2;
-            out.push(c);
-        }
-    }
-    out.dedup_by(|a, b| a.distance(*b) < 0.01);
-    out
-}
-
-fn path_length_table(path: &[Vec3]) -> (Vec<f32>, f32) {
-    let mut lengths = Vec::with_capacity(path.len());
-    lengths.push(0.0);
-    let mut total = 0.0;
-    for pair in path.windows(2) {
-        total += pair[0].distance(pair[1]);
-        lengths.push(total);
-    }
-    (lengths, total)
-}
-
-/// World position of the banana, sampled by arc length and lifted above the
-/// terrain. From the return leg onward, the path blends toward the king's
-/// current right hand so a moving Awowogei still catches his banana.
-fn bananarang_position(banana: &Bananarang, height: &HeightGrid, return_target: Vec3) -> Vec3 {
-    let last = banana.path.len().saturating_sub(1);
-    let t = banana.t.clamp(0.0, 1.0);
-    let target = t * banana.path_length;
-    let mut pos = banana.path.get(last).copied().unwrap_or(Vec3::ZERO);
-    if banana.path.len() > 1 {
-        let index = banana
-            .path_lengths
-            .partition_point(|&length| length < target)
-            .min(last);
-        if index == 0 {
-            pos = banana.path[0];
-        } else {
-            let previous = index - 1;
-            let segment = (banana.path_lengths[index] - banana.path_lengths[previous]).max(0.001);
-            let fraction = ((target - banana.path_lengths[previous]) / segment).clamp(0.0, 1.0);
-            pos = banana.path[previous].lerp(banana.path[index], fraction);
-        }
-    }
-    let return_blend = bananarang_return_blend(t);
-    if return_blend > 0.0 {
-        pos = pos.lerp(
-            Vec3::new(return_target.x, 0.0, return_target.z),
-            return_blend,
-        );
-    }
-    pos.y = height.height_at(pos.x, pos.z) + 70.0;
-    pos
-}
-
-/// Smoothstep weight for the moving return target. Zero through the outbound
-/// leg and top face, then easing into the king's current right hand.
-fn bananarang_return_blend(t: f32) -> f32 {
-    let u = ((t - 0.62) / 0.38).clamp(0.0, 1.0);
-    u * u * (3.0 - 2.0 * u)
 }
 
 /// Turn a unit toward a heading at a species-appropriate rate instead of
@@ -7109,10 +6460,9 @@ fn append_banana_model(
     scene: &mut AnimatedScene,
     model: &Model,
     center: Vec3,
-    yaw: f32,
+    rot: Mat3,
     scale: f32,
 ) {
-    let rot = Mat3::from_rotation_y(yaw);
     let vertex = |index: usize| -> Vec3 {
         let x = model.vertex_x.get(index).copied().unwrap_or(0) as f32;
         let y = model.vertex_y.get(index).copied().unwrap_or(0) as f32;
@@ -7149,32 +6499,6 @@ fn append_banana_model(
         scene.vertices.push(vc);
         scene.indices.extend_from_slice(&[base, base + 1, base + 2]);
     }
-}
-
-fn append_banana(scene: &mut AnimatedScene, center: Vec3, right: Vec3, up: Vec3) {
-    // Comically oversized banana: overlapping yellow billboards forming a
-    // crescent, with small brown tips.
-    for i in 0..6 {
-        let u = i as f32 / 5.0 * 2.0 - 1.0;
-        let offset = right * (u * 44.0) + up * ((1.0 - u * u) * 20.0 - 4.0);
-        append_billboard(scene, center + offset, 30.0, [255, 214, 45], right, up);
-    }
-    append_billboard(
-        scene,
-        center - right * 48.0 + up * 2.0,
-        14.0,
-        [120, 80, 30],
-        right,
-        up,
-    );
-    append_billboard(
-        scene,
-        center + right * 48.0 + up * 2.0,
-        14.0,
-        [120, 80, 30],
-        right,
-        up,
-    );
 }
 
 fn append_billboard(
@@ -7327,59 +6651,6 @@ mod tests {
         assert!((offset - 30.0).abs() < 0.01);
         let behind = segment_distance_xz(Vec3::new(-25.0, 0.0, 0.0), from, to);
         assert!((behind - 25.0).abs() < 0.01);
-    }
-
-    #[test]
-    fn bananarang_path_is_rounded_trapezoid() {
-        let path = bananarang_local_path();
-        let first = path[0];
-        let last = *path.last().expect("path");
-        assert!((first.x + BANANARANG_HAND).abs() < 0.01);
-        assert!(first.z.abs() < 0.01);
-        assert!((last.x - BANANARANG_HAND).abs() < 0.01);
-        assert!(last.z.abs() < 0.01);
-
-        let launch = (path[1] - first).normalize();
-        let expected = Vec3::new(-BANANARANG_SPLAY.sin(), 0.0, BANANARANG_SPLAY.cos());
-        assert!(
-            launch.dot(expected) > 0.999,
-            "launch leg should leave 30 degrees to the left, got {launch:?}"
-        );
-
-        let top = path
-            .iter()
-            .filter(|p| (p.z - BANANARANG_DEPTH).abs() < 0.5)
-            .collect::<Vec<_>>();
-        assert!(top.len() >= 2);
-        let min_x = top.iter().map(|p| p.x).fold(f32::MAX, f32::min);
-        let max_x = top.iter().map(|p| p.x).fold(f32::MIN, f32::max);
-        assert!(
-            max_x - min_x > BANANARANG_HAND * 4.0,
-            "top face should be much longer than the hand gap"
-        );
-
-        let max_range = path.iter().map(|p| p.length()).fold(0.0_f32, f32::max);
-        assert!((1_300.0..1_600.0).contains(&max_range));
-
-        let mut sharpest = 0.0_f32;
-        for window in path.windows(3) {
-            let before = (window[1] - window[0]).normalize();
-            let after = (window[2] - window[1]).normalize();
-            sharpest = sharpest.max(before.dot(after).clamp(-1.0, 1.0).acos());
-        }
-        assert!(
-            sharpest < 0.5,
-            "path should change heading gradually, sharpest turn was {sharpest:.2} rad"
-        );
-    }
-
-    #[test]
-    fn bananarang_return_blend_eases_in_and_out() {
-        assert_eq!(bananarang_return_blend(0.0), 0.0);
-        assert_eq!(bananarang_return_blend(0.62), 0.0);
-        assert!(bananarang_return_blend(0.8) > 0.0);
-        assert!(bananarang_return_blend(0.8) < 1.0);
-        assert_eq!(bananarang_return_blend(1.0), 1.0);
     }
 
     #[test]

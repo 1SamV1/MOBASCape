@@ -1,4 +1,5 @@
 mod animated;
+mod audio;
 mod balance;
 mod champion;
 mod devtools;
@@ -107,12 +108,16 @@ struct Cli {
     /// attack animations with a close camera.
     #[arg(long)]
     demo_anim: bool,
-    /// Demo: spawn a sparring enemy champion beside the hero for Trial by Combat.
+    /// Demo: spawn a sparring enemy champion beside the hero.
     #[arg(long)]
     demo_duel: bool,
-    /// Demo: spawn a rival champion and automatically cast Trial by Combat.
+    /// Demo: King Awowogei's kit against a rival champion: Bananarang,
+    /// a peel thrown under the rival, Greegree, then Vine Swing.
     #[arg(long)]
-    demo_trial: bool,
+    demo_awowogei: bool,
+    /// Play no sound (also off for `--shots` and `--benchmark`).
+    #[arg(long)]
+    mute: bool,
     /// Demo: pop floating damage numbers, a kill shout and a minimap ping.
     #[arg(long)]
     demo_fx: bool,
@@ -343,18 +348,11 @@ fn main() -> Result<()> {
         animated.teleport_player(point);
         tracing::info!("animation demo: spawned hero at tile 2748,3010");
     }
-    if cli.demo_duel || cli.demo_trial {
+    if cli.demo_duel || cli.demo_awowogei {
         let spawn = animated.player_pos() + Vec3::new(3.0 * 128.0, 0.0, 0.0);
         let spawn = Vec3::new(spawn.x, height.height_at(spawn.x, spawn.z), spawn.z);
         match animated.spawn_enemy_champion(&cache, &champion, spawn) {
             Ok(index) => {
-                if cli.demo_trial {
-                    // Leave the rival wounded so the automated demo can
-                    // actually resolve the duel and prove the win bonus.
-                    let unit = &mut animated.units[index];
-                    unit.health = (unit.max_health * 0.25).max(1.0);
-                    tracing::info!("demo trial: rival starts at {:.0} HP", unit.health);
-                }
                 tracing::info!("demo duel: enemy champion {index} at {spawn:?}");
             }
             Err(err) => tracing::warn!("demo duel: failed to spawn enemy champion: {err:#}"),
@@ -472,7 +470,10 @@ fn main() -> Result<()> {
     } else {
         None
     };
+    let mut audio = audio::Audio::new(cli.mute || cli.shots.is_some() || cli.benchmark.is_some());
+    audio.preload(&cache, animated.sound_ids());
     let mut app = App {
+        audio,
         cache,
         scene: Some(scene),
         animated: Some(animated),
@@ -508,9 +509,9 @@ fn main() -> Result<()> {
         demo_anim_timer: 0.0,
         demo_anim_stage: 0,
         demo_anim_targeted: false,
-        demo_trial: cli.demo_trial,
-        demo_trial_timer: 0.0,
-        demo_trial_stage: 0,
+        demo_awowogei: cli.demo_awowogei,
+        demo_awowogei_timer: 0.0,
+        demo_awowogei_stage: 0,
         demo_fx: cli.demo_fx,
         demo_camp: cli.demo_camp,
         demo_watchtower: cli.demo_watchtower,
@@ -610,6 +611,8 @@ fn main() -> Result<()> {
 }
 
 struct App {
+    /// Sound effect output (silent without a device or with `--mute`).
+    audio: audio::Audio,
     cache: Cache,
     scene: Option<SceneData>,
     animated: Option<AnimatedScene>,
@@ -653,9 +656,9 @@ struct App {
     demo_anim_timer: f32,
     demo_anim_stage: u8,
     demo_anim_targeted: bool,
-    demo_trial: bool,
-    demo_trial_timer: f32,
-    demo_trial_stage: u8,
+    demo_awowogei: bool,
+    demo_awowogei_timer: f32,
+    demo_awowogei_stage: u8,
     demo_fx: bool,
     demo_camp: bool,
     demo_watchtower: bool,
@@ -1775,7 +1778,7 @@ impl App {
                             0 => animated.cast_q(aim),
                             1 => animated.cast_w(aim, collision, height),
                             2 => animated.cast_e(collision, height),
-                            _ => animated.cast_r(aim, None, height),
+                            _ => animated.cast_r(aim),
                         };
                         tracing::info!("demo abilities: slot {slot} cast={ok}");
                         self.demo_abilities_stage += 1;
@@ -1843,7 +1846,7 @@ impl App {
                 if self.demo_kit_stage == 2 && self.demo_kit_timer >= 3.0 {
                     if let Some(index) = animated.nearest_enemy(animated.player_pos()) {
                         let pos = animated.unit_pos(index).unwrap_or(animated.player_pos());
-                        let ok = animated.cast_r(pos, Some(index), height);
+                        let ok = animated.cast_r(pos);
                         tracing::info!("demo kit: R cast={ok}");
                     }
                     self.demo_kit_stage = 3;
@@ -1864,50 +1867,52 @@ impl App {
                 }
             }
 
-            if self.demo_trial {
-                self.demo_trial_timer += dt;
-                if self.demo_trial_stage == 0 && self.demo_trial_timer >= 1.0 {
-                    if let Some(index) = animated
-                        .units
-                        .iter()
-                        .position(|unit| unit.is_champion && unit.team == 1 && unit.health > 0.0)
-                    {
-                        let pos = animated.unit_pos(index).unwrap_or(animated.player_pos());
-                        let ok = animated.cast_r(pos, Some(index), height);
-                        tracing::info!("demo trial: cast={ok} target={index}");
-                    } else {
-                        tracing::warn!("demo trial: no enemy champion");
-                    }
-                    self.demo_trial_stage = 1;
-                }
-                if self.demo_trial_stage == 1 && self.demo_trial_timer >= 3.0 {
-                    let target = animated
-                        .units
-                        .iter()
-                        .position(|unit| unit.is_champion && unit.team == 1 && unit.health > 0.0)
-                        .and_then(|index| animated.unit_pos(index));
-                    let pos = target.unwrap_or(animated.player_pos());
-                    let ok = animated.cast_q(pos);
-                    tracing::info!("demo trial: bananarang cast={ok}");
-                    self.demo_trial_stage = 2;
-                }
-                if self.demo_trial_stage >= 1 && self.demo_trial_timer >= 13.0 {
-                    let stats = animated.player_stats();
-                    let bonus = animated.units[animated.player_index].min_base_damage_bonus;
-                    let target = animated
-                        .units
-                        .iter()
-                        .find(|unit| unit.is_champion && unit.team == 1)
-                        .map(|unit| (unit.health, unit.max_health));
+            if self.demo_awowogei {
+                self.demo_awowogei_timer += dt;
+                let t = self.demo_awowogei_timer;
+                let rival = animated
+                    .units
+                    .iter()
+                    .position(|unit| unit.is_champion && unit.team == 1 && unit.health > 0.0);
+                let rival_pos = rival.and_then(|index| animated.unit_pos(index));
+                let aim = rival_pos.unwrap_or(animated.player_pos() + Vec3::new(400.0, 0.0, 0.0));
+                let steps = [1.0f32, 3.2, 4.4, 5.6];
+                let stage = self.demo_awowogei_stage as usize;
+                if stage < steps.len() && t >= steps[stage] {
+                    animated.debug_refill_mana();
+                    animated.kit_aim = aim;
+                    let ok = match stage {
+                        0 => animated.cast_q(aim),
+                        1 => animated.cast_e(collision, height),
+                        2 => animated.cast_r(aim),
+                        _ => {
+                            let past =
+                                aim + (aim - animated.player_pos()).normalize_or_zero() * 500.0;
+                            animated.cast_w(past, collision, height)
+                        }
+                    };
                     tracing::info!(
-                        "demo trial: wins={} bonus={:.0} attack={:.0} hp={:.0}/{:.0} target={target:?}",
-                        animated.duel_wins,
-                        bonus,
-                        stats.attack_damage,
-                        stats.health,
-                        stats.max_health
+                        "demo awowogei: slot {} cast={ok} aim={aim:?}",
+                        [0, 2, 3, 1][stage]
                     );
-                    self.demo_trial = false;
+                    self.demo_awowogei_stage += 1;
+                }
+                if self.demo_awowogei_stage == 4 && t >= 9.0 {
+                    let stats = animated.player_stats();
+                    let rival = rival.map(|index| {
+                        let unit = &animated.units[index];
+                        (unit.health, unit.max_health)
+                    });
+                    tracing::info!(
+                        "demo awowogei: king hp={:.0}/{:.0} at {:?} rival={rival:?} bananas={} peels={} gorilla={}",
+                        stats.health,
+                        stats.max_health,
+                        animated.player_pos(),
+                        animated.awowogei.bananas.len(),
+                        animated.awowogei.peels.len(),
+                        animated.awowogei.greegree.is_some(),
+                    );
+                    self.demo_awowogei = false;
                 }
             }
 
@@ -1987,6 +1992,16 @@ impl App {
                 }
             }
             phase_sim = sim_start.elapsed().as_secs_f32() * 1000.0;
+            let cues = std::mem::take(&mut animated.sound_cues);
+            if !cues.is_empty() {
+                // Screen right in a right-handed view: look x up.
+                let look = renderer.camera.target - renderer.camera.eye();
+                let listener = audio::Listener {
+                    pos: renderer.camera.target,
+                    right: look.cross(Vec3::Y).normalize_or_zero(),
+                };
+                self.audio.play_cues(&self.cache, &listener, cues);
+            }
             let current_health = animated.player_stats().health;
             if self.last_health > current_health + 0.5 {
                 self.damage_flash = (self.damage_flash + 0.55).min(0.9);
@@ -2644,6 +2659,7 @@ impl App {
             }
         };
 
+        self.audio.preload(&self.cache, animated.sound_ids());
         self.animated = Some(animated);
         self.hero_select.open = false;
         self.hero_select.hover = None;
@@ -3065,12 +3081,16 @@ impl App {
             return;
         };
         if let Some((origin, dir)) = renderer.screen_ray(self.mouse_pos.0, self.mouse_pos.1) {
-            let target = animated.pick_enemy_champion(origin, dir);
             let fallback = animated.player_pos();
             let point = renderer
                 .pick_ground(self.mouse_pos.0, self.mouse_pos.1, height)
-                .unwrap_or(fallback);
-            let cast = animated.cast_r(point, target, height);
+                .unwrap_or_else(|| {
+                    animated
+                        .pick_enemy_champion(origin, dir)
+                        .and_then(|index| animated.unit_pos(index))
+                        .unwrap_or(fallback)
+                });
+            let cast = animated.cast_r(point);
             println!("R cast={cast}");
         }
     }
@@ -3327,7 +3347,7 @@ fn has_demo_flags(cli: &Cli) -> bool {
         || cli.demo_combat
         || cli.demo_anim
         || cli.demo_duel
-        || cli.demo_trial
+        || cli.demo_awowogei
         || cli.demo_camp
         || cli.demo_ranks.is_some()
         || cli.demo_watchtower

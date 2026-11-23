@@ -1,6 +1,53 @@
 # Status
 
-Last updated: paper balance report and first balance pass, 2026-11-23.
+Last updated: King Awowogei's new kit and the first sound effects, 2026-11-23.
+
+## 2026-11-23 — King Awowogei's new kit and the first sound effects
+
+- **Sound.** `rift_cache::sound` ports the reference client's synthesised
+  sound effects (index 4: instruments, envelopes, gating, echo and the
+  moving IIR filter, with the `java.util.Random(0)` noise table) and
+  renders 16-bit 22,050 Hz audio. All 11,171 sounds in the pinned cache
+  decode and render. Sequences now decode their opcode-14 frame sounds
+  (1,429 animations have them). `crates/client/src/audio.rs` plays queued
+  cues through `rodio` with distance falloff (silent past 20 tiles) and
+  stereo panning, trimming the silent lead-in some sounds have. Champion
+  files name sounds in `sounds`; `--mute` turns it off.
+- The OSRS server, not the cache, picks combat sounds, so no cache data
+  says which sound a throw makes. The king uses documented RuneLite ids:
+  teleport whoosh 1930 (throw, pitched-up whirl, swing), attack hit 2498,
+  item pickup 2582 (catch), item drop 2739 (landings), magic splash boing
+  227 (slip), teleport vwoop 200 and prayer-off vwoop 2663 (Greegree),
+  tree chop 2735 (slam). Swap them in `data/champions/monkey.json`.
+- **King Awowogei** (`animated/awowogei.rs`), approved direction "Greegree
+  Trickster":
+  - Q Bananarang, rebuilt: thrown at the cursor (it used to follow a fixed
+    path in front of him). The same cache banana curves out on his right,
+    eases into a hang at 1300, then steers home on his left with a turn
+    rate and speed that grow until it is caught in his hand wherever he
+    walked. Hits every enemy going out and again for 50% coming back;
+    rank still raises crit chance and the crit stun. Spins with a tilt and
+    leaves a trail; whirl, hit and catch sounds.
+  - W Vine Swing: a long vine drops from the canopy, he runs and jumps on,
+    swings along a curved arc that rises over the terrain in its path and
+    lands softly at the cursor (900-1125, furthest walkable spot).
+    Untargetable from the cast until 0.5 s after landing (towers, minions,
+    champions and projectiles ignore him; damage is zeroed).
+  - E Banana Peel: lobbed onto a ground circle (850-1000; not unit
+    targeted). Landing under an enemy slips it at once; otherwise it
+    waits 25 s as a trap (three at most). A slip deals 50-125, stuns 1 s
+    and sends the victim sliding and spinning the way it was walking.
+  - R Greegree: 8 s as the Ape Atoll gorilla (NPC 5275's models 4810/4812,
+    idle 1401, walk 1399, attack 1402): +250/400/550 health, attacks hit
+    1.7x as hard and 1.35x as slowly, and every attack slams enemies within
+    220 for 60/95/130.
+  - Trial by Combat, its arena, spectator monkeys, the tower exemptions and
+    the permanent win bonus are gone (`--demo-trial` became
+    `--demo-awowogei`). Royal Dash and King's Decree stay as the fallback W
+    and E for kit-less champions.
+- Balance report: Awowogei's burst went from 0.21x to 0.46x of the melee
+  median; return hits and slams are not modelled. Not playtested; the
+  ability icons are still the old Royal Dash / Decree / Trial sprites.
 
 ## 2026-11-23 — Paper balance report and first balance pass
 

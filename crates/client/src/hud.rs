@@ -564,7 +564,7 @@ impl Hud {
                 UnitKind::DeliveryGuard => {
                     self.quad(width, height, ux - 2.0, uy - 2.0, 4.0, 4.0, [250, 240, 180]);
                 }
-                UnitKind::Ambient | UnitKind::Spectator => {}
+                UnitKind::Ambient => {}
                 UnitKind::EnemyChampion => {
                     self.quad(width, height, ux - 3.0, uy - 3.0, 6.0, 6.0, [235, 90, 80]);
                 }

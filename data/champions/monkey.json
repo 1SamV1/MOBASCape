@@ -33,7 +33,8 @@
     {
       "key": "Q",
       "name": "BANANARANG",
-      "description": "A comically large banana boomerang that sweeps out in a rounded trapezoid, striking every enemy it passes.",
+      "description": "Hurls a giant banana at the cursor. It curves out, hangs at full range, then loops home to the king's hand, striking enemies both ways.",
+      "damage_note": "Return hits deal 50%",
       "ranks": [
         { "damage": 45, "range": 1300, "cooldown": 8 },
         { "damage": 65, "range": 1300, "cooldown": 7.5 },
@@ -43,40 +44,55 @@
     },
     {
       "key": "W",
-      "name": "ROYAL DASH",
-      "description": "The king blinks a short distance along the ground, leaving his enemies behind.",
-      "damage_note": "Blink, no damage",
+      "name": "VINE SWING",
+      "description": "A long vine drops from the canopy. The king leaps on and swings in a curving arc over hills to the target, landing softly.",
+      "damage_note": "Untargetable until 0.5 s after landing",
       "ranks": [
-        { "range": 768, "cooldown": 8 },
-        { "range": 832, "cooldown": 7.5 },
-        { "range": 896, "cooldown": 7 },
-        { "range": 960, "cooldown": 6.5 }
+        { "range": 900, "cooldown": 14 },
+        { "range": 975, "cooldown": 13 },
+        { "range": 1050, "cooldown": 12 },
+        { "range": 1125, "cooldown": 11 }
       ]
     },
     {
       "key": "E",
-      "name": "KING'S DECREE",
-      "description": "A royal decree restores health and shields the king for a few seconds.",
-      "damage_label": "Shield",
+      "name": "BANANA PEEL",
+      "description": "Throws a peel onto the target circle. Land it under an enemy to slip them at once, or leave it as a trap for the next one to step on it.",
+      "damage_note": "1 s slip stun; trap lasts 25 s",
       "ranks": [
-        { "damage": 120, "range": 0, "cooldown": 12 },
-        { "damage": 150, "range": 0, "cooldown": 11 },
-        { "damage": 180, "range": 0, "cooldown": 10 },
-        { "damage": 210, "range": 0, "cooldown": 9 }
+        { "damage": 50, "range": 850, "cooldown": 12 },
+        { "damage": 75, "range": 900, "cooldown": 11 },
+        { "damage": 100, "range": 950, "cooldown": 10 },
+        { "damage": 125, "range": 1000, "cooldown": 9 }
       ]
     },
     {
       "key": "R",
-      "name": "TRIAL BY COMBAT",
-      "description": "A barrier traps the king and an enemy champion. Monkey subjects hurl banana peels that strip armor until one of them falls.",
-      "damage_note": "10 s duel; peels strip armour",
+      "name": "GREEGREE",
+      "description": "The king turns into a hulking gorilla for 8 seconds, gaining health and trading speed for heavy slams that splash around his target.",
+      "damage_label": "Slam",
+      "damage_note": "8 s gorilla: +250/400/550 health",
       "ranks": [
-        { "range": 9600, "cooldown": 90 },
-        { "range": 9600, "cooldown": 75 },
-        { "range": 9600, "cooldown": 60 }
+        { "damage": 60, "range": 220, "cooldown": 80 },
+        { "damage": 95, "range": 220, "cooldown": 70 },
+        { "damage": 130, "range": 220, "cooldown": 60 }
       ]
     }
   ],
+  "sounds": {
+    "q_throw": { "id": 1930, "volume": 0.8 },
+    "q_whirl": { "id": 1930, "volume": 0.3, "speed": 1.6 },
+    "q_hit": { "id": 2498, "volume": 0.7 },
+    "q_catch": { "id": 2582, "volume": 0.9 },
+    "w_swing": { "id": 1930, "volume": 0.7, "speed": 0.75 },
+    "w_land": { "id": 2739, "volume": 0.8 },
+    "e_throw": { "id": 1930, "volume": 0.5, "speed": 1.3 },
+    "e_land": { "id": 2739, "volume": 0.4, "speed": 1.4 },
+    "e_slip": { "id": 227, "volume": 0.6 },
+    "r_transform": { "id": 200, "volume": 0.7 },
+    "r_revert": { "id": 2663, "volume": 0.6 },
+    "r_slam": { "id": 2735, "volume": 0.7, "speed": 0.8 }
+  },
   "ability_icons": [
     57,
     53,

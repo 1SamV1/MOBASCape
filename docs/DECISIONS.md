@@ -746,3 +746,19 @@ Consequences: movement becomes the first system in the simulation tick
 (ADR-049); a `--lab` mode exists for tuning; the checklist in
 [MOVEMENT.md](MOVEMENT.md) must be complete, including a sign-off by play,
 before combat is built on the new movement.
+
+## ADR-051 — King Awowogei's Greegree Trickster kit and cache sound effects
+
+**Status:** accepted; supersedes ADR-040.
+
+King Awowogei keeps Bananarang (rebuilt to fly at the cursor and steer home
+to his hand, hitting both ways) and gains Vine Swing (W, untargetable
+swing over terrain), Banana Peel (E, ground-targeted trap) and Greegree (R,
+8 s gorilla form). Trial by Combat and its duel machinery are removed. The
+kit lives in `crates/client/src/animated/awowogei.rs`.
+
+Sound effects are the cache's own synthesised OSRS sounds, decoded by a
+port of the reference client (`rift_cache::sound`) and played through
+`rodio`; champion files name them. Because the OSRS server picks combat
+sounds, the kit uses documented sound ids whose meaning fits, and they are
+data so they can be swapped after listening.

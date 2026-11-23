@@ -864,6 +864,11 @@ impl AnimatedScene {
         1.0 + swift + haste + transform
     }
 
+    /// A kit dash or buff makes the player untargetable right now.
+    pub(super) fn kit_untargetable(&self) -> bool {
+        self.kit_rt.untargetable_timer > 0.0
+    }
+
     /// Fraction of incoming damage the player takes. Zero while untargetable.
     pub(super) fn kit_incoming_mult(&self) -> f32 {
         if self.kit_rt.untargetable_timer > 0.0 {
@@ -963,7 +968,7 @@ impl AnimatedScene {
         let (mut damage, ranged, from, target_pos) = {
             let unit = &mut self.units[pi];
             unit.attack_cooldown = unit.attack_interval / unit.attack_speed_mult.max(0.1);
-            let mut damage = unit.attack_damage + unit.min_base_damage_bonus;
+            let mut damage = unit.attack_damage;
             if unit.ranged_auto {
                 damage *= unit.ranged_scale();
             }

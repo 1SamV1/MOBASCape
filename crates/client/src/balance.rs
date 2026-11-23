@@ -62,7 +62,7 @@ pub struct ChampionBalance {
 /// Mana costs of the hand-written kits in `animated.rs`.
 fn hand_written_costs(id: &str) -> [f32; 4] {
     match id {
-        "monkey" => [40.0, 30.0, 40.0, 100.0],
+        "monkey" => crate::animated::awowogei::COSTS,
         "ranger" => [30.0, 50.0, 25.0, 80.0],
         _ => [25.0, 30.0, 40.0, 80.0],
     }

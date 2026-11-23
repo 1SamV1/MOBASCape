@@ -293,6 +293,7 @@ mod tests {
             abilities: Vec::new(),
             ability_icons: Vec::new(),
             kit: None,
+            sounds: Default::default(),
             tagline: String::new(),
             model: 0,
             attachments: Vec::new(),

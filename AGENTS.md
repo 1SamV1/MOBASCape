@@ -216,8 +216,9 @@ Cache location: `.cache/osrs-235/cache` by default. Pass `--cache` and
   wall-clock time, or the player can click the button or press Enter.
 - Four data-driven champions (`monkey`, `jad`, `kree`, `ranger`) with distinct
   models, stats, and ability numbers. A hero-select screen chooses among them
-  and bakes cache-model portraits. King Awowogei uses Bananarang (Q) and Trial
-  by Combat (R); the Blowpipe Ranger uses Toxic Dart, Dart Volley, Footwork and
+  and bakes cache-model portraits. King Awowogei uses Bananarang (Q), Vine
+  Swing (W), Banana Peel (E) and Greegree (R)
+  (`crates/client/src/animated/awowogei.rs`); the Blowpipe Ranger uses Toxic Dart, Dart Volley, Footwork and
   Deadshot; Jad and Kree keep the shared Q bolt and R meteor. Kree has ranged
   auto-attacks. No passives yet. Champion files also carry a real `armor` stat
   and movement weight:
@@ -245,7 +246,10 @@ Cache location: `.cache/osrs-235/cache` by default. Pass `--cache` and
   flower sprites are drawn opaque. The `0xff00ff` terrain overlay sentinel
   still uses a flat fallback colour. Dead-tree trunks read as pale spikes.
 - Animaya is not applied; only classic frame/framemap animation works.
-- No netcode, audio, or map editor. Ambient NPCs idle only.
+- Sound effects are cache-synthesised OSRS sounds (`rift_cache::sound`)
+  played through `rodio` (`crates/client/src/audio.rs`); champion files
+  name them in `sounds`. Only King Awowogei uses them so far. No music.
+- No netcode or map editor. Ambient NPCs idle only.
 - The UI atlas depends on external PNGs in `assets/osrs-ui`; without them the
   shop uses procedural fallback icons and no OSRS tab sprites. The bronze sword
   icon is a trimmed detail render because the plain inventory icon file was not

@@ -39,6 +39,16 @@ pub struct AbilityRank {
     pub cooldown: f32,
 }
 
+/// One named sound: a cache sound id plus volume and playback rate.
+#[derive(Debug, Clone, Copy, Deserialize, PartialEq)]
+pub struct SoundSpec {
+    pub id: u32,
+    #[serde(default = "one")]
+    pub volume: f32,
+    #[serde(default = "one")]
+    pub speed: f32,
+}
+
 #[derive(Debug, Clone, Deserialize)]
 pub struct ChampionConfig {
     /// File stem used by the hero-select screen and portrait atlas.
@@ -61,6 +71,10 @@ pub struct ChampionConfig {
     /// hand-written kit in `animated.rs`.
     #[serde(default)]
     pub kit: Option<crate::kit::Kit>,
+    /// Named cache sound effects the kit plays (`"q_throw"`, ...). Ids are
+    /// cache index-4 sounds; audition them with `rift-tools sound ID --out`.
+    #[serde(default)]
+    pub sounds: std::collections::BTreeMap<String, SoundSpec>,
     /// One-line flavour text shown on the hero-select card.
     #[serde(default)]
     pub tagline: String,
