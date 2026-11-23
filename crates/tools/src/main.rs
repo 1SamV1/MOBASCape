@@ -12,6 +12,7 @@ use rift_cache::{
 use rift_sim::Match as BattleMatch;
 
 mod interface_dump;
+mod model_sheet;
 mod picture;
 
 #[derive(Parser, Debug)]
@@ -115,6 +116,32 @@ enum Command {
         out: PathBuf,
     },
     /// Run a deterministic headless 5v5 bot match and print its state hash.
+    /// Print a spot animation (projectile / spell graphic) definition.
+    Spotanim { id: u32 },
+    /// List spot animations in an id range, optionally as a contact sheet of
+    /// their models posed half way through their sequence.
+    Spotanims {
+        #[arg(long, default_value_t = 0)]
+        from: u32,
+        #[arg(long, default_value_t = 200)]
+        to: u32,
+        /// Write a labelled PNG contact sheet here.
+        #[arg(long)]
+        sheet: Option<PathBuf>,
+    },
+    /// Find sequences that animate the same skeleton as `sequence` (an NPC's
+    /// idle or walk), which is where its attack and death clips hide.
+    SkeletonAnims {
+        sequence: u32,
+        /// Pose this model with each candidate and write a contact sheet.
+        #[arg(long)]
+        model: Option<u32>,
+        #[arg(long)]
+        sheet: Option<PathBuf>,
+        /// Only list ids in this window around the reference sequence.
+        #[arg(long, default_value_t = 100_000)]
+        window: u32,
+    },
     Match {
         #[arg(long, default_value_t = 1)]
         seed: u32,
@@ -188,6 +215,14 @@ fn main() -> Result<()> {
             region_y,
             out,
         } => terrain_obj(&cache, region_x, region_y, &out)?,
+        Command::Spotanim { id } => spotanim(&cache, id)?,
+        Command::Spotanims { from, to, sheet } => spotanims(&cache, from, to, sheet.as_deref())?,
+        Command::SkeletonAnims {
+            sequence,
+            model,
+            sheet,
+            window,
+        } => skeleton_anims(&cache, sequence, model, sheet.as_deref(), window)?,
         Command::Match { .. } => unreachable!("handled before opening the cache"),
     }
 
@@ -725,6 +760,193 @@ fn sequence(cache: &Cache, id: u32) -> Result<()> {
             frame.index_frame_ids.len(),
             frame.index_frame_ids.iter().take(8).collect::<Vec<_>>()
         );
+    }
+    Ok(())
+}
+
+fn spotanim(cache: &Cache, id: u32) -> Result<()> {
+    let data = cache.config(rift_cache::spotanim::SPOTANIM_ARCHIVE, id)?;
+    let def = rift_cache::SpotAnimDefinition::parse(id, &data)?;
+    println!(
+        "spotanim {id}: model={} sequence={} resize={}x{} rotation={} ambient={} contrast={} complete={}",
+        def.model_id,
+        def.animation_id,
+        def.resize_x,
+        def.resize_y,
+        def.rotation,
+        def.ambient,
+        def.contrast,
+        def.complete
+    );
+    if !def.recolors.is_empty() {
+        println!("  recolors={:?}", def.recolors);
+    }
+    if !def.retextures.is_empty() {
+        println!("  retextures={:?}", def.retextures);
+    }
+    if def.model_id > 0 {
+        let group = cache.group(7, def.model_id)?;
+        let model = Model::load(def.model_id, &group.data)?;
+        let (min, max) = model.bounds();
+        let translucent = model
+            .face_alphas
+            .as_ref()
+            .map_or(0, |alphas| alphas.iter().filter(|&&a| a > 0).count());
+        println!(
+            "  model: {} verts, {} faces ({translucent} translucent), bounds {min:?}..{max:?}",
+            model.vertex_count, model.face_count
+        );
+    }
+    if def.animation_id >= 0 {
+        let clip = rift_cache::AnimationClip::load(cache, def.animation_id as u32)?;
+        println!(
+            "  sequence: {} frames, {:.0} ms",
+            clip.frames.len(),
+            clip.loop_ms()
+        );
+    }
+    Ok(())
+}
+
+/// Load a spot animation's model with its palette swaps applied, posed at
+/// `t` (0..1) of its sequence.
+fn spotanim_pose(
+    cache: &Cache,
+    def: &rift_cache::SpotAnimDefinition,
+    t: f32,
+) -> Result<(Model, Vec<[f32; 3]>)> {
+    let group = cache.group(7, def.model_id)?;
+    let mut model = Model::load(def.model_id, &group.data)?;
+    if !def.recolors.is_empty() {
+        let (find, replace): (Vec<i16>, Vec<i16>) = def
+            .recolors
+            .iter()
+            .map(|&(f, r)| (f as i16, r as i16))
+            .unzip();
+        model.recolor(&find, &replace);
+    }
+    let positions = if def.animation_id >= 0 {
+        match rift_cache::AnimationClip::load(cache, def.animation_id as u32) {
+            Ok(clip) => model.animated_positions(&clip, clip.loop_ms() * t),
+            Err(_) => model.animated_positions(&rift_cache::AnimationClip::default(), 0.0),
+        }
+    } else {
+        model.animated_positions(&rift_cache::AnimationClip::default(), 0.0)
+    };
+    Ok((model, positions))
+}
+
+fn spotanims(cache: &Cache, from: u32, to: u32, sheet: Option<&Path>) -> Result<()> {
+    let files = cache.archive_files_with_ids(2, rift_cache::spotanim::SPOTANIM_ARCHIVE)?;
+    let total = files.len();
+    let mut incomplete = 0usize;
+    let mut tiles = Vec::new();
+    for (id, data) in files {
+        let def = match rift_cache::SpotAnimDefinition::parse(id, &data) {
+            Ok(def) => def,
+            Err(err) => {
+                incomplete += 1;
+                println!("spotanim {id}: error {err}");
+                continue;
+            }
+        };
+        if !def.complete {
+            incomplete += 1;
+        }
+        if id < from || id > to {
+            continue;
+        }
+        println!(
+            "spotanim {id:5}: model={:5} seq={:5} resize={}x{} rot={} complete={}",
+            def.model_id, def.animation_id, def.resize_x, def.resize_y, def.rotation, def.complete
+        );
+        if sheet.is_some() && def.model_id > 0 {
+            if let Ok((model, positions)) = spotanim_pose(cache, &def, 0.5) {
+                let tile = model_sheet::render_pose(&model, &positions, 96, [44, 44, 52, 255]);
+                tiles.push((id.to_string(), tile));
+            }
+        }
+    }
+    println!("{total} spot animations, {incomplete} stopped at an unknown opcode");
+    if let Some(path) = sheet {
+        model_sheet::sheet(&tiles, 12, 96).save(path)?;
+        println!("wrote {} tiles to {}", tiles.len(), path.display());
+    }
+    Ok(())
+}
+
+fn skeleton_anims(
+    cache: &Cache,
+    sequence_id: u32,
+    model_id: Option<u32>,
+    sheet: Option<&Path>,
+    window: u32,
+) -> Result<()> {
+    let framemap_of = |frame_id: u32| -> Option<u16> {
+        let data = cache.file(0, frame_id >> 16, frame_id & 0xffff).ok()?;
+        (data.len() >= 2).then(|| u16::from_be_bytes([data[0], data[1]]))
+    };
+    let reference = rift_cache::Sequence::load(sequence_id, &cache.file(2, 12, sequence_id)?)?;
+    let skeleton = reference
+        .frame_ids
+        .first()
+        .and_then(|&frame| framemap_of(frame))
+        .context("reference sequence has no frames")?;
+    println!("sequence {sequence_id} animates skeleton {skeleton}");
+
+    // One lookup per frame archive: every frame in an archive shares a
+    // skeleton, so the first file answers for all of them.
+    let mut archive_skeleton: std::collections::HashMap<u32, Option<u16>> =
+        std::collections::HashMap::new();
+    let mut matches = Vec::new();
+    for (id, data) in cache.archive_files_with_ids(2, 12)? {
+        if id.abs_diff(sequence_id) > window {
+            continue;
+        }
+        let Ok(seq) = rift_cache::Sequence::load(id, &data) else {
+            continue;
+        };
+        let Some(&first) = seq.frame_ids.first() else {
+            continue;
+        };
+        let found = *archive_skeleton
+            .entry(first >> 16)
+            .or_insert_with(|| framemap_of(first));
+        if found == Some(skeleton) {
+            let ms: f32 = seq
+                .frame_lengths
+                .iter()
+                .map(|&l| l.max(1) as f32 * 20.0)
+                .sum();
+            println!(
+                "  sequence {id:5}: {:3} frames {:6.0} ms loops={} priority={} {}",
+                seq.frame_ids.len(),
+                ms,
+                seq.max_loops,
+                seq.priority,
+                seq.debug_name
+            );
+            matches.push(id);
+        }
+    }
+    println!("{} sequence(s) share the skeleton", matches.len());
+
+    if let (Some(model_id), Some(path)) = (model_id, sheet) {
+        let group = cache.group(7, model_id)?;
+        let model = Model::load(model_id, &group.data)?;
+        let mut tiles = Vec::new();
+        for &id in &matches {
+            let Ok(clip) = rift_cache::AnimationClip::load(cache, id) else {
+                continue;
+            };
+            for t in [0.2f32, 0.45, 0.7] {
+                let positions = model.animated_positions(&clip, clip.loop_ms() * t);
+                let tile = model_sheet::render_pose(&model, &positions, 96, [44, 44, 52, 255]);
+                tiles.push((id.to_string(), tile));
+            }
+        }
+        model_sheet::sheet(&tiles, 12, 96).save(path)?;
+        println!("wrote {} tiles to {}", tiles.len(), path.display());
     }
     Ok(())
 }
