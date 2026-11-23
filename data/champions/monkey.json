@@ -21,7 +21,6 @@
   "e_heal": 80,
   "e_shield": 120,
   "w_distance": 768,
-  "model_yaw": 3.1415927,
   "walk_sway": 0.0,
   "weight": 82,
   "walk_arm": 0.0,
@@ -50,5 +49,10 @@
       "description": "A barrier traps the king and an enemy champion. Monkey subjects hurl banana peels that strip armor until one of them falls."
     }
   ],
-  "ability_icons": [57, 53, 122, 168]
+  "ability_icons": [
+    57,
+    53,
+    122,
+    168
+  ]
 }

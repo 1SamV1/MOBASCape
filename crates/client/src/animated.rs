@@ -40,6 +40,10 @@ const TRIAL_RANGE: f32 = 75.0 * 128.0;
 const MINION_AGGRO: f32 = 520.0;
 const MAX_MINIONS_PER_TEAM: usize = 36;
 const DEATH_SINK_TIME: f32 = 0.45;
+/// OSRS models are authored facing -Z, while a unit's `yaw` points +Z along
+/// its movement (`dir.x.atan2(dir.z)`). Every unit is turned half a circle
+/// when it is drawn; `model_yaw_offset` is only for genuine exceptions.
+const CACHE_MODEL_FORWARD: f32 = std::f32::consts::PI;
 /// Model vertex groups used by King Awowogei's arms and hands.
 const MONKEY_ARM_GROUPS: &[u8] = &[11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 37];
 
@@ -411,9 +415,8 @@ struct MinionTemplate {
     interval: f32,
     speed: f32,
     scale: f32,
-    /// Added to the unit's yaw when posing the model. Cache models do not
-    /// share one forward axis: the imp, like King Awowogei, is authored
-    /// facing the opposite way to the fairy and walked backwards at 0.
+    /// Extra yaw for a model whose forward axis breaks the cache
+    /// convention (see `CACHE_MODEL_FORWARD`). Zero for both minions.
     model_yaw: f32,
 }
 
@@ -851,7 +854,7 @@ impl AnimatedScene {
             interval: 1.0,
             speed: 400.0,
             scale: 3.6,
-            model_yaw: std::f32::consts::PI,
+            model_yaw: 0.0,
         };
         let ranged_template = MinionTemplate {
             model: assets.model(2857)?,
@@ -5453,7 +5456,7 @@ fn append_unit_model(
     model: &Model,
     positions: &[[f32; 3]],
 ) {
-    let rot = Mat3::from_rotation_y(unit.yaw + unit.model_yaw_offset);
+    let rot = Mat3::from_rotation_y(unit.yaw + unit.model_yaw_offset + CACHE_MODEL_FORWARD);
     let dominant_texture = model_dominant_texture(model);
     // Key by the model instance, not the cache id: a recoloured camp/champion
     // can share the id while carrying a different palette.

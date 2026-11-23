@@ -45,8 +45,8 @@ pub struct ChampionConfig {
     pub idle: u32,
     pub walk: u32,
     pub scale: f32,
-    /// Extra yaw applied to the rendered model when its authored forward axis
-    /// differs from the engine's +Z movement convention.
+    /// Extra yaw for a model whose forward axis breaks the cache convention.
+    /// The renderer already turns every OSRS model to face its movement.
     #[serde(default)]
     pub model_yaw: f32,
     /// Multiplier for sideways rotation in the walk clip. Some cache walk
