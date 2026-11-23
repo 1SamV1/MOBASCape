@@ -35,6 +35,16 @@ pub struct NpcDefinition {
     pub is_interactable: bool,
 }
 
+/// Some boss names in the pinned cache decode with two stray leading bytes
+/// (for example "p\u{2}General Graardor") while their models and animations
+/// are correct. Keep the text after the last control character.
+fn clean_npc_name(name: String) -> String {
+    match name.rfind(|c: char| c.is_control()) {
+        Some(index) => name[index + 1..].to_string(),
+        None => name,
+    }
+}
+
 impl NpcDefinition {
     pub fn parse(id: u32, data: &[u8]) -> Result<Self> {
         let mut def = Self {
@@ -70,7 +80,7 @@ impl NpcDefinition {
                         def.models.push(b.read_u16()? as u32);
                     }
                 }
-                2 => def.name = b.read_string()?,
+                2 => def.name = clean_npc_name(b.read_string()?),
                 12 => def.size = b.read_u8()?,
                 13 => def.standing_animation = b.read_u16()? as i32,
                 14 => def.walking_animation = b.read_u16()? as i32,
@@ -195,6 +205,27 @@ impl NpcDefinition {
                     b.read_u16()?;
                 }
                 147 => {}
+                // Parameter map (the same layout as objects and items). Most
+                // modern NPCs carry one; without it every boss failed to
+                // decode. The values are not needed yet, so they are skipped.
+                249 => {
+                    let count = b.read_u8()? as usize;
+                    for _ in 0..count {
+                        let kind = b.read_u8()?;
+                        let _key = b.read_u24()?;
+                        match kind {
+                            1 => {
+                                let _ = b.read_string()?;
+                            }
+                            2 => {
+                                b.read_u64()?;
+                            }
+                            _ => {
+                                b.read_i32()?;
+                            }
+                        }
+                    }
+                }
                 other => {
                     return Err(Error::parse(format!(
                         "npc {}: unknown opcode {} at offset {}",
@@ -561,5 +592,44 @@ impl ObjectDefinition {
 
     pub fn first_model(&self) -> Option<u32> {
         self.models.first().copied()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// An NPC with a name, size, animations and an opcode 249 parameter map
+    /// holding one integer and one string entry.
+    #[test]
+    fn npc_parameter_map_is_skipped_not_fatal() {
+        let mut bytes = vec![2];
+        bytes.extend_from_slice(b"Cerberus\0");
+        bytes.extend_from_slice(&[12, 5, 13, 0x11, 0x84, 14, 0x11, 0x88]);
+        bytes.extend_from_slice(&[249, 2]);
+        bytes.extend_from_slice(&[0, 0x00, 0x01, 0x02, 0, 0, 0, 7]);
+        bytes.extend_from_slice(&[1, 0x00, 0x03, 0x04]);
+        bytes.extend_from_slice(b"text\0");
+        bytes.push(95);
+        bytes.extend_from_slice(&[0x01, 0x3e]);
+        bytes.push(0);
+        let def = NpcDefinition::parse(5862, &bytes).expect("parses");
+        assert_eq!(def.name, "Cerberus");
+        assert_eq!(def.size, 5);
+        assert_eq!(def.standing_animation, 4484);
+        assert_eq!(def.walking_animation, 4488);
+        assert_eq!(def.combat_level, 318, "opcodes after 249 still decode");
+    }
+
+    #[test]
+    fn npc_names_drop_stray_leading_bytes() {
+        assert_eq!(
+            clean_npc_name("p\u{2}General Graardor".into()),
+            "General Graardor"
+        );
+        assert_eq!(
+            clean_npc_name("K'ril Tsutsaroth".into()),
+            "K'ril Tsutsaroth"
+        );
     }
 }
