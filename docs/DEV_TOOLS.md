@@ -71,6 +71,18 @@ The log prints each startup phase: `startup: cache open`, `scene build`,
 `animated scene`, `textures + renderer`, and `first frame after N s`. Use
 it to see where load time goes before optimising.
 
+## Combat checks
+
+- `--demo-attack`: park the hero 1,000 units from the nearest jungle camp
+  and basic-attack it (attack clip, reach, projectile, impact).
+- `--hold-indicator SLOT`: draw the held ability indicator for slot 0-3
+  aimed at that camp, as if right mouse were held.
+- Combine with `--screenshot out.png --screenshot-after N` and step `N` to
+  capture a projectile in flight.
+- `rift-tools spotanim ID`, `rift-tools spotanims --from A --to B --sheet
+  out.png` and `rift-tools skeleton-anims SEQ --model M --sheet out.png`
+  inspect projectile graphics and find attack clips.
+
 ## Existing switches (for reference)
 
 `--debug-view`, `--debug-hud`, `--gpu-timing`, `--benchmark N`,

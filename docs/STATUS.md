@@ -1,6 +1,51 @@
 # Status
 
-Last updated: every model faces its movement, 2026-11-23.
+Last updated: attack animations, reach and projectile effects, 2026-11-23.
+
+## 2026-11-23 — Attack animations, reach and projectile effects
+
+- **Attack and cast animations:** champion files name `attack_anim`,
+  `attack_hit` and `cast_anim`. The clip is time scaled so its hit frame
+  lands when the wind-up ends, blends over idle/walk and is cancelled by
+  walking. Wind-up now shortens with attack speed. Imps (169) and fairies
+  (110) swing too, and minions, camps and enemy champions wind up a strike
+  before the blow or shot lands. Clips were picked from pose sheets
+  (`rift-tools skeleton-anims`), e.g. Graardor 7018, Cerberus 4491,
+  Vorkath's breath 7952, Kree's wing blast 6978, the ranger's blowpipe 5061.
+- **Reach:** attack range is edge to edge on the ground plane (target
+  footprint `body_radius`, not the generous projectile hit box, and no
+  height penalty on terraces). Melee champion ranges drop by 50 to keep
+  hero-vs-hero reach about the same; towers, the nexus and big camps are
+  now reachable from their edge. A committed swing tolerates 90 units of
+  drift. The shared meteor is clamped to 1,100 units (it had no range).
+- **Projectiles:** basic attacks, minion bolts and tower shots home and
+  cannot miss; abilities stay skillshots. Shots carry a look from
+  `fx::LOOKS`: an OSRS spot animation model (fire/water/earth/wind
+  blasts and waves, dragonfire breaths, Jad's fireball, trident bolt,
+  Armadyl crystal, darts, arrows, team-coloured tower orbs), a layered glow,
+  a ribbon trail, embers, a point light, and an impact flash, shock ring,
+  sparks and hit-splash model. Arrows and darts lob. Jad now attacks with
+  his fireball (`ranged_auto`). Melee hits draw a bright slash.
+- **Additive FX pass:** `fs_fx` in `scene.wgsl` draws glows, ribbons,
+  translucent cache faces and ground indicators with additive blending after
+  the opaque scene, feeding bloom. Particles and effect rings moved into it.
+- **Cache:** spot animation decoder (archive 13, all 3,565 decode) and
+  per-face transparency on models (`face_alphas`).
+- **Ability indicators:** casting stays instant; holding right mouse shows
+  the last cast ability's shape at the cursor (skillshot lanes, fans,
+  target circles inside a range ring, cones, dash arrows, Bananarang's
+  path), greyed while on cooldown. Every cast briefly flashes its range.
+- **Big Frog replaces Vardorvis**, whose Animaya model could not animate:
+  NPC 8701 (model 6947), tongue-lash attack 1793, Tongue Lash pull, Big Leap
+  slam, Swamp Croak slow and shield, Plague of Frogs rain plus three frogs.
+  Its ability icons are still the old Vardorvis sprites.
+- Fixed while here: player basic-attack last hits never counted as CS, and
+  allied ranged-minion kills paid out hero rewards (both passed no
+  attacker).
+- Verified: workspace tests and clippy pass; screenshots of homing fireballs,
+  tower orbs, Vorkath's breath, the cast clip and the four indicator kinds;
+  `--demo-abilities` for Big Frog; benchmark 152 fps at 1280x720.
+
 
 ## 2026-11-23 — Every unit faces the way it moves
 
@@ -47,7 +92,8 @@ Last updated: every model faces its movement, 2026-11-23.
   movement in the AI loop, taunt in `find_target`); summons are minion units
   with a lifetime that follow the champion between fights.
 - **Roster (approved by the user):** General Graardor, Cerberus, Kalphite
-  Queen, K'ril Tsutsaroth, Callisto, Vardorvis, Venenatis, Commander
+  Queen, K'ril Tsutsaroth, Callisto, Vardorvis (since replaced by Big
+  Frog), Venenatis, Commander
   Zilyana, Ancient Wyvern (replacing Zulrah), Kolodion, Vorkath and the Wise
   Old Man, generated with cache models, sprite icons and kits. 16 champions.
 - **Hero select:** portraits are 128px and wrap onto two atlas rows, so all

@@ -25,7 +25,7 @@ Ability damage is multiplied by `(1 + ability_power / 100) * (1 + 0.05 * (level 
 
 | Type | What it does | Main fields |
 |---|---|---|
-| `projectile` | Straight skillshot; `count` > 1 fans over `spread` degrees | `speed`, `range`, `damage`, `width`, `pierce`, `explode`, `on_hit` |
+| `projectile` | Straight skillshot; `count` > 1 fans over `spread` degrees | `speed`, `range`, `damage`, `width`, `pierce`, `explode`, `visual`, `on_hit` |
 | `area` | Circle or cone after `delay`; can `repeat` with `scatter` | `at`, `radius`, `arc`, `damage`, `range`, `interval`, `heal_per_hit`, `on_hit` |
 | `zone` | Lingering pool that ticks; `count`/`spacing` lay a line | `radius`, `duration`, `damage`, `tick`, `grow`, `heal_caster`, `on_tick` |
 | `dash` | Moves the caster, hitting what it passes; `land` actions make leaps | `distance`, `speed`, `to_cursor`, `backwards`, `untargetable`, `land` |
@@ -36,6 +36,31 @@ Ability damage is multiplied by `(1 + ability_power / 100) * (1 + 0.05 * (level 
 | `transform` | Takes another NPC's model with stat bonuses | `npc`, `duration`, `scale`, `damage`, `range`, `move_speed`, `heal` |
 
 `at` is `point` (cursor, clamped to `range`), `caster`, or `front`.
+
+`visual` names a projectile look from `crates/client/src/fx.rs` (for
+example `fire_wave`, `dragonfire`, `trident`, `crystal`, `tongue`). Without
+one the shot is a glowing orb in the ability's `color`.
+
+## Attack and cast animations, projectiles
+
+Every champion file (kit or not) may also carry:
+
+| Field | Meaning |
+|---|---|
+| `attack_anim` | Cache sequence for basic attacks. It is time scaled so the blow lands when `attack_windup` ends. |
+| `attack_hit` | Fraction of that clip where the blow connects (default 0.5). |
+| `cast_anim` | Sequence played on a successful cast (defaults to `attack_anim`). |
+| `projectile` | Basic-attack look for `ranged_auto` champions (defaults: `arrow` for RANGED, the arcane orb otherwise). |
+
+Find a clip with `rift-tools skeleton-anims <idle> --model <model> --sheet
+out.png`: it lists every sequence that animates the same skeleton and draws
+three poses of each. Animaya-only clips (no frames) cannot be used yet.
+Pick looks with `rift-tools spotanims --from A --to B --sheet out.png`.
+
+Attack range is measured edge to edge on the ground: a unit attacks when
+the planar distance to its target minus the target's footprint radius is
+within `attack_range`. Basic-attack projectiles home and cannot miss;
+ability projectiles stay skillshots.
 
 ## Statuses (`on_hit`, `on_tick`)
 
