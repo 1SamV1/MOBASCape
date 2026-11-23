@@ -69,7 +69,10 @@ reference, using only cache-scraped terrain, textures and models.
 Goal: the live interface carries the reference's information hierarchy and
 interaction, not just its panels.
 
-- Cache QWER/battle-spell icons, item detail icon, target/kill-feed portraits.
+- **Done (2026-11-23):** cache QWER icons per champion and the champion
+  portrait in the ability bar.
+- Battle-spell icons (D/F have no gameplay yet), item detail icon,
+  target/kill-feed portraits.
 - Populate team frames for a real roster; objective/boss timers and ward count.
 - Route ability bar, minimap, team frames and target panel clicks.
 - Use stone/parchment panels for objectives/target/kill feed.

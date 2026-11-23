@@ -1,6 +1,24 @@
 # Status
 
-Last updated: cliff dressing, 2026-11-23.
+Last updated: live ability bar icons and portrait, 2026-11-23.
+
+## 2026-11-23 — Live ability bar: cache spell icons and the champion portrait
+
+- The `--ui-live` ability bar drew the word "HERO" and plain Q/W/E/R
+  letters. It now shows the cache-baked champion portrait (`portrait.self`)
+  and one cache spell/prayer sprite per ability, with the hotkey as a small
+  corner badge. Letters remain the fallback when a role is missing.
+- Data-driven: each champion JSON has `ability_icons` (four cache sprite
+  IDs). The theme bakes every champion's set as
+  `icon.ability.<name>.<slot>`, so the bar is right after hero select too.
+  - King Awowogei: 57 (returning arc), 53 (swoop), 122 (heart), 168 (crossed swords)
+  - JalRek-Jad: 21 (fire strike), 33 (teleport rune), 130 (heart), 131 (red pillar)
+  - Kree'arra Jr.: 26 (lightning), 53 (swoop), 132 (blue pillar), 36 (fire burst)
+  - Blowpipe Ranger: 45 (green orb), 58 (scatter), 61 (wind), 133 (eagle eye)
+- `AbilityState` gains `portrait` and `icons`; `theme_file` accepts extra
+  cache sprites by role.
+- Tests: stable icon roles across punctuation; every champion ships four
+  icons. Verified: 286 workspace tests pass; clippy clean.
 
 ## 2026-11-23 — Cliff dressing: riser outcrops and plateau tree masses
 
