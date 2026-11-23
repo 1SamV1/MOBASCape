@@ -113,6 +113,8 @@ fn base() -> HudState {
             level: 7,
             experience: 62,
             cooldowns: [0.0, 3.2, 0.0, 18.5],
+            portrait: None,
+            icons: Default::default(),
         },
         minimap: MinimapState {
             lanes: vec![

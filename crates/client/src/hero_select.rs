@@ -285,6 +285,7 @@ mod tests {
             role: String::new(),
             class: String::new(),
             abilities: Vec::new(),
+            ability_icons: Vec::new(),
             tagline: String::new(),
             model: 0,
             attachments: Vec::new(),

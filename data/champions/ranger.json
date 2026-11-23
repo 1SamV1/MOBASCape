@@ -51,5 +51,6 @@
       "name": "DEADSHOT",
       "description": "A piercing blowpipe shot that hits everything in its line and finishes off wounded targets."
     }
-  ]
+  ],
+  "ability_icons": [45, 58, 61, 133]
 }

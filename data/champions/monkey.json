@@ -49,5 +49,6 @@
       "name": "TRIAL BY COMBAT",
       "description": "A barrier traps the king and an enemy champion. Monkey subjects hurl banana peels that strip armor until one of them falls."
     }
-  ]
+  ],
+  "ability_icons": [57, 53, 122, 168]
 }

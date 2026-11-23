@@ -27,6 +27,9 @@ pub struct ChampionConfig {
     /// Ability list shown in the hero-select detail panel.
     #[serde(default)]
     pub abilities: Vec<ChampionAbility>,
+    /// Cache sprite IDs for the Q, W, E and R icons in the live ability bar.
+    #[serde(default)]
+    pub ability_icons: Vec<u32>,
     /// One-line flavour text shown on the hero-select card.
     #[serde(default)]
     pub tagline: String,

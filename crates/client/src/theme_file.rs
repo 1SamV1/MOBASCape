@@ -80,7 +80,7 @@ pub fn load_with_items_and_minimap(
     items: &[(String, u32)],
     minimap: Option<&image::RgbaImage>,
 ) -> Result<Theme> {
-    load_with_items_minimap_and_portrait(cache, path, items, minimap, None)
+    load_with_items_minimap_and_portrait(cache, path, items, minimap, None, &[])
 }
 
 /// The same, plus the cache-baked champion portrait for the live team frames.
@@ -90,6 +90,7 @@ pub fn load_with_items_minimap_and_portrait(
     items: &[(String, u32)],
     minimap: Option<&image::RgbaImage>,
     portrait: Option<&image::RgbaImage>,
+    extra_sprites: &[(String, u32)],
 ) -> Result<Theme> {
     let text = std::fs::read_to_string(path)
         .with_context(|| format!("reading theme {}", path.display()))?;
@@ -142,6 +143,14 @@ pub fn load_with_items_minimap_and_portrait(
     }
     if let Some(portrait) = portrait {
         builder.sprite("portrait.self", portrait_sprite_image(portrait));
+    }
+    // Code-supplied cache sprites, such as champion ability icons. A missing
+    // sprite leaves the role out and the component keeps its fallback.
+    for (role, sprite) in extra_sprites {
+        match frame_image(cache, *sprite, 0) {
+            Ok(image) => builder.sprite(role, image),
+            Err(err) => tracing::warn!("sprite role {role} ({sprite}): {err:#}"),
+        }
     }
     Ok(builder.build())
 }

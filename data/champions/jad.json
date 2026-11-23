@@ -43,5 +43,6 @@
       "name": "EARTH SPLITTER",
       "description": "The ground erupts under the cursor, hurling boulders at everything nearby."
     }
-  ]
+  ],
+  "ability_icons": [21, 33, 130, 131]
 }

@@ -56,15 +56,53 @@ pub fn draw(theme: &Theme, list: &mut DrawList, area: Rect, state: &AbilityState
             }
         };
 
-    // Portrait: a labelled square until champion portraits exist. The level
-    // sits in a small box at its lower right.
-    slot(list, 9, 10, 76, 76, "HERO", quiet);
+    // A theme sprite fitted inside a slot's frame, when the role exists.
+    let icon =
+        |list: &mut DrawList, role: Option<&String>, x: i32, y: i32, w: i32, h: i32| match role
+            .filter(|role| theme.has_sprite(role))
+        {
+            Some(role) => {
+                let (sx, sy) = at(x + 3, y + 3);
+                list.sprite_fit(
+                    theme.sprite(role),
+                    Rect::new(sx, sy, (w - 6) * s, (h - 6) * s),
+                );
+                true
+            }
+            None => false,
+        };
+
+    // Portrait: the cache-baked champion face, or a labelled square when the
+    // theme has none. The level sits in a small box at its lower right.
+    let has_portrait = state
+        .portrait
+        .as_ref()
+        .is_some_and(|role| theme.has_sprite(role));
+    slot(
+        list,
+        9,
+        10,
+        76,
+        76,
+        if has_portrait { "" } else { "HERO" },
+        quiet,
+    );
+    icon(list, state.portrait.as_ref(), 9, 10, 76, 76);
     slot(list, 68, 68, 18, 18, &state.level.to_string(), title);
 
     // Four ability slots and the two battle spells.
     for (n, label) in ["Q", "W", "E", "R"].iter().enumerate() {
         let x = 92 + n as i32 * 42;
-        slot(list, x, 10, 40, 40, label, text);
+        let role = state.icons.get(n).and_then(Option::as_ref);
+        let has_icon = role.is_some_and(|role| theme.has_sprite(role));
+        slot(list, x, 10, 40, 40, if has_icon { "" } else { label }, text);
+        if icon(list, role, x, 10, 40, 40) {
+            // The hotkey stays readable as a small corner badge.
+            if let Some(font) = small {
+                let (kx, ky) = at(x + 3, 10 + 2);
+                list.text(font, label, kx, ky + font.ascent * s, title);
+            }
+        }
         let cooldown = state.cooldowns.get(n).copied().unwrap_or(0.0);
         if cooldown > 0.0 {
             let (ox, oy) = at(x, 10);

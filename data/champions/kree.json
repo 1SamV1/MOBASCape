@@ -48,5 +48,6 @@
       "name": "SKYFIRE",
       "description": "A falling column of sky fire scorches everything beneath it."
     }
-  ]
+  ],
+  "ability_icons": [26, 53, 132, 36]
 }

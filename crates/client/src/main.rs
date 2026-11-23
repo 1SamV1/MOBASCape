@@ -386,6 +386,23 @@ fn main() -> Result<()> {
     } else {
         Vec::new()
     };
+    // Every champion's ability icons, so the bar is right after hero select.
+    let ability_icon_sprites: Vec<(String, u32)> = champions
+        .iter()
+        .flat_map(|champion| {
+            champion
+                .ability_icons
+                .iter()
+                .take(4)
+                .enumerate()
+                .map(|(slot, sprite)| {
+                    (
+                        crate::ui_live::ability_icon_role(&champion.name, slot),
+                        *sprite,
+                    )
+                })
+        })
+        .collect();
     let ui_theme = if cli.ui_test || cli.ui_theme_sheet || cli.ui_layout || cli.ui_live {
         let theme = theme_file::load_with_items_minimap_and_portrait(
             &cache,
@@ -393,6 +410,7 @@ fn main() -> Result<()> {
             &item_icons,
             Some(&minimap_image),
             live_portrait.as_ref(),
+            &ability_icon_sprites,
         )
         .with_context(|| format!("loading theme {}", cli.ui_theme.display()))?;
         tracing::info!(

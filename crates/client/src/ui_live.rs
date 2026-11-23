@@ -628,7 +628,7 @@ pub fn plate(frame: &UnitFrame) -> Option<UnitPlate> {
 }
 
 pub fn ability(player: &PlayerHud) -> AbilityState {
-    ability_from(
+    let mut state = ability_from(
         player.health,
         player.max_health,
         player.mana,
@@ -637,7 +637,22 @@ pub fn ability(player: &PlayerHud) -> AbilityState {
         player.xp,
         player.xp_next,
         player.cooldowns,
-    )
+    );
+    state.portrait = Some("portrait.self".to_string());
+    state.icons = std::array::from_fn(|n| Some(ability_icon_role(&player.champion_name, n)));
+    state
+}
+
+/// Theme role of a champion's ability icon: `icon.ability.<name>.<slot>`,
+/// with the display name reduced to lowercase letters and digits so it is
+/// stable across punctuation ("Kree'arra Jr." -> `kreearrajr`).
+pub fn ability_icon_role(champion_name: &str, slot: usize) -> String {
+    let key: String = champion_name
+        .chars()
+        .filter(char::is_ascii_alphanumeric)
+        .map(|c| c.to_ascii_lowercase())
+        .collect();
+    format!("icon.ability.{key}.{slot}")
 }
 
 /// The pure part of the ability bar's bridge.
@@ -666,6 +681,8 @@ pub fn ability_from(
             0
         },
         cooldowns: cooldowns.map(|seconds| seconds.max(0.0)),
+        portrait: None,
+        icons: Default::default(),
     }
 }
 
@@ -676,6 +693,35 @@ fn count(value: f32) -> u32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn ability_icon_roles_are_stable_across_punctuation() {
+        assert_eq!(
+            ability_icon_role("Kree'arra Jr.", 0),
+            "icon.ability.kreearrajr.0"
+        );
+        assert_eq!(
+            ability_icon_role("King Awowogei", 3),
+            "icon.ability.kingawowogei.3"
+        );
+        assert_eq!(
+            ability_icon_role("JalRek-Jad", 2),
+            "icon.ability.jalrekjad.2"
+        );
+    }
+
+    #[test]
+    fn every_champion_ships_four_ability_icons() {
+        for name in ["monkey", "jad", "kree", "ranger"] {
+            let path = format!(
+                "{}/../../data/champions/{name}.json",
+                env!("CARGO_MANIFEST_DIR")
+            );
+            let text = std::fs::read_to_string(&path).unwrap();
+            let champion: crate::champion::ChampionConfig = serde_json::from_str(&text).unwrap();
+            assert_eq!(champion.ability_icons.len(), 4, "{name}");
+        }
+    }
 
     #[test]
     fn the_score_strip_reads_the_match_numbers_and_clock() {

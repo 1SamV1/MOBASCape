@@ -285,6 +285,10 @@ pub struct AbilityState {
     pub level: u8,
     pub experience: u32,
     pub cooldowns: [f32; 4],
+    /// Theme sprite role for the champion portrait, when one is baked.
+    pub portrait: Option<String>,
+    /// Theme sprite roles for the Q, W, E and R icons, when baked.
+    pub icons: [Option<String>; 4],
 }
 
 /// A point in the minimap's own 254 by 252 picture.
