@@ -1,6 +1,32 @@
 # Status
 
-Last updated: kit action sounds, 2026-11-23.
+Last updated: main menu, hero spotlight and wielded weapons, 2026-11-23.
+
+## 2026-11-23 — Main menu, hero spotlight and wielded weapons
+
+- **Main menu.** The game (and the AppImage) boots into a menu in the
+  style of the early RuneScape front end: gold MOBASCAPE title between two
+  pixel-flame braziers, a stone tablet with BOT MATCH, PUBLIC MATCH,
+  PRIVATE MATCH and QUIT, over a slow orbit of the arena playing itself.
+  Mouse, arrows/WS + Enter, 1-3 and Esc work. Public and Private are
+  marked OFFLINE: there is no match server yet, so they run the bot match.
+- **Hero select.** A 30 s countdown dial locks in the highlighted hero at
+  zero (beeps for the last five seconds). Heroes are grouped by type
+  (MELEE / RANGED / MAGIC sections, with filter tabs). The centre stage is a
+  spotlight: the selected hero, rendered from the cache in real time, plays
+  its cast (or attack) animation as an entrance and then idles, swaying
+  under a light beam. Stats, the wielded weapon and the four abilities are
+  on the right. Esc returns to the menu.
+- **Wielded weapons.** Humanoid heroes hold the first weapon in their
+  inventory, merged from the item's cache wield models so it moves with the
+  hand. With no weapon bought they hold a cosmetic default: Kolodion a staff
+  of fire, Wise Old Man a staff of air, the Ranger a toxic blowpipe. Monster
+  heroes use their own skeletons and cannot wield.
+- **Live portrait.** With `--ui-live`, locking in a hero rebakes the team
+  frame portrait for that hero.
+- **Tools.** `rift-tools item` prints wield models; `rift-tools wielders`
+  lists the items that use given models. `--start-select` opens hero select
+  directly for screenshots.
 
 ## 2026-11-23 — Kit abilities sound like what they do
 

@@ -220,9 +220,24 @@ Cache location: `.cache/osrs-235/cache` by default. Pass `--cache` and
   icons, cache fonts and cache hitmarks; `ui.wgsl` samples it with nearest
   filtering. Panels and buttons without a clean cache sprite keep procedural
   geometry. Never commit `assets/`.
-- **Match flow**: hero select -> LOCK IN -> 5v5 lobby -> match. The hero-select
-  screen is the reference layout (filter tabs ALL/MELEE/RANGED/MAGIC, roster
-  grid, side rosters, ability detail panel). The lobby shows both lineups as
+- **Match flow**: main menu -> hero select -> LOCK IN -> 5v5 lobby -> match.
+  The client (and the AppImage, which passes `--ui-live`) boots into the main
+  menu (`menu.rs`, drawn in `hud/screens.rs`): Bot / Public / Private Match
+  and Quit over an orbiting attract-mode arena. Public and Private need the
+  match server, which does not exist yet; they run the local bot match and
+  say so. Hero select has a 30 s pick timer (auto lock-in at zero, beeps in
+  the last five seconds, Esc goes back to the menu), the roster grouped by
+  type with ALL/MELEE/RANGED/MAGIC tabs, a centre spotlight of the selected
+  hero playing its cast (else attack) animation then idle
+  (`spotlight.rs`, a CPU raster streamed into the HUD atlas at
+  `ui_assets::SPOTLIGHT_RECT`), and stats/abilities on the right.
+  `--start-select bot|public|private [--champion id]` skips the menu for
+  screenshots.
+- **Wielded weapons** (`wield.rs`): heroes on the player skeleton
+  (framemap 0: Kolodion, Wise Old Man, the Ranger) hold the first weapon in
+  their inventory, else their champion file's cosmetic `weapon`. The item's
+  male wield models are merged into the body before animation. Boss-model
+  heroes have their own skeletons and cannot wield. The lobby shows both lineups as
   two rows of five hero cards with RADIANT/DIRE side tabs and the red
   "LOADING - PLEASE WAIT..." button; it auto-starts after eight seconds of
   wall-clock time, or the player can click the button or press Enter.

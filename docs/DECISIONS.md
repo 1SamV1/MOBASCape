@@ -762,3 +762,19 @@ port of the reference client (`rift_cache::sound`) and played through
 `rodio`; champion files name them. Because the OSRS server picks combat
 sounds, the kit uses documented sound ids whose meaning fits, and they are
 data so they can be swapped after listening.
+
+## ADR-052 — Boot into a main menu; Public and Private are offline stubs
+
+**Status:** accepted.
+
+The client boots into a main menu (Bot / Public / Private Match, Quit)
+rather than straight into hero select, as the user asked. With no match
+server (M7/M8), Public and Private run the same local match as Bot Match,
+with bots in every slot, and every screen labels them offline rather than
+hiding them. Hero select gains a 30 s pick timer, a type-grouped roster and
+an animated spotlight rendered on the CPU into a reserved HUD atlas slot,
+which avoids a second 3D pass for one model.
+
+Humanoid heroes visibly wield their weapon, using the OSRS method of
+merging item wield models into the body. Only the player skeleton supports
+this, so boss heroes keep whatever their models hold.
