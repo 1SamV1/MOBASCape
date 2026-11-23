@@ -147,131 +147,182 @@ def logo(y, word):
 
 
 # ============================================================================
+def bevel_logo(y, word):
+    """The block logo with a bevel: lit left edge, ▓ body, ▒ right edge."""
+    width = len(word) * 10 - 1
+    x0 = (W - width) // 2
+    clear(x0 - 5, y - 1, x0 + width + 5, y + LOGO_ROWS + 1)
+    for i, ch in enumerate(word):
+        rows = LOGO[ch]
+        for r in range(LOGO_ROWS):
+            for c, px in enumerate(rows[r]):
+                if px == " ":
+                    continue
+                x = x0 + i * 10 + c
+                left = c == 0 or rows[r][c - 1] == " "
+                right = c + 1 >= len(rows[r]) or rows[r][c + 1] == " "
+                if px != "█":
+                    put(x, y + r, px, LOGO_GRAD[r])
+                elif left:
+                    put(x, y + r, "█", WHITE if r < 2 else HEAD)
+                elif right:
+                    put(x, y + r, "▒", MID)
+                else:
+                    put(x, y + r, "▓", LOGO_GRAD[r])
+                if grid[y + r + 1][x + 1][0] == " ":
+                    put(x + 1, y + r + 1, "░", FAINT)
+    # Corner brackets, the old group-logo way.
+    for dx, dy, ch in [(-4, -1, "▄▄▄"), (width + 2, -1, "▄▄▄"), (-4, LOGO_ROWS, "▀▀▀"), (width + 2, LOGO_ROWS, "▀▀▀")]:
+        text(x0 + dx, y + dy, ch, BRIGHT)
+    for r in range(LOGO_ROWS):
+        put(x0 - 4, y + r, "█", DIM)
+        put(x0 + width + 4, y + r, "█", DIM)
+
+
 fade_bar(1, 2, W - 3)
-x0, lw = logo(3, "MOBASCAPE")
-center(10, "  ▓▒░  p  r  e  s  e  n  t  s   ░▒▓  ", AMBER)
-center(11, "  " + elite("phase.1 :: the fog of war") + "  ", WHITE)
-fade_bar(12, 2, W - 3)
+bevel_logo(3, "MOBASCAPE")
+center(11, "  ░▒▓█  r i F T   c R e W   p R e S e N T s  █▓▒░  ", AMBER)
+center(12, "  " + elite("phase.1 closed :: the light is data") + "  ", WHITE)
+fade_bar(13, 2, W - 3)
 
 # --- release info -------------------------------------------------------------
-header(14, elite("release info"))
-clear(4, 15, W - 5, 19)
+header(15, elite("release info"))
+clear(4, 16, W - 5, 19)
 info = [
-    ("rELEASE dATE", "2026-11-23", "sUPPLIER", "MobaScape Movement System Branch"),
-    ("tYPE", "eNGINE / rENDERER / hUD", "cOMMITS", "1438692  +  28e98c7  ->  sam/main"),
-    ("tESTS", "378 PASS // 0 FAIL", "cLIPPY", "-D warnings :: CLEAN"),
-    ("sOURCE", "VIDEO STUDY: 70 STILLS / 15 s", "rULE", "ONLY OSRS CACHE ASSETS. NO EXCEPTIONS."),
+    ("rELEASE dATE", "2026-11-23", "cOMMIT", "e28cf54  ->  sam/main"),
+    ("tYPE", "rENDERER / dATA / mINIMAP", "tESTS", "383 PASS // 0 FAIL   (+5)"),
+    ("rELOAD kEY", "F5 :: shader + lighting.json", "cLIPPY", "-D warnings :: CLEAN"),
+    ("rULE", "ONLY OSRS CACHE ASSETS", "sIZE", "9 knobs / 3 uniforms / 0 rebuilds"),
 ]
 for i, (k1, v1, k2, v2) in enumerate(info):
-    y = 15 + i
+    y = 16 + i
     text(8, y, f"{k1:.<16}", DIM)
-    text(25, y, v1, BRIGHT)
+    text(25, y, v1, AMBER if k1 == "rULE" else BRIGHT)
     text(76, y, f"{k2:.<12}", DIM)
-    text(89, y, v2, HEAD if k2 != "rULE" else AMBER)
+    text(89, y, v2, HEAD)
 
-# --- left box: what got cracked ------------------------------------------------
-box(4, 21, 74, 40, elite("what got cracked"))
-done = [
-    ("[+]", "ROADMAPPLAN.md", "7 phases: light, minimap, shop,"),
-    ("", "", "select, set dressing, HUD, post-match"),
-    ("[+]", "MINIMAP VEIL", "team LOS sampled 127x126, live"),
-    ("[+]", "HERO RINGS", "team colour, player in gold"),
-    ("[+]", "WORLD FOG OF WAR", "LOS grid -> 512^2 R8 texture"),
-    ("", "", "5-tap soft edge, binds 8 + 9"),
-    ("", "", "unseen: 40% light, greyed out"),
-    ("[+]", "LIGHT RETUNE", "ambient 1.64 -> 1.30"),
-    ("", "", "sun 0.72 -> 0.90  shadow 0.52 -> 0.36"),
-    ("", "", "post saturation 0.95 -> 0.86"),
-    ("[+]", "GRASS PALETTE", "lime 'dry' tint -> olive, boost 1.3->1.12"),
-    ("[+]", "TESTS", "+4: veil runs, rings, texel packing x2"),
+# --- left: hex dump of the new data file ---------------------------------------
+box(4, 21, 76, 39, elite("data/lighting.json // hexview"))
+knobs = [
+    ("terrain_ambient", 1.30, 4.0, "1.64"),
+    ("unit_ambient", 1.48, 4.0, "1.74"),
+    ("sun_strength", 0.90, 4.0, "0.72"),
+    ("shadow_floor", 0.36, 1.0, "0.52"),
+    ("hidden_tint", "[.40 .42 .47]", None, "--"),
+    ("hidden_saturation", 0.45, 1.0, "--"),
+    ("grass_saturation", 1.12, 3.0, "1.30"),
+    ("grass_brightness", 0.58, 2.0, "0.66"),
+    ("grass_mottle", 0.30, 2.0, "0.30"),
 ]
-for i, (tag, k, v) in enumerate(done):
-    y = 23 + i
-    if tag:
-        text(7, y, tag, WHITE)
-    text(11, y, k, CYAN)
-    text(30, y, v, BRIGHT)
-text(7, 36, "wALLS AND TREES NOW CAST SIGHT SHADOWS ON THE MAP.", AMBER)
-text(7, 37, "mENUS + DEMOS KEEP THE OLD CIRCLE (clear_vision_grid).", DIM)
-text(7, 38, "sTILLS OF THE REFERENCE VIDEO ARE NOT COMMITTED.", DIM)
+text(7, 23, "OFFS  KEY                  VALUE    WAS    RANGE", DIM)
+for i, (key, value, high, was) in enumerate(knobs):
+    y = 24 + i
+    text(7, y, f"{i * 0x18:04X}", FAINT if i % 2 else DIM)
+    text(13, y, key, CYAN)
+    shown = value if isinstance(value, str) else f"{value:.2f}"
+    text(34, y, shown if len(shown) < 9 else "", WHITE)
+    if len(shown) >= 9:
+        text(34, y, shown, WHITE)
+        continue
+    text(43, y, was, DIM if was == "--" else RED)
+    filled = int(round(value / high * 14))
+    text(50, y, "[", DIM)
+    for j in range(14):
+        put(51 + j, y, "▓" if j < filled else "░", BRIGHT if j < filled else FAINT)
+    text(65, y, "]", DIM)
+    text(67, y, f"0..{high:g}", FAINT)
+text(7, 34, "> F5  -> naga validates shader, serde validates json", AMBER)
+text(7, 35, "> bad key? 'sun_strenght' -> REFUSED, old values stay", AMBER)
+text(7, 36, "> test: extreme file dropped frame luma 75 -> 59", BRIGHT)
+text(7, 37, "> test: shipped file == built-in defaults (bit exact)", BRIGHT)
 
-# --- right box: an ASCII minimap of the fog ------------------------------------
-box(76, 21, W - 5, 40, elite("minimap.exe // live los"))
-mx, my, mw, mh = 80, 23, 32, 15
-rng2 = random.Random(7)
-
-
-def lit(px, py):
-    # Lit patches: blue fountain bottom-left, towers and waves along lanes.
-    spots = [(2, 13, 4.5), (9, 13, 2.5), (2, 7, 2.2), (8, 9, 2.8), (17, 13, 2.4), (12, 6, 1.6)]
-    for sx, sy, r in spots:
-        if (px - sx) ** 2 + ((py - sy) * 1.9) ** 2 <= (r * 1.9) ** 2:
-            return True
-    return False
-
-
-for py in range(mh):
-    for px in range(mw):
-        lane = py == 1 or px == 1 or py == mh - 2 or px == mw - 2 or abs((mw - 1 - px) * mh / mw - py) < 0.8
-        river = abs(px * mh / mw - py) < 0.7
-        if lit(px, py):
-            ch, col = ("█", BRIGHT) if lane else ("▓", MID)
-            if river:
-                ch, col = "≈", CYAN
-        else:
-            ch, col = ("▒", DIM) if lane else ("░", FAINT)
-            if river:
-                ch, col = "~", DIM
-        put(mx + px, my + py, ch, col)
-put(mx + 2, my + 12, "@", AMBER)          # the player, gold ring
-for tx, ty in [(9, 13), (2, 7), (17, 13)]:
-    put(mx + tx, my + ty, "■", CYAN)      # allied towers
-for tx, ty in [(29, 1), (22, 1), (30, 6), (25, 5)]:
-    put(mx + tx, my + ty, "■", RED)       # enemy towers, remembered
-text(mx + mw + 2, my + 0, "LEGEND", HEAD)
-text(mx + mw + 2, my + 2, "▓█ SEEN", BRIGHT)
-text(mx + mw + 2, my + 3, "░▒ FOG", DIM)
-text(mx + mw + 2, my + 4, "@  YOU", AMBER)
-text(mx + mw + 2, my + 5, "■  ALLY", CYAN)
-text(mx + mw + 2, my + 6, "■  ENEMY", RED)
-text(mx + mw + 2, my + 8, "REFRESH", HEAD)
-text(mx + mw + 2, my + 9, "0.15 s", BRIGHT)
-text(mx + mw + 2, my + 11, "CELLS", HEAD)
-text(mx + mw + 2, my + 12, "127x126", BRIGHT)
+# --- right: the camera footprint -----------------------------------------------
+box(78, 21, W - 5, 39, elite("frustum.com // minimap view"))
+eye_x, eye_y = 100, 23
+text(eye_x - 1, eye_y, "(@)", WHITE)
+text(eye_x + 4, eye_y, "camera eye", DIM)
+# Four rays fanning to the ground trapezoid.
+far_l, far_r, near_l, near_r = 82, 118, 92, 108
+ground_far, ground_near = 30, 35
+for step in range(1, ground_far - eye_y):
+    t = step / (ground_far - eye_y)
+    put(int(round(eye_x + (far_l - eye_x) * t)), eye_y + step, "/", MID)
+    put(int(round(eye_x + 1 + (far_r - eye_x - 1) * t)), eye_y + step, "\\", MID)
+for step in range(1, ground_near - eye_y):
+    t = step / (ground_near - eye_y)
+    put(int(round(eye_x + (near_l - eye_x) * t)), eye_y + step, ":", DIM)
+    put(int(round(eye_x + 1 + (near_r - eye_x - 1) * t)), eye_y + step, ":", DIM)
+for x in range(far_l, far_r + 1):
+    put(x, ground_far, "═", BRIGHT)
+for x in range(near_l, near_r + 1):
+    put(x, ground_near, "═", BRIGHT)
+for y in range(ground_far + 1, ground_near):
+    t = (y - ground_far) / (ground_near - ground_far)
+    put(int(round(far_l + (near_l - far_l) * t)), y, "\\", BRIGHT)
+    put(int(round(far_r + (near_r - far_r) * t)), y, "/", BRIGHT)
+    for x in range(int(round(far_l + (near_l - far_l) * t)) + 1, int(round(far_r + (near_r - far_r) * t))):
+        put(x, y, "░", DIM)
+text(far_l - 1, ground_far - 1, "TL", HEAD)
+text(far_r, ground_far - 1, "TR", HEAD)
+text(near_l - 1, ground_near + 1, "BL", HEAD)
+text(near_r, ground_near + 1, "BR", HEAD)
+text(94, 33, "screen", WHITE)
+text(80, 37, "corner rays hit y = focus; horizon rays capped at 60k", DIM)
+text(80, 38, "drawn unclamped, clipped by the map frame", DIM)
+# A tiny minimap with the trapezoid in it.
+mx, my = 124, 24
+for py in range(11):
+    for px in range(17):
+        edge = py in (0, 10) or px in (0, 16)
+        put(mx + px, my + py, "█" if edge else "░", DIM if edge else FAINT)
+for px in range(2, 10):
+    put(mx + px, my + 6, "▀", BRIGHT)
+for px in range(4, 8):
+    put(mx + px, my + 9, "▄", BRIGHT)
+put(mx + 2, my + 7, "\\", BRIGHT)
+put(mx + 3, my + 8, "\\", BRIGHT)
+put(mx + 9, my + 7, "/", BRIGHT)
+put(mx + 8, my + 8, "/", BRIGHT)
+put(mx + 5, my + 8, "@", AMBER)
+put(mx + 13, my + 2, "■", RED)
+text(mx, my + 12, "minimap.view", CYAN)
 
 # --- roadmap -------------------------------------------------------------------
-header(42, elite("roadmap // the oracle says"))
-clear(4, 43, W - 5, 50)
+header(41, elite("roadmap // the oracle says"))
+clear(4, 42, W - 5, 49)
 phases = [
-    ("PHASE 1", "MAP LIGHT + COLOUR", "▓▓▓▓▓▓▓▓░░", "fog, light, grass DONE // lighting.json + floor ids open"),
-    ("PHASE 2", "MINIMAP", "▓▓▓░░░░░░░", "veil + rings DONE // portraits, trapezoid, sharp bake"),
-    ("PHASE 3", "SHOP", "░░░░░░░░░░", "tiers, icon grid, recipes A+B>C, sell, undo"),
-    ("PHASE 4", "HERO SELECT", "▓░░░░░░░░░", "lanes, team columns, battle spells, stone panels"),
-    ("PHASE 5", "ARENA SET DRESSING", "░░░░░░░░░░", "cache cliffs, plank bridges, god castles"),
-    ("PHASE 6", "HUD POLISH", "░░░░░░░░░░", "objectives timers, ally rows, slim bar"),
-    ("PHASE 7", "POST-MATCH", "░░░░░░░░░░", "victory board, K/D/A, items, damage"),
+    ("PHASE 1", "MAP LIGHT + COLOUR", 9, "fog, light, grass, lighting.json DONE // floor ids open"),
+    ("PHASE 2", "MINIMAP", 4, "veil, rings, trapezoid DONE // portraits, sharp bake"),
+    ("PHASE 3", "SHOP", 0, "tiers, icon grid, recipes A+B>C, sell, undo"),
+    ("PHASE 4", "HERO SELECT", 1, "lanes, team columns, battle spells, stone panels"),
+    ("PHASE 5", "ARENA SET DRESSING", 0, "cache cliffs, plank bridges, god castles"),
+    ("PHASE 6", "HUD POLISH", 0, "objectives timers, ally rows, slim bar"),
+    ("PHASE 7", "POST-MATCH", 0, "victory board, K/D/A, items, damage"),
 ]
-for i, (p, name, bar, note) in enumerate(phases):
-    y = 43 + i
+for i, (p, name, done, note) in enumerate(phases):
+    y = 42 + i
     text(8, y, p, WHITE)
     text(18, y, name, CYAN)
     text(40, y, "[", DIM)
-    for j, ch in enumerate(bar):
-        put(41 + j, y, ch, BRIGHT if ch == "▓" else FAINT)
+    for j in range(10):
+        lit_cell = j < done
+        put(41 + j, y, "▓" if lit_cell else "░", BRIGHT if lit_cell else FAINT)
     text(51, y, "]", DIM)
-    text(55, y, note, BRIGHT if "DONE" in note else MID)
+    text(53, y, f"{done * 10:>3}%", HEAD if done else FAINT)
+    text(59, y, note, BRIGHT if "DONE" in note else MID)
 
 # --- greets + footer -----------------------------------------------------------
-header(52, elite("greetz"))
-clear(4, 53, W - 5, 55)
-center(53, "tHE OSRS CACHE  *  rUNELITE sOUNDeFFECTiD  *  wgpu  *  tHE rUST cREW  *  aLL bOT lANERS", MID)
+header(51, elite("greetz + memberz"))
+clear(4, 52, W - 5, 55)
+center(52, "cODE: lighting.rs  *  gFX: scene.wgsl  *  mAP: minimap.rs  *  dATA: lighting.json  *  sFX: the osrs synth", MID)
+center(53, "gREETZ: tHE OSRS CACHE  *  sERDE  *  NAGA  *  wgpu  *  tHE BOT LANERS WHO NEVER COMPLAIN", MID)
 center(54, "nOT AFFILIATED WITH JAGEX. cACHE ASSETS STAY OUT OF GIT. aLWAYS.", DIM)
 
 fade_bar(57, 2, W - 3)
-clear(20, 58, W - 21, 60)
-center(58, "  y o u   t a k e   t h e   b l u e   p i l l  :  t h e   m a p   s t a y s   l i m e  ", DIM)
-center(59, "  y o u   t a k e   t h e   r e d   p i l l  :  y o u   s e e   o n l y   w h a t   y o u r   t e a m   s e e s  ", HEAD)
-center(60, "-=[ mObAsCaPe // 2026 // cAlL tHe cOnStRuCt: 555-0199 // 28.8k-56k // 24hRs ]=-", AMBER)
+clear(14, 58, W - 15, 60)
+center(58, "  w h a t   i s   t h e   m a t r i x ?   a   j s o n   f i l e   a n d   a n   F 5   k e y .  ", DIM)
+center(59, "  t h e r e   i s   n o   r e b u i l d .  ", HEAD)
+center(60, "-=[ mObAsCaPe // 2026 // nODE 1: tHE cONsTrUcT // 14.4k-56k // sYSoP: rIFT // 24hRs ]=-", AMBER)
 
 # --- outputs ------------------------------------------------------------------
 with open(out + ".txt", "w") as f:
