@@ -271,9 +271,11 @@ Cache location: `.cache/osrs-235/cache` by default. Pass `--cache` and
   combining, or passives yet.
 - Fog/brush is **client-side** in this prototype. A 192×192 visibility grid is
   computed from allied units/structures, enemy/neutral units outside vision are
-  hidden, brush rectangles hide units unless the player is close, and a dark fog
-  mesh covers unseen tiles. The minimap draws 8×8-tile fog blocks and supports
-  click-to-pan. Server-authoritative fog is still required.
+  hidden, and brush rectangles hide units unless the player is close. The
+  world shader samples that grid (uploaded as a 512x512 R8 texture,
+  `Renderer::set_vision_grid`) and dims and greys unseen ground; the
+  minimap draws the same grid as a live veil and heroes as team rings.
+  Server-authoritative fog is still required.
 - Model formats 1 and old-format models are not implemented yet.
 - Model textures are sampled, but texture alpha cut-outs are not: leaf and
   flower sprites are drawn opaque. The `0xff00ff` terrain overlay sentinel
