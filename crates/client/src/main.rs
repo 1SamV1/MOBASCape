@@ -1,4 +1,5 @@
 mod animated;
+mod balance;
 mod champion;
 mod devtools;
 mod font;
@@ -140,6 +141,9 @@ struct Cli {
     /// so its ability tooltip shows.
     #[arg(long)]
     demo_ranks: Option<usize>,
+    /// Write the paper balance report (Markdown) to this path and exit.
+    #[arg(long)]
+    balance_report: Option<PathBuf>,
     /// Dev: show the held ability indicator for this slot (0-3) aimed at
     /// the nearest jungle camp, as if right mouse were held.
     #[arg(long)]
@@ -244,6 +248,13 @@ fn main() -> Result<()> {
         .init();
 
     let cli = Cli::parse();
+    if let Some(path) = cli.balance_report.as_ref() {
+        let champions = ChampionConfig::load_all()?;
+        std::fs::write(path, balance::report(&champions))
+            .with_context(|| format!("writing {}", path.display()))?;
+        println!("balance report: {}", path.display());
+        return Ok(());
+    }
     let window_size = parse_window_size(&cli.window_size)
         .with_context(|| format!("window size {:?} (expected WIDTHxHEIGHT)", cli.window_size))?;
     let render_scale = resolve_render_scale(&cli.render_scale, window_size).with_context(|| {
