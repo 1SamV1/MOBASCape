@@ -407,6 +407,10 @@ struct MinionTemplate {
     interval: f32,
     speed: f32,
     scale: f32,
+    /// Added to the unit's yaw when posing the model. Cache models do not
+    /// share one forward axis: the imp, like King Awowogei, is authored
+    /// facing the opposite way to the fairy and walked backwards at 0.
+    model_yaw: f32,
 }
 
 pub struct AnimatedScene {
@@ -838,6 +842,7 @@ impl AnimatedScene {
             interval: 1.0,
             speed: 400.0,
             scale: 3.6,
+            model_yaw: std::f32::consts::PI,
         };
         let ranged_template = MinionTemplate {
             model: assets.model(2857)?,
@@ -849,6 +854,7 @@ impl AnimatedScene {
             interval: 1.3,
             speed: 380.0,
             scale: 1.15,
+            model_yaw: 0.0,
         };
 
         let mut min = glam::Vec2::splat(f32::MAX);
@@ -4117,7 +4123,7 @@ impl AnimatedScene {
                 pose_scratch: AnimationScratch::default(),
                 pos,
                 yaw: if team == 0 { 0.0 } else { std::f32::consts::PI },
-                model_yaw_offset: 0.0,
+                model_yaw_offset: template.model_yaw,
                 motion: None,
                 walk_blend: 0.0,
                 walk_arm: 1.0,
