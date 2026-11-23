@@ -17,6 +17,21 @@ pub struct Sequence {
     pub anim_maya_id: i32,
     pub vertical_offset: i8,
     pub debug_name: String,
+    /// Sounds keyed by frame index (opcode 14).
+    pub sounds: Vec<FrameSound>,
+}
+
+/// A sound effect a sequence plays when it reaches `frame`.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct FrameSound {
+    pub frame: u16,
+    /// Sound effect id (cache index 4 group).
+    pub id: u16,
+    pub loops: u8,
+    /// Audible distance in tiles.
+    pub range: u8,
+    pub retain: u8,
+    pub weight: u8,
 }
 
 impl Sequence {
@@ -85,12 +100,14 @@ impl Sequence {
                 14 => {
                     let count = b.read_u16()? as usize;
                     for _ in 0..count {
-                        b.read_u16()?;
-                        b.read_u16()?;
-                        b.read_u8()?;
-                        b.read_u8()?;
-                        b.read_u8()?;
-                        b.read_u8()?;
+                        def.sounds.push(FrameSound {
+                            frame: b.read_u16()?,
+                            id: b.read_u16()?,
+                            loops: b.read_u8()?,
+                            range: b.read_u8()?,
+                            retain: b.read_u8()?,
+                            weight: b.read_u8()?,
+                        });
                     }
                 }
                 15 => {

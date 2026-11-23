@@ -69,6 +69,22 @@ enum Command {
     },
     /// Print a sequence and its first frames.
     Sequence { id: u32 },
+    /// Decode a synthesised sound effect (index 4), print its instruments,
+    /// and optionally write it as a WAV file.
+    Sound {
+        id: u32,
+        #[arg(long)]
+        out: Option<PathBuf>,
+    },
+    /// Decode every sound effect and report failures; with `--sequences`,
+    /// list the sounds those animations play instead.
+    Sounds {
+        #[arg(long, value_delimiter = ',')]
+        sequences: Vec<u32>,
+        /// Also write each listed sound to this folder as `<id>.wav`.
+        #[arg(long)]
+        out: Option<PathBuf>,
+    },
     /// Animate a model with a sequence and print frame bounds.
     Animate { model: u32, sequence: u32 },
     /// Print a model summary.
@@ -197,6 +213,8 @@ fn main() -> Result<()> {
         Command::Object { id } => object(&cache, id)?,
         Command::FindObject { query, limit } => find_object(&cache, &query, limit)?,
         Command::Sequence { id } => sequence(&cache, id)?,
+        Command::Sound { id, out } => sound(&cache, id, out.as_deref())?,
+        Command::Sounds { sequences, out } => sounds(&cache, &sequences, out.as_deref())?,
         Command::Animate { model, sequence } => animate(&cache, model, sequence)?,
         Command::Model { id } => model(&cache, id)?,
         Command::ExportObj { id, out } => export_obj(&cache, id, &out)?,
@@ -728,6 +746,117 @@ fn find_object(cache: &Cache, query: &str, limit: usize) -> Result<()> {
     Ok(())
 }
 
+fn describe_sound(sound: &rift_cache::SoundEffect) -> String {
+    let forms: Vec<String> = sound
+        .instruments
+        .iter()
+        .map(|i| {
+            let wave = match i.pitch.form {
+                1 => "square",
+                2 => "sine",
+                3 => "saw",
+                4 => "noise",
+                _ => "off",
+            };
+            format!(
+                "{wave}x{} {}ms@{}{}{}",
+                i.oscillators.len(),
+                i.duration,
+                i.offset,
+                if i.filter.pairs != [0, 0] {
+                    " filt"
+                } else {
+                    ""
+                },
+                if i.pitch_modifier.is_some() {
+                    " vib"
+                } else {
+                    ""
+                },
+            )
+        })
+        .collect();
+    format!("{}ms [{}]", sound.length_ms(), forms.join(", "))
+}
+
+fn sound(cache: &Cache, id: u32, out: Option<&Path>) -> Result<()> {
+    let sound = rift_cache::SoundEffect::load(cache, id)?;
+    println!("sound {id}: {}", describe_sound(&sound));
+    let samples = sound.render();
+    let peak = samples.iter().map(|s| s.unsigned_abs()).max().unwrap_or(0);
+    println!("  {} samples at 22050 Hz, peak {peak}", samples.len());
+    if let Some(out) = out {
+        std::fs::write(out, sound.to_wav())?;
+        println!("  wrote {}", out.display());
+    }
+    Ok(())
+}
+
+fn sounds(cache: &Cache, sequences: &[u32], out: Option<&Path>) -> Result<()> {
+    if let Some(dir) = out {
+        std::fs::create_dir_all(dir)?;
+    }
+    if sequences.is_empty() {
+        let count = cache.group_count(rift_cache::sound::SOUND_INDEX);
+        let mut ok = 0;
+        let mut failed = Vec::new();
+        for id in 0..count {
+            let Ok(data) = cache.file(rift_cache::sound::SOUND_INDEX, id, 0) else {
+                continue;
+            };
+            match rift_cache::SoundEffect::decode(id, &data) {
+                Ok(sound) => {
+                    let _ = sound.render();
+                    ok += 1;
+                }
+                Err(err) => failed.push((id, err.to_string())),
+            }
+        }
+        println!("decoded {ok} sounds, {} failed", failed.len());
+        let mut with_sounds = 0;
+        for (id, data) in cache.archive_files_with_ids(2, 12)? {
+            if let Ok(seq) = rift_cache::Sequence::load(id, &data)
+                && !seq.sounds.is_empty()
+            {
+                with_sounds += 1;
+                let ids: Vec<u16> = seq.sounds.iter().map(|s| s.id).collect();
+                println!("  sequence {id}: sounds {ids:?}");
+            }
+        }
+        println!("{with_sounds} sequences play sounds");
+        for (id, err) in failed.iter().take(10) {
+            println!("  {id}: {err}");
+        }
+        return Ok(());
+    }
+    for &seq_id in sequences {
+        let seq = rift_cache::Sequence::load(seq_id, &cache.file(2, 12, seq_id)?)?;
+        if seq.sounds.is_empty() {
+            println!("sequence {seq_id}: no sounds");
+        }
+        for frame_sound in &seq.sounds {
+            let id = frame_sound.id as u32;
+            match rift_cache::SoundEffect::load(cache, id) {
+                Ok(sound) => {
+                    println!(
+                        "sequence {seq_id} frame {}: sound {id} {}",
+                        frame_sound.frame,
+                        describe_sound(&sound)
+                    );
+                    if let Some(dir) = out {
+                        std::fs::write(dir.join(format!("{id}.wav")), sound.to_wav())?;
+                    }
+                }
+                Err(err) => println!(
+                    "sequence {seq_id} frame {}: sound {id}: {err}",
+                    frame_sound.frame
+                ),
+            }
+        }
+    }
+    Ok(())
+}
+
 fn sequence(cache: &Cache, id: u32) -> Result<()> {
     let data = cache.file(2, 12, id)?;
     let seq = rift_cache::Sequence::load(id, &data)?;
@@ -741,6 +870,12 @@ fn sequence(cache: &Cache, id: u32) -> Result<()> {
         seq.debug_name
     );
     println!("  lengths={:?}", seq.frame_lengths);
+    for sound in &seq.sounds {
+        println!(
+            "  sound at frame {}: id={} loops={} range={} retain={} weight={}",
+            sound.frame, sound.id, sound.loops, sound.range, sound.retain, sound.weight
+        );
+    }
     println!(
         "  frame_ids={:?}",
         &seq.frame_ids[..seq.frame_ids.len().min(12)]
