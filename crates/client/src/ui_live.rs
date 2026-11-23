@@ -160,6 +160,15 @@ fn map_point(p: Vec3, min: Vec2, max: Vec2) -> MapPoint {
     }
 }
 
+/// The world x/z under a minimap fraction (0..1 across the picture): the
+/// inverse of `map_point`, used by the live minimap's click-to-pan.
+pub fn world_from_map(u: f32, v: f32, min: Vec2, max: Vec2) -> (f32, f32) {
+    (
+        min.x + u.clamp(0.0, 1.0) * (max.x - min.x),
+        min.y + v.clamp(0.0, 1.0) * (max.y - min.y),
+    )
+}
+
 fn is_objective_camp(kind: UnitKind, buff: Option<CampBuff>) -> bool {
     kind == UnitKind::Camp && buff.is_some()
 }
@@ -693,6 +702,24 @@ fn count(value: f32) -> u32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn minimap_click_inverts_the_dot_mapping() {
+        let min = Vec2::new(340_000.0, 371_000.0);
+        let max = Vec2::new(382_000.0, 408_000.0);
+        for (x, z) in [
+            (350_000.0, 380_000.0),
+            (381_000.0, 372_000.0),
+            (361_000.0, 399_500.0),
+        ] {
+            let dot = map_point(Vec3::new(x, 0.0, z), min, max);
+            let (wx, wz) = world_from_map(dot.x as f32 / MAP.0, dot.y as f32 / MAP.1, min, max);
+            // One map pixel is (max - min) / 254 world units.
+            assert!((wx - x).abs() <= (max.x - min.x) / MAP.0, "x {wx} vs {x}");
+            assert!((wz - z).abs() <= (max.y - min.y) / MAP.1, "z {wz} vs {z}");
+        }
+        assert_eq!(world_from_map(-1.0, 2.0, min, max), (min.x, max.y));
+    }
 
     #[test]
     fn ability_icon_roles_are_stable_across_punctuation() {

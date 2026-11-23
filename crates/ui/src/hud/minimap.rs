@@ -16,6 +16,20 @@ const FRAME: i32 = 6;
 const PICTURE: (i32, i32) = (254, 252);
 const LAYER: i32 = 20;
 
+/// Where a click lands on the map picture, as fractions of its width and
+/// height (0 at the top left, 1 at the bottom right). `None` outside the
+/// picture, including on the stone frame.
+pub fn picture_at(area: Rect, scale: i32, mouse: (i32, i32)) -> Option<(f32, f32)> {
+    let s = scale.max(1);
+    let x = mouse.0 - (area.x + FRAME * s);
+    let y = mouse.1 - (area.y + FRAME * s);
+    let (w, h) = (PICTURE.0 * s, PICTURE.1 * s);
+    if x < 0 || y < 0 || x >= w || y >= h {
+        return None;
+    }
+    Some((x as f32 / w as f32, y as f32 / h as f32))
+}
+
 pub fn draw(theme: &Theme, list: &mut DrawList, area: Rect, state: &MinimapState) {
     let s = list.scale();
     let previous = list.set_layer(LAYER);
@@ -120,4 +134,25 @@ pub fn draw(theme: &Theme, list: &mut DrawList, area: Rect, state: &MinimapState
     list.pop_clip();
     list.pop_clip();
     list.set_layer(previous);
+}
+
+#[cfg(test)]
+mod hit_tests {
+    use super::*;
+
+    #[test]
+    fn picture_fractions_skip_the_frame() {
+        let area = Rect::new(10, 20, SIZE.0, SIZE.1);
+        assert_eq!(
+            picture_at(area, 1, (10 + FRAME, 20 + FRAME)),
+            Some((0.0, 0.0))
+        );
+        let (u, v) = picture_at(area, 1, (10 + FRAME + 127, 20 + FRAME + 126)).unwrap();
+        assert!((u - 0.5).abs() < 0.01 && (v - 0.5).abs() < 0.01);
+        assert_eq!(picture_at(area, 1, (10 + 2, 20 + 2)), None, "stone frame");
+        assert_eq!(
+            picture_at(area, 1, (10 + SIZE.0 - 1, 20 + SIZE.1 - 1)),
+            None
+        );
+    }
 }

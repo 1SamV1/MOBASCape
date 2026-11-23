@@ -15,6 +15,21 @@ pub const SIZE: (i32, i32) = (458, 94);
 
 const LAYER: i32 = 20;
 
+/// The ability slot (0 for Q to 3 for R) under the mouse, if any. Matches
+/// the slot geometry `draw` uses: 40 by 40 at x = 92 + 42n, y = 10.
+pub fn ability_at(area: Rect, scale: i32, mouse: (i32, i32)) -> Option<usize> {
+    let s = scale.max(1);
+    let x = mouse.0 - area.x;
+    let y = mouse.1 - area.y;
+    if y < 10 * s || y >= 50 * s {
+        return None;
+    }
+    (0..4).find(|n| {
+        let left = (92 + *n as i32 * 42) * s;
+        x >= left && x < left + 40 * s
+    })
+}
+
 pub fn draw(theme: &Theme, list: &mut DrawList, area: Rect, state: &AbilityState) {
     let s = list.scale();
     let previous = list.set_layer(LAYER);
@@ -175,4 +190,26 @@ pub fn draw(theme: &Theme, list: &mut DrawList, area: Rect, state: &AbilityState
 
     list.pop_clip();
     list.set_layer(previous);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ability_slots_are_hit_where_they_are_drawn() {
+        let area = Rect::new(100, 200, SIZE.0 * 2, SIZE.1 * 2);
+        assert_eq!(ability_at(area, 2, (100 + 93 * 2, 200 + 11 * 2)), Some(0));
+        assert_eq!(
+            ability_at(area, 2, (100 + (92 + 3 * 42 + 39) * 2, 200 + 49 * 2)),
+            Some(3)
+        );
+        // The gap between W and E, the portrait and the bars miss.
+        assert_eq!(
+            ability_at(area, 2, (100 + (92 + 40) * 2 + 1, 200 + 30 * 2)),
+            None
+        );
+        assert_eq!(ability_at(area, 2, (100 + 20 * 2, 200 + 30 * 2)), None);
+        assert_eq!(ability_at(area, 2, (100 + 100 * 2, 200 + 70 * 2)), None);
+    }
 }

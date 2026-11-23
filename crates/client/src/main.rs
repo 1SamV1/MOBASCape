@@ -2542,6 +2542,11 @@ impl App {
     }
 
     fn click_minimap(&mut self) -> bool {
+        // The old HUD's minimap is not drawn under the live interface; its
+        // rectangle must not catch clicks there.
+        if self.ui_live {
+            return false;
+        }
         let Some(renderer) = self.renderer.as_mut() else {
             return false;
         };
@@ -2743,18 +2748,65 @@ impl App {
             return mx >= area.x && mx < area.right() && my >= area.y && my < area.bottom();
         }
 
-        let Some(area) = placed.get(rift_ui::hud::Piece::Inventory) else {
-            return false;
-        };
-        if rift_ui::hud::inventory::shop_button_at(area, scale, mouse) {
+        if let Some(area) = placed.get(rift_ui::hud::Piece::Inventory)
+            && rift_ui::hud::inventory::shop_button_at(area, scale, mouse)
+        {
             self.shop.open = true;
             self.shop.selected = self.shop.filtered_items().first().copied();
             self.shop.scroll = 0;
             tracing::info!("shop: opened from the assembled inventory");
             return true;
         }
-        let (mx, my) = mouse;
-        mx >= area.x && mx < area.right() && my >= area.y && my < area.bottom()
+        // The minimap pans the camera to the clicked point, like the old HUD.
+        if let Some(area) = placed.get(rift_ui::hud::Piece::Minimap)
+            && let Some((u, v)) = rift_ui::hud::minimap::picture_at(area, scale, mouse)
+        {
+            self.pan_camera_to_minimap(u, v);
+            return true;
+        }
+        // Ability slots cast like their hotkeys.
+        if let Some(area) = placed.get(rift_ui::hud::Piece::Ability)
+            && let Some(slot) = rift_ui::hud::ability_bar::ability_at(area, scale, mouse)
+        {
+            tracing::info!("ability bar: slot {slot} clicked");
+            match slot {
+                0 => self.cast_q(),
+                1 => self.cast_w(),
+                2 => self.cast_e(),
+                _ => self.cast_r(),
+            }
+            return true;
+        }
+        // Every other click on a panel belongs to the interface: it must not
+        // walk the hero to the ground hidden behind the panel.
+        placed.pieces.values().any(|area| {
+            mouse.0 >= area.x
+                && mouse.0 < area.right()
+                && mouse.1 >= area.y
+                && mouse.1 < area.bottom()
+        })
+    }
+
+    /// Centre the camera on the world point under a minimap fraction. The
+    /// inverse of `ui_live::map_point`, over the same minimap bounds.
+    fn pan_camera_to_minimap(&mut self, u: f32, v: f32) {
+        let (Some(renderer), Some(animated), Some(height)) = (
+            self.renderer.as_mut(),
+            self.animated.as_ref(),
+            self.height.as_ref(),
+        ) else {
+            return;
+        };
+        let (min, max) = animated.minimap_bounds;
+        let (wx, wz) = crate::ui_live::world_from_map(u, v, min, max);
+        renderer.camera.target = Vec3::new(wx, height.height_at(wx, wz) + 140.0, wz);
+        self.follow = false;
+        renderer.update_camera();
+        tracing::info!(
+            "live minimap pan to tile {:.0},{:.0}",
+            wx / 128.0,
+            wz / 128.0
+        );
     }
 
     fn pick_and_move(&mut self) {
