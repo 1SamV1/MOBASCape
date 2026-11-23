@@ -307,6 +307,7 @@ mod tests {
             face_normals: Vec::new(),
             vertex_groups: None,
             priority: 0,
+            face_alphas: None,
         };
         let rgb = portrait_face_color(&model, 0);
         assert!(rgb.iter().any(|&channel| channel > 0));

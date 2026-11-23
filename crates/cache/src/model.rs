@@ -20,6 +20,10 @@ pub struct Model {
     pub face_normals: Vec<[f32; 3]>,
     pub vertex_groups: Option<Vec<Vec<u32>>>,
     pub priority: i8,
+    /// Per-face transparency, 0 opaque to 255 invisible. `None` when the
+    /// model has no translucent faces. Spell and projectile models use it
+    /// for their glowing shells.
+    pub face_alphas: Option<Vec<u8>>,
 }
 
 /// Reusable scratch buffers for [`Model::animated_positions_into`]. One per
@@ -91,7 +95,7 @@ impl Model {
         }
         let packed_groups_off = cursor;
         cursor += packed_groups_len;
-        let _transparencies_off = cursor;
+        let transparencies_off = cursor;
         if face_transparencies_flag == 1 {
             cursor += face_count;
         }
@@ -126,6 +130,12 @@ impl Model {
             id,
         )?;
         check_range(data.len(), texture_coords_off, texture_coords_len, id)?;
+        let face_alphas = if face_transparencies_flag == 1 {
+            check_range(data.len(), transparencies_off, face_count, id)?;
+            Some(data[transparencies_off..transparencies_off + face_count].to_vec())
+        } else {
+            None
+        };
 
         let mut dx_buf = Buffer::new(&data[vertex_dx_off..vertex_dx_off + vertex_dx_len]);
         let mut dy_buf = Buffer::new(&data[vertex_dy_off..vertex_dy_off + vertex_dy_len]);
@@ -238,6 +248,7 @@ impl Model {
             face_normals,
             vertex_groups,
             priority,
+            face_alphas,
         })
     }
 
@@ -279,7 +290,7 @@ impl Model {
         }
         let packed_groups_off = cursor;
         cursor += packed_groups_len;
-        let _transparencies_off = cursor;
+        let transparencies_off = cursor;
         if transparencies_flag == 1 {
             cursor += face_count;
         }
@@ -301,6 +312,12 @@ impl Model {
         check_range(data.len(), face_deltas_off, face_index_deltas_len, id)?;
         check_range(data.len(), face_colors_off, face_count * 2, id)?;
         check_range(data.len(), tex_indices_off, num_texture_faces * 6, id)?;
+        let face_alphas = if transparencies_flag == 1 {
+            check_range(data.len(), transparencies_off, face_count, id)?;
+            Some(data[transparencies_off..transparencies_off + face_count].to_vec())
+        } else {
+            None
+        };
 
         let mut dx_buf = Buffer::new(&data[vertex_dx_off..vertex_dx_off + vertex_dx_len]);
         let mut dy_buf = Buffer::new(&data[vertex_dy_off..vertex_dy_off + vertex_dy_len]);
@@ -418,6 +435,7 @@ impl Model {
             face_normals,
             vertex_groups,
             priority,
+            face_alphas,
         })
     }
 
@@ -604,7 +622,12 @@ impl Model {
             face_normals: Vec::new(),
             vertex_groups: None,
             priority: parts.iter().map(|part| part.priority).max().unwrap_or(0),
+            face_alphas: None,
         };
+        let any_alphas = parts.iter().any(|part| part.face_alphas.is_some());
+        if any_alphas {
+            out.face_alphas = Some(Vec::new());
+        }
         let any_textures = parts.iter().any(|part| part.face_textures.is_some());
         let any_coords = parts.iter().any(|part| part.texture_coords.is_some());
         if any_textures {
@@ -629,6 +652,12 @@ impl Model {
                 .extend_from_slice(&part.face_render_types);
             out.face_normals.extend_from_slice(&part.face_normals);
             out.num_texture_faces += part.num_texture_faces;
+            if let Some(alphas) = &mut out.face_alphas {
+                match &part.face_alphas {
+                    Some(part_alphas) => alphas.extend_from_slice(part_alphas),
+                    None => alphas.extend(std::iter::repeat_n(0, part.face_count)),
+                }
+            }
 
             if let Some(textures) = &mut out.face_textures {
                 match &part.face_textures {
@@ -1064,7 +1093,18 @@ mod tests {
             face_normals: vec![[0.0, 1.0, 0.0]],
             vertex_groups: Some(groups),
             priority: 0,
+            face_alphas: None,
         }
+    }
+
+    #[test]
+    fn merge_pads_opaque_alphas_for_parts_without_transparency() {
+        let mut glow = tiny_model(1, [[0, 0, 0], [1, 0, 0], [0, 1, 0]], 0);
+        glow.face_alphas = Some(vec![160]);
+        let solid = tiny_model(2, [[0, 0, 0], [1, 0, 0], [0, 1, 0]], 0);
+        let merged = Model::merge(&[solid.clone(), glow]);
+        assert_eq!(merged.face_alphas, Some(vec![0, 160]));
+        assert_eq!(Model::merge(&[solid.clone(), solid]).face_alphas, None);
     }
 
     #[test]
