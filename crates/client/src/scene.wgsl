@@ -354,28 +354,31 @@ fn albedo(input: VsOut) -> vec3<f32> {
         let variant = min(packed & 0xFFu, 5u);
         let overlay_texture = (packed >> 8u) & 0xFFu;
         let overlay_weight = f32((packed >> 16u) & 0xFFu) / 255.0;
-        // Two samples of the grass sprite: the 384-unit base and a rotated
-        // 1150-unit layer. Mixing them (and pulling both toward the
-        // sprite's mean colour from the smallest mip) hides the repeat,
-        // which was the most visible "low res" artefact on open fields.
         // The grass array mirror-tiles each 128px sprite, so a single
         // axis-aligned sample shows a seam grid every ~96 units. Two samples
-        // at unrelated rotations and scales cancel each other's seams, and
-        // a procedural two-octave mottle supplies irregular variation.
+        // at unrelated rotations and scales cancel each other's seams.
         let rot_a = mat2x2<f32>(0.921, -0.391, 0.391, 0.921);
         let rot_b = mat2x2<f32>(0.755, 0.656, -0.656, 0.755);
         let uv_a = (rot_a * input.world.xz) / 430.0;
         let uv_b = (rot_b * input.world.xz) / 1030.0 + vec2<f32>(0.37, 0.71);
-        let grass_a = textureSampleGrad(
+        let grass_a4 = textureSampleGrad(
             grass_textures, terrain_sampler, uv_a, variant, dpdx(uv_a), dpdy(uv_a)
-        ).rgb;
-        let grass_b = textureSampleGrad(
+        );
+        let grass_b4 = textureSampleGrad(
             grass_textures, terrain_sampler, uv_b, variant, dpdx(uv_b), dpdy(uv_b)
-        ).rgb;
-        let grass_mean = textureSampleLevel(grass_textures, terrain_sampler, uv, variant, 12.0).rgb;
-        let macro_n = noise2(input.world.xz / 2300.0);
-        let mottle = noise2(input.world.xz / 520.0 + vec2<f32>(17.0, 3.0)) * 0.65
-            + noise2(input.world.xz / 150.0 - vec2<f32>(5.0, 11.0)) * 0.35;
+        );
+        // A coarse mip far below the sprite detail stands in for the mean
+        // colour; sampled at a 6400-unit repeat its baked alpha noise gives
+        // the slow lush/dry field patches.
+        let macro_uv = input.world.xz / 6400.0 + vec2<f32>(0.19, 0.53);
+        let grass_mean4 = textureSampleLevel(grass_textures, terrain_sampler, macro_uv, variant, 5.0);
+        let grass_a = grass_a4.rgb;
+        let grass_b = grass_b4.rgb;
+        let grass_mean = grass_mean4.rgb;
+        // Alpha carries tileable noise baked at load (see grass_textures.rs);
+        // the two rotated samples give two unrelated octaves of mottle.
+        let macro_n = grass_mean4.a;
+        let mottle = grass_b4.a * 0.6 + grass_a4.a * 0.4;
         let grass_detail = mix(grass_a, grass_b, 0.45);
         let grass_raw = mix(grass_mean, grass_detail, 0.7);
         // Push the palette towards the reference's deep, saturated OSRS
@@ -391,7 +394,6 @@ fn albedo(input: VsOut) -> vec3<f32> {
         // The dark biome grass sprites are nearly black in linear light and
         // read as flat fog/water in low jungle. Lift the linear values while
         // preserving the sprite's texture and hue.
-        let grass_lit = pow(max(grass, vec3<f32>(0.0)), vec3<f32>(0.80));
 
         // Project the soil and rock sprites onto the face closest to the
         // camera. A flat xz projection stretches one texel over four world
@@ -447,7 +449,7 @@ fn albedo(input: VsOut) -> vec3<f32> {
         // risers are steep. Rock belongs only on the risers, with a cool
         // grey-brown grade and horizontal strata so faces read as stone.
         let cliff = smoothstep(0.13, 0.32, slope);
-        let strata = 0.84 + 0.16 * noise2(vec2<f32>(input.world.y / 22.0, (input.world.x + input.world.z) / 300.0));
+        let strata = 0.86 + 0.14 * sin(input.world.y * 0.29 + (input.world.x + input.world.z) * 0.0031);
         let rock = stone * vec3<f32>(0.92, 0.90, 0.86) * strata * (0.80 + 0.2 * c);
         tex = mix(tex, rock, cliff);
 

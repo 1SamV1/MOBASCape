@@ -85,6 +85,7 @@ impl GrassTextures {
                 image::imageops::resize(&source, SOURCE, SOURCE, FilterType::Nearest)
             };
             let mut level = mirror_tile(&source);
+            bake_alpha_noise(&mut level);
             pixels.extend_from_slice(level.as_raw());
             for _ in 1..MIPS {
                 let w = (level.width() / 2).max(1);
@@ -108,6 +109,52 @@ impl GrassTextures {
             pixels,
         })
     }
+}
+
+/// Write tileable multi-octave value noise into the alpha channel. The grass
+/// sprites are opaque and the shader only reads `.rgb`, so alpha is free:
+/// the terrain shader reads it from the grass samples it already takes and
+/// gets mottle and macro patches without evaluating procedural noise per
+/// pixel. The noise is periodic over the 512px layer, so it tiles exactly
+/// like the colour does, and the mip chain filters it for distance.
+fn bake_alpha_noise(image: &mut RgbaImage) {
+    const OCTAVES: [(u32, f32); 3] = [(4, 0.55), (9, 0.30), (23, 0.15)];
+    let size = image.width();
+    for y in 0..size {
+        for x in 0..size {
+            let mut value = 0.0f32;
+            for (index, (cells, weight)) in OCTAVES.iter().enumerate() {
+                value += periodic_noise(x, y, size, *cells, index as u32) * weight;
+            }
+            image.get_pixel_mut(x, y).0[3] = (value * 255.0).round().clamp(0.0, 255.0) as u8;
+        }
+    }
+}
+
+/// Smooth value noise with `cells` lattice cells across `size` pixels that
+/// wraps at the edge, so the layer tiles seamlessly.
+fn periodic_noise(x: u32, y: u32, size: u32, cells: u32, seed: u32) -> f32 {
+    let fx = x as f32 * cells as f32 / size as f32;
+    let fy = y as f32 * cells as f32 / size as f32;
+    let ix = fx.floor() as u32;
+    let iy = fy.floor() as u32;
+    let tx = fx - ix as f32;
+    let ty = fy - iy as f32;
+    let ux = tx * tx * (3.0 - 2.0 * tx);
+    let uy = ty * ty * (3.0 - 2.0 * ty);
+    let corner = |cx: u32, cy: u32| {
+        hash(
+            (cx % cells).wrapping_add(seed * 7_919),
+            (cy % cells).wrapping_add(seed * 104_729),
+        )
+    };
+    let a = corner(ix, iy);
+    let b = corner(ix + 1, iy);
+    let c = corner(ix, iy + 1);
+    let d = corner(ix + 1, iy + 1);
+    let top = a + (b - a) * ux;
+    let bottom = c + (d - c) * ux;
+    top + (bottom - top) * uy
 }
 
 fn mirror_tile(source: &RgbaImage) -> RgbaImage {
@@ -163,4 +210,33 @@ fn hash(x: u32, y: u32) -> f32 {
         .wrapping_add(y.wrapping_mul(668_265_263));
     h = (h ^ (h >> 13)).wrapping_mul(1_274_126_177);
     ((h ^ (h >> 16)) & 255) as f32 / 255.0
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn alpha_noise_tiles_seamlessly_and_spans_a_range() {
+        let mut image = RgbaImage::from_pixel(SIZE, SIZE, image::Rgba([10, 20, 30, 255]));
+        bake_alpha_noise(&mut image);
+        let alpha = |x: u32, y: u32| image.get_pixel(x, y).0[3] as i32;
+        // The last column/row must lead smoothly into the first.
+        for k in (0..SIZE).step_by(17) {
+            assert!(
+                (alpha(SIZE - 1, k) - alpha(0, k)).abs() <= 12,
+                "x seam at {k}"
+            );
+            assert!(
+                (alpha(k, SIZE - 1) - alpha(k, 0)).abs() <= 12,
+                "y seam at {k}"
+            );
+        }
+        let values: Vec<i32> = image.pixels().map(|p| p.0[3] as i32).collect();
+        let min = *values.iter().min().unwrap();
+        let max = *values.iter().max().unwrap();
+        assert!(max - min > 100, "noise too flat: {min}..{max}");
+        // Colour is untouched.
+        assert_eq!(&image.get_pixel(5, 5).0[..3], &[10, 20, 30]);
+    }
 }
