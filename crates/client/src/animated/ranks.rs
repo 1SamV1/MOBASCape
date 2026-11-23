@@ -156,6 +156,14 @@ impl AnimatedScene {
             .unwrap_or(1.0)
     }
 
+    /// Damage multiplier for the hand-written kits (Monkey, Ranger and the
+    /// fallback): the rank plus the same +5% per level kits get through
+    /// `kit::scaled_damage`. Ability power and the ranged scale are applied
+    /// at each cast site.
+    pub fn hand_damage_mult(&self, slot: usize) -> f32 {
+        self.rank_damage_mult(slot) * crate::kit::scaled_damage(1.0, 0.0, self.player_level())
+    }
+
     /// Reach multiplier (shot length, cast range, dash length) from the rank.
     pub fn rank_reach_mult(&self, slot: usize) -> f32 {
         self.current_and_first(slot)
@@ -172,16 +180,16 @@ impl AnimatedScene {
     }
 
     /// What the runtime multiplies authored damage by right now, apart from
-    /// the rank (ability power, champion level, ranged level), so the
-    /// tooltip shows what a cast would actually do.
+    /// the rank (ability power, +5% per champion level for every hero, and
+    /// the Ranger's ranged level), so the tooltip shows what a cast would
+    /// actually do.
     pub fn ability_power_mult(&self) -> f32 {
         let player = &self.units[self.player_index];
-        if self.kit.is_some() {
-            crate::kit::scaled_damage(1.0, player.ability_power, player.level)
-        } else if self.champion_id == "ranger" {
-            player.ranged_scale() * (1.0 + player.ability_power / 100.0)
+        let base = crate::kit::scaled_damage(1.0, player.ability_power, player.level);
+        if self.kit.is_none() && self.champion_id == "ranger" {
+            base * player.ranged_scale()
         } else {
-            1.0 + player.ability_power / 100.0
+            base
         }
     }
 }

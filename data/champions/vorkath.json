@@ -60,11 +60,11 @@
     {
       "key": "R",
       "name": "RAPIDFIRE",
-      "description": "Channels a 2.5 second barrage of fireballs.",
+      "description": "Channels a 2 second barrage of fireballs.",
       "ranks": [
-        { "damage": 340, "range": 1150, "cooldown": 65 },
-        { "damage": 480, "range": 1200, "cooldown": 57 },
-        { "damage": 620, "range": 1250, "cooldown": 49 }
+        { "damage": 280, "range": 1150, "cooldown": 65 },
+        { "damage": 380, "range": 1200, "cooldown": 57 },
+        { "damage": 480, "range": 1250, "cooldown": 49 }
       ]
     }
   ],
@@ -173,14 +173,14 @@
         "actions": [
           {
             "type": "channel",
-            "duration": 2.5,
+            "duration": 2.0,
             "interval": 0.25,
             "action": {
               "type": "projectile",
               "visual": "dragonfire",
               "speed": 1500,
               "range": 1150,
-              "damage": 34,
+              "damage": 35,
               "width": 110,
               "explode": 150
             }

@@ -92,6 +92,10 @@ Every entry in `abilities` carries hand-authored numbers per rank:
   and dash length by `range / rank_1_range`. `cooldown` replaces the kit's.
   Caster-centred sizes (cones, self areas) do not scale with range, so keep
   `range` flat across ranks for them.
+- Ability damage also grows 5% per champion level for every hero, kit or
+  hand-written (`kit::scaled_damage`, `AnimatedScene::hand_damage_mult`).
+- After changing numbers, run `--balance-report docs/BALANCE.md` and check
+  the flags.
 - `damage_label` names the headline number ("Shield", "Heal", ...). Leave
   `damage` out when the ability has no number that scales (a blink, a
   percentage buff), and give `damage_note` instead, e.g. "25% of missing

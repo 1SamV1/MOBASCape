@@ -2380,7 +2380,7 @@ impl AnimatedScene {
         let pi = self.player_index;
         // The Bananarang's path is fixed, so its rank changes damage and cooldown.
         let (rank_damage, rank_cooldown) = (
-            self.rank_damage_mult(0),
+            self.hand_damage_mult(0),
             self.rank_cooldown(0, BANANARANG_COOLDOWN),
         );
         let rank = self.ability_ranks[0];
@@ -2434,7 +2434,7 @@ impl AnimatedScene {
     fn cast_toxic_dart(&mut self, target: Vec3) -> bool {
         let pi = self.player_index;
         let (rank_damage, rank_reach, rank_cooldown) = (
-            self.rank_damage_mult(0),
+            self.hand_damage_mult(0),
             self.rank_reach_mult(0),
             self.rank_cooldown(0, 5.0),
         );
@@ -2479,7 +2479,7 @@ impl AnimatedScene {
     fn cast_dart_volley(&mut self, target: Vec3) -> bool {
         let pi = self.player_index;
         let (rank_damage, rank_reach, rank_cooldown) = (
-            self.rank_damage_mult(1),
+            self.hand_damage_mult(1),
             self.rank_reach_mult(1),
             self.rank_cooldown(1, 12.0),
         );
@@ -2530,7 +2530,7 @@ impl AnimatedScene {
     fn cast_footwork(&mut self, collision: &WorldCollision, height: &HeightGrid) -> bool {
         let pi = self.player_index;
         let (rank_damage, rank_reach, rank_cooldown) = (
-            self.rank_damage_mult(2),
+            self.hand_damage_mult(2),
             self.rank_reach_mult(2),
             self.rank_cooldown(2, 14.0),
         );
@@ -2576,7 +2576,7 @@ impl AnimatedScene {
     fn cast_deadshot(&mut self, target: Vec3) -> bool {
         let pi = self.player_index;
         let (rank_damage, rank_reach, rank_cooldown) = (
-            self.rank_damage_mult(3),
+            self.hand_damage_mult(3),
             self.rank_reach_mult(3),
             self.rank_cooldown(3, 75.0),
         );
@@ -2622,7 +2622,7 @@ impl AnimatedScene {
     fn cast_arcane_bolt(&mut self, target: Vec3) -> bool {
         let pi = self.player_index;
         let (rank_damage, rank_reach, rank_cooldown) = (
-            self.rank_damage_mult(0),
+            self.hand_damage_mult(0),
             self.rank_reach_mult(0),
             self.rank_cooldown(0, Q_COOLDOWN),
         );
@@ -2737,7 +2737,7 @@ impl AnimatedScene {
         if self.champion_id == "ranger" {
             return self.cast_footwork(collision, height);
         }
-        let (rank_damage, rank_cooldown) = (self.rank_damage_mult(2), self.rank_cooldown(2, 12.0));
+        let (rank_damage, rank_cooldown) = (self.hand_damage_mult(2), self.rank_cooldown(2, 12.0));
         let pi = self.player_index;
         let player = &mut self.units[pi];
         if player.health <= 0.0
@@ -2871,7 +2871,7 @@ impl AnimatedScene {
     fn cast_meteor(&mut self, target: Vec3) -> bool {
         let pi = self.player_index;
         let (rank_damage, rank_reach, rank_cooldown) = (
-            self.rank_damage_mult(3),
+            self.hand_damage_mult(3),
             self.rank_reach_mult(3),
             self.rank_cooldown(3, 45.0),
         );

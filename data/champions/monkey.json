@@ -18,7 +18,7 @@
   "attack_interval": 1.15,
   "speed": 420,
   "ranged_auto": false,
-  "q_damage": 38,
+  "q_damage": 45,
   "r_damage": 120,
   "e_heal": 80,
   "e_shield": 120,
@@ -35,10 +35,10 @@
       "name": "BANANARANG",
       "description": "A comically large banana boomerang that sweeps out in a rounded trapezoid, striking every enemy it passes.",
       "ranks": [
-        { "damage": 38, "range": 1300, "cooldown": 8 },
-        { "damage": 52, "range": 1300, "cooldown": 7.5 },
-        { "damage": 66, "range": 1300, "cooldown": 7 },
-        { "damage": 80, "range": 1300, "cooldown": 6.5 }
+        { "damage": 45, "range": 1300, "cooldown": 8 },
+        { "damage": 65, "range": 1300, "cooldown": 7.5 },
+        { "damage": 85, "range": 1300, "cooldown": 7 },
+        { "damage": 105, "range": 1300, "cooldown": 6.5 }
       ]
     },
     {

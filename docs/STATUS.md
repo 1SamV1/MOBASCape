@@ -1,6 +1,29 @@
 # Status
 
-Last updated: ability ranks and tooltips, 2026-11-23.
+Last updated: paper balance report and first balance pass, 2026-11-23.
+
+## 2026-11-23 — Paper balance report and first balance pass
+
+- `rift-client --balance-report docs/BALANCE.md` (new `balance.rs`) works
+  out every champion's effective health, basic and ability DPS, burst,
+  shields/heals and mana per rotation at level 1 / rank 1 and level 11 /
+  top ranks, with the game's formulas. It flags numbers at least 1.35x or
+  at most 0.7x their group's median. It needs no cache or window.
+- Approved tuning from the first report:
+  - Monkey and Ranger (hand-written kits) now get +5% ability damage per
+    level like every kit hero (`hand_damage_mult`; tooltip and report
+    follow).
+  - King Awowogei: Bananarang 38/52/66/80 -> 45/65/85/105 (`q_damage` 45).
+  - Vorkath: Rapidfire channels 2 s instead of 2.5 s (8 fireballs at 35
+    instead of 10 at 34); ranks 340/480/620 -> 280/380/480.
+  - Kolodion: Claws of Guthix cooldown 7..5.5 -> 8..6.5 and Saradomin
+    Strike 5..4.25 -> 6..5.25 (kit cooldowns match rank 1).
+- Still flagged after the pass (see docs/BALANCE.md): Awowogei's burst is
+  0.2x the melee median (Trial's 3x duel damage is not modelled), Vorkath
+  1.6x and Kolodion 1.7x on ability damage, Cerberus 1.8x (lava pools are
+  counted at full duration), Kree'arra and Wise Old Man low. Jad's
+  effective health flag is from grouping a 360-range bruiser with ranged
+  heroes. Not playtested.
 
 ## 2026-11-23 — Ability ranks, skill points and ability tooltips
 
