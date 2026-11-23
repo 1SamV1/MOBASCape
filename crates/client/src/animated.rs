@@ -539,14 +539,66 @@ pub struct TeamBuff {
     pub kind: CampBuff,
 }
 
+/// Which OSRS hitmark a floating combat number uses. The sprite and the
+/// number colour both come from the reference client, so damage, poison,
+/// venom, disease, healing and a blocked hit each read at a glance.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum HitsplatKind {
+    Damage,
+    Poison,
+    Venom,
+    Disease,
+    Heal,
+    Miss,
+}
+
+impl HitsplatKind {
+    /// Key into the cache hitmark atlas.
+    pub fn sprite_name(self) -> &'static str {
+        match self {
+            Self::Damage => "damage",
+            Self::Poison => "poison",
+            Self::Venom => "venom",
+            Self::Disease => "disease",
+            Self::Heal => "heal",
+            Self::Miss => "miss",
+        }
+    }
+
+    /// Fallback splat colour when the cache has no hitmark sprites.
+    pub fn fallback_color(self) -> [u8; 3] {
+        match self {
+            Self::Damage => [195, 30, 28],
+            Self::Poison => [35, 160, 45],
+            Self::Venom => [35, 120, 112],
+            Self::Disease => [220, 145, 20],
+            Self::Heal => [165, 45, 190],
+            Self::Miss => [45, 65, 220],
+        }
+    }
+}
+
+/// How a floating number is drawn: an OSRS hitmark, or a plain coloured
+/// label (gold pickups and developer text).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FloatStyle {
+    Hitsplat(HitsplatKind),
+    Label([u8; 3]),
+}
+
 /// A number that pops over a unit when it is hit, like the reference client.
 pub struct FloatText {
     pub pos: Vec3,
     pub text: String,
-    pub color: [u8; 3],
+    pub style: FloatStyle,
     pub life: f32,
     /// Text scale. Bigger hits pop larger, like the reference client.
     pub scale: f32,
+    /// Column slot for hitsplats sharing one unit: 0 is the top of the
+    /// stack, so a combo reads downward like the reference client.
+    pub stack: u8,
+    /// The unit this number belongs to, for stacking and cleanup.
+    pub unit: Option<usize>,
 }
 
 pub struct Projectile {
@@ -1299,19 +1351,27 @@ impl AnimatedScene {
         let pi = self.player_index;
         self.floats.clear();
         let pos = self.units[pi].pos;
+        // Three red damage splats, one per column slot, like a combo in the
+        // reference client.
+        for (stack, text) in ["46", "32", "38"].iter().enumerate() {
+            self.floats.push(FloatText {
+                pos: pos + Vec3::Y * (self.units[pi].bar_height + 30.0),
+                text: text.to_string(),
+                style: FloatStyle::Hitsplat(HitsplatKind::Damage),
+                life: 9999.0,
+                scale: 1.0,
+                stack: stack as u8,
+                unit: Some(pi),
+            });
+        }
         self.floats.push(FloatText {
             pos: pos + Vec3::Y * 150.0,
             text: "1,502".to_string(),
-            color: [255, 225, 120],
+            style: FloatStyle::Label([255, 225, 120]),
             life: 9999.0,
             scale: 1.7,
-        });
-        self.floats.push(FloatText {
-            pos: pos + Vec3::Y * 240.0,
-            text: "330".to_string(),
-            color: [235, 235, 235],
-            life: 9999.0,
-            scale: 1.15,
+            stack: 0,
+            unit: None,
         });
         self.announcement = Some(("YOU HAVE SLAIN A MINION!".to_string(), 9999.0));
         self.announcement_pinned = true;
@@ -1334,6 +1394,34 @@ impl AnimatedScene {
         }
         if let Some((index, _)) = best {
             self.units[pi].attack_target = Some(index);
+        }
+    }
+
+    /// Pin one hitmark of every OSRS kind over the hero. Used by
+    /// `--demo-hitsplats` to check the cache sprites, the bold font and the
+    /// column stacking in one frame.
+    pub fn demo_hitsplats(&mut self) {
+        let pi = self.player_index;
+        self.floats.clear();
+        let pos = self.units[pi].pos + Vec3::Y * (self.units[pi].bar_height + 30.0);
+        let examples = [
+            ("78", HitsplatKind::Damage),
+            ("8", HitsplatKind::Poison),
+            ("20", HitsplatKind::Venom),
+            ("14", HitsplatKind::Disease),
+            ("25", HitsplatKind::Heal),
+            ("0", HitsplatKind::Miss),
+        ];
+        for (stack, (text, kind)) in examples.iter().enumerate() {
+            self.floats.push(FloatText {
+                pos,
+                text: text.to_string(),
+                style: FloatStyle::Hitsplat(*kind),
+                life: 9999.0,
+                scale: 1.0,
+                stack: stack as u8,
+                unit: Some(pi),
+            });
         }
     }
 
@@ -2628,10 +2716,15 @@ impl AnimatedScene {
         player.mana -= 40.0;
         player.cooldowns[2] = rank_cooldown;
         let ability_mult = (1.0 + player.ability_power / 100.0) * rank_damage;
+        let before = player.health;
         player.health = (player.health + player.e_heal * ability_mult).min(player.max_health);
+        let healed = player.health - before;
         player.shield = player.e_shield * ability_mult;
         player.shield_timer = 4.0;
         let pos = player.pos;
+        if healed > 0.5 {
+            self.push_hitsplat(pi, healed, HitsplatKind::Heal);
+        }
         self.effects.push(Effect {
             pos,
             radius: 160.0,
@@ -3046,7 +3139,13 @@ impl AnimatedScene {
         // time out, and the minimap ping decays.
         self.floats.retain_mut(|float| {
             float.life -= dt;
-            float.pos.y += dt * 46.0;
+            // Hitmarks hang a little longer than economy labels, like the
+            // reference client's one-to-two tick splats.
+            let drift = match float.style {
+                FloatStyle::Hitsplat(_) => 26.0,
+                FloatStyle::Label(_) => 46.0,
+            };
+            float.pos.y += dt * drift;
             float.life > 0.0
         });
         if let Some((_, timer)) = &mut self.announcement {
@@ -3328,7 +3427,7 @@ impl AnimatedScene {
         self.update_projectiles(dt, height);
 
         for (index, damage, team) in venom_ticks {
-            self.damage_unit(index, damage, team);
+            self.damage_unit_typed(index, damage, team, HitsplatKind::Venom);
         }
 
         // Replace the clock's share of every moving unit's animation time
@@ -3902,8 +4001,44 @@ impl AnimatedScene {
         unit.moving = true;
     }
 
-    fn damage_unit(&mut self, index: usize, amount: f32, attacker_team: u8) {
-        self.damage_unit_mixed(index, amount, 0.0, attacker_team, None);
+    /// Pop an OSRS hitmark over a unit. Hits on one unit occupy a downward
+    /// column: slot 0 sits at the unit's head, later hits stack below it.
+    fn push_hitsplat(&mut self, index: usize, amount: f32, kind: HitsplatKind) {
+        let Some(unit) = self.units.get(index) else {
+            return;
+        };
+        let stack = self
+            .floats
+            .iter()
+            .filter(|float| {
+                float.unit == Some(index)
+                    && float.life > 0.0
+                    && matches!(float.style, FloatStyle::Hitsplat(_))
+            })
+            .count()
+            .min(3) as u8;
+        let pos = unit.pos + Vec3::Y * (unit.bar_height + 30.0);
+        let amount = amount.max(0.0).round() as u32;
+        self.floats.push(FloatText {
+            pos,
+            text: amount.to_string(),
+            style: FloatStyle::Hitsplat(kind),
+            life: 1.2,
+            scale: 1.0,
+            stack,
+            unit: Some(index),
+        });
+    }
+
+    /// Damage with a specific hitmark, used by venom ticks.
+    fn damage_unit_typed(
+        &mut self,
+        index: usize,
+        amount: f32,
+        attacker_team: u8,
+        kind: HitsplatKind,
+    ) {
+        self.damage_unit_mixed_kind(index, amount, 0.0, attacker_team, None, kind);
     }
 
     /// Apply damage and attribute it to a specific attacker. The aggressor
@@ -3927,6 +4062,26 @@ impl AnimatedScene {
         pure: f32,
         attacker_team: u8,
         aggressor: Option<usize>,
+    ) {
+        self.damage_unit_mixed_kind(
+            index,
+            physical,
+            pure,
+            attacker_team,
+            aggressor,
+            HitsplatKind::Damage,
+        );
+    }
+
+    /// The shared damage path, with the hitmark to pop.
+    fn damage_unit_mixed_kind(
+        &mut self,
+        index: usize,
+        physical: f32,
+        pure: f32,
+        attacker_team: u8,
+        aggressor: Option<usize>,
+        hitsplat: HitsplatKind,
     ) {
         if index >= self.units.len() {
             return;
@@ -3991,6 +4146,12 @@ impl AnimatedScene {
             Some(aggressor) => self.units[aggressor].kind == UnitKind::Player,
             None => attacker_team == 0,
         };
+        let hit_kind = if amount > 0.5 {
+            hitsplat
+        } else {
+            HitsplatKind::Miss
+        };
+        self.push_hitsplat(index, amount, hit_kind);
         if amount > 0.0 {
             let color = if index == self.player_index {
                 [255, 110, 100]
@@ -4000,13 +4161,6 @@ impl AnimatedScene {
                 [235, 235, 235]
             };
             let pos = self.units[index].pos + Vec3::Y * (self.units[index].bar_height + 40.0);
-            self.floats.push(FloatText {
-                pos,
-                text: format!("{amount:.0}"),
-                color,
-                life: 1.2,
-                scale: (0.9 + amount / 260.0).clamp(0.9, 1.8),
-            });
             if hero_aggressor || index == self.player_index {
                 self.emit_burst(pos, color, 3, 130.0, 7.0, 0.3);
             }
@@ -6594,6 +6748,26 @@ fn append_quad(scene: &mut AnimatedScene, center: Vec3, right: Vec3, up: Vec3, c
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn hitmark_kinds_map_to_distinct_osrs_sprites() {
+        let kinds = [
+            HitsplatKind::Damage,
+            HitsplatKind::Poison,
+            HitsplatKind::Venom,
+            HitsplatKind::Disease,
+            HitsplatKind::Heal,
+            HitsplatKind::Miss,
+        ];
+        let mut names: Vec<&str> = kinds.iter().map(|kind| kind.sprite_name()).collect();
+        names.sort_unstable();
+        names.dedup();
+        assert_eq!(names.len(), kinds.len());
+        let mut colours: Vec<[u8; 3]> = kinds.iter().map(|kind| kind.fallback_color()).collect();
+        colours.sort_unstable();
+        colours.dedup();
+        assert_eq!(colours.len(), kinds.len());
+    }
 
     #[test]
     fn wave_formation_spaces_minions_apart() {

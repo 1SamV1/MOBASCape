@@ -62,7 +62,12 @@ designed for fast-paced low-team-count matches.
 > deterministic relief, the river surface follows the water mask at 64-unit
 > resolution with a depth-biased shallow sheet, three cache-textured wooden
 > decks cover the crossings, and 1,839 cache-only plants plus 244 slope
-> boulders break up the fields. See
+> boulders break up the fields. Combat feedback is cache-native: the HUD bakes
+> `p11_full`/`p12_full`/`b12_full` from the cache, draws the exact 24x23 OSRS
+> hitmarks (red damage, green poison, teal venom, orange disease, purple heal,
+> blue miss) with bold numbers stacked down the target, and puts larger solid
+> team/camp-coloured overhead names over health bars with the level chip to
+> the right of the bar. See
 > [docs/STATUS.md](docs/STATUS.md),
 > [docs/UI_ASSETS.md](docs/UI_ASSETS.md) and
 > [docs/INTERFACE_STAGE3_REVIEW.md](docs/INTERFACE_STAGE3_REVIEW.md).
@@ -85,7 +90,8 @@ designed for fast-paced low-team-count matches.
 - `crates/client` — native wgpu client: 5x5 Karamja with regional biome
   pockets and a river, animated NPCs, three lanes, towers/inhibitors/nexus,
   minion waves, jungle camps/buffs with aggro and leash, brush/fog of war,
-  item shop/inventory, bitmap-font HUD, 117HD Core lighting/atmosphere, HDR
+  item shop/inventory, cache-font HUD with OSRS hitmarks and overhead plates,
+  117HD Core lighting/atmosphere, HDR
   bloom, cache-native ground textures, fogged minimap, click-to-move +
   hold-to-steer, auto-attacks, Q, and the stage 3 interface dev screen
 - `data/maps/karamja_rift/map.json` — lanes, structures, camps, biome pockets,
@@ -132,6 +138,10 @@ cargo run -p rift-client -- --demo-anim --walk-arm 0.25 --walk-sway 0.1
 
 # Deterministic combat check: target a dummy and fire Q
 cargo run -p rift-client -- --demo-combat
+
+# Pin one OSRS hitmark of every kind over the hero (damage, poison, venom,
+# disease, heal, miss) to check the cache sprites and bold font
+cargo run -p rift-client -- --demo-hitsplats
 
 # Spawn a rival champion for manual Bananarang / Trial by Combat testing
 cargo run -p rift-client -- --champion monkey --demo-duel

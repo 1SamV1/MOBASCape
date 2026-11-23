@@ -3,6 +3,9 @@ use std::path::Path;
 
 use anyhow::{Context, Result};
 use image::imageops::FilterType;
+use rift_cache::font::FONT_INDEX;
+use rift_cache::sprite::SPRITE_INDEX;
+use rift_cache::{Cache, Font, SpriteSheet};
 
 // The atlas holds the item icons, the minimap and a shelf of champion
 // portraits. 2048px gives the portrait shelf room for a full roster without
@@ -15,6 +18,32 @@ const PORTRAIT_ROW_Y: u32 = 428;
 /// let two rows hold every champion above the minimap slot.
 const PORTRAIT_SIZE: u32 = 128;
 const PORTRAIT_GAP: u32 = 4;
+
+/// Cache fonts baked into the atlas for overhead names and hitsplat numbers.
+/// The ids are the font archives from index 13; their glyph sheets are the
+/// sprite group with the same id in index 8. `p12_full` is OSRS's overhead
+/// font, `b12_full` is the bold variant the hitsplat numbers use.
+const CACHE_FONTS: [(&str, u32); 3] = [("p11", 494), ("p12", 495), ("b12", 496)];
+
+/// OSRS hitmark sprites from index 8. These are the exact 24x23 splats from
+/// the cache: blue miss, red damage, green poison, orange disease, teal
+/// venom and the purple heal cross.
+const HITMARK_SPRITES: [(&str, u32); 6] = [
+    ("damage", 1359),
+    ("poison", 1360),
+    ("disease", 1361),
+    ("venom", 1632),
+    ("heal", 1629),
+    ("miss", 1358),
+];
+
+/// One cache sprite placed in the atlas, with its size in pixels.
+#[derive(Clone, Copy)]
+pub struct SpriteSlot {
+    pub uv: [f32; 4],
+    pub width: f32,
+    pub height: f32,
+}
 
 /// A small shelf-packed atlas of OSRS item icons and UI sprites.
 ///
@@ -58,7 +87,12 @@ pub struct UiAtlas {
     ui_uv: HashMap<String, [f32; 4]>,
     hero_uv: HashMap<String, [f32; 4]>,
     minimap_uv: Option<[f32; 4]>,
+    /// The optional baked interface atlas from `assets/osrs-ui`.
     font: Option<FontAtlas>,
+    /// Cache-native fonts by name (`p11`, `p12`, `b12`).
+    cache_fonts: HashMap<String, FontAtlas>,
+    /// Cache-native hitmark sprites by kind.
+    hitmarks: HashMap<String, SpriteSlot>,
 }
 
 impl UiAtlas {
@@ -73,6 +107,8 @@ impl UiAtlas {
             hero_uv: HashMap::new(),
             minimap_uv: None,
             font: None,
+            cache_fonts: HashMap::new(),
+            hitmarks: HashMap::new(),
         };
         // A single opaque white texel at (0,0) lets every untextured HUD quad
         // use the same textured pipeline.
@@ -171,6 +207,147 @@ impl UiAtlas {
         Ok(atlas)
     }
 
+    /// Load the local UI assets, then bake the OSRS cache's fonts and
+    /// hitmark sprites into the same atlas. A cache without those archives
+    /// degrades to the baked font or the built-in pixel font and procedural
+    /// hitsplats, so this never blocks a match.
+    pub fn load_with_cache(cache: &Cache) -> Result<Self> {
+        let mut atlas = Self::load()?;
+        atlas.add_cache_assets(cache);
+        Ok(atlas)
+    }
+
+    /// Bake the cache-native overhead/hitsplat assets.
+    ///
+    /// Fonts get one shelf each in the lower half of the atlas; the hitmark
+    /// row sits below them. These regions are outside the item, portrait and
+    /// minimap slots used by `load`.
+    pub fn add_cache_assets(&mut self, cache: &Cache) {
+        for (index, (name, id)) in CACHE_FONTS.iter().enumerate() {
+            let y = 1300 + index as u32 * 140;
+            if let Err(error) = self.add_cache_font(cache, *id, name, 2, y) {
+                tracing::warn!("cache font {name} ({id}): {error:#}");
+            }
+        }
+        let mut x = 2;
+        for (key, id) in HITMARK_SPRITES {
+            match self.add_cache_sprite(cache, id, x, 1740) {
+                Ok(slot) => {
+                    x += slot.width as u32 + 4;
+                    self.hitmarks.insert(key.to_string(), slot);
+                }
+                Err(error) => tracing::warn!("cache hitmark {key} ({id}): {error:#}"),
+            }
+        }
+        tracing::info!(
+            "cache UI: {} fonts, {} hitmarks",
+            self.cache_fonts.len(),
+            self.hitmarks.len()
+        );
+    }
+
+    /// Decode one cache font into a shelf of tintable glyphs.
+    fn add_cache_font(
+        &mut self,
+        cache: &Cache,
+        id: u32,
+        name: &str,
+        origin_x: u32,
+        origin_y: u32,
+    ) -> Result<()> {
+        let measurements = cache.group(FONT_INDEX, id)?.data;
+        let letters = SpriteSheet::decode(id, &cache.group(SPRITE_INDEX, id)?.data)?;
+        let font = Font::decode(id, &measurements, &letters)?;
+
+        let mut cursor_x = origin_x;
+        let mut cursor_y = origin_y;
+        let mut row_height = 0u32;
+        let mut glyphs = HashMap::new();
+        for code in 32u8..=126 {
+            let glyph = font.glyphs[code as usize];
+            let char = rift_cache::font::char_of(code);
+            let Some(frame) = letters.frames.get(code as usize) else {
+                continue;
+            };
+            if frame.width == 0 || frame.height == 0 {
+                // Spaces and other blank frames still advance the pen.
+                glyphs.insert(
+                    char,
+                    FontGlyph {
+                        uv: [0.0; 4],
+                        w: 0.0,
+                        h: 0.0,
+                        left: glyph.left as f32,
+                        top: glyph.top as f32,
+                        advance: glyph.advance as f32,
+                    },
+                );
+                continue;
+            }
+            let pixels = frame.rgba(&letters.palette);
+            let mut raw = Vec::with_capacity(pixels.len() * 4);
+            for px in pixels {
+                raw.extend_from_slice(&px);
+            }
+            let image = image::RgbaImage::from_raw(frame.width as u32, frame.height as u32, raw)
+                .with_context(|| format!("font {id} glyph {code}"))?;
+            if cursor_x + frame.width as u32 + 1 > ATLAS_SIZE {
+                cursor_x = origin_x;
+                cursor_y += row_height + 1;
+                row_height = 0;
+            }
+            let uv = self.copy(&image, cursor_x, cursor_y);
+            glyphs.insert(
+                char,
+                FontGlyph {
+                    uv,
+                    w: frame.width as f32,
+                    h: frame.height as f32,
+                    left: glyph.left as f32,
+                    top: glyph.top as f32,
+                    advance: glyph.advance as f32,
+                },
+            );
+            cursor_x += frame.width as u32 + 1;
+            row_height = row_height.max(frame.height as u32);
+        }
+        tracing::debug!(
+            "cache font {name}: {} glyphs, drops to y {}",
+            glyphs.len(),
+            cursor_y + row_height
+        );
+        self.cache_fonts.insert(
+            name.to_string(),
+            FontAtlas {
+                size: font.ascent as f32,
+                glyphs,
+            },
+        );
+        Ok(())
+    }
+
+    /// Decode one cache sprite (the first frame) and place it in the atlas.
+    fn add_cache_sprite(&mut self, cache: &Cache, id: u32, x: u32, y: u32) -> Result<SpriteSlot> {
+        let sheet = SpriteSheet::decode(id, &cache.group(SPRITE_INDEX, id)?.data)?;
+        let frame = sheet
+            .frames
+            .first()
+            .with_context(|| format!("sprite {id} has no frames"))?;
+        let pixels = frame.rgba(&sheet.palette);
+        let mut raw = Vec::with_capacity(pixels.len() * 4);
+        for px in pixels {
+            raw.extend_from_slice(&px);
+        }
+        let image = image::RgbaImage::from_raw(frame.width as u32, frame.height as u32, raw)
+            .with_context(|| format!("sprite {id} frame buffer"))?;
+        let uv = self.copy(&image, x, y);
+        Ok(SpriteSlot {
+            uv,
+            width: frame.width as f32,
+            height: frame.height as f32,
+        })
+    }
+
     /// Copy the baked interface font into the atlas and resolve glyph UVs.
     fn add_font(&mut self, png: &Path, json: &Path) -> Result<()> {
         let image = image::open(png)
@@ -216,8 +393,21 @@ impl UiAtlas {
         Ok(())
     }
 
+    /// The interface's default font: the optional baked atlas, else OSRS's
+    /// plain 12 (the overhead/interface font) straight from the cache.
     pub fn font(&self) -> Option<&FontAtlas> {
-        self.font.as_ref()
+        self.font.as_ref().or_else(|| self.cache_fonts.get("p12"))
+    }
+
+    /// A named cache font, falling back to the default so text never
+    /// disappears on a cache without the font archives.
+    pub fn font_named(&self, name: &str) -> Option<&FontAtlas> {
+        self.cache_fonts.get(name).or_else(|| self.font())
+    }
+
+    /// The exact cache hitmark sprite for a damage kind.
+    pub fn hitmark(&self, kind: &str) -> Option<SpriteSlot> {
+        self.hitmarks.get(kind).copied()
     }
 
     /// Upload a baked champion portrait into the reserved portrait shelf.
@@ -332,4 +522,38 @@ fn fit_icon(image: &image::RgbaImage, size: u32, filter: FilterType) -> image::R
     let oy = (size - h) / 2;
     image::imageops::overlay(&mut canvas, &resized, ox as i64, oy as i64);
     canvas
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn pinned_cache() -> Option<Cache> {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let cache = root.join(".cache/osrs-235/cache");
+        if !cache.join("main_file_cache.dat2").exists() {
+            return None;
+        }
+        Some(Cache::open(&cache).expect("the pinned cache opens"))
+    }
+
+    #[test]
+    fn the_pinned_cache_bakes_osrs_fonts_and_hitmarks() {
+        let Some(cache) = pinned_cache() else {
+            return;
+        };
+        let atlas = UiAtlas::load_with_cache(&cache).expect("the UI atlas with cache assets");
+        for font in ["p11", "p12", "b12"] {
+            assert!(
+                atlas.font_named(font).is_some(),
+                "cache font {font} is missing"
+            );
+        }
+        for kind in ["damage", "poison", "disease", "venom", "heal", "miss"] {
+            let slot = atlas
+                .hitmark(kind)
+                .unwrap_or_else(|| panic!("cache hitmark {kind} is missing"));
+            assert_eq!((slot.width, slot.height), (24.0, 23.0));
+        }
+    }
 }

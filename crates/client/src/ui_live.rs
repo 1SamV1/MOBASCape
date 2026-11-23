@@ -967,7 +967,10 @@ mod tests {
             max_mana: 0.0,
             team: 1,
             hero: true,
+            camp: false,
             structure: false,
+            name_color: [255, 105, 95],
+            name_scale: 2.0,
             width: 184.0,
         };
         let hero = plate(&frame).expect("a hero plate");

@@ -2,13 +2,14 @@ use std::sync::Arc;
 
 use glam::Vec2;
 
-use crate::animated::{AnimatedScene, UnitKind};
+use crate::animated::{AnimatedScene, HitsplatKind, UnitKind};
 use crate::font;
 use crate::hero_select::{self, HeroSelect};
 use crate::items::{
     CATEGORY_LABELS, ItemConfig, ItemShop, shop_button_rect, shop_buy_rect, shop_card_rect,
     shop_category_rect, shop_close_rect, shop_detail_rect, shop_sell_rect, shop_window_rect,
 };
+use crate::scene::CampBuff;
 use crate::scene::srgb_to_linear;
 use crate::ui_assets::UiAtlas;
 
@@ -33,6 +34,11 @@ const HUD_SMALL_SCALE: f32 = 0.70;
 /// authored at 16px, so this maps the authored HUD scale to whole pixels for
 /// crisp nearest-filtered text.
 const FONT_SCALE: f32 = 1.0 / TEXT_SCALE;
+
+/// Cache hitmarks are 24x23. They are drawn at 2x so the pixel art stays
+/// crisp and the splat reads at the default camera distance.
+const HITMARK_SCALE: f32 = 2.0;
+const HITMARK_GAP: f32 = 4.0;
 
 /// Information about the unit under the cursor, shown as a Dota style
 /// tooltip next to the mouse.
@@ -70,8 +76,47 @@ pub struct UnitFrame {
     pub max_mana: f32,
     pub team: u8,
     pub hero: bool,
+    /// Neutral jungle creature; gets its own gold/buff name colour.
+    pub camp: bool,
     pub structure: bool,
+    /// A solid overhead-name colour chosen from team and creature type.
+    pub name_color: [u8; 3],
+    /// Overhead names are larger for champions than for jungle creatures.
+    pub name_scale: f32,
     pub width: f32,
+}
+
+/// A projected OSRS hitmark, ready for the HUD to draw.
+#[derive(Clone)]
+pub struct Hitsplat {
+    pub x: f32,
+    pub y: f32,
+    pub text: String,
+    pub kind: HitsplatKind,
+    /// Fades out over the last fraction of a second.
+    pub alpha: f32,
+    /// Column slot when several hitmarks share one unit.
+    pub stack: u8,
+}
+
+/// Solid overhead-name colours: team heroes are blue/red, jungle camps take
+/// their buff colour, and structures stay neutral bone white.
+pub fn unit_name_color(team: u8, hero: bool, camp: bool, buff: Option<CampBuff>) -> [u8; 3] {
+    if hero {
+        return if team == 0 {
+            [125, 195, 255]
+        } else {
+            [255, 105, 95]
+        };
+    }
+    if camp {
+        return match buff {
+            Some(CampBuff::Might) => [255, 150, 80],
+            Some(CampBuff::Swift) => [120, 235, 160],
+            None => [245, 205, 85],
+        };
+    }
+    [225, 220, 205]
 }
 
 #[repr(C)]
@@ -136,8 +181,10 @@ pub struct PlayerHud {
     pub biome: Option<String>,
     /// Team heroes for the minimap and the hero profile card.
     pub heroes: Vec<HeroMarker>,
-    /// Screen-space floating damage numbers: `(x, y, text, colour, scale)`.
+    /// Screen-space floating labels: `(x, y, text, colour, scale)`.
     pub damage_numbers: Vec<(f32, f32, String, [u8; 3], f32)>,
+    /// Screen-space OSRS hitmarks for combat damage, status ticks and heals.
+    pub hitsplats: Vec<Hitsplat>,
     /// Screen-space name/health plates for champions, structures and camps.
     pub unit_frames: Vec<UnitFrame>,
     /// 0..1 progress of a committed player attack, if one is winding up.
@@ -222,8 +269,7 @@ impl Hud {
         }
     }
 
-    /// Draw text as one quad per horizontal pixel run, with a one-pixel drop
-    /// shadow. Lowercase is folded to uppercase by the font module.
+    /// Draw text with the default interface font and a drop shadow.
     #[allow(clippy::too_many_arguments)]
     pub fn text(
         &mut self,
@@ -235,22 +281,15 @@ impl Hud {
         text: &str,
         color: [u8; 3],
     ) {
-        let shadow = (scale * TEXT_SCALE * FONT_SCALE).round().max(1.0);
-        self.text_raw(
-            width,
-            height,
-            x + shadow,
-            y + shadow,
-            scale,
-            text,
-            [0, 0, 0],
-        );
-        self.text_raw(width, height, x, y, scale, text, color);
+        self.text_font(None, width, height, x, y, scale, text, color);
     }
 
+    /// Draw text with a named cache font (for example `p12` for overhead
+    /// names or `b12` for hitmark numbers), with a drop shadow.
     #[allow(clippy::too_many_arguments)]
-    fn text_raw(
+    pub fn text_named(
         &mut self,
+        font_name: &str,
         width: f32,
         height: f32,
         x: f32,
@@ -259,15 +298,89 @@ impl Hud {
         text: &str,
         color: [u8; 3],
     ) {
-        if self.atlas.font().is_some() {
-            // Real RuneScape interface glyphs: one textured quad per glyph.
-            // Collect first so the atlas borrow ends before drawing.
-            // Pixel glyphs must land on whole pixels: non-integer nearest
-            // scaling drops rows/columns and breaks letters.
-            let scale = (scale * TEXT_SCALE * FONT_SCALE).round().max(1.0);
-            let mut quads = Vec::with_capacity(text.len());
-            {
-                let atlas = self.atlas.font().expect("font atlas");
+        self.text_font(Some(font_name), width, height, x, y, scale, text, color);
+    }
+
+    /// Draw one pass of a named font without a shadow. The hitmark renderer
+    /// uses this for the black offset pass and the white number pass so both
+    /// can fade together.
+    #[allow(clippy::too_many_arguments)]
+    pub fn text_named_raw(
+        &mut self,
+        font_name: &str,
+        width: f32,
+        height: f32,
+        x: f32,
+        y: f32,
+        scale: f32,
+        text: &str,
+        color: [u8; 3],
+        alpha: f32,
+    ) {
+        self.text_raw(
+            Some(font_name),
+            width,
+            height,
+            x,
+            y,
+            scale,
+            text,
+            color,
+            alpha,
+        );
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn text_font(
+        &mut self,
+        font_name: Option<&str>,
+        width: f32,
+        height: f32,
+        x: f32,
+        y: f32,
+        scale: f32,
+        text: &str,
+        color: [u8; 3],
+    ) {
+        let shadow = (scale * TEXT_SCALE * FONT_SCALE).round().max(1.0);
+        self.text_raw(
+            font_name,
+            width,
+            height,
+            x + shadow,
+            y + shadow,
+            scale,
+            text,
+            [0, 0, 0],
+            1.0,
+        );
+        self.text_raw(font_name, width, height, x, y, scale, text, color, 1.0);
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn text_raw(
+        &mut self,
+        font_name: Option<&str>,
+        width: f32,
+        height: f32,
+        x: f32,
+        y: f32,
+        scale: f32,
+        text: &str,
+        color: [u8; 3],
+        alpha: f32,
+    ) {
+        let quads = {
+            let atlas = match font_name {
+                Some(name) => self.atlas.font_named(name),
+                None => self.atlas.font(),
+            };
+            atlas.map(|atlas| {
+                // Real RuneScape interface glyphs: one textured quad per
+                // glyph. Pixel glyphs must land on whole pixels: non-integer
+                // nearest scaling drops rows/columns and breaks letters.
+                let scale = (scale * TEXT_SCALE * FONT_SCALE).round().max(1.0);
+                let mut quads = Vec::with_capacity(text.len());
                 let mut cx = x;
                 for ch in text.chars() {
                     let Some(glyph) = atlas.glyph(ch) else {
@@ -276,8 +389,8 @@ impl Hud {
                     };
                     if ch != ' ' && glyph.w > 0.0 && glyph.h > 0.0 {
                         quads.push((
-                            cx + glyph.left * scale,
-                            y + glyph.top * scale,
+                            (cx + glyph.left * scale).round(),
+                            (y + glyph.top * scale).round(),
                             glyph.w * scale,
                             glyph.h * scale,
                             glyph.uv,
@@ -285,9 +398,12 @@ impl Hud {
                     }
                     cx += glyph.advance * scale;
                 }
-            }
+                quads
+            })
+        };
+        if let Some(quads) = quads {
             for (qx, qy, qw, qh, uv) in quads {
-                self.sprite(width, height, qx, qy, qw, qh, uv, color, 1.0);
+                self.sprite(width, height, qx, qy, qw, qh, uv, color, alpha);
             }
             return;
         }
@@ -308,7 +424,7 @@ impl Hud {
                     while col < font::GLYPH_W && bits & (1 << (font::GLYPH_W - 1 - col)) != 0 {
                         col += 1;
                     }
-                    self.quad(
+                    self.quad_alpha(
                         width,
                         height,
                         cx + start as f32 * scale,
@@ -316,6 +432,7 @@ impl Hud {
                         (col - start) as f32 * scale,
                         scale,
                         color,
+                        alpha,
                     );
                 }
             }
@@ -323,7 +440,7 @@ impl Hud {
         }
     }
 
-    /// Width of a string in screen pixels for the current font.
+    /// Width of a string in screen pixels for the default font.
     pub fn text_width(&self, text: &str, scale: f32) -> f32 {
         if let Some(atlas) = self.atlas.font() {
             let snapped = (scale * TEXT_SCALE * FONT_SCALE).round().max(1.0);
@@ -331,6 +448,34 @@ impl Hud {
         } else {
             font::text_width(text, scale * TEXT_SCALE)
         }
+    }
+
+    /// Width of a string in screen pixels for a named cache font.
+    pub fn text_width_named(&self, font_name: &str, text: &str, scale: f32) -> f32 {
+        if let Some(atlas) = self.atlas.font_named(font_name) {
+            let snapped = (scale * TEXT_SCALE * FONT_SCALE).round().max(1.0);
+            atlas.measure(text, snapped)
+        } else {
+            font::text_width(text, scale * TEXT_SCALE)
+        }
+    }
+
+    /// Top-to-baseline height of a named font, in pixels.
+    pub fn font_ascent_named(&self, font_name: &str) -> f32 {
+        self.atlas
+            .font_named(font_name)
+            .map_or(font::GLYPH_H as f32, |font| font.size)
+    }
+
+    /// Visual centre of a digit, measured from the top of the text line.
+    /// Used to centre hitmark numbers inside the splat.
+    pub fn font_digit_center_named(&self, font_name: &str) -> f32 {
+        self.atlas
+            .font_named(font_name)
+            .and_then(|font| font.glyph('0'))
+            .map_or(font::GLYPH_H as f32 * 0.5, |glyph| {
+                glyph.top + glyph.h * 0.5
+            })
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -346,6 +491,31 @@ impl Hud {
     ) {
         let text_width = self.text_width(text, scale);
         self.text(
+            width,
+            height,
+            center_x - text_width * 0.5,
+            y,
+            scale,
+            text,
+            color,
+        );
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn text_centered_named(
+        &mut self,
+        font_name: &str,
+        width: f32,
+        height: f32,
+        center_x: f32,
+        y: f32,
+        scale: f32,
+        text: &str,
+        color: [u8; 3],
+    ) {
+        let text_width = self.text_width_named(font_name, text, scale);
+        self.text_named(
+            font_name,
             width,
             height,
             center_x - text_width * 0.5,
@@ -1156,8 +1326,10 @@ impl Hud {
                 for other in &frames[..i] {
                     let dx = (x - other.x).abs();
                     let dy = (y - other.y).abs();
-                    if dx < (w + other.width) * 0.5 && dy < 26.0 {
-                        y -= 22.0;
+                    // Champion names are twice as tall now, so leave room for
+                    // the full name + bar plate instead of the old 26px box.
+                    if dx < (w + other.width) * 0.5 && dy < 40.0 {
+                        y -= 34.0;
                         moved = true;
                     }
                 }
@@ -1171,66 +1343,48 @@ impl Hud {
             let w = frame.width;
             let x = (frame.x - w * 0.5).clamp(4.0, (width - w - 4.0).max(4.0));
             let y = (frame.y - 30.0).clamp(64.0, (height - 140.0).max(64.0));
-            let team_color = if frame.team == 0 {
-                [110, 185, 255]
-            } else if frame.team == 2 {
-                [240, 190, 80]
-            } else {
-                [255, 100, 90]
-            };
-            self.quad_alpha(
-                width,
-                height,
-                x - 3.0,
-                y - 13.0,
-                w + 6.0,
-                26.0,
-                [8, 9, 12],
-                0.55,
-            );
-            let name: String = frame.name.chars().take(18).collect();
-            if frame.hero {
-                self.text(
-                    width,
-                    height,
-                    x + 2.0,
-                    y - 11.0,
-                    0.65,
-                    &format!("{}", frame.level),
-                    [235, 225, 150],
-                );
-                self.text(
-                    width,
-                    height,
-                    x + 20.0,
-                    y - 11.0,
-                    0.76,
-                    &name.to_uppercase(),
-                    team_color,
-                );
-            } else {
-                self.text_centered(
-                    width,
-                    height,
-                    x + w * 0.5,
-                    y - 11.0,
-                    0.68,
-                    &name.to_uppercase(),
-                    team_color,
-                );
-            }
             let bar_h = if frame.hero {
-                7.0
+                8.0
             } else if frame.structure {
                 6.0
             } else {
                 5.0
             };
-            self.quad(width, height, x, y, w, bar_h, [16, 16, 20]);
+            // A level chip to the right of the bar shifts the bar left by
+            // half the chip so the whole plate still reads as centred.
+            let show_level = frame.hero || frame.camp;
+            let level_text = frame.level.to_string();
+            let level_width = self.text_width_named("p12", &level_text, 1.0);
+            let level_box_w = (level_width + 7.0).max(16.0);
+            let level_box_h = 14.0;
+            let shift = if show_level {
+                (level_box_w + 4.0) * 0.5
+            } else {
+                0.0
+            };
+            let bar_x = (x - shift).clamp(4.0, (width - w - 4.0).max(4.0));
+
+            // Big, solid OSRS overhead name with a crisp black shadow. No
+            // dark plate behind it; the name sits directly on the world.
+            let name: String = frame.name.chars().take(22).collect();
+            let name_scale = frame.name_scale.max(1.0);
+            let name_top = y - 7.0 - self.font_ascent_named("p12") * name_scale;
+            self.text_centered_named(
+                "p12",
+                width,
+                height,
+                bar_x + w * 0.5,
+                name_top,
+                name_scale,
+                &name,
+                frame.name_color,
+            );
+
+            self.quad(width, height, bar_x, y, w, bar_h, [16, 16, 20]);
             self.quad(
                 width,
                 height,
-                x,
+                bar_x,
                 y,
                 w * (frame.health / frame.max_health.max(1.0)).clamp(0.0, 1.0),
                 bar_h,
@@ -1243,21 +1397,114 @@ impl Hud {
                 },
             );
             if frame.hero && frame.max_mana > 0.0 {
-                self.quad(width, height, x, y + 8.0, w, 3.0, [16, 16, 22]);
+                self.quad(width, height, bar_x, y + bar_h + 1.0, w, 3.0, [16, 16, 22]);
                 self.quad(
                     width,
                     height,
-                    x,
-                    y + 8.0,
+                    bar_x,
+                    y + bar_h + 1.0,
                     w * (frame.mana / frame.max_mana.max(1.0)).clamp(0.0, 1.0),
                     3.0,
                     [70, 120, 235],
                 );
             }
+            if show_level {
+                let cx = bar_x + w + 4.0;
+                let cy = y + bar_h * 0.5 - level_box_h * 0.5;
+                self.quad_alpha(
+                    width,
+                    height,
+                    cx,
+                    cy,
+                    level_box_w,
+                    level_box_h,
+                    [8, 9, 12],
+                    0.78,
+                );
+                self.quad(width, height, cx, cy, level_box_w, 1.0, [96, 86, 58]);
+                self.text_centered_named(
+                    "p12",
+                    width,
+                    height,
+                    cx + level_box_w * 0.5,
+                    cy + 1.0,
+                    1.0,
+                    &level_text,
+                    [235, 225, 150],
+                );
+            }
         }
 
-        // Floating damage numbers over the units that were hit. Large hits
-        // pop larger; a one-pixel shadow keeps them readable over grass.
+        // OSRS hitmarks: the exact cache splat for the damage kind, with
+        // the bold cache font centred over it. Hits on one unit stack down
+        // the body, so a combo reads at a glance.
+        for hit in &player.hitsplats {
+            let sprite = self.atlas.hitmark(hit.kind.sprite_name());
+            let (sw, sh) = sprite
+                .map(|slot| (slot.width * HITMARK_SCALE, slot.height * HITMARK_SCALE))
+                .unwrap_or((24.0 * HITMARK_SCALE, 23.0 * HITMARK_SCALE));
+            let cx = hit.x.round();
+            let cy = hit.y.round() + hit.stack as f32 * (sh + HITMARK_GAP);
+            let sx = (cx - sw * 0.5).round();
+            let sy = (cy - sh * 0.5).round();
+            if let Some(slot) = sprite {
+                self.sprite(
+                    width,
+                    height,
+                    sx,
+                    sy,
+                    sw,
+                    sh,
+                    slot.uv,
+                    [255, 255, 255],
+                    hit.alpha,
+                );
+            } else {
+                self.quad_alpha(
+                    width,
+                    height,
+                    sx,
+                    sy,
+                    sw,
+                    sh,
+                    hit.kind.fallback_color(),
+                    hit.alpha * 0.92,
+                );
+            }
+
+            // OSRS uses a bold 12px font in the splat. Two-digit hits get
+            // the full 3x treatment; longer numbers shrink so they stay
+            // legible instead of running past the sprite.
+            let digits = hit.text.chars().filter(|c| c.is_ascii_digit()).count();
+            let text_scale = if digits <= 2 {
+                3.0
+            } else if digits <= 4 {
+                2.0
+            } else {
+                1.0
+            };
+            let text_width = self.text_width_named("b12", &hit.text, text_scale);
+            let text_x = (cx - text_width * 0.5).round();
+            let text_y = (cy - self.font_digit_center_named("b12") * text_scale).round();
+            let shadow = (text_scale * 0.5).round().max(1.0);
+            self.text_named_raw(
+                "b12",
+                width,
+                height,
+                text_x + shadow,
+                text_y + shadow,
+                text_scale,
+                &hit.text,
+                [0, 0, 0],
+                hit.alpha,
+            );
+            self.text_named_raw(
+                "b12", width, height, text_x, text_y, text_scale, &hit.text, OSRS_WHITE, hit.alpha,
+            );
+        }
+
+        // Plain floating labels (gold pickups and developer text). Large
+        // labels pop larger; a one-pixel shadow keeps them readable.
         for (x, y, text, color, scale) in &player.damage_numbers {
             self.text(
                 width,
@@ -3582,5 +3829,20 @@ mod tests {
     fn minimap_world_rejects_clicks_outside() {
         let bounds = (Vec2::ZERO, Vec2::ONE);
         assert!(minimap_world_at(1280.0, 720.0, (10.0, 10.0), bounds).is_none());
+    }
+
+    #[test]
+    fn overhead_name_colours_separate_teams_and_camps() {
+        let ally = unit_name_color(0, true, false, None);
+        let enemy = unit_name_color(1, true, false, None);
+        let might = unit_name_color(2, false, true, Some(CampBuff::Might));
+        let swift = unit_name_color(2, false, true, Some(CampBuff::Swift));
+        let neutral = unit_name_color(2, false, true, None);
+        assert!(ally[2] > ally[0], "allies read blue");
+        assert!(enemy[0] > enemy[2], "enemies read red");
+        assert!(might[0] > might[2], "Might camps read warm");
+        assert!(swift[1] > swift[0], "Swift camps read green");
+        assert_ne!(neutral, might);
+        assert_ne!(neutral, swift);
     }
 }

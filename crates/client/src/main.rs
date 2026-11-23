@@ -39,7 +39,7 @@ use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::keyboard::{KeyCode, PhysicalKey};
 use winit::window::{Window, WindowId};
 
-use crate::animated::{AnimatedScene, BuyOutcome, UnitKind};
+use crate::animated::{AnimatedScene, BuyOutcome, FloatStyle, UnitKind};
 use crate::champion::ChampionConfig;
 use crate::grass_textures::GrassTextures;
 use crate::hero_select::HeroSelect;
@@ -121,6 +121,9 @@ struct Cli {
     /// Demo: pop floating damage numbers, a kill shout and a minimap ping.
     #[arg(long)]
     demo_fx: bool,
+    /// Demo: pin one OSRS hitmark of every kind over the hero.
+    #[arg(long)]
+    demo_hitsplats: bool,
     /// Demo: teleport to a jungle camp, attack it, and verify the buff.
     #[arg(long)]
     demo_camp: bool,
@@ -375,7 +378,7 @@ fn main() -> Result<()> {
         }
     });
 
-    let mut ui_atlas = ui_assets::UiAtlas::load()?;
+    let mut ui_atlas = ui_assets::UiAtlas::load_with_cache(&cache)?;
     let mut live_portrait = None;
     if hero_select_open {
         for champion in &champions {
@@ -513,6 +516,7 @@ fn main() -> Result<()> {
         demo_awowogei_timer: 0.0,
         demo_awowogei_stage: 0,
         demo_fx: cli.demo_fx,
+        demo_hitsplats: cli.demo_hitsplats,
         demo_camp: cli.demo_camp,
         demo_watchtower: cli.demo_watchtower,
         demo_watchtower_timer: 0.0,
@@ -660,6 +664,7 @@ struct App {
     demo_awowogei_timer: f32,
     demo_awowogei_stage: u8,
     demo_fx: bool,
+    demo_hitsplats: bool,
     demo_camp: bool,
     demo_watchtower: bool,
     demo_watchtower_timer: f32,
@@ -1990,6 +1995,9 @@ impl App {
                     // Re-pin the demo numbers so they do not drift off screen.
                     animated.demo_fx();
                 }
+                if self.demo_hitsplats {
+                    animated.demo_hitsplats();
+                }
             }
             phase_sim = sim_start.elapsed().as_secs_f32() * 1000.0;
             let cues = std::mem::take(&mut animated.sound_cues);
@@ -2180,6 +2188,7 @@ impl App {
             let aspect = hud_w / hud_h.max(1.0);
             let view_proj = renderer.camera.view_proj(aspect);
             let mut damage_numbers = Vec::new();
+            let mut hitsplats = Vec::new();
             for float in &animated.floats {
                 let clip = view_proj * glam::Vec4::new(float.pos.x, float.pos.y, float.pos.z, 1.0);
                 if clip.w <= 0.0 {
@@ -2192,13 +2201,23 @@ impl App {
                 }
                 let screen_x = (ndc_x * 0.5 + 0.5) * hud_w;
                 let screen_y = (1.0 - (ndc_y * 0.5 + 0.5)) * hud_h;
-                damage_numbers.push((
-                    screen_x,
-                    screen_y,
-                    float.text.clone(),
-                    float.color,
-                    float.scale,
-                ));
+                match float.style {
+                    FloatStyle::Hitsplat(kind) => hitsplats.push(crate::hud::Hitsplat {
+                        x: screen_x,
+                        y: screen_y,
+                        text: float.text.clone(),
+                        kind,
+                        alpha: (float.life / 0.3).clamp(0.0, 1.0),
+                        stack: float.stack,
+                    }),
+                    FloatStyle::Label(color) => damage_numbers.push((
+                        screen_x,
+                        screen_y,
+                        float.text.clone(),
+                        color,
+                        float.scale,
+                    )),
+                }
             }
             // Screen-space name/health plates. Minions keep their cheap
             // world-space bars; champions, structures and camps get the
@@ -2245,6 +2264,7 @@ impl App {
                     unit.kind,
                     UnitKind::Tower | UnitKind::Inhibitor | UnitKind::Nexus | UnitKind::Watchtower
                 );
+                let camp = unit.kind == UnitKind::Camp;
                 unit_frames.push(crate::hud::UnitFrame {
                     x: (ndc_x * 0.5 + 0.5) * hud_w,
                     y: (1.0 - (ndc_y * 0.5 + 0.5)) * hud_h,
@@ -2256,7 +2276,10 @@ impl App {
                     max_mana: unit.max_mana,
                     team: unit.team,
                     hero,
+                    camp,
                     structure,
+                    name_color: crate::hud::unit_name_color(unit.team, hero, camp, unit.camp_buff),
+                    name_scale: if hero { 2.0 } else { 1.0 },
                     width: if hero {
                         184.0
                     } else if structure {
@@ -2318,6 +2341,7 @@ impl App {
                 heroes: heroes.clone(),
                 roster,
                 damage_numbers,
+                hitsplats,
                 unit_frames,
                 cast_progress,
                 damage_flash: self.damage_flash,
@@ -3345,6 +3369,8 @@ fn has_demo_flags(cli: &Cli) -> bool {
         || cli.spawn.is_some()
         || cli.shots.is_some()
         || cli.demo_combat
+        || cli.demo_fx
+        || cli.demo_hitsplats
         || cli.demo_anim
         || cli.demo_duel
         || cli.demo_awowogei

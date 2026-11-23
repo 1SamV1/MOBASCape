@@ -175,10 +175,16 @@ Cache location: `.cache/osrs-235/cache` by default. Pass `--cache` and
   1.6x scale). Four jungle camps grant Might (+25% damage) or Swift (+20%
   speed) for 60 s. Brush and client-side fog of war are implemented.
 - Nexus is damageable only after at least one enemy inhibitor falls.
-- The HUD is geometry plus a built-in 5x7 bitmap font (`crates/client/src/
-  font.rs`). HP/MP/XP/gold, nexus values, wave timer, ability labels/cooldowns,
-  shop names/costs/tooltips, and match result are on-screen. This is a
-  code-defined font, not a cache-native OSRS font atlas.
+- The HUD uses cache-native OSRS fonts. `crates/client/src/ui_assets.rs`
+  bakes `p11_full`, `p12_full` and `b12_full` from the cache's font and sprite
+  archives at startup: `p12_full` for interface text and overhead names,
+  `b12_full` for hitmark numbers. The built-in 5x7 bitmap font (`crates/client/
+  src/font.rs`) is only the fallback when those archives are unavailable.
+  Combat feedback uses the cache's exact 24x23 hitmarks: red damage, green
+  poison, teal venom, orange disease, the purple heal cross and the blue miss.
+  Hitmarks stack down the unit and fade after 1.2 s. Overhead plates draw larger
+  solid team/camp-coloured names with a level chip to the right of the health
+  bar.
 - **117HD Core** rendering is in: `SceneVertex` carries position, normal,
   colour, UV, AO, material, and texture ID; terrain uses smooth heightfield
   normals, models use flat per-face normals; the scene shader does sun +

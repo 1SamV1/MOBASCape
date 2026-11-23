@@ -1,6 +1,35 @@
 # Status
 
-Last updated: King Awowogei's new kit and the first sound effects, 2026-11-23.
+Last updated: cache-native hitmarks and overhead plates, 2026-11-23.
+
+## 2026-11-23 — Cache-native hitmarks and overhead plates
+
+- **Fonts.** `crates/client/src/ui_assets.rs` now decodes `p11_full` (494),
+  `p12_full` (495) and `b12_full` (496) from the cache's font measurements
+  (index 13) and glyph sheets (index 8), then shelves the glyphs into the UI
+  atlas as white tintable quads. `p12_full` is the default interface/overhead
+  font; `b12_full` is used for hitmark numbers. The built-in 5x7 font remains
+  the fallback when a cache has no font archives.
+- **Hitmarks.** The exact OSRS 24x23 sprites are baked from index 8: red
+  damage (1359), green poison (1360), orange disease (1361), teal venom
+  (1632), the purple heal cross (1629) and the blue miss (1358). They are
+  drawn at 2x with the cache's bold 12px digits, a black shadow, and a 1.2 s
+  life. Hits on one unit stack down the body; two-digit numbers use the full
+  3x text size, longer numbers step down to stay legible.
+- **Combat plumbing.** `FloatText` now carries a `FloatStyle::Hitsplat`
+  kind. Damage uses the red splat, blocked/zero hits use blue, venom ticks use
+  teal, and the E heal uses purple with the amount actually restored. A
+  `--demo-hitsplats` flag pins one of each kind over the hero for visual
+  checks; `--demo-fx` shows a three-hit combo.
+- **Overhead plates.** Hero and jungle-camp plates now draw larger solid names
+  in the cache's `p12_full` font: blue ally, red enemy, warm orange for Might
+  camps, green for Swift camps, bone white for structures. The level chip
+  moved to the right edge of the health bar (gold number on a dark slot) for
+  heroes and camps. The old dark name box is gone.
+- Verified at 1280x720 with `--demo-hitsplats --spawn 2770 3000`, `--demo-camp
+  --timescale 4` and `--demo-duel --timescale 4`; hero select still lays out
+  correctly with the cache font. `cargo test --workspace` and
+  `cargo clippy -p rift-client --all-targets -- -D warnings` pass.
 
 ## 2026-11-23 — King Awowogei's new kit and the first sound effects
 
@@ -1395,7 +1424,10 @@ the -24 contour.
 - Dynamic lights are capped at 16 and have no shadows.
 - Item purchases and gold/heal/shop-range remain client-side.
 - No item selling/combining/passives; champions share the QWER shape.
-- The HUD font is a code-defined 5x7 bitmap, not a cache-native OSRS font.
+- The legacy HUD now uses the cache's `p12_full`/`b12_full` fonts and OSRS
+  hitmarks. The assembled `--ui-live` interface still draws with `crates/ui`'s
+  raster theme fonts and does not yet show cache hitmarks or jungle-camp name
+  plates.
 - UI assets live in gitignored `assets/osrs-ui`; without them the shop falls back
   to procedural icons and no tab sprites. The bronze sword icon is a trimmed
   detail render because the plain inventory icon file was unavailable under the
