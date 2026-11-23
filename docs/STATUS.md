@@ -1,6 +1,27 @@
 # Status
 
-Last updated: assembled-interface hitmarks, PK markers and max hits, 2026-11-23.
+Last updated: cache-native legacy HUD icons and ability art, 2026-11-23.
+
+## 2026-11-23 — Cache-native legacy HUD icons and ability art
+
+- **Only cache visuals.** `crates/client/src/ui_assets.rs` no longer reads
+  `assets/osrs-ui`. The legacy atlas is built from cache sprites and cache
+  model renders: fonts, hitmarks, skull, swords, champion ability icons and
+  every shop item's inventory icon.
+- **Item icons.** `main.rs` bakes every item in `data/items/items.json` with an
+  `obj` id through `item_icons::bake` and packs the 32px renders under the item
+  id. The Fountain Shop, detail pane and inventory now use OSRS item art in
+  the default HUD, not coloured placeholders.
+- **Ability icons.** Every champion's four cache ability sprites are packed
+  under `icon.ability.<champion>.<slot>`; the legacy ability bar asks for the
+  same role as the live theme. Score-strip swords (442) and skull (439) are
+  also cache sprites.
+- **Docs.** `docs/UI_ASSETS.md` now documents the cache-native pipeline and
+  retires the external PNG tree. The procedural panels/buttons that have no
+  clean cache sprite remain geometry only.
+- Verified at 1280x720 with `--demo-shop --timescale 4`, `--demo-camp` and the
+  normal HUD; `cargo test --workspace` and `cargo clippy --workspace
+  --all-targets -- -D warnings` pass.
 
 ## 2026-11-23 — Assembled hitmarks, PK markers and max hits
 
@@ -1457,10 +1478,11 @@ the -24 contour.
   tags and jungle-camp plates. The assembled `--ui-live` interface reads the
   same cache-native theme fonts and sprites; its dev layout labels remain
   visible when run with `--ui-live`.
-- UI assets live in gitignored `assets/osrs-ui`; without them the shop falls back
-  to procedural icons and no tab sprites. The bronze sword icon is a trimmed
-  detail render because the plain inventory icon file was unavailable under the
-  expected wiki name. Faint baked tab numbers/icons can show through overlays.
+- Both HUDs are cache-native for visual assets: fonts, hitmarks, skull,
+  score-strip icons, champion ability icons and item icons all come from the
+  pinned cache. Panels/buttons without a clean cache interface sprite keep the
+  procedural OSRS-styled geometry. The old `assets/osrs-ui` tree is retired for
+  visuals.
 - Kree'arra/Jad models are large; scale tuning is ongoing.
 - Cache texture alpha cut-outs are rendered opaque; leaf and flower sprites are
   wrapped and colour-lifted rather than alpha-tested.

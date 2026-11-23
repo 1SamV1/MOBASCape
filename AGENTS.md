@@ -212,12 +212,14 @@ Cache location: `.cache/osrs-235/cache` by default. Pass `--cache` and
 - `--graphics classic` preserves a flat baseline; `--debug-view albedo|normal|
   lighting|fog|lights|shadow|ao` helps tune the renderer.
 - **UI pass**: the Fountain Shop is a centered OSRS-style window with category
-  tabs, item-card grid, detail pane, Buy/Sell buttons, inventory row, and real
-  item icons/tab sprites from the gitignored `assets/osrs-ui` tree. The HUD has
-  resource, team, objectives, event-log, compact health/mana, inventory, and
-  shop-button panels. `crates/client/src/ui_assets.rs` builds a 1024×1024 atlas;
-  `ui.wgsl` samples it with nearest filtering. Missing assets fall back to
-  procedural icons. See `docs/UI_ASSETS.md`; never commit `assets/`.
+  tabs, item-card grid, detail pane, Buy/Sell buttons, inventory row, and
+  cache-rendered item icons. The HUD has resource, team, objectives, event-log,
+  compact health/mana, inventory, and shop-button panels. The legacy HUD's
+  visual assets are cache-native: `crates/client/src/ui_assets.rs` builds a
+  2048×2048 atlas from cache sprites, cache item-model renders, cache ability
+  icons, cache fonts and cache hitmarks; `ui.wgsl` samples it with nearest
+  filtering. Panels and buttons without a clean cache sprite keep procedural
+  geometry. Never commit `assets/`.
 - **Match flow**: hero select -> LOCK IN -> 5v5 lobby -> match. The hero-select
   screen is the reference layout (filter tabs ALL/MELEE/RANGED/MAGIC, roster
   grid, side rosters, ability detail panel). The lobby shows both lineups as
@@ -260,12 +262,13 @@ Cache location: `.cache/osrs-235/cache` by default. Pass `--cache` and
   played through `rodio` (`crates/client/src/audio.rs`); champion files
   name them in `sounds`. Only King Awowogei uses them so far. No music.
 - No netcode or map editor. Ambient NPCs idle only.
-- The UI atlas depends on external PNGs in `assets/osrs-ui`; without them the
-  shop uses procedural fallback icons and no OSRS tab sprites. The bronze sword
-  icon is a trimmed detail render because the plain inventory icon file was not
-  available under the expected wiki name.
-- Baked numbers/icons in the tab sprites are covered by dark overlays; faint
-  traces can still show through at some scales.
+- The legacy HUD no longer reads visual assets from `assets/osrs-ui`: item
+  icons are cache item-model renders, ability icons are champion cache sprite
+  ids, and the score-strip sword/skull icons are cache sprites. The old
+  external tree is retired for visuals; only cache content is used.
+- The cache has no clean generic shop-tab/button sprite for every role, so
+  those panels keep the procedural OSRS-styled geometry until a suitable
+  cache interface sprite is selected.
 - Terrain color is blurred per vertex (two separable box-blur passes) and the
   scene shader samples pre-baked OSRS ground sprites plus procedural detail.
   Terrain is **not** cache-native per-tile texture blending yet; ground-layer

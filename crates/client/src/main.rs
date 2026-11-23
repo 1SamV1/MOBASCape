@@ -379,6 +379,41 @@ fn main() -> Result<()> {
     });
 
     let mut ui_atlas = ui_assets::UiAtlas::load_with_cache(&cache)?;
+    // Cache-rendered inventory icons for every shop item, so the legacy HUD
+    // never falls back to a coloured placeholder or an external PNG.
+    for item in &shop.items {
+        let Some(obj) = item.obj else {
+            continue;
+        };
+        match crate::item_icons::bake(&cache, obj) {
+            Ok(icon) => {
+                let mut raw = Vec::with_capacity(icon.pixels.len() * 4);
+                for pixel in &icon.pixels {
+                    raw.extend_from_slice(pixel);
+                }
+                if let Some(image) =
+                    image::RgbaImage::from_raw(icon.width as u32, icon.height as u32, raw)
+                {
+                    ui_atlas.add_item_icon(&item.id, &image);
+                }
+            }
+            Err(err) => tracing::warn!("item icon {} ({obj}): {err:#}", item.id),
+        }
+    }
+    // Every champion's cache ability icons, keyed like the assembled
+    // interface's `icon.ability.*` roles. The legacy bar asks for the same
+    // key, so hero select and champion swaps need no atlas rebuild.
+    for champion in &champions {
+        for (slot, sprite) in champion.ability_icons.iter().take(4).enumerate() {
+            let key = crate::ui_live::ability_icon_role(&champion.name, slot);
+            if let Err(err) = ui_atlas.add_cache_ui_sprite(&cache, *sprite, &key) {
+                tracing::warn!(
+                    "ability icon {} slot {slot} ({sprite}): {err:#}",
+                    champion.name
+                );
+            }
+        }
+    }
     let mut live_portrait = None;
     if hero_select_open {
         for champion in &champions {

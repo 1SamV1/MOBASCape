@@ -70,7 +70,9 @@ designed for fast-paced low-team-count matches.
 > names over health bars with the level chip to the right of the bar. Enemy
 > champions also carry the white PK skull and a yellow "NO SAFE" tag. The
 > assembled `--ui-live` interface now draws the same hitmarks and camp plates
-> through `crates/ui`. See
+> through `crates/ui`. The legacy shop, inventory and ability bar use
+> cache-rendered item icons and cache champion ability icons, and the old
+> external image tree is retired for visuals. See
 > [docs/STATUS.md](docs/STATUS.md),
 > [docs/UI_ASSETS.md](docs/UI_ASSETS.md) and
 > [docs/INTERFACE_STAGE3_REVIEW.md](docs/INTERFACE_STAGE3_REVIEW.md).
@@ -93,7 +95,8 @@ designed for fast-paced low-team-count matches.
 - `crates/client` — native wgpu client: 5x5 Karamja with regional biome
   pockets and a river, animated NPCs, three lanes, towers/inhibitors/nexus,
   minion waves, jungle camps/buffs with aggro and leash, brush/fog of war,
-  item shop/inventory, cache-font HUD with OSRS hitmarks and overhead plates,
+  item shop/inventory, cache-native HUD with OSRS hitmarks, item and ability
+  icons, and overhead plates,
   117HD Core lighting/atmosphere, HDR
   bloom, cache-native ground textures, fogged minimap, click-to-move +
   hold-to-steer, auto-attacks, Q, and the stage 3 interface dev screen
@@ -205,8 +208,8 @@ cargo run -p rift-client -- --graphics 117hd --debug-view ao
 cargo run -p rift-client -- --graphics 117hd --shadows off|blob|map
 cargo run -p rift-client -- --graphics 117hd --pitch 0.22
 
-# Optional: populate the gitignored UI asset tree (see docs/UI_ASSETS.md)
-# assets/osrs-ui/items/*.png + assets/osrs-ui/ui/tab.png
+# The legacy HUD's item/ability/score icons are cache-native; no external
+# image tree is needed. See docs/UI_ASSETS.md.
 
 # Grant gold, open the shop, and buy six items
 cargo run -p rift-client -- --demo-shop --timescale 4

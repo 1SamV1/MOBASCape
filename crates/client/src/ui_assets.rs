@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::path::Path;
 
 use anyhow::{Context, Result};
 use image::imageops::FilterType;
@@ -7,11 +6,10 @@ use rift_cache::font::FONT_INDEX;
 use rift_cache::sprite::SPRITE_INDEX;
 use rift_cache::{Cache, Font, SpriteSheet};
 
-// The atlas holds the item icons, the minimap and a shelf of champion
-// portraits. 2048px gives the portrait shelf room for a full roster without
-// dropping the last champion.
+// The atlas holds cache item icons, cache UI sprites, the minimap and a
+// shelf of champion portraits. 2048px gives the portrait shelf room for a
+// full roster without dropping the last champion.
 const ATLAS_SIZE: u32 = 2048;
-const ITEM_SIZE: u32 = 128;
 /// Reserved shelf below the item/UI rows and above the font/minimap slots.
 const PORTRAIT_ROW_Y: u32 = 428;
 /// Roster cards are at most 118px wide, so 128px portraits stay sharp and
@@ -39,6 +37,9 @@ const HITMARK_SPRITES: [(&str, u32); 8] = [
     ("skull", 439),
 ];
 
+/// Small cache UI icons the legacy HUD uses outside the hitmark family.
+const UI_SPRITES: [(&str, u32); 2] = [("icon_swords", 442), ("icon_skull", 439)];
+
 /// One cache sprite placed in the atlas, with its size in pixels.
 #[derive(Clone, Copy)]
 pub struct SpriteSlot {
@@ -47,11 +48,12 @@ pub struct SpriteSlot {
     pub height: f32,
 }
 
-/// A small shelf-packed atlas of OSRS item icons and UI sprites.
+/// A small shelf-packed atlas of cache-native OSRS interface art.
 ///
-/// Assets are loaded from the gitignored `assets/osrs-ui` tree. Missing files
-/// are skipped; the HUD falls back to its procedural icons when a UV is absent.
-/// One glyph in the baked OSRS interface font atlas.
+/// Nothing here reads an image file: item icons come from the cache's item
+/// models, ability icons and the score-strip icons from index 8, and the
+/// fonts and hitmarks from their cache archives. Missing cache entries leave
+/// the HUD's procedural fallbacks in place.
 pub struct FontGlyph {
     pub uv: [f32; 4],
     pub w: f32,
@@ -61,7 +63,7 @@ pub struct FontGlyph {
     pub advance: f32,
 }
 
-/// The RuneScape interface font baked into the UI atlas.
+/// A RuneScape interface font baked into the UI atlas.
 pub struct FontAtlas {
     pub size: f32,
     pub glyphs: HashMap<char, FontGlyph>,
@@ -89,15 +91,17 @@ pub struct UiAtlas {
     ui_uv: HashMap<String, [f32; 4]>,
     hero_uv: HashMap<String, [f32; 4]>,
     minimap_uv: Option<[f32; 4]>,
-    /// The optional baked interface atlas from `assets/osrs-ui`.
-    font: Option<FontAtlas>,
     /// Cache-native fonts by name (`p11`, `p12`, `b12`).
     cache_fonts: HashMap<String, FontAtlas>,
     /// Cache-native hitmark sprites by kind.
     hitmarks: HashMap<String, SpriteSlot>,
+    item_cursor: (u32, u32, u32),
+    ui_cursor: (u32, u32, u32),
 }
 
 impl UiAtlas {
+    /// An empty atlas with only the white texel every untextured HUD quad
+    /// uses. `load_with_cache` fills the visual roles.
     pub fn load() -> Result<Self> {
         let mut atlas = Self {
             width: ATLAS_SIZE,
@@ -108,12 +112,11 @@ impl UiAtlas {
             ui_uv: HashMap::new(),
             hero_uv: HashMap::new(),
             minimap_uv: None,
-            font: None,
             cache_fonts: HashMap::new(),
             hitmarks: HashMap::new(),
+            item_cursor: (2, 2, 0),
+            ui_cursor: (2, 110, 0),
         };
-        // A single opaque white texel at (0,0) lets every untextured HUD quad
-        // use the same textured pipeline.
         atlas.pixels[0..4].copy_from_slice(&[255, 255, 255, 255]);
         atlas.white_uv = [
             0.5 / ATLAS_SIZE as f32,
@@ -121,109 +124,23 @@ impl UiAtlas {
             0.5 / ATLAS_SIZE as f32,
             0.5 / ATLAS_SIZE as f32,
         ];
-
-        let mut cursor_x = 2u32;
-        let mut cursor_y = 2u32;
-        let mut row_height = 0u32;
-
-        for key in [
-            "bronze_sword",
-            "iron_plate",
-            "fury",
-            "berserker",
-            "ahrims",
-            "boots",
-        ] {
-            let path = format!("assets/osrs-ui/items/{key}.png");
-            if let Some(image) = load_rgba(&path)? {
-                let trimmed = trim_alpha(&image);
-                let filter = if trimmed.width() > ITEM_SIZE || trimmed.height() > ITEM_SIZE {
-                    FilterType::Lanczos3
-                } else {
-                    FilterType::Nearest
-                };
-                let icon = fit_icon(&trimmed, ITEM_SIZE, filter);
-                if cursor_x + ITEM_SIZE + 2 > ATLAS_SIZE {
-                    cursor_x = 2;
-                    cursor_y += row_height + 2;
-                    row_height = 0;
-                }
-                let uv = atlas.copy(&icon, cursor_x, cursor_y);
-                atlas.item_uv.insert(key.to_string(), uv);
-                cursor_x += ITEM_SIZE + 2;
-                row_height = row_height.max(ITEM_SIZE);
-            }
-        }
-
-        cursor_x = 2;
-        cursor_y += row_height + 2;
-        row_height = 0;
-        for key in [
-            "tab",
-            "button",
-            "button_red",
-            "header",
-            "panel",
-            "icon_hp",
-            "icon_mp",
-            "icon_gold",
-            "icon_xp",
-            "icon_swords",
-            "icon_skull",
-            "icon_q",
-            "icon_w",
-            "icon_e",
-            "icon_r",
-        ] {
-            let path = format!("assets/osrs-ui/ui/{key}.png");
-            if let Some(image) = load_rgba(&path)? {
-                if cursor_x + image.width() + 2 > ATLAS_SIZE {
-                    cursor_x = 2;
-                    cursor_y += row_height + 2;
-                    row_height = 0;
-                }
-                let uv = atlas.copy(&image, cursor_x, cursor_y);
-                atlas.ui_uv.insert(key.to_string(), uv);
-                cursor_x += image.width() + 2;
-                row_height = row_height.max(image.height());
-            }
-        }
-
-        // The RuneScape interface font: a baked glyph atlas with metrics.
-        let font_png = Path::new("assets/osrs-ui/font/font.png");
-        let font_json = Path::new("assets/osrs-ui/font/font.json");
-        if font_png.exists() && font_json.exists() {
-            match atlas.add_font(font_png, font_json) {
-                Ok(()) => {}
-                Err(err) => tracing::warn!("font atlas: {err}"),
-            }
-        }
-
-        tracing::info!(
-            "UI atlas: {}x{}, {} item icons, {} UI sprites",
-            atlas.width,
-            atlas.height,
-            atlas.item_uv.len(),
-            atlas.ui_uv.len()
-        );
         Ok(atlas)
     }
 
-    /// Load the local UI assets, then bake the OSRS cache's fonts and
-    /// hitmark sprites into the same atlas. A cache without those archives
-    /// degrades to the baked font or the built-in pixel font and procedural
-    /// hitsplats, so this never blocks a match.
+    /// Load the empty atlas, then bake the OSRS cache's fonts, hitmarks and
+    /// shared interface icons. A cache without those archives degrades to the
+    /// built-in pixel font and procedural hitsplats, so this never blocks a
+    /// match.
     pub fn load_with_cache(cache: &Cache) -> Result<Self> {
         let mut atlas = Self::load()?;
         atlas.add_cache_assets(cache);
         Ok(atlas)
     }
 
-    /// Bake the cache-native overhead/hitsplat assets.
+    /// Bake the cache-native overhead, hitmark and score-strip assets.
     ///
     /// Fonts get one shelf each in the lower half of the atlas; the hitmark
-    /// row sits below them. These regions are outside the item, portrait and
-    /// minimap slots used by `load`.
+    /// row sits below them. Item and UI icons pack from the top.
     pub fn add_cache_assets(&mut self, cache: &Cache) {
         for (index, (name, id)) in CACHE_FONTS.iter().enumerate() {
             let y = 1300 + index as u32 * 140;
@@ -241,10 +158,16 @@ impl UiAtlas {
                 Err(error) => tracing::warn!("cache hitmark {key} ({id}): {error:#}"),
             }
         }
+        for (key, id) in UI_SPRITES {
+            if let Err(error) = self.add_cache_ui_sprite(cache, id, key) {
+                tracing::warn!("cache UI sprite {key} ({id}): {error:#}");
+            }
+        }
         tracing::info!(
-            "cache UI: {} fonts, {} hitmarks",
+            "cache UI: {} fonts, {} hitmarks, {} UI sprites",
             self.cache_fonts.len(),
-            self.hitmarks.len()
+            self.hitmarks.len(),
+            self.ui_uv.len()
         );
     }
 
@@ -350,55 +273,46 @@ impl UiAtlas {
         })
     }
 
-    /// Copy the baked interface font into the atlas and resolve glyph UVs.
-    fn add_font(&mut self, png: &Path, json: &Path) -> Result<()> {
-        let image = image::open(png)
-            .with_context(|| format!("loading font atlas {}", png.display()))?
-            .to_rgba8();
-        let data: serde_json::Value = serde_json::from_slice(&std::fs::read(json)?)?;
-        let ox = 2u32;
-        let oy = 700u32;
-        self.copy(&image, ox, oy);
-        let aw = self.width as f32;
-        let ah = self.height as f32;
-        let mut glyphs = HashMap::new();
-        if let Some(map) = data["glyphs"].as_object() {
-            for (ch, g) in map {
-                let Some(c) = ch.chars().next() else {
-                    continue;
-                };
-                let x = g["x"].as_f64().unwrap_or(0.0) as f32;
-                let y = g["y"].as_f64().unwrap_or(0.0) as f32;
-                let w = g["w"].as_f64().unwrap_or(0.0) as f32;
-                let h = g["h"].as_f64().unwrap_or(0.0) as f32;
-                glyphs.insert(
-                    c,
-                    FontGlyph {
-                        uv: [
-                            (ox as f32 + x) / aw,
-                            (oy as f32 + y) / ah,
-                            (ox as f32 + x + w) / aw,
-                            (oy as f32 + y + h) / ah,
-                        ],
-                        w,
-                        h,
-                        left: g["left"].as_f64().unwrap_or(0.0) as f32,
-                        top: g["top"].as_f64().unwrap_or(0.0) as f32,
-                        advance: g["advance"].as_f64().unwrap_or(w as f64) as f32,
-                    },
-                );
-            }
-        }
-        let size = data["size"].as_f64().unwrap_or(16.0) as f32;
-        tracing::info!("font atlas: {} glyphs at {}px", glyphs.len(), size);
-        self.font = Some(FontAtlas { size, glyphs });
+    /// Pack a cache sprite into the legacy HUD's UI shelf under `key`.
+    /// Champion ability icons use this with their `icon.ability.*` roles.
+    pub fn add_cache_ui_sprite(&mut self, cache: &Cache, id: u32, key: &str) -> Result<()> {
+        let (x, y, row_height) = self.ui_cursor;
+        let slot = self.add_cache_sprite(cache, id, x, y)?;
+        let width = slot.width.ceil() as u32;
+        let height = slot.height.ceil() as u32;
+        let (next_x, next_y, next_row) = if x + width + 1 > ATLAS_SIZE {
+            (2, y + row_height + 1, height)
+        } else {
+            (x + width + 1, y, row_height.max(height))
+        };
+        self.ui_cursor = (next_x, next_y, next_row);
+        self.ui_uv.insert(key.to_string(), slot.uv);
         Ok(())
     }
 
-    /// The interface's default font: the optional baked atlas, else OSRS's
-    /// plain 12 (the overhead/interface font) straight from the cache.
+    /// Pack a cache-rendered item icon (32x32 inventory render) under the
+    /// item id the legacy shop already asks for.
+    pub fn add_item_icon(&mut self, key: &str, image: &image::RgbaImage) {
+        let (x, y, row_height) = self.item_cursor;
+        let width = image.width();
+        let height = image.height();
+        if width == 0 || height == 0 {
+            return;
+        }
+        let (copy_x, copy_y, row_height) = if x + width + 1 > ATLAS_SIZE {
+            (2, y + row_height + 1, 0)
+        } else {
+            (x, y, row_height)
+        };
+        let uv = self.copy(image, copy_x, copy_y);
+        self.item_uv.insert(key.to_string(), uv);
+        self.item_cursor = (copy_x + width + 1, copy_y, row_height.max(height));
+    }
+
+    /// The interface's default font: OSRS's plain 12 (the overhead and
+    /// interface font) straight from the cache.
     pub fn font(&self) -> Option<&FontAtlas> {
-        self.font.as_ref().or_else(|| self.cache_fonts.get("p12"))
+        self.cache_fonts.get("p12")
     }
 
     /// A named cache font, falling back to the default so text never
@@ -457,9 +371,10 @@ impl UiAtlas {
         if w == 0 || h == 0 {
             return [0.0, 0.0, 0.0, 0.0];
         }
+        let source_width = image.width() as usize;
         for py in 0..h {
             for px in 0..w {
-                let src = ((py * w + px) * 4) as usize;
+                let src = (py as usize * source_width + px as usize) * 4;
                 let dst = (((y + py) * self.width + (x + px)) * 4) as usize;
                 self.pixels[dst..dst + 4].copy_from_slice(&image.as_raw()[src..src + 4]);
             }
@@ -487,48 +402,10 @@ impl UiAtlas {
     }
 }
 
-fn load_rgba(path: &str) -> Result<Option<image::RgbaImage>> {
-    if !Path::new(path).exists() {
-        return Ok(None);
-    }
-    let image = image::open(path).with_context(|| format!("loading UI asset {path}"))?;
-    Ok(Some(image.to_rgba8()))
-}
-
-fn trim_alpha(image: &image::RgbaImage) -> image::RgbaImage {
-    let mut min_x = image.width();
-    let mut min_y = image.height();
-    let mut max_x = 0;
-    let mut max_y = 0;
-    for (x, y, p) in image.enumerate_pixels() {
-        if p[3] > 8 {
-            min_x = min_x.min(x);
-            min_y = min_y.min(y);
-            max_x = max_x.max(x);
-            max_y = max_y.max(y);
-        }
-    }
-    if min_x > max_x || min_y > max_y {
-        return image.clone();
-    }
-    image::imageops::crop_imm(image, min_x, min_y, max_x - min_x + 1, max_y - min_y + 1).to_image()
-}
-
-fn fit_icon(image: &image::RgbaImage, size: u32, filter: FilterType) -> image::RgbaImage {
-    let scale = (size as f32 / image.width() as f32).min(size as f32 / image.height() as f32);
-    let w = (image.width() as f32 * scale).round().max(1.0) as u32;
-    let h = (image.height() as f32 * scale).round().max(1.0) as u32;
-    let resized = image::imageops::resize(image, w, h, filter);
-    let mut canvas = image::RgbaImage::new(size, size);
-    let ox = (size - w) / 2;
-    let oy = (size - h) / 2;
-    image::imageops::overlay(&mut canvas, &resized, ox as i64, oy as i64);
-    canvas
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::Path;
 
     fn pinned_cache() -> Option<Cache> {
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
@@ -540,7 +417,7 @@ mod tests {
     }
 
     #[test]
-    fn the_pinned_cache_bakes_osrs_fonts_and_hitmarks() {
+    fn the_pinned_cache_bakes_osrs_fonts_sprites_and_hitmarks() {
         let Some(cache) = pinned_cache() else {
             return;
         };
@@ -549,6 +426,12 @@ mod tests {
             assert!(
                 atlas.font_named(font).is_some(),
                 "cache font {font} is missing"
+            );
+        }
+        for key in ["icon_swords", "icon_skull"] {
+            assert!(
+                atlas.ui_uv(key).is_some(),
+                "cache UI sprite {key} is missing"
             );
         }
         for (kind, size) in [
@@ -566,5 +449,16 @@ mod tests {
                 .unwrap_or_else(|| panic!("cache hitmark {kind} is missing"));
             assert_eq!((slot.width, slot.height), size);
         }
+    }
+
+    #[test]
+    fn item_icons_pack_and_lookup_by_key() {
+        let mut atlas = UiAtlas::load().expect("an empty atlas");
+        let icon = image::RgbaImage::from_pixel(32, 32, image::Rgba([1, 2, 3, 255]));
+        atlas.add_item_icon("bronze_sword", &icon);
+        let uv = atlas
+            .item_uv("bronze_sword")
+            .expect("the item icon is packed");
+        assert!(uv[2] > uv[0] && uv[3] > uv[1]);
     }
 }

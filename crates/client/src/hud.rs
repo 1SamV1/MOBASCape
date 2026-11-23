@@ -1177,14 +1177,14 @@ impl Hud {
                         [44, 44, 48]
                     },
                 );
-                let icon_key = ["icon_q", "icon_w", "icon_e", "icon_r"][i];
+                let icon_key = crate::ui_live::ability_icon_role(&player.champion_name, i);
                 self.icon(
                     width,
                     height,
                     bx + 14.0,
                     y0 + 14.0,
                     box_size - 28.0,
-                    icon_key,
+                    &icon_key,
                     [255, 255, 255],
                 );
                 // Clockwise radial sweep, the genre-standard cooldown read.
