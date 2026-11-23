@@ -1,6 +1,41 @@
 # Status
 
-Last updated: shared combat sounds and cache frame sounds, 2026-11-23.
+Last updated: kit action sounds, 2026-11-23.
+
+## 2026-11-23 — Kit abilities sound like what they do
+
+- **Per-action sounds.** Every kit action now makes a shared sound when it
+  runs (`Action::sound_name` in `crates/client/src/kit.rs`), replacing the
+  single cast whoosh for the twelve kit champions. All ids are RuneLite
+  `SoundEffectID`s, so buffs use the OSRS prayer chimes:
+  | action | sound |
+  |---|---|
+  | projectile | 1930 whoosh, pitched up |
+  | dash | 1930 whoosh, pitched down |
+  | area (on landing, each repeat) | 3791 SMITH_ANVIL_TONK, deep |
+  | zone | 2596 FIRE_WOOSH |
+  | heal buff | 2678 Rapid Heal |
+  | shield / damage reduction / reflect / untargetable | 2687 Steel Skin |
+  | attack or move speed | 2667 Incredible Reflexes |
+  | other buff | 2690 Thick Skin |
+  | summon | 200 TELEPORT_VWOOP |
+  | channel | 2670 Mystic Will (each tick plays its inner action) |
+  | empower | 2691 Ultimate Strength |
+  | transform | 200 TELEPORT_VWOOP, lower |
+- **Overrides.** The names (`kit_projectile`, `kit_heal`, ...) live in
+  `data/sounds.json`; a champion's `sounds` entry with the same name
+  overrides them. A champion file that scores a slot itself (any `q_*` key)
+  silences the shared action sounds for that slot and plays its `q_cast`
+  instead. Hand-written kits (King Awowogei, the Ranger) are unchanged.
+- **Tools.** `rift-tools sounds --ids 1930,2678` describes sound ids directly
+  (and `--out` writes WAVs); all 17 ids in `data/sounds.json` decode in the
+  pinned cache.
+- Verified with debug cue traces in `--demo-kit --timescale 4`: Cerberus
+  W/E/R gave 2596, 1930, 3791; Graardor 200, 2687 + 3791, 1930; Venenatis
+  1930 (+3791 Pounce landing), 200, 2596; King Awowogei kept his own sounds.
+  New tests: every action type used by a champion file has a table entry,
+  and buffs pick their strongest effect. 361 workspace tests pass; clippy
+  clean. Not yet heard by a person; volumes are a first pass.
 
 ## 2026-11-23 — Every champion makes sound: shared combat sounds and cache frame sounds
 

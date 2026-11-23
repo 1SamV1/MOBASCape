@@ -158,8 +158,9 @@ Goal: enough content for a real session.
 - Audio: SFX bus, positional hits/casts, announcer, UI clicks, music hook.
   **Done (2026-11-23):** cache-synthesised sound effects with distance and
   pan, cache animation frame sounds, and shared hit/cast/shop/UI sounds for
-  every champion (`data/sounds.json`). Remaining: announcer, music hook,
-  per-champion ability sounds beyond King Awowogei.
+  every champion (`data/sounds.json`), and per-action kit ability sounds
+  (prayer chimes for buffs). Remaining: announcer, music hook, signature
+  sounds per champion, and a by-ear volume pass.
 
 Exit: three complete matches on two maps with eight champions and no
 placeholder art or silence.

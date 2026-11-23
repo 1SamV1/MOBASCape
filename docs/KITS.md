@@ -106,6 +106,18 @@ Every entry in `abilities` carries hand-authored numbers per rank:
   show the level they need. Damage includes the hero's current ability
   power and level, so it is what a cast would do now.
 
+## Sounds
+
+Each action plays a shared sound from `data/sounds.json` when it runs:
+`kit_projectile`, `kit_dash`, `kit_zone`, `kit_summon`, `kit_channel`,
+`kit_empower`, `kit_transform`, and for buffs `kit_heal`, `kit_shield`,
+`kit_haste` or `kit_buff` (strongest effect wins). Areas play `kit_area`
+when they land. Put an entry with the same name in the champion's `sounds`
+to change it for that champion only. To score a whole slot by hand, name
+any `q_*` (`w_*`, `e_*`, `r_*`) sound: the shared action sounds go quiet
+for that slot and `q_cast` plays on cast. Check an id with
+`rift-tools sounds --ids <id>[,<id>...] --out <dir>`.
+
 ## Statuses (`on_hit`, `on_tick`)
 
 `slow {pct, duration}`, `root`, `stun`, `knockup`, `fear`, `taunt`
