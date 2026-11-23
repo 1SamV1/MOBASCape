@@ -1,6 +1,34 @@
 # Status
 
-Last updated: cache-native hitmarks and overhead plates, 2026-11-23.
+Last updated: assembled-interface hitmarks, PK markers and max hits, 2026-11-23.
+
+## 2026-11-23 — Assembled hitmarks, PK markers and max hits
+
+- **`--ui-live` parity.** `crates/ui/src/hud/hitmarks.rs` draws the same cache
+  splats and bold numbers through the assembled interface's theme atlas.
+  `HudState` gained `hitmarks: Vec<HitmarkState>` and `ui_live::hitmarks`
+  projects the live `PlayerHud` hitmarks into it. The theme file now names
+  `icon.hitmark.damage/poison/disease/venom/heal/miss/max` and `icon.skull`
+  from cache sprites 1359/1360/1361/1632/1629/1358/3571/439.
+- **Camp plates.** `PlateKind::Camp` joins the assembled unit plates: a 96px
+  bar, the camp's buff-coloured name, and its level chip on the right. The
+  legacy and assembled paths share `hud::nudge_unit_frames`, so overlapping
+  camp and hero plates are pushed apart in both.
+- **PK marker.** Enemy champions get the white OSRS PK skull (sprite 439) and
+  a yellow `NO SAFE` tag above a 2x name, matching the reference video's
+  skull/label/health-bar stack. The skull and tag are in both HUDs.
+- **Max-hit splat.** `HitsplatKind::MaxHit` uses the gold-trimmed 24x24 max
+  damage splat (sprite 3571). King Awowogei's Bananarang critical now shows
+  it instead of a plain red damage splat.
+- **Tinted hits.** Champion hits that did not come from the local player use
+  the reference client's dark cool tint (about a third brightness), while the
+  local player's hits keep the cache's original red/green/teal colours.
+  Splats from minions, towers and camps stay untinted.
+- Verified at 1280x720: `--demo-hitsplats` (all seven kinds), `--ui-live
+  --demo-duel` (skull, NO SAFE, 2x names, tinted incoming hits), `--ui-live
+  --demo-camp` (camp name/level plate and hitmarks), and `--demo-duel` in the
+  legacy HUD. `cargo test --workspace` and `cargo clippy --workspace
+  --all-targets -- -D warnings` pass.
 
 ## 2026-11-23 — Cache-native hitmarks and overhead plates
 
@@ -1425,9 +1453,10 @@ the -24 contour.
 - Item purchases and gold/heal/shop-range remain client-side.
 - No item selling/combining/passives; champions share the QWER shape.
 - The legacy HUD now uses the cache's `p12_full`/`b12_full` fonts and OSRS
-  hitmarks. The assembled `--ui-live` interface still draws with `crates/ui`'s
-  raster theme fonts and does not yet show cache hitmarks or jungle-camp name
-  plates.
+  hitmarks, max-hit variants, tinted other-champion hits, PK skull/NO SAFE
+  tags and jungle-camp plates. The assembled `--ui-live` interface reads the
+  same cache-native theme fonts and sprites; its dev layout labels remain
+  visible when run with `--ui-live`.
 - UI assets live in gitignored `assets/osrs-ui`; without them the shop falls back
   to procedural icons and no tab sprites. The bronze sword icon is a trimmed
   detail render because the plain inventory icon file was unavailable under the

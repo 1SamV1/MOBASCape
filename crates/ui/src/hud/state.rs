@@ -226,8 +226,52 @@ pub struct ChatLine {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PlateKind {
     Hero,
+    Camp,
     Minion,
     Structure,
+}
+
+/// Which OSRS hitmark art a combat number uses. `Max` is the gold-trimmed
+/// maximum-hit splat; `Miss` is the blue zero/blocked splat.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HitmarkKind {
+    Damage,
+    Poison,
+    Venom,
+    Disease,
+    Heal,
+    Miss,
+    Max,
+}
+
+impl HitmarkKind {
+    /// Theme sprite role suffix.
+    pub fn role(self) -> &'static str {
+        match self {
+            Self::Damage => "damage",
+            Self::Poison => "poison",
+            Self::Venom => "venom",
+            Self::Disease => "disease",
+            Self::Heal => "heal",
+            Self::Miss => "miss",
+            Self::Max => "max",
+        }
+    }
+}
+
+/// One projected hitmark, in window pixels. `stack` offsets hits on the same
+/// unit down the body; `tint` cools hits that did not come from the local
+/// player, the way OSRS tints other players' splats.
+#[derive(Debug, Clone, PartialEq)]
+pub struct HitmarkState {
+    pub at: (i32, i32),
+    pub text: String,
+    pub kind: HitmarkKind,
+    /// 0..1, used for the fade at the end of the splat's life.
+    pub alpha: f32,
+    pub stack: u8,
+    /// Multiplied over the cache sprite; `None` keeps its original colour.
+    pub tint: Option<[u8; 3]>,
 }
 
 /// One unit plate, already placed in window pixels by the client's
@@ -242,6 +286,12 @@ pub struct UnitPlate {
     pub health: u32,
     pub max_health: u32,
     pub blue: bool,
+    /// Solid overhead-name colour. `None` falls back to the team colour.
+    pub name_colour: Option<[u8; 3]>,
+    /// Player-killer skull above the name.
+    pub pk: bool,
+    /// A short warning label such as "NO SAFE", above the name.
+    pub tag: Option<String>,
 }
 
 /// Everything the interface shows, as plain data. The component slices are
@@ -254,6 +304,7 @@ pub struct HudState {
     pub objectives: ObjectivesState,
     pub allies: Vec<AllyState>,
     pub plates: Vec<UnitPlate>,
+    pub hitmarks: Vec<HitmarkState>,
     pub target: Option<TargetState>,
     pub inventory: Vec<Option<InventoryItem>>,
     pub gold: u32,

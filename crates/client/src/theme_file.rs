@@ -343,6 +343,14 @@ mod tests {
             "icon.team.red",
             "icon.gold",
             "orb.ring",
+            "icon.skull",
+            "icon.hitmark.damage",
+            "icon.hitmark.poison",
+            "icon.hitmark.disease",
+            "icon.hitmark.venom",
+            "icon.hitmark.heal",
+            "icon.hitmark.miss",
+            "icon.hitmark.max",
         ] {
             let found =
                 theme.font(role).is_some() || theme.panel(role).is_some() || theme.has_sprite(role);
@@ -353,6 +361,10 @@ mod tests {
             "text.quiet",
             "text.dim",
             "text.title",
+            "text.overhead.tag",
+            "text.level",
+            "text.camp.might",
+            "text.camp.swift",
             "announcement",
             "bar.health",
             "shade",

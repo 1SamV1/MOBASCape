@@ -11,9 +11,10 @@ use crate::scene::{CampBuff, SceneData};
 use glam::{Vec2, Vec3};
 use rift_ui::hud::state::{
     AbilityNumbers, AbilityState, AbilityTooltipState, AbilityUpgrade, AllyState, CampState,
-    ChatKind, ChatLine, DamageSource, DeathState, InventoryItem, KillFeedEntry, LaneState,
-    MapPoint, MinimapState, NexusState, ObjectivesState, PlateKind, ScoreState, ShopItem,
-    ShopState, StructureMark, TargetStat, TargetState, TooltipState, UnitPlate,
+    ChatKind, ChatLine, DamageSource, DeathState, HitmarkKind, HitmarkState, InventoryItem,
+    KillFeedEntry, LaneState, MapPoint, MinimapState, NexusState, ObjectivesState, PlateKind,
+    ScoreState, ShopItem, ShopState, StructureMark, TargetStat, TargetState, TooltipState,
+    UnitPlate,
 };
 
 pub fn score(player: &PlayerHud) -> ScoreState {
@@ -611,7 +612,10 @@ fn reward(victim: &str) -> u32 {
 }
 
 pub fn plates(player: &PlayerHud) -> Vec<UnitPlate> {
-    player.unit_frames.iter().filter_map(plate).collect()
+    crate::hud::nudge_unit_frames(player.unit_frames.clone())
+        .iter()
+        .filter_map(plate)
+        .collect()
 }
 
 /// One already-projected unit frame as a plate. Neutral camps are left to
@@ -622,6 +626,8 @@ pub fn plate(frame: &UnitFrame) -> Option<UnitPlate> {
     // interface.
     let kind = if frame.hero {
         PlateKind::Hero
+    } else if frame.camp {
+        PlateKind::Camp
     } else if frame.structure {
         PlateKind::Structure
     } else {
@@ -635,7 +641,34 @@ pub fn plate(frame: &UnitFrame) -> Option<UnitPlate> {
         health: count(frame.health),
         max_health: count(frame.max_health),
         blue: frame.team == 0,
+        name_colour: Some(frame.name_color),
+        pk: frame.pk,
+        tag: frame.tag.clone(),
     })
+}
+
+/// Projected OSRS hitmarks as the assembled interface's plain state.
+pub fn hitmarks(player: &PlayerHud) -> Vec<HitmarkState> {
+    player
+        .hitsplats
+        .iter()
+        .map(|hit| HitmarkState {
+            at: (hit.x.round() as i32, hit.y.round() as i32),
+            text: hit.text.clone(),
+            kind: match hit.kind {
+                crate::animated::HitsplatKind::Damage => HitmarkKind::Damage,
+                crate::animated::HitsplatKind::Poison => HitmarkKind::Poison,
+                crate::animated::HitsplatKind::Venom => HitmarkKind::Venom,
+                crate::animated::HitsplatKind::Disease => HitmarkKind::Disease,
+                crate::animated::HitsplatKind::Heal => HitmarkKind::Heal,
+                crate::animated::HitsplatKind::Miss => HitmarkKind::Miss,
+                crate::animated::HitsplatKind::MaxHit => HitmarkKind::Max,
+            },
+            alpha: hit.alpha,
+            stack: hit.stack,
+            tint: hit.tint,
+        })
+        .collect()
 }
 
 pub fn ability(player: &PlayerHud) -> AbilityState {
@@ -971,6 +1004,8 @@ mod tests {
             structure: false,
             name_color: [255, 105, 95],
             name_scale: 2.0,
+            pk: true,
+            tag: Some("NO SAFE".to_string()),
             width: 184.0,
         };
         let hero = plate(&frame).expect("a hero plate");
@@ -978,11 +1013,14 @@ mod tests {
         assert_eq!(hero.kind, PlateKind::Hero);
         assert_eq!((hero.health, hero.max_health), (208, 420));
         assert_eq!((hero.level, hero.blue), (7, false));
+        assert!(hero.pk);
+        assert_eq!(hero.tag.as_deref(), Some("NO SAFE"));
 
         frame.team = 2;
         frame.hero = false;
+        frame.camp = true;
         let camp = plate(&frame).expect("a neutral camp plate");
-        assert_eq!(camp.kind, PlateKind::Minion);
+        assert_eq!(camp.kind, PlateKind::Camp);
         assert!(!camp.blue);
     }
 

@@ -338,7 +338,22 @@ impl DrawList {
     /// A line of text, its pen starting at `x` on a baseline at `baseline`,
     /// both in window pixels. Returns how wide it came out.
     pub fn text(&mut self, font: &Font, text: &str, x: i32, baseline: i32, colour: Colour) -> i32 {
-        let s = self.scale;
+        self.text_times(font, text, x, baseline, self.scale as u32, colour)
+    }
+
+    /// One line of text at a chosen whole multiple of the font's own size,
+    /// independent of the interface scale. Used by hitmark numbers so they
+    /// stay large when the rest of the interface is scaled down.
+    pub fn text_times(
+        &mut self,
+        font: &Font,
+        text: &str,
+        x: i32,
+        baseline: i32,
+        times: u32,
+        colour: Colour,
+    ) -> i32 {
+        let s = times.max(1) as i32;
         let top = baseline - font.ascent * s;
         let mut pen = x;
         for c in text.chars() {

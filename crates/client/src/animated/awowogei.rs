@@ -25,8 +25,8 @@ use glam::{Mat3, Vec3};
 use rift_cache::{AnimationClip, Model};
 
 use super::{
-    AnimatedScene, Effect, Indicator, UnitAssets, UnitKind, append_banana_model, append_quad,
-    append_ring_width, planar_delta, segment_distance_xz,
+    AnimatedScene, Effect, HitsplatKind, Indicator, UnitAssets, UnitKind, append_banana_model,
+    append_quad, append_ring_width, planar_delta, segment_distance_xz,
 };
 use crate::scene::{HeightGrid, WorldCollision};
 
@@ -794,12 +794,17 @@ impl AnimatedScene {
                     Q_RETURN_DAMAGE
                 };
                 let amount = banana.damage * leg_mult * if crit { 1.5 } else { 1.0 };
-                self.damage_unit_mixed(
+                self.damage_unit_mixed_kind(
                     index,
                     amount * 0.6,
                     amount * 0.4,
                     0,
                     Some(self.player_index),
+                    if crit {
+                        HitsplatKind::MaxHit
+                    } else {
+                        HitsplatKind::Damage
+                    },
                 );
                 if crit {
                     let stun = banana.stun;

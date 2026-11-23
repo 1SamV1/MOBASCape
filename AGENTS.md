@@ -180,11 +180,15 @@ Cache location: `.cache/osrs-235/cache` by default. Pass `--cache` and
   archives at startup: `p12_full` for interface text and overhead names,
   `b12_full` for hitmark numbers. The built-in 5x7 bitmap font (`crates/client/
   src/font.rs`) is only the fallback when those archives are unavailable.
-  Combat feedback uses the cache's exact 24x23 hitmarks: red damage, green
-  poison, teal venom, orange disease, the purple heal cross and the blue miss.
-  Hitmarks stack down the unit and fade after 1.2 s. Overhead plates draw larger
-  solid team/camp-coloured names with a level chip to the right of the health
-  bar.
+  Combat feedback uses the cache's exact hitmarks: red damage, the gold-trimmed
+  maximum hit, green poison, teal venom, orange disease, the purple heal cross,
+  the blue miss and the white PK skull. Hitmarks stack down the unit, fade after
+  1.2 s, and hits from another champion are tinted the reference client's dark
+  cool tint. Overhead plates draw larger solid team/camp-coloured names with a
+  level chip to the right of the health bar; enemy champions also carry a PK
+  skull and a yellow "NO SAFE" tag. The assembled `--ui-live` interface reads
+  the same hitmark and plate state from `crates/ui` (`hud/hitmarks.rs`,
+  `hud/unit_plates.rs`) so the two paths stay in step.
 - **117HD Core** rendering is in: `SceneVertex` carries position, normal,
   colour, UV, AO, material, and texture ID; terrain uses smooth heightfield
   normals, models use flat per-face normals; the scene shader does sun +

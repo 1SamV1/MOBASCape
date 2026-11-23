@@ -25,16 +25,18 @@ const PORTRAIT_GAP: u32 = 4;
 /// font, `b12_full` is the bold variant the hitsplat numbers use.
 const CACHE_FONTS: [(&str, u32); 3] = [("p11", 494), ("p12", 495), ("b12", 496)];
 
-/// OSRS hitmark sprites from index 8. These are the exact 24x23 splats from
-/// the cache: blue miss, red damage, green poison, orange disease, teal
-/// venom and the purple heal cross.
-const HITMARK_SPRITES: [(&str, u32); 6] = [
+/// OSRS combat sprites from index 8. These are the exact splats from the
+/// cache: blue miss, red damage, gold-trimmed maximum hit, green poison,
+/// orange disease, teal venom, the purple heal cross and the white PK skull.
+const HITMARK_SPRITES: [(&str, u32); 8] = [
     ("damage", 1359),
+    ("max", 3571),
     ("poison", 1360),
     ("disease", 1361),
     ("venom", 1632),
     ("heal", 1629),
     ("miss", 1358),
+    ("skull", 439),
 ];
 
 /// One cache sprite placed in the atlas, with its size in pixels.
@@ -549,11 +551,20 @@ mod tests {
                 "cache font {font} is missing"
             );
         }
-        for kind in ["damage", "poison", "disease", "venom", "heal", "miss"] {
+        for (kind, size) in [
+            ("damage", (24.0, 23.0)),
+            ("max", (24.0, 24.0)),
+            ("poison", (24.0, 23.0)),
+            ("disease", (24.0, 23.0)),
+            ("venom", (24.0, 23.0)),
+            ("heal", (24.0, 23.0)),
+            ("miss", (24.0, 23.0)),
+            ("skull", (25.0, 25.0)),
+        ] {
             let slot = atlas
                 .hitmark(kind)
                 .unwrap_or_else(|| panic!("cache hitmark {kind} is missing"));
-            assert_eq!((slot.width, slot.height), (24.0, 23.0));
+            assert_eq!((slot.width, slot.height), size);
         }
     }
 }

@@ -83,6 +83,10 @@ pub struct UnitFrame {
     pub name_color: [u8; 3],
     /// Overhead names are larger for champions than for jungle creatures.
     pub name_scale: f32,
+    /// Player-killer skull over the name.
+    pub pk: bool,
+    /// A short warning line such as "NO SAFE" between the skull and name.
+    pub tag: Option<String>,
     pub width: f32,
 }
 
@@ -97,6 +101,8 @@ pub struct Hitsplat {
     pub alpha: f32,
     /// Column slot when several hitmarks share one unit.
     pub stack: u8,
+    /// Cool tint for another champion's hit; `None` keeps the cache colour.
+    pub tint: Option<[u8; 3]>,
 }
 
 /// Solid overhead-name colours: team heroes are blue/red, jungle camps take
@@ -117,6 +123,52 @@ pub fn unit_name_color(team: u8, hero: bool, camp: bool, buff: Option<CampBuff>)
         };
     }
     [225, 220, 205]
+}
+
+/// How far a plate reaches above its anchor, for the overlap nudge.
+fn plate_extent(frame: &UnitFrame) -> f32 {
+    let mut extent = 24.0 + frame.name_scale.max(1.0) * 12.0;
+    if frame.tag.is_some() {
+        extent += 16.0;
+    }
+    if frame.pk {
+        extent += 29.0;
+    }
+    extent
+}
+
+/// Sort projected plates and push overlapping ones upward. Both the legacy
+/// HUD and the assembled `--ui-live` interface use this, so a champion and a
+/// jungle camp at the same spot never print their names on top of each other.
+pub fn nudge_unit_frames(mut frames: Vec<UnitFrame>) -> Vec<UnitFrame> {
+    frames.sort_by(|a, b| {
+        (a.team != 0)
+            .cmp(&(b.team != 0))
+            .then(a.y.partial_cmp(&b.y).unwrap_or(std::cmp::Ordering::Equal))
+    });
+    for i in 1..frames.len() {
+        let mut y = frames[i].y;
+        let x = frames[i].x;
+        let w = frames[i].width;
+        let extent = plate_extent(&frames[i]);
+        for _ in 0..3 {
+            let mut moved = false;
+            for other in &frames[..i] {
+                let dx = (x - other.x).abs();
+                let dy = (y - other.y).abs();
+                let needed = (extent + plate_extent(other)) * 0.5;
+                if dx < (w + other.width) * 0.5 && dy < needed {
+                    y -= extent * 0.8;
+                    moved = true;
+                }
+            }
+            if !moved {
+                break;
+            }
+        }
+        frames[i].y = y;
+    }
+    frames
 }
 
 #[repr(C)]
@@ -1309,36 +1361,7 @@ impl Hud {
         // Screen-space unit plates: name, level, HP and (for champions) mana.
         // These replace the old world-space bars on champions and structures,
         // which were too small to read at the reference camera distance.
-        // The local player sorts first; any plate that would overlap an
-        // already placed one is nudged upward.
-        let mut frames = player.unit_frames.clone();
-        frames.sort_by(|a, b| {
-            (a.team != 0)
-                .cmp(&(b.team != 0))
-                .then(a.y.partial_cmp(&b.y).unwrap_or(std::cmp::Ordering::Equal))
-        });
-        for i in 1..frames.len() {
-            let mut y = frames[i].y;
-            let x = frames[i].x;
-            let w = frames[i].width;
-            for _ in 0..3 {
-                let mut moved = false;
-                for other in &frames[..i] {
-                    let dx = (x - other.x).abs();
-                    let dy = (y - other.y).abs();
-                    // Champion names are twice as tall now, so leave room for
-                    // the full name + bar plate instead of the old 26px box.
-                    if dx < (w + other.width) * 0.5 && dy < 40.0 {
-                        y -= 34.0;
-                        moved = true;
-                    }
-                }
-                if !moved {
-                    break;
-                }
-            }
-            frames[i].y = y;
-        }
+        let frames = nudge_unit_frames(player.unit_frames.clone());
         for frame in &frames {
             let w = frame.width;
             let x = (frame.x - w * 0.5).clamp(4.0, (width - w - 4.0).max(4.0));
@@ -1379,6 +1402,38 @@ impl Hud {
                 &name,
                 frame.name_color,
             );
+            // "NO SAFE" and the PK skull, like the reference client's
+            // warning label above a flagged player.
+            let center = bar_x + w * 0.5;
+            if let Some(tag) = frame.tag.as_deref() {
+                let tag_top = name_top - 14.0;
+                self.text_centered_named(
+                    "b12",
+                    width,
+                    height,
+                    center,
+                    tag_top,
+                    1.0,
+                    tag,
+                    [255, 255, 0],
+                );
+                if frame.pk {
+                    if let Some(skull) = self.atlas.hitmark("skull") {
+                        let size = 25.0;
+                        self.sprite(
+                            width,
+                            height,
+                            center - size * 0.5,
+                            tag_top - size - 4.0,
+                            size,
+                            size,
+                            skull.uv,
+                            [255, 255, 255],
+                            1.0,
+                        );
+                    }
+                }
+            }
 
             self.quad(width, height, bar_x, y, w, bar_h, [16, 16, 20]);
             self.quad(
@@ -1456,7 +1511,7 @@ impl Hud {
                     sw,
                     sh,
                     slot.uv,
-                    [255, 255, 255],
+                    hit.tint.unwrap_or([255, 255, 255]),
                     hit.alpha,
                 );
             } else {

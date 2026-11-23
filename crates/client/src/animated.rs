@@ -550,6 +550,8 @@ pub enum HitsplatKind {
     Disease,
     Heal,
     Miss,
+    /// Gold-trimmed splat for a maximum/critical hit.
+    MaxHit,
 }
 
 impl HitsplatKind {
@@ -562,6 +564,7 @@ impl HitsplatKind {
             Self::Disease => "disease",
             Self::Heal => "heal",
             Self::Miss => "miss",
+            Self::MaxHit => "max",
         }
     }
 
@@ -574,6 +577,7 @@ impl HitsplatKind {
             Self::Disease => [220, 145, 20],
             Self::Heal => [165, 45, 190],
             Self::Miss => [45, 65, 220],
+            Self::MaxHit => [210, 45, 25],
         }
     }
 }
@@ -599,6 +603,9 @@ pub struct FloatText {
     pub stack: u8,
     /// The unit this number belongs to, for stacking and cleanup.
     pub unit: Option<usize>,
+    /// Cool tint for hits that did not come from the local player, like the
+    /// reference client's tinted other-player hitsplats.
+    pub tint: Option<[u8; 3]>,
 }
 
 pub struct Projectile {
@@ -1362,6 +1369,7 @@ impl AnimatedScene {
                 scale: 1.0,
                 stack: stack as u8,
                 unit: Some(pi),
+                tint: None,
             });
         }
         self.floats.push(FloatText {
@@ -1372,6 +1380,7 @@ impl AnimatedScene {
             scale: 1.7,
             stack: 0,
             unit: None,
+            tint: None,
         });
         self.announcement = Some(("YOU HAVE SLAIN A MINION!".to_string(), 9999.0));
         self.announcement_pinned = true;
@@ -1406,6 +1415,7 @@ impl AnimatedScene {
         let pos = self.units[pi].pos + Vec3::Y * (self.units[pi].bar_height + 30.0);
         let examples = [
             ("78", HitsplatKind::Damage),
+            ("99", HitsplatKind::MaxHit),
             ("8", HitsplatKind::Poison),
             ("20", HitsplatKind::Venom),
             ("14", HitsplatKind::Disease),
@@ -1421,6 +1431,7 @@ impl AnimatedScene {
                 scale: 1.0,
                 stack: stack as u8,
                 unit: Some(pi),
+                tint: None,
             });
         }
     }
@@ -2723,7 +2734,7 @@ impl AnimatedScene {
         player.shield_timer = 4.0;
         let pos = player.pos;
         if healed > 0.5 {
-            self.push_hitsplat(pi, healed, HitsplatKind::Heal);
+            self.push_hitsplat(pi, healed, HitsplatKind::Heal, None);
         }
         self.effects.push(Effect {
             pos,
@@ -4001,9 +4012,31 @@ impl AnimatedScene {
         unit.moving = true;
     }
 
+    /// Cool tint for a champion's hit that was not the local player's. It is
+    /// the reference client's tinted other-player hitsplat, kept subtle so
+    /// the splat colour still reads.
+    fn hitsplat_tint(&self, aggressor: Option<usize>) -> Option<[u8; 3]> {
+        let aggressor = aggressor?;
+        if aggressor == self.player_index {
+            return None;
+        }
+        // The reference client's tinted splat is roughly a third brightness
+        // with a cool cast, not a faint wash.
+        self.units
+            .get(aggressor)
+            .is_some_and(|unit| unit.is_champion)
+            .then_some([100, 90, 125])
+    }
+
     /// Pop an OSRS hitmark over a unit. Hits on one unit occupy a downward
     /// column: slot 0 sits at the unit's head, later hits stack below it.
-    fn push_hitsplat(&mut self, index: usize, amount: f32, kind: HitsplatKind) {
+    fn push_hitsplat(
+        &mut self,
+        index: usize,
+        amount: f32,
+        kind: HitsplatKind,
+        tint: Option<[u8; 3]>,
+    ) {
         let Some(unit) = self.units.get(index) else {
             return;
         };
@@ -4027,6 +4060,7 @@ impl AnimatedScene {
             scale: 1.0,
             stack,
             unit: Some(index),
+            tint,
         });
     }
 
@@ -4151,7 +4185,8 @@ impl AnimatedScene {
         } else {
             HitsplatKind::Miss
         };
-        self.push_hitsplat(index, amount, hit_kind);
+        let tint = self.hitsplat_tint(aggressor);
+        self.push_hitsplat(index, amount, hit_kind, tint);
         if amount > 0.0 {
             let color = if index == self.player_index {
                 [255, 110, 100]
@@ -6758,6 +6793,7 @@ mod tests {
             HitsplatKind::Disease,
             HitsplatKind::Heal,
             HitsplatKind::Miss,
+            HitsplatKind::MaxHit,
         ];
         let mut names: Vec<&str> = kinds.iter().map(|kind| kind.sprite_name()).collect();
         names.sort_unstable();

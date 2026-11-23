@@ -6,6 +6,7 @@ pub mod ability_tooltip;
 pub mod announcements;
 pub mod chat;
 pub mod death;
+pub mod hitmarks;
 pub mod inventory;
 pub mod kill_feed;
 pub mod layout;

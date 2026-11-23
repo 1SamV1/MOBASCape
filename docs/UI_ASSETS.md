@@ -12,8 +12,16 @@ need the external PNG tree:
 - its text colours are the OSRS interface palette in
   `data/ui/theme.json` (white, yellow, orange, green, red and quiet grey).
 
-The old `crates/client/src/hud.rs` still uses the gitignored `assets/osrs-ui`
-tree described below until it retires. Assets are **never committed**.
+The legacy `crates/client/src/hud.rs` also bakes cache fonts, hitmarks and
+the PK skull itself; it still uses the gitignored `assets/osrs-ui` tree
+described below for shop tabs and item icons until it retires. Assets are
+**never committed**.
+
+The live theme's combat roles are `icon.hitmark.damage`, `.poison`,
+`.disease`, `.venom`, `.heal`, `.miss`, `.max`, and `icon.skull`, backed by
+cache sprites 1359, 1360, 1361, 1632, 1629, 1358, 3571 and 439. The theme
+colours `text.overhead.tag`, `text.level`, `text.camp.might` and
+`text.camp.swift` carry the overhead plates.
 
 ## 1. Sprite package
 

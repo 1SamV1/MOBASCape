@@ -303,6 +303,7 @@ fn base() -> HudState {
             },
         ],
         plates: Vec::new(),
+        hitmarks: Vec::new(),
         target: Some(TargetState {
             name: "Top outer statue".to_string(),
             kind: "Structure".to_string(),
@@ -590,6 +591,9 @@ fn plate(
         health,
         max_health,
         blue,
+        name_colour: None,
+        pk: false,
+        tag: None,
     }
 }
 

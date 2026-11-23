@@ -2209,6 +2209,7 @@ impl App {
                         kind,
                         alpha: (float.life / 0.3).clamp(0.0, 1.0),
                         stack: float.stack,
+                        tint: float.tint,
                     }),
                     FloatStyle::Label(color) => damage_numbers.push((
                         screen_x,
@@ -2265,6 +2266,7 @@ impl App {
                     UnitKind::Tower | UnitKind::Inhibitor | UnitKind::Nexus | UnitKind::Watchtower
                 );
                 let camp = unit.kind == UnitKind::Camp;
+                let pk = unit.kind == UnitKind::EnemyChampion;
                 unit_frames.push(crate::hud::UnitFrame {
                     x: (ndc_x * 0.5 + 0.5) * hud_w,
                     y: (1.0 - (ndc_y * 0.5 + 0.5)) * hud_h,
@@ -2280,6 +2282,8 @@ impl App {
                     structure,
                     name_color: crate::hud::unit_name_color(unit.team, hero, camp, unit.camp_buff),
                     name_scale: if hero { 2.0 } else { 1.0 },
+                    pk,
+                    tag: pk.then(|| "NO SAFE".to_string()),
                     width: if hero {
                         184.0
                     } else if structure {
@@ -3268,6 +3272,7 @@ fn draw_ui_overlay(
                 state.score = crate::ui_live::score(player);
                 state.ability = crate::ui_live::ability(player);
                 state.plates = crate::ui_live::plates(player);
+                state.hitmarks = crate::ui_live::hitmarks(player);
                 state.chat = crate::ui_live::chat(player);
                 state.feed = crate::ui_live::feed(player);
                 state.announcement = crate::ui_live::announcement(player);

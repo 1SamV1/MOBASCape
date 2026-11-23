@@ -42,6 +42,7 @@ fn theme() -> Theme {
     builder
         .panel("panel.slot", numbered(20, 20), [5, 5, 5, 5])
         .unwrap();
+    builder.sprite("icon.skull", numbered(25, 25));
     builder.font("font.small", boxes(), 8, 10);
     builder.font("font.body", boxes(), 10, 12);
     for role in [
@@ -66,6 +67,9 @@ fn plate(at: (i32, i32), kind: PlateKind) -> UnitPlate {
         health: 438,
         max_health: 730,
         blue: true,
+        name_colour: None,
+        pk: false,
+        tag: None,
     }
 }
 
@@ -125,6 +129,43 @@ fn nothing_is_drawn_outside_the_plates() {
                     picture[y as usize * 400 + x as usize],
                     GROUND,
                     "pixel {x},{y}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn camp_names_and_pk_tags_stay_inside_their_rooms() {
+    let theme = theme();
+    let mut camp = plate((300, 200), PlateKind::Camp);
+    camp.name = "MIGHT JUNGLE CREATURE".to_string();
+    camp.blue = false;
+    camp.name_colour = Some([255, 150, 80]);
+    let mut pk = plate((100, 200), PlateKind::Hero);
+    pk.blue = false;
+    pk.pk = true;
+    pk.tag = Some("NO SAFE".to_string());
+    pk.name_colour = Some([255, 105, 95]);
+    for source in [&camp, &pk] {
+        for s in 1..=4u32 {
+            let area = unit_plates::bounds(source, s as i32);
+            let mut list = DrawList::new((640, 480), s, &theme.atlas);
+            unit_plates::draw(&theme, &mut list, std::slice::from_ref(source));
+            let (vertices, indices) = list.finish();
+            assert!(!vertices.is_empty() && indices.len() % 6 == 0);
+            for vertex in vertices {
+                assert!(
+                    vertex.pos[0] >= area.x as f32 && vertex.pos[0] <= area.right() as f32,
+                    "{} at {s}: x {} outside {area:?}",
+                    source.name,
+                    vertex.pos[0]
+                );
+                assert!(
+                    vertex.pos[1] >= area.y as f32 && vertex.pos[1] <= area.bottom() as f32,
+                    "{} at {s}: y {} outside {area:?}",
+                    source.name,
+                    vertex.pos[1]
                 );
             }
         }

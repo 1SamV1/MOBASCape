@@ -62,12 +62,15 @@ designed for fast-paced low-team-count matches.
 > deterministic relief, the river surface follows the water mask at 64-unit
 > resolution with a depth-biased shallow sheet, three cache-textured wooden
 > decks cover the crossings, and 1,839 cache-only plants plus 244 slope
-> boulders break up the fields. Combat feedback is cache-native: the HUD bakes
-> `p11_full`/`p12_full`/`b12_full` from the cache, draws the exact 24x23 OSRS
-> hitmarks (red damage, green poison, teal venom, orange disease, purple heal,
-> blue miss) with bold numbers stacked down the target, and puts larger solid
-> team/camp-coloured overhead names over health bars with the level chip to
-> the right of the bar. See
+> boulders break up the fields. Combat feedback is cache-native in both HUDs:
+> they bake `p11_full`/`p12_full`/`b12_full` from the cache, draw the exact OSRS
+> hitmarks (red damage, gold-trimmed max hit, green poison, teal venom, orange
+> disease, purple heal, blue miss) with bold numbers stacked down the target,
+> tint other champions' hits, and put larger solid team/camp-coloured overhead
+> names over health bars with the level chip to the right of the bar. Enemy
+> champions also carry the white PK skull and a yellow "NO SAFE" tag. The
+> assembled `--ui-live` interface now draws the same hitmarks and camp plates
+> through `crates/ui`. See
 > [docs/STATUS.md](docs/STATUS.md),
 > [docs/UI_ASSETS.md](docs/UI_ASSETS.md) and
 > [docs/INTERFACE_STAGE3_REVIEW.md](docs/INTERFACE_STAGE3_REVIEW.md).
@@ -139,9 +142,15 @@ cargo run -p rift-client -- --demo-anim --walk-arm 0.25 --walk-sway 0.1
 # Deterministic combat check: target a dummy and fire Q
 cargo run -p rift-client -- --demo-combat
 
-# Pin one OSRS hitmark of every kind over the hero (damage, poison, venom,
-# disease, heal, miss) to check the cache sprites and bold font
+# Pin one OSRS hitmark of every kind over the hero (damage, max hit, poison,
+# venom, disease, heal, miss) to check the cache sprites and bold font
 cargo run -p rift-client -- --demo-hitsplats
+
+# Enemy champion PK skull + "NO SAFE" tag, and tinted incoming hits
+cargo run -p rift-client -- --demo-duel --timescale 4
+
+# The assembled --ui-live interface: same hitmarks, camp plates, PK marker
+cargo run -p rift-client -- --ui-live --demo-camp --timescale 4
 
 # Spawn a rival champion for manual Bananarang / Trial by Combat testing
 cargo run -p rift-client -- --champion monkey --demo-duel
