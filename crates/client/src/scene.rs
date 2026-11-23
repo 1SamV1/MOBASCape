@@ -1815,78 +1815,185 @@ pub fn build(
         (0.82 - cavity * 0.30).clamp(0.52, 1.0)
     };
 
-    let mut terrain_mesh = MeshData::new();
-    for fy in 0..fine_size - 1 {
-        for fx in 0..fine_size - 1 {
-            let tile_x = (fx / TERRAIN_SUBDIV).min(size - 2);
-            let tile_y = (fy / TERRAIN_SUBDIV).min(size - 2);
-            let tile = tile_y * size + tile_x;
-            // Biome edges: threshold the bilinear coverage against a slow
-            // noise so the variant boundary is an organic contour stepped
-            // at cell size, not a salt-and-pepper of whole tiles.
-            let mut variant = grass_variant[tile];
-            if biome_coverage[tile] > 0.0 || biome_variant[tile] != 0 {
-                let cx = (fx as f32 + 0.5) * inv;
-                let cy = (fy as f32 + 0.5) * inv;
-                let cover = sample_bilinear(&biome_coverage, size, cx, cy);
-                let wx = origin_wx + cx * 128.0;
-                let wz = origin_wz + cy * 128.0;
-                let edge = value_noise(wx * 0.0021 + 3.0, wz * 0.0021 - 6.0) * 0.7
-                    + value_noise(wx * 0.0065, wz * 0.0065 + 2.0) * 0.3;
-                if cover >= 0.999 || cover > edge {
-                    variant = biome_variant[tile];
-                } else if grass_variant[tile] == biome_variant[tile] {
-                    // The tile was dithered into the biome; fall back to
-                    // the open-country default carried by the neighbours.
-                    variant = 0;
-                }
+    // Packed ground identity for one display cell. Biome edges threshold the
+    // bilinear coverage against a slow noise so the variant boundary is an
+    // organic contour stepped at cell size, not a salt-and-pepper of tiles.
+    let ground_for_cell = |fx: usize, fy: usize| -> u32 {
+        let tile_x = (fx / TERRAIN_SUBDIV).min(size - 2);
+        let tile_y = (fy / TERRAIN_SUBDIV).min(size - 2);
+        let tile = tile_y * size + tile_x;
+        let mut variant = grass_variant[tile];
+        if biome_coverage[tile] > 0.0 || biome_variant[tile] != 0 {
+            let cx = (fx as f32 + 0.5) * inv;
+            let cy = (fy as f32 + 0.5) * inv;
+            let cover = sample_bilinear(&biome_coverage, size, cx, cy);
+            let wx = origin_wx + cx * 128.0;
+            let wz = origin_wz + cy * 128.0;
+            let edge = value_noise(wx * 0.0021 + 3.0, wz * 0.0021 - 6.0) * 0.7
+                + value_noise(wx * 0.0065, wz * 0.0065 + 2.0) * 0.3;
+            if cover >= 0.999 || cover > edge {
+                variant = biome_variant[tile];
+            } else if grass_variant[tile] == biome_variant[tile] {
+                // The tile was dithered into the biome; fall back to the
+                // open-country default carried by the neighbours.
+                variant = 0;
             }
-            let ground = overlay_for_cell(fx, fy) | variant as u32;
-            let corner = |cx: usize, cy: usize| {
-                let i = cy * fine_size + cx;
-                let p = Vec3::new(
-                    origin_wx + cx as f32 * fine_step,
-                    fine_heights[i],
-                    origin_wz + cy as f32 * fine_step,
+        }
+        overlay_for_cell(fx, fy) | variant as u32
+    };
+    let vertex = |cx: usize, cy: usize, ground: u32| {
+        let i = cy * fine_size + cx;
+        let p = Vec3::new(
+            origin_wx + cx as f32 * fine_step,
+            fine_heights[i],
+            origin_wz + cy as f32 * fine_step,
+        );
+        let n = normal_at(cx, cy);
+        let mut v = SceneVertex::new(p, n, fine_colors[i]);
+        // The lane mask rides in the vertex alpha for the terrain.
+        v.color[3] = fine_lane[i];
+        // uv.x carries the baked slope so the shader can add cliff detail
+        // without warping UVs from the per-fragment normal; uv.y carries the
+        // river mask so the road shader can stop the lane soil from painting
+        // the river bed.
+        v.uv = [(1.0 - n.y).clamp(0.0, 1.0), fine_water[i]];
+        v.ao = ao_at(cx, cy);
+        v.material = 4;
+        // Low byte: grass variant; upper bytes: cache overlay texture and
+        // weight. Flat interpolation keeps every triangle of a cell equal.
+        v.texture_id = ground;
+        v
+    };
+
+    // Adaptive resolution. The 64-unit grid quadruples the triangle count,
+    // which cost ~2.4 ms of scene GPU time on the 680M, but most of the map
+    // is calm floor that a 128-unit quad already reproduces. A tile is
+    // refined only where its fine heights leave the coarse quad's plane
+    // (cliff lips, risers, banks) or its ground identity changes inside it.
+    const _: () = assert!(TERRAIN_SUBDIV == 2, "adaptive terrain assumes 2x");
+    const REFINE_ERROR: f32 = 3.0;
+    let tiles = size - 1;
+    let fine_h = |x: usize, y: usize| fine_heights[y * fine_size + x];
+    let mut refine = vec![false; tiles * tiles];
+    for ty in 0..tiles {
+        for tx in 0..tiles {
+            let (x0, y0) = (tx * 2, ty * 2);
+            let h00 = fine_h(x0, y0);
+            let h20 = fine_h(x0 + 2, y0);
+            let h02 = fine_h(x0, y0 + 2);
+            let h22 = fine_h(x0 + 2, y0 + 2);
+            let mut error = 0.0f32;
+            for (dx, dy) in [(1, 0), (0, 1), (1, 1), (2, 1), (1, 2)] {
+                let u = dx as f32 * 0.5;
+                let v = dy as f32 * 0.5;
+                let plane =
+                    (h00 * (1.0 - u) + h20 * u) * (1.0 - v) + (h02 * (1.0 - u) + h22 * u) * v;
+                error = error.max((fine_h(x0 + dx, y0 + dy) - plane).abs());
+            }
+            let g = ground_for_cell(x0, y0);
+            let mixed = g != ground_for_cell(x0 + 1, y0)
+                || g != ground_for_cell(x0, y0 + 1)
+                || g != ground_for_cell(x0 + 1, y0 + 1);
+            refine[ty * tiles + tx] = error > REFINE_ERROR || mixed;
+        }
+    }
+    let refined = |tx: i64, ty: i64| {
+        tx >= 0
+            && ty >= 0
+            && (tx as usize) < tiles
+            && (ty as usize) < tiles
+            && refine[ty as usize * tiles + tx as usize]
+    };
+
+    let mut terrain_mesh = MeshData::new();
+    let mut refined_tiles = 0usize;
+    for ty in 0..tiles {
+        for tx in 0..tiles {
+            let (x0, y0) = (tx * 2, ty * 2);
+            if refine[ty * tiles + tx] {
+                refined_tiles += 1;
+                for fy in y0..y0 + 2 {
+                    for fx in x0..x0 + 2 {
+                        let ground = ground_for_cell(fx, fy);
+                        let v00 = vertex(fx, fy, ground);
+                        let v10 = vertex(fx + 1, fy, ground);
+                        let v01 = vertex(fx, fy + 1, ground);
+                        let v11 = vertex(fx + 1, fy + 1, ground);
+                        // Split along the diagonal that best follows the
+                        // surface, so cliff lips do not zig-zag.
+                        let d0 = (fine_h(fx, fy) - fine_h(fx + 1, fy + 1)).abs();
+                        let d1 = (fine_h(fx + 1, fy) - fine_h(fx, fy + 1)).abs();
+                        if d0 <= d1 {
+                            terrain_mesh.push_triangle(v00, v01, v11);
+                            terrain_mesh.push_triangle(v00, v11, v10);
+                        } else {
+                            terrain_mesh.push_triangle(v00, v01, v10);
+                            terrain_mesh.push_triangle(v10, v01, v11);
+                        }
+                    }
+                }
+                continue;
+            }
+            let ground = ground_for_cell(x0, y0);
+            let (itx, ity) = (tx as i64, ty as i64);
+            // Edges shared with a refined neighbour carry its midpoint, so
+            // the coarse tile fans around its centre and stays watertight.
+            let left = refined(itx - 1, ity);
+            let right = refined(itx + 1, ity);
+            let below = refined(itx, ity - 1);
+            let above = refined(itx, ity + 1);
+            if !(left || right || below || above) {
+                let v00 = vertex(x0, y0, ground);
+                let v10 = vertex(x0 + 2, y0, ground);
+                let v01 = vertex(x0, y0 + 2, ground);
+                let v11 = vertex(x0 + 2, y0 + 2, ground);
+                let d0 = (fine_h(x0, y0) - fine_h(x0 + 2, y0 + 2)).abs();
+                let d1 = (fine_h(x0 + 2, y0) - fine_h(x0, y0 + 2)).abs();
+                if d0 <= d1 {
+                    terrain_mesh.push_triangle(v00, v01, v11);
+                    terrain_mesh.push_triangle(v00, v11, v10);
+                } else {
+                    terrain_mesh.push_triangle(v00, v01, v10);
+                    terrain_mesh.push_triangle(v10, v01, v11);
+                }
+                continue;
+            }
+            // Boundary loop in the same winding as the quads above:
+            // up the x0 edge, across the top, down the far edge, back.
+            let mut ring: Vec<(usize, usize)> = Vec::with_capacity(8);
+            ring.push((x0, y0));
+            if left {
+                ring.push((x0, y0 + 1));
+            }
+            ring.push((x0, y0 + 2));
+            if above {
+                ring.push((x0 + 1, y0 + 2));
+            }
+            ring.push((x0 + 2, y0 + 2));
+            if right {
+                ring.push((x0 + 2, y0 + 1));
+            }
+            ring.push((x0 + 2, y0));
+            if below {
+                ring.push((x0 + 1, y0));
+            }
+            let centre = vertex(x0 + 1, y0 + 1, ground);
+            for k in 0..ring.len() {
+                let a = ring[k];
+                let b = ring[(k + 1) % ring.len()];
+                terrain_mesh.push_triangle(
+                    centre,
+                    vertex(a.0, a.1, ground),
+                    vertex(b.0, b.1, ground),
                 );
-                let n = normal_at(cx, cy);
-                let mut v = SceneVertex::new(p, n, fine_colors[i]);
-                // The lane mask rides in the vertex alpha for the terrain.
-                v.color[3] = fine_lane[i];
-                // uv.x carries the baked slope so the shader can add cliff
-                // detail without warping UVs from the per-fragment normal;
-                // uv.y carries the river mask so the road shader can stop
-                // the lane soil from painting the river bed.
-                v.uv = [(1.0 - n.y).clamp(0.0, 1.0), fine_water[i]];
-                v.ao = ao_at(cx, cy);
-                v.material = 4;
-                // Low byte: grass variant; upper bytes: cache overlay
-                // texture and weight. Flat interpolation keeps both
-                // triangles equal.
-                v.texture_id = ground;
-                v
-            };
-            let v00 = corner(fx, fy);
-            let v10 = corner(fx + 1, fy);
-            let v01 = corner(fx, fy + 1);
-            let v11 = corner(fx + 1, fy + 1);
-            // Split each quad along the diagonal that best follows the
-            // surface, so cliff lips do not zig-zag.
-            let d0 = (fine_heights[fy * fine_size + fx]
-                - fine_heights[(fy + 1) * fine_size + fx + 1])
-                .abs();
-            let d1 = (fine_heights[fy * fine_size + fx + 1]
-                - fine_heights[(fy + 1) * fine_size + fx])
-                .abs();
-            if d0 <= d1 {
-                terrain_mesh.push_triangle(v00, v01, v11);
-                terrain_mesh.push_triangle(v00, v11, v10);
-            } else {
-                terrain_mesh.push_triangle(v00, v01, v10);
-                terrain_mesh.push_triangle(v10, v01, v11);
             }
         }
     }
+    tracing::info!(
+        "terrain: {:.1}% of tiles refined, {} triangles",
+        refined_tiles as f32 * 100.0 / (tiles * tiles) as f32,
+        terrain_mesh.indices.len() / 3
+    );
 
     // ------------------------------------------------------------------
     // River water surface. The terrain carves the bed and keeps the water
