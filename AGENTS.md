@@ -244,7 +244,7 @@ Cache location: `.cache/osrs-235/cache` by default. Pass `--cache` and
   `crates/client/src/audio.rs`). Units play their animations' cache frame
   sounds; shared hit, release, cast, shop and UI sounds live in
   `data/sounds.json` and a champion's `sounds` map overrides them by name.
-  Only King Awowogei has hand-picked ability sounds so far.
+  Only King Awowogei has hand-picked ability sounds so far. No music.
 - Ambient, non-combat scenery creatures (butterflies, monkey-riding pasture
   cows, shore crabs) share the unit renderer but use `UnitKind::Ambient`, team
   2, no health bars, and no targeting or attacks.
@@ -263,9 +263,6 @@ Cache location: `.cache/osrs-235/cache` by default. Pass `--cache` and
   flower sprites are drawn opaque. The `0xff00ff` terrain overlay sentinel
   still uses a flat fallback colour. Dead-tree trunks read as pale spikes.
 - Animaya is not applied; only classic frame/framemap animation works.
-- Sound effects are cache-synthesised OSRS sounds (`rift_cache::sound`)
-  played through `rodio` (`crates/client/src/audio.rs`); champion files
-  name them in `sounds`. Only King Awowogei uses them so far. No music.
 - No netcode or map editor. Ambient NPCs idle only.
 - The legacy HUD no longer reads visual assets from `assets/osrs-ui`: item
   icons are cache item-model renders, ability icons are champion cache sprite
