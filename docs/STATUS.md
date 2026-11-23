@@ -1,6 +1,40 @@
 # Status
 
-Last updated: live interface click routing, 2026-11-23.
+Last updated: 12 new champions on a data-driven kit system, 2026-11-23.
+
+## 2026-11-23 — Twelve new champions on a data-driven kit system
+
+- **NPC decoder:** opcode 249 (the parameter map) aborted nearly every
+  modern boss definition. It is now decoded, unlocking the God Wars
+  generals, Cerberus, the wilderness bosses, Vorkath and more. Barrows
+  brothers still fail on an unknown opcode 6.
+- **Kit system** (`kit.rs`, `animated/kit_runtime.rs`, `docs/KITS.md`): a
+  champion file can describe its passive and Q/W/E/R as data. Actions:
+  projectile, area, zone, dash (with landing actions), buff, summon,
+  channel, empower, transform. Statuses: slow, root, stun, knock-up, fear,
+  taunt, knockback, pull, venom, bleed, heal cut, mana drain, armour shred,
+  %-current-health damage and stacking chill. Ten passive kinds. Charges,
+  untargetable dashes, damage reduction, reflect and a second form are
+  supported. Hooks: incoming damage, projectile damage, basic attacks,
+  minion damage, XP and movement. Crowd control moves into every unit's
+  `cc` (slows and roots in `move_unit_toward`/`follow_lane`, fear and forced
+  movement in the AI loop, taunt in `find_target`); summons are minion units
+  with a lifetime that follow the champion between fights.
+- **Roster (approved by the user):** General Graardor, Cerberus, Kalphite
+  Queen, K'ril Tsutsaroth, Callisto, Vardorvis, Venenatis, Commander
+  Zilyana, Ancient Wyvern (replacing Zulrah), Kolodion, Vorkath and the Wise
+  Old Man, generated with cache models, sprite icons and kits. 16 champions.
+- **Hero select:** portraits are 128px and wrap onto two atlas rows, so all
+  16 bake (only 7 fitted before); the detail panel sits below two rows.
+- **`--demo-abilities`:** all twelve cast all four abilities against a
+  jungle camp: every camp hurt, eleven killed (Zilyana's R is an empower and
+  needs a basic attack), summons spawn for Graardor, the Kalphite Queen,
+  Venenatis and Vorkath, Kolodion's demon form takes over, statuses land.
+- Known: Vardorvis's model is a skeletal (Animaya) model with no vertex
+  groups, so he moves without animating until Animaya is decoded. Support
+  kits heal and shield only the caster: there are no allied heroes yet.
+  Ability numbers are first-pass and untested against enemy heroes.
+- Verified: 296 workspace tests pass; clippy clean.
 
 ## 2026-11-23 — Live interface click routing
 
