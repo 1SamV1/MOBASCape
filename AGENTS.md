@@ -240,6 +240,11 @@ Cache location: `.cache/osrs-235/cache` by default. Pass `--cache` and
   side rotation and `walk_arm` scales local arm transforms; King Awowogei's
   current baseline is 0 for both. `attack_windup` adds committed attack timing
   with an orange charge ring during the wind-up.
+- Audio: cache-synthesised sound effects (`rift_cache::sound`,
+  `crates/client/src/audio.rs`). Units play their animations' cache frame
+  sounds; shared hit, release, cast, shop and UI sounds live in
+  `data/sounds.json` and a champion's `sounds` map overrides them by name.
+  Only King Awowogei has hand-picked ability sounds so far.
 - Ambient, non-combat scenery creatures (butterflies, monkey-riding pasture
   cows, shore crabs) share the unit renderer but use `UnitKind::Ambient`, team
   2, no health bars, and no targeting or attacks.

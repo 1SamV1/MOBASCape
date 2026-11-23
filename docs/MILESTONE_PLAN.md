@@ -156,6 +156,10 @@ Goal: enough content for a real session.
 - Boss objective (dragon/rift Herald analogue), buffs, soul/objective economy.
 - Second map; map editor carve/place/export loop.
 - Audio: SFX bus, positional hits/casts, announcer, UI clicks, music hook.
+  **Done (2026-11-23):** cache-synthesised sound effects with distance and
+  pan, cache animation frame sounds, and shared hit/cast/shop/UI sounds for
+  every champion (`data/sounds.json`). Remaining: announcer, music hook,
+  per-champion ability sounds beyond King Awowogei.
 
 Exit: three complete matches on two maps with eight champions and no
 placeholder art or silence.

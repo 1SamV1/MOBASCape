@@ -1,6 +1,42 @@
 # Status
 
-Last updated: cache-native legacy HUD icons and ability art, 2026-11-23.
+Last updated: shared combat sounds and cache frame sounds, 2026-11-23.
+
+## 2026-11-23 — Every champion makes sound: shared combat sounds and cache frame sounds
+
+- **Cache frame sounds.** `Sequence::sounds_between` (`crates/cache/src/
+  sequence.rs`) returns the opcode-14 sounds whose frame starts inside a time
+  span, wrapping looping clips and playing each sound at most once per pass.
+  The scene snapshots every unit's base and one-shot clip clocks at the top of
+  `AnimatedScene::update` and plays the frame sounds of what each visible
+  unit actually animated that tick, within each sound's cache audible range.
+  Graardor's swing (3843) and stomp (3834) and K'ril's stomp (3834) now come
+  straight from the cache; K'ril's claw (3865) sits a third of the way into
+  its swing and is lost when movement cancels the swing early. Hidden units are silent, so sound
+  never leaks through fog.
+- **Shared sound table.** New `data/sounds.json` names the sounds every unit
+  falls back to, all documented RuneLite `SoundEffectID`s: `melee_hit` /
+  `ranged_hit` 2498 (ATTACK_HIT), `blocked_hit` 511 (ZERO_DAMAGE_SPLAT),
+  `player_hurt` 510 (TAKE_DAMAGE_SPLAT), `ranged_release` / `magic_release` /
+  `cast` 1930 at different pitches (NPC_TELEPORT_WOOSH), `shop_buy` 3924
+  (GE_COIN_TINKLE), `shop_sell` 3928 (GE_COLLECT_BLOOP), `skill_point` 2266
+  (UI_BOOP), `structure_fall` 2734 (TREE_FALLING) and `frame_sound` (volume
+  only, for cache frame sounds). A champion file's `sounds` entry with the
+  same name overrides one for that champion; enemy champions use the shared
+  table only.
+- **When sounds play.** Like the reference client, only fights the player is
+  in make hit noise (the player struck or was struck), plus visible champion
+  duels; lane minion and tower trades stay quiet. A champion's basic-attack
+  shot whooshes on release (magic heroes lower). Abilities get the cast
+  whoosh unless the champion file scores that slot itself (`q_*`, `w_*`, ...),
+  so King Awowogei keeps his own kit sounds. One copy of a sound id plays per
+  frame, so an area spell striking five minions is one hit.
+- Verified with `RUST_LOG=rift_client=debug` cue traces in `--demo-duel
+  --timescale 4` as Graardor (3843 swings, 2498 hits, 510 hurt), K'ril (3834
+  stomps) and the Blowpipe Ranger (1930 shots, 510 hurt). New tests:
+  frame-sound windows and wrapping (`rift-cache`), and the shared table naming
+  every sound the scene asks for. 359 workspace tests pass; clippy clean.
+  Not playtested by ear; volumes are a first pass in `data/sounds.json`.
 
 ## 2026-11-23 — Cache-native legacy HUD icons and ability art
 
