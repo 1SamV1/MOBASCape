@@ -1,0 +1,162 @@
+{
+  "name": "K'ril Tsutsaroth",
+  "role": "DEMON BRUISER",
+  "class": "MELEE",
+  "tagline": "Zamorak's general poisons, charges and roars.",
+  "model": 27683,
+  "attachments": [
+    27681,
+    27692,
+    27682,
+    27690
+  ],
+  "idle": 6935,
+  "walk": 4070,
+  "scale": 0.62,
+  "health": 600,
+  "mana": 220,
+  "damage": 16,
+  "armor": 32.0,
+  "attack_range": 340,
+  "attack_interval": 1.2,
+  "speed": 410,
+  "ranged_auto": false,
+  "weight": 80,
+  "attack_windup": 0.3,
+  "abilities": [
+    {
+      "key": "Q",
+      "name": "FLAMES OF ZAMORAK",
+      "description": "A line of hellfire that scorches everything it passes."
+    },
+    {
+      "key": "W",
+      "name": "DEMONIC CHARGE",
+      "description": "Charges forward, damaging enemies in the way."
+    },
+    {
+      "key": "E",
+      "name": "INFERNAL SHIELD",
+      "description": "A shield and lifesteal from the next hits."
+    },
+    {
+      "key": "R",
+      "name": "YARRRRRRR!",
+      "description": "A crushing blow for 30% of the target's current health; their healing is cut."
+    }
+  ],
+  "ability_icons": [
+    47,
+    32,
+    121,
+    34
+  ],
+  "kit": {
+    "passive": {
+      "type": "on_hit",
+      "statuses": [
+        {
+          "type": "venom",
+          "damage": 6,
+          "duration": 6
+        }
+      ]
+    },
+    "abilities": [
+      {
+        "cost": 30,
+        "cooldown": 6,
+        "color": [
+          255,
+          80,
+          40
+        ],
+        "actions": [
+          {
+            "type": "projectile",
+            "speed": 1300,
+            "range": 950,
+            "damage": 55,
+            "width": 120,
+            "pierce": true
+          }
+        ]
+      },
+      {
+        "cost": 40,
+        "cooldown": 10,
+        "color": [
+          255,
+          60,
+          60
+        ],
+        "actions": [
+          {
+            "type": "dash",
+            "distance": 650,
+            "speed": 1900,
+            "damage": 45,
+            "on_hit": [
+              {
+                "type": "slow",
+                "pct": 0.25,
+                "duration": 1.0
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "cost": 40,
+        "cooldown": 12,
+        "color": [
+          255,
+          150,
+          90
+        ],
+        "actions": [
+          {
+            "type": "buff",
+            "shield": 110,
+            "duration": 4
+          },
+          {
+            "type": "empower",
+            "attacks": 3,
+            "bonus": 12,
+            "duration": 4
+          }
+        ]
+      },
+      {
+        "cost": 100,
+        "cooldown": 60,
+        "color": [
+          200,
+          20,
+          20
+        ],
+        "actions": [
+          {
+            "type": "area",
+            "at": "front",
+            "radius": 200,
+            "arc": 80,
+            "damage": 90,
+            "on_hit": [
+              {
+                "type": "current_health",
+                "pct": 0.3
+              },
+              {
+                "type": "heal_cut",
+                "duration": 5
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "source_npc": 3129
+}

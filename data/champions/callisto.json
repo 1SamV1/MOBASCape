@@ -1,0 +1,153 @@
+{
+  "name": "Callisto",
+  "role": "BEAR INITIATOR",
+  "class": "MELEE",
+  "tagline": "A wilderness bear that charges in and roars the line apart.",
+  "model": 28298,
+  "attachments": [],
+  "idle": 4919,
+  "walk": 4923,
+  "scale": 1.4,
+  "health": 660,
+  "mana": 220,
+  "damage": 16,
+  "armor": 36.0,
+  "attack_range": 330,
+  "attack_interval": 1.25,
+  "speed": 400,
+  "ranged_auto": false,
+  "weight": 90,
+  "attack_windup": 0.35,
+  "abilities": [
+    {
+      "key": "Q",
+      "name": "MAUL",
+      "description": "A heavy swipe that knocks enemies back."
+    },
+    {
+      "key": "W",
+      "name": "CHARGE",
+      "description": "Charges at the cursor and knocks back whatever it hits."
+    },
+    {
+      "key": "E",
+      "name": "HIBERNATE",
+      "description": "Settles for 1.5 seconds to heal a quarter of missing health."
+    },
+    {
+      "key": "R",
+      "name": "SHOCKWAVE",
+      "description": "A huge roar down a line that knocks back and stuns."
+    }
+  ],
+  "ability_icons": [
+    116,
+    62,
+    122,
+    56
+  ],
+  "kit": {
+    "passive": {
+      "type": "thick_hide",
+      "reduction": 0.15
+    },
+    "abilities": [
+      {
+        "cost": 30,
+        "cooldown": 7,
+        "color": [
+          200,
+          150,
+          100
+        ],
+        "actions": [
+          {
+            "type": "area",
+            "at": "front",
+            "radius": 260,
+            "arc": 120,
+            "damage": 55,
+            "on_hit": [
+              {
+                "type": "knockback",
+                "distance": 160
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "cost": 45,
+        "cooldown": 12,
+        "color": [
+          190,
+          140,
+          90
+        ],
+        "actions": [
+          {
+            "type": "dash",
+            "distance": 800,
+            "speed": 1700,
+            "to_cursor": true,
+            "damage": 40,
+            "on_hit": [
+              {
+                "type": "knockback",
+                "distance": 220
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "cost": 40,
+        "cooldown": 16,
+        "color": [
+          120,
+          255,
+          160
+        ],
+        "actions": [
+          {
+            "type": "buff",
+            "heal_missing": 0.25,
+            "damage_reduction": 0.2,
+            "duration": 1.5,
+            "rooted": true
+          }
+        ]
+      },
+      {
+        "cost": 100,
+        "cooldown": 70,
+        "color": [
+          230,
+          220,
+          200
+        ],
+        "actions": [
+          {
+            "type": "projectile",
+            "speed": 1200,
+            "range": 1100,
+            "damage": 140,
+            "width": 280,
+            "pierce": true,
+            "on_hit": [
+              {
+                "type": "knockback",
+                "distance": 240
+              },
+              {
+                "type": "stun",
+                "duration": 1.0
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "source_npc": 6503
+}

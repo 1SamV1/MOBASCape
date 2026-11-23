@@ -1,0 +1,140 @@
+{
+  "name": "Commander Zilyana",
+  "role": "BLADE SKIRMISHER",
+  "class": "MELEE",
+  "tagline": "Saradomin's commander, fast and blessed.",
+  "model": 27989,
+  "attachments": [
+    27985,
+    27968
+  ],
+  "idle": 6966,
+  "walk": 6965,
+  "scale": 1.0,
+  "health": 540,
+  "mana": 220,
+  "damage": 15,
+  "armor": 26.0,
+  "attack_range": 320,
+  "attack_interval": 0.95,
+  "speed": 450,
+  "ranged_auto": false,
+  "weight": 48,
+  "attack_windup": 0.2,
+  "abilities": [
+    {
+      "key": "Q",
+      "name": "SARADOMIN STRIKE",
+      "description": "Lightning strikes the cursor after a short delay."
+    },
+    {
+      "key": "W",
+      "name": "BLESSED DASH",
+      "description": "A quick dash; holds two charges."
+    },
+    {
+      "key": "E",
+      "name": "STARLIGHT",
+      "description": "Heals her and nearby allies."
+    },
+    {
+      "key": "R",
+      "name": "GODSWORD SPECIAL",
+      "description": "Her next hit deals huge damage; a kill resets Blessed Dash."
+    }
+  ],
+  "ability_icons": [
+    26,
+    48,
+    130,
+    129
+  ],
+  "kit": {
+    "passive": {
+      "type": "swift",
+      "move_speed": 0.1,
+      "dash_bonus": 25
+    },
+    "abilities": [
+      {
+        "cost": 30,
+        "cooldown": 6,
+        "color": [
+          140,
+          200,
+          255
+        ],
+        "actions": [
+          {
+            "type": "area",
+            "radius": 170,
+            "range": 850,
+            "delay": 0.5,
+            "damage": 70,
+            "on_hit": [
+              {
+                "type": "slow",
+                "pct": 0.2,
+                "duration": 1.0
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "cost": 20,
+        "cooldown": 8,
+        "charges": 2,
+        "color": [
+          180,
+          220,
+          255
+        ],
+        "actions": [
+          {
+            "type": "dash",
+            "distance": 480,
+            "speed": 2300,
+            "to_cursor": true,
+            "damage": 20
+          }
+        ]
+      },
+      {
+        "cost": 45,
+        "cooldown": 14,
+        "color": [
+          200,
+          255,
+          230
+        ],
+        "actions": [
+          {
+            "type": "buff",
+            "heal": 90,
+            "duration": 1
+          }
+        ]
+      },
+      {
+        "cost": 90,
+        "cooldown": 50,
+        "color": [
+          255,
+          240,
+          160
+        ],
+        "actions": [
+          {
+            "type": "empower",
+            "duration": 6,
+            "bonus": 150,
+            "missing_health": 0.15,
+            "reset_on_kill": 1
+          }
+        ]
+      }
+    ]
+  },
+  "source_npc": 2205
+}

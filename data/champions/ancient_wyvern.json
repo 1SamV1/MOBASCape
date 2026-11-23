@@ -1,0 +1,150 @@
+{
+  "name": "Ancient Wyvern",
+  "role": "FROST MAGE",
+  "class": "MAGIC",
+  "tagline": "A fossil wyvern whose breath freezes the battlefield.",
+  "model": 33879,
+  "attachments": [],
+  "idle": 7650,
+  "walk": 7650,
+  "scale": 1.4,
+  "health": 520,
+  "mana": 280,
+  "damage": 12,
+  "armor": 24.0,
+  "attack_range": 600,
+  "attack_interval": 1.2,
+  "speed": 410,
+  "ranged_auto": true,
+  "weight": 70,
+  "attack_windup": 0.3,
+  "abilities": [
+    {
+      "key": "Q",
+      "name": "ICY BREATH",
+      "description": "A cone of frost that chills enemies."
+    },
+    {
+      "key": "W",
+      "name": "TAIL SWEEP",
+      "description": "Sweeps its tail, knocking nearby enemies away."
+    },
+    {
+      "key": "E",
+      "name": "ANCIENT WARD",
+      "description": "Frozen scales shield it and cut incoming damage."
+    },
+    {
+      "key": "R",
+      "name": "FROST STORM",
+      "description": "A blizzard at the cursor that chills everything inside."
+    }
+  ],
+  "ability_icons": [
+    38,
+    61,
+    132,
+    35
+  ],
+  "kit": {
+    "passive": {
+      "type": "frost_bite",
+      "pct": 0.15,
+      "duration": 2.5
+    },
+    "abilities": [
+      {
+        "cost": 35,
+        "cooldown": 6,
+        "color": [
+          170,
+          220,
+          255
+        ],
+        "actions": [
+          {
+            "type": "area",
+            "at": "caster",
+            "radius": 520,
+            "arc": 60,
+            "damage": 55,
+            "on_hit": [
+              {
+                "type": "chill",
+                "pct": 0.3,
+                "duration": 2.5
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "cost": 40,
+        "cooldown": 11,
+        "color": [
+          200,
+          230,
+          255
+        ],
+        "actions": [
+          {
+            "type": "area",
+            "at": "caster",
+            "radius": 300,
+            "damage": 45,
+            "on_hit": [
+              {
+                "type": "knockback",
+                "distance": 260
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "cost": 45,
+        "cooldown": 14,
+        "color": [
+          150,
+          200,
+          255
+        ],
+        "actions": [
+          {
+            "type": "buff",
+            "shield": 120,
+            "damage_reduction": 0.15,
+            "duration": 4
+          }
+        ]
+      },
+      {
+        "cost": 110,
+        "cooldown": 65,
+        "color": [
+          210,
+          240,
+          255
+        ],
+        "actions": [
+          {
+            "type": "zone",
+            "radius": 330,
+            "duration": 4,
+            "damage": 26,
+            "tick": 0.5,
+            "range": 1000,
+            "on_tick": [
+              {
+                "type": "chill",
+                "pct": 0.35,
+                "duration": 2.0
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "source_npc": 7795
+}
