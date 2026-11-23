@@ -189,6 +189,8 @@ fn base() -> HudState {
                     blue: false,
                 },
             ],
+            heroes: Vec::new(),
+            vision: None,
             camera: (96, 92, 58, 48),
         },
         objectives: ObjectivesState {

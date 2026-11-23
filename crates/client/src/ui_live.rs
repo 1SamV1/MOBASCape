@@ -11,10 +11,10 @@ use crate::scene::{CampBuff, SceneData};
 use glam::{Vec2, Vec3};
 use rift_ui::hud::state::{
     AbilityNumbers, AbilityState, AbilityTooltipState, AbilityUpgrade, AllyState, CampState,
-    ChatKind, ChatLine, DamageSource, DeathState, HitmarkKind, HitmarkState, InventoryItem,
-    KillFeedEntry, LaneState, MapPoint, MinimapState, NexusState, ObjectivesState, PlateKind,
-    ScoreState, ShopItem, ShopState, StructureMark, TargetStat, TargetState, TooltipState,
-    UnitPlate,
+    ChatKind, ChatLine, DamageSource, DeathState, HeroMark, HitmarkKind, HitmarkState,
+    InventoryItem, KillFeedEntry, LaneState, MapPoint, MinimapState, NexusState, ObjectivesState,
+    PlateKind, ScoreState, ShopItem, ShopState, StructureMark, TargetStat, TargetState,
+    TooltipState, UnitPlate, VisionMask,
 };
 
 pub fn score(player: &PlayerHud) -> ScoreState {
@@ -91,6 +91,7 @@ pub fn minimap(
 
     let mut allies = Vec::new();
     let mut enemies = Vec::new();
+    let mut heroes = Vec::new();
     let mut camps = Vec::new();
     let mut structures = Vec::new();
     for unit in &animated.units {
@@ -108,13 +109,15 @@ pub fn minimap(
             camps.push(point(unit.pos));
             continue;
         }
-        if matches!(
-            unit.kind,
-            UnitKind::Player
-                | UnitKind::EnemyChampion
-                | UnitKind::MeleeMinion
-                | UnitKind::RangedMinion
-        ) {
+        if unit.kind.is_champion() {
+            heroes.push(HeroMark {
+                at: point(unit.pos),
+                blue: unit.team == 0,
+                player: unit.kind == UnitKind::Player,
+            });
+            continue;
+        }
+        if matches!(unit.kind, UnitKind::MeleeMinion | UnitKind::RangedMinion) {
             let mark = point(unit.pos);
             if unit.team == 0 {
                 allies.push(mark);
@@ -145,8 +148,32 @@ pub fn minimap(
         enemies,
         camps,
         structures,
+        heroes,
+        vision: Some(vision_mask(animated, min, max)),
         camera,
     }
+}
+
+/// Cells across the minimap's vision veil (each about 2 by 2 picture
+/// pixels, near the 128-unit tile size on the current maps).
+const VISION_CELLS: (usize, usize) = (127, 126);
+
+/// Sample the team's line-of-sight grid at each minimap cell centre.
+fn vision_mask(animated: &AnimatedScene, min: Vec2, max: Vec2) -> VisionMask {
+    let (cols, rows) = VISION_CELLS;
+    let (ox, oy) = animated.vision_origin;
+    let mut seen = Vec::with_capacity(cols * rows);
+    for row in 0..rows {
+        for col in 0..cols {
+            let u = (col as f32 + 0.5) / cols as f32;
+            let v = (row as f32 + 0.5) / rows as f32;
+            let (x, z) = world_from_map(u, v, min, max);
+            let tx = (x / 128.0).floor() as i32 - ox;
+            let ty = (z / 128.0).floor() as i32 - oy;
+            seen.push(animated.visibility.is_visible(tx, ty));
+        }
+    }
+    VisionMask { cols, rows, seen }
 }
 
 fn map_point(p: Vec3, min: Vec2, max: Vec2) -> MapPoint {

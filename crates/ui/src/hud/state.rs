@@ -407,6 +407,23 @@ pub struct StructureMark {
     pub blue: bool,
 }
 
+/// A hero on the minimap: a ring in the team colour, gold for the player.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct HeroMark {
+    pub at: MapPoint,
+    pub blue: bool,
+    pub player: bool,
+}
+
+/// The team's live vision over the map picture: `cols` by `rows` cells,
+/// row-major, true where an ally (hero, minion, tower) has line of sight.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct VisionMask {
+    pub cols: usize,
+    pub rows: usize,
+    pub seen: Vec<bool>,
+}
+
 /// The minimap's picture and marks. Stage 3 fills this with a sample map;
 /// stage 4 feeds the client's visible units and camera box.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -418,6 +435,10 @@ pub struct MinimapState {
     pub enemies: Vec<MapPoint>,
     pub camps: Vec<MapPoint>,
     pub structures: Vec<StructureMark>,
+    /// Heroes (allies, and enemies the team can see).
+    pub heroes: Vec<HeroMark>,
+    /// The team's vision; `None` draws the whole map lit.
+    pub vision: Option<VisionMask>,
     /// Left, top, width and height in the map picture.
     pub camera: (i32, i32, i32, i32),
 }

@@ -76,6 +76,38 @@ pub fn draw(theme: &Theme, list: &mut DrawList, area: Rect, state: &MinimapState
         line(list, lane, 3, [0.52, 0.47, 0.29, 0.92]);
     }
 
+    // The team's live vision: unseen ground sits under a dark veil, so the
+    // areas allies can see (and the shadows walls cast in their sight)
+    // show in real time. Runs of hidden cells merge into one rectangle.
+    if let Some(vision) = &state.vision
+        && vision.cols > 0
+        && vision.rows > 0
+        && vision.seen.len() == vision.cols * vision.rows
+    {
+        let cell = |i: usize, total: usize, span: i32| (i as i32 * span) / total as i32;
+        for row in 0..vision.rows {
+            let y0 = cell(row, vision.rows, PICTURE.1);
+            let y1 = cell(row + 1, vision.rows, PICTURE.1);
+            let mut col = 0;
+            while col < vision.cols {
+                if vision.seen[row * vision.cols + col] {
+                    col += 1;
+                    continue;
+                }
+                let start = col;
+                while col < vision.cols && !vision.seen[row * vision.cols + col] {
+                    col += 1;
+                }
+                let x0 = cell(start, vision.cols, PICTURE.0);
+                let x1 = cell(col, vision.cols, PICTURE.0);
+                list.rect(
+                    Rect::new(map.x + x0 * s, map.y + y0 * s, (x1 - x0) * s, (y1 - y0) * s),
+                    [0.0, 0.01, 0.02, 0.52],
+                );
+            }
+        }
+    }
+
     // Base crystals and structures as rings, in the team's colour.
     let team = |blue: bool| {
         if blue {
@@ -115,6 +147,20 @@ pub fn draw(theme: &Theme, list: &mut DrawList, area: Rect, state: &MinimapState
         dot(list, "map.dot.enemy", *point, theme.colour("text.team.red"));
     }
 
+    // Heroes: a dark disc inside a ring in the team colour (gold for the
+    // player), drawn last so they sit over minions and camps.
+    for hero in &state.heroes {
+        let (x, y) = at(hero.at);
+        let colour = if hero.player {
+            [1.0, 0.82, 0.25, 1.0]
+        } else {
+            team(hero.blue)
+        };
+        disc(list, x, y, 6 * s, [0.03, 0.03, 0.04, 0.92]);
+        ring(list, x, y, 7 * s, 2 * s.max(1), colour);
+        disc(list, x, y, 3 * s, colour);
+    }
+
     // The camera's box, a thin pale rectangle.
     let (cx, cy, cw, ch) = state.camera;
     let camera = Rect::new(map.x + cx * s, map.y + cy * s, cw * s, ch * s);
@@ -136,9 +182,87 @@ pub fn draw(theme: &Theme, list: &mut DrawList, area: Rect, state: &MinimapState
     list.set_layer(previous);
 }
 
+/// A filled disc as one rectangle per scanline.
+fn disc(list: &mut DrawList, cx: i32, cy: i32, r: i32, colour: Colour) {
+    for dy in -r..=r {
+        let half = ((r * r - dy * dy) as f32).sqrt().round() as i32;
+        list.rect(Rect::new(cx - half, cy + dy, half * 2 + 1, 1), colour);
+    }
+}
+
+/// A ring `thick` pixels wide, outer radius `r`, as scanline spans.
+fn ring(list: &mut DrawList, cx: i32, cy: i32, r: i32, thick: i32, colour: Colour) {
+    let inner = (r - thick).max(0);
+    for dy in -r..=r {
+        let outer = ((r * r - dy * dy) as f32).sqrt().round() as i32;
+        if dy.abs() > inner {
+            list.rect(Rect::new(cx - outer, cy + dy, outer * 2 + 1, 1), colour);
+            continue;
+        }
+        let hole = ((inner * inner - dy * dy) as f32).sqrt().round() as i32;
+        list.rect(Rect::new(cx - outer, cy + dy, outer - hole, 1), colour);
+        list.rect(Rect::new(cx + hole + 1, cy + dy, outer - hole, 1), colour);
+    }
+}
+
 #[cfg(test)]
 mod hit_tests {
     use super::*;
+    use crate::hud::state::{HeroMark, VisionMask};
+
+    fn empty_state() -> MinimapState {
+        MinimapState {
+            lanes: Vec::new(),
+            river: Vec::new(),
+            bases: Vec::new(),
+            allies: Vec::new(),
+            enemies: Vec::new(),
+            camps: Vec::new(),
+            structures: Vec::new(),
+            heroes: Vec::new(),
+            vision: None,
+            camera: (0, 0, 10, 10),
+        }
+    }
+
+    fn quads(state: &MinimapState) -> usize {
+        let theme = crate::theme::ThemeBuilder::new().build();
+        let mut list = DrawList::new((400, 400), 1, &theme.atlas);
+        draw(&theme, &mut list, Rect::new(0, 0, SIZE.0, SIZE.1), state);
+        list.len()
+    }
+
+    #[test]
+    fn unseen_ground_is_veiled_in_merged_runs() {
+        let lit = quads(&empty_state());
+        let mut state = empty_state();
+        // Two rows: the first fully hidden (one run), the second with a
+        // seen cell in the middle (two runs).
+        state.vision = Some(VisionMask {
+            cols: 3,
+            rows: 2,
+            seen: vec![false, false, false, false, true, false],
+        });
+        assert_eq!(quads(&state), lit + 3);
+        state.vision = Some(VisionMask {
+            cols: 3,
+            rows: 2,
+            seen: vec![true; 6],
+        });
+        assert_eq!(quads(&state), lit, "fully seen draws no veil");
+    }
+
+    #[test]
+    fn heroes_draw_as_rings_over_the_map() {
+        let before = quads(&empty_state());
+        let mut state = empty_state();
+        state.heroes.push(HeroMark {
+            at: MapPoint { x: 120, y: 120 },
+            blue: true,
+            player: true,
+        });
+        assert!(quads(&state) > before + 10);
+    }
 
     #[test]
     fn picture_fractions_skip_the_frame() {

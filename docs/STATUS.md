@@ -1,6 +1,20 @@
 # Status
 
-Last updated: main menu, hero spotlight and wielded weapons, 2026-11-23.
+Last updated: reference study, roadmap plan and live minimap vision, 2026-11-23.
+
+## 2026-11-23 — Reference study and live minimap vision
+
+- **Roadmap plan.** [ROADMAPPLAN.md](ROADMAPPLAN.md) compares MobaScape with
+  a gameplay video of another OSRS-asset MOBA (70 stills, every 15 s) and
+  plans seven phases: map light and colour, minimap, shop, hero select,
+  arena set dressing, HUD polish and post-match. Rule: every visual comes
+  from the OSRS cache.
+- **Minimap shows the team's vision live.** Ground no ally sees sits under
+  a dark veil, sampled from the line-of-sight grid (`VisibilityGrid`) at
+  127x126 cells, so wall shadows show too. Lit patches follow allied
+  heroes, minions and towers as they move.
+- **Hero rings.** Heroes are drawn as team-coloured rings (the player in
+  gold) over minions and camps instead of the same dot as a minion.
 
 ## 2026-11-23 — Main menu, hero spotlight and wielded weapons
 
