@@ -1,6 +1,17 @@
 # Status
 
-Last updated: Big Frog ability icons, 2026-11-23.
+Last updated: self-updating AppImage launcher, 2026-11-23.
+
+## 2026-11-23 — Self-updating AppImage launcher
+
+- `tools/appimage/build.sh` packs `dist/MobaScape-x86_64.AppImage`. On each
+  launch it fast-forwards a clean checkout to `sam/main`, rebuilds
+  incrementally and runs the new client, falling back to the last good build
+  and then to a bundled snapshot. See DEV_TOOLS.md.
+- Original icon (three lanes and a rift); no Jagex data inside the image.
+- Verified: the launcher runs the client from any working directory
+  (0.18 s no-op build). On a clone one commit behind, it fast-forwarded to
+  c50f884 before launching.
 
 ## 2026-11-23 — Big Frog ability icons
 

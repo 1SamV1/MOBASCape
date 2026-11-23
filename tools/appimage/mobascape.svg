@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <!-- Original MobaScape icon: a three-lane map split by a glowing rift. -->
+  <defs>
+    <radialGradient id="ground" cx="50%" cy="45%" r="70%">
+      <stop offset="0" stop-color="#2f5a2a"/>
+      <stop offset="1" stop-color="#14261a"/>
+    </radialGradient>
+    <linearGradient id="rift" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#7dfcae"/>
+      <stop offset="0.5" stop-color="#c8fff0"/>
+      <stop offset="1" stop-color="#7dfcae"/>
+    </linearGradient>
+    <filter id="glow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="6" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <rect x="8" y="8" width="240" height="240" rx="44" fill="url(#ground)" stroke="#c9a54a" stroke-width="8"/>
+  <!-- lanes -->
+  <g fill="none" stroke="#d8c48a" stroke-opacity="0.55" stroke-width="12" stroke-linecap="round">
+    <path d="M52 204 L52 60 L196 60"/>
+    <path d="M52 204 L204 204 L204 52"/>
+    <path d="M60 196 L196 60"/>
+  </g>
+  <!-- the rift (river) -->
+  <path d="M40 72 C 92 104, 112 120, 128 128 S 172 158, 216 184" fill="none"
+        stroke="url(#rift)" stroke-width="14" stroke-linecap="round" filter="url(#glow)"/>
+  <!-- bases -->
+  <circle cx="58" cy="198" r="22" fill="#3a8dff" stroke="#e8f2ff" stroke-width="5" filter="url(#glow)"/>
+  <circle cx="198" cy="58" r="22" fill="#ff4a3a" stroke="#ffe8e4" stroke-width="5" filter="url(#glow)"/>
+</svg>

@@ -1,0 +1,158 @@
+#!/usr/bin/env bash
+# MobaScape AppImage launcher.
+#
+# The AppImage does not freeze a build. Each launch it:
+#   1. finds the MobaScape checkout (data/, assets/ and the OSRS cache live
+#      there, never inside the AppImage);
+#   2. fast-forwards it to its upstream branch when the tree is clean;
+#   3. runs an incremental `cargo build --release -p rift-client`;
+#   4. starts the freshly built client from the checkout.
+# If git or cargo fail, it falls back to the last good build in target/, then
+# to the snapshot binary bundled in the AppImage.
+#
+# Environment:
+#   MOBASCAPE_REPO=/path      use this checkout
+#   MOBASCAPE_NO_PULL=1       never touch git
+#   MOBASCAPE_NO_BUILD=1      never run cargo; use the newest binary there is
+# With no arguments the client starts with --ui-live (hero select first);
+# any arguments replace that and pass straight through.
+
+set -u
+HERE="$(dirname "$(readlink -f "$0")")"
+CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/mobascape"
+STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/mobascape"
+LOG="$STATE_DIR/launcher.log"
+mkdir -p "$CONFIG_DIR" "$STATE_DIR"
+: >"$LOG"
+export PATH="$HOME/.cargo/bin:$PATH"
+
+log() { printf '[mobascape] %s\n' "$*" | tee -a "$LOG" >&2; }
+interactive() { [ -t 2 ]; }
+have() { command -v "$1" >/dev/null 2>&1; }
+
+notify() {
+    log "$1"
+    interactive && return
+    have notify-send && notify-send -a MobaScape -i applications-games "MobaScape" "$1" 2>/dev/null || true
+}
+
+fail() {
+    log "error: $1"
+    if ! interactive && have zenity; then
+        zenity --error --title=MobaScape --width=420 --text="$1\n\nLog: $LOG" 2>/dev/null
+    fi
+    exit 1
+}
+
+is_repo() { [ -f "$1/Cargo.toml" ] && [ -d "$1/crates/client" ] && [ -d "$1/data" ]; }
+
+find_repo() {
+    local candidate
+    for candidate in \
+        "${MOBASCAPE_REPO:-}" \
+        "$(cat "$CONFIG_DIR/repo" 2>/dev/null)" \
+        "$(cat "$HERE/repo-path" 2>/dev/null)"; do
+        if [ -n "$candidate" ] && is_repo "$candidate"; then
+            printf '%s' "$candidate"
+            return 0
+        fi
+    done
+    # Nothing known works: ask once and remember the answer.
+    if ! interactive && have zenity; then
+        candidate="$(zenity --file-selection --directory \
+            --title='Choose the MobaScape checkout (the folder with Cargo.toml)' 2>/dev/null)"
+        if [ -n "$candidate" ] && is_repo "$candidate"; then
+            printf '%s\n' "$candidate" >"$CONFIG_DIR/repo"
+            printf '%s' "$candidate"
+            return 0
+        fi
+    fi
+    return 1
+}
+
+update_checkout() {
+    [ "${MOBASCAPE_NO_PULL:-0}" = 1 ] && return
+    have git || return
+    git -C "$REPO" rev-parse --abbrev-ref '@{u}' >/dev/null 2>&1 || {
+        log "git: no upstream branch, skipping update"
+        return
+    }
+    # Only fast-forward a clean tree: local work is never touched.
+    if [ -n "$(git -C "$REPO" status --porcelain --untracked-files=no)" ]; then
+        log "git: local changes present, running them as they are"
+        return
+    fi
+    if ! timeout 20 git -C "$REPO" fetch --quiet >>"$LOG" 2>&1; then
+        log "git: fetch failed (offline?), using the local checkout"
+        return
+    fi
+    local behind
+    behind="$(git -C "$REPO" rev-list --count 'HEAD..@{u}' 2>/dev/null || echo 0)"
+    if [ "$behind" -gt 0 ]; then
+        if git -C "$REPO" merge --ff-only --quiet '@{u}' >>"$LOG" 2>&1; then
+            notify "Updated: $behind new commit(s), now at $(git -C "$REPO" log -1 --format=%h)"
+        else
+            log "git: fast-forward not possible, using the local checkout"
+        fi
+    fi
+}
+
+build_client() {
+    [ "${MOBASCAPE_NO_BUILD:-0}" = 1 ] && return 0
+    have cargo || {
+        log "cargo not found, using the newest existing build"
+        return 0
+    }
+    local cmd=(cargo build --release -p rift-client --manifest-path "$REPO/Cargo.toml")
+    if interactive; then
+        log "building (incremental; instant when nothing changed)..."
+        "${cmd[@]}" 2>&1 | tee -a "$LOG" >&2
+        return "${PIPESTATUS[0]}"
+    fi
+    if have zenity; then
+        local status_file="$STATE_DIR/build.status"
+        rm -f "$status_file"
+        (
+            "${cmd[@]}" >>"$LOG" 2>&1
+            echo $? >"$status_file"
+        ) &
+        local pid=$!
+        # Only show a window when the build takes noticeable time.
+        sleep 1.5
+        if kill -0 "$pid" 2>/dev/null; then
+            (while kill -0 "$pid" 2>/dev/null; do
+                echo "# $(grep -E 'Compiling|Finished' "$LOG" | tail -1 | sed 's/^ *//')"
+                sleep 0.5
+            done) | zenity --progress --pulsate --auto-close --no-cancel \
+                --title=MobaScape --width=460 --text="Building the latest MobaScape..." 2>/dev/null
+        fi
+        wait "$pid"
+        return "$(cat "$status_file" 2>/dev/null || echo 1)"
+    fi
+    "${cmd[@]}" >>"$LOG" 2>&1
+}
+
+REPO="$(find_repo)" || fail "MobaScape checkout not found.\nSet MOBASCAPE_REPO=/path/to/checkout or write the path to $CONFIG_DIR/repo."
+log "checkout: $REPO"
+
+update_checkout
+if ! build_client; then
+    notify "Build failed; starting the last good build. See $LOG"
+fi
+
+BIN="$REPO/target/release/rift-client"
+if [ ! -x "$BIN" ]; then
+    BIN="$HERE/usr/bin/rift-client"
+    log "no build in the checkout, using the snapshot bundled in the AppImage"
+fi
+[ -x "$BIN" ] || fail "No MobaScape client binary available."
+
+[ -f "$REPO/.cache/osrs-235/cache/main_file_cache.dat2" ] || case " $* " in
+    *" --cache "*) ;;
+    *) fail "OSRS cache missing at $REPO/.cache/osrs-235/cache.\nFetch it as described in the README (it is never bundled)." ;;
+esac
+
+[ $# -eq 0 ] && set -- --ui-live
+log "running $(git -C "$REPO" log -1 --format='%h %s' 2>/dev/null): $BIN $*"
+cd "$REPO" || fail "cannot enter $REPO"
+exec "$BIN" "$@"

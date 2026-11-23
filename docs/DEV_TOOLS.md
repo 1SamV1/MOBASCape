@@ -3,6 +3,29 @@
 Debugging and art-iteration aids built into `rift-client`. None of them
 change normal play: they are CLI flags or function keys.
 
+## AppImage launcher (`tools/appimage`)
+
+`tools/appimage/build.sh` writes `dist/MobaScape-x86_64.AppImage`
+(`--install` also copies it to `~/Applications` and adds a menu entry).
+The AppImage does not freeze a build. Every launch it:
+
+1. finds the checkout (`$MOBASCAPE_REPO`, then `~/.config/mobascape/repo`,
+   then the path baked in at build time, else a folder picker);
+2. fast-forwards to the upstream branch (`sam/main`) if the tracked tree is
+   clean (local edits are never touched; offline just skips this);
+3. runs an incremental `cargo build --release -p rift-client` (about 0.2 s
+   when nothing changed; a progress window appears for longer builds);
+4. runs the client from the checkout root, by default with `--ui-live`.
+   Any arguments replace that default and are passed through.
+
+If the build fails, it runs the last good binary in `target/release`, then
+the snapshot bundled in the AppImage. `MOBASCAPE_NO_PULL=1` and
+`MOBASCAPE_NO_BUILD=1` turn steps 2 and 3 off. The log is at
+`~/.local/state/mobascape/launcher.log`. Rebuild the AppImage only when
+`AppRun` changes or the checkout moves. It contains no cache or `assets/`
+(the OSRS cache stays in `.cache/`). `build.sh` fetches `appimagetool` into
+`.cache/tools` the first time it runs.
+
 ## Batch screenshots (`--shots`)
 
 One load, many camera presets, one PNG each, then the client exits.

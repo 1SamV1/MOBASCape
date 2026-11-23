@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=MobaScape
+Comment=MOBA built on the OSRS cache (builds the latest checkout on launch)
+Exec=AppRun %U
+Icon=mobascape
+Terminal=false
+Categories=Game;StrategyGame;
+StartupWMClass=rift-client
