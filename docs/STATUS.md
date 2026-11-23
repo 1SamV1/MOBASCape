@@ -1,6 +1,33 @@
 # Status
 
-Last updated: terraced terrain, grass anti-tiling and imp facing, 2026-11-23.
+Last updated: terrain performance recovery, 2026-11-23.
+
+## 2026-11-23 — Terrain performance recovery: baked noise, adaptive mesh
+
+- **Baked grass noise.** Tileable three-octave value noise is written into
+  the (unused) alpha channel of every grass layer at load. The terrain
+  shader reads mottle from the two rotated grass samples it already takes
+  and the lush/dry macro field from a mip-5 sample at a 6400-unit repeat,
+  replacing three procedural `noise2` calls (12 hashes per pixel); cliff
+  strata use one `sin`. Test: the bake tiles seamlessly and spans a range.
+- **Adaptive terrain.** A tile gets the 64-unit grid only where its fine
+  heights leave the coarse quad's plane by more than 3 units (cliff lips,
+  risers, banks) or its ground identity changes inside it; 17.9% of tiles.
+  Coarse tiles that border refined ones fan around their centre through the
+  shared edge midpoints, so the mesh stays watertight. 364k terrain
+  triangles (was 819k uniform, 205k before the rework).
+- Measured at 1920×1008, live UI, auto scale (scene GPU / p50 / p95):
+
+  | Build | Scene GPU | p50 | p95 |
+  |---|---:|---:|---:|
+  | Pre-rework baseline | 11.3 ms | 13.0 ms | 13.9 ms |
+  | Uniform 64-unit + procedural noise | 14.3 ms | 16.2 ms | 17.6 ms |
+  | Uniform 64-unit + baked noise | 13.1 ms | 14.9 ms | 15.5 ms |
+  | 128-unit + baked noise (reference) | 10.7 ms | 12.8 ms | 15.3 ms |
+  | **Adaptive + baked noise (shipped)** | **12.0 ms** | **13.7 ms / 73 fps** | **14.6 ms** |
+
+- Verified: 283 workspace tests pass; clippy clean; cliff and jungle captures
+  show no cracks at refined/coarse borders.
 
 ## 2026-11-23 — Terraced terrain, 64-unit ground mesh, grass anti-tiling, imp facing
 
