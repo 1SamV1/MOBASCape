@@ -145,6 +145,7 @@ impl Audio {
             let Some(samples) = self.samples(cache, cue.id) else {
                 continue;
             };
+            tracing::debug!(id = cue.id, volume = cue.volume, "audio: cue");
             let gain = cue.volume * self.master;
             if gain * left.max(right) < 0.01 || samples.is_empty() {
                 continue;

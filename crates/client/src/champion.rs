@@ -49,6 +49,25 @@ pub struct SoundSpec {
     pub speed: f32,
 }
 
+/// Shared combat and interface sounds every unit falls back to
+/// (`data/sounds.json`). A champion's own `sounds` entry with the same name
+/// overrides one for that champion.
+pub type SoundTable = std::collections::BTreeMap<String, SoundSpec>;
+
+/// Load `data/sounds.json`. A missing or broken file leaves the game silent
+/// apart from champion-specific sounds rather than failing the boot.
+pub fn load_default_sounds() -> SoundTable {
+    load_sound_table("data/sounds.json").unwrap_or_else(|err| {
+        tracing::warn!("sounds: {err:#}; shared combat sounds are off");
+        SoundTable::new()
+    })
+}
+
+fn load_sound_table(path: &str) -> Result<SoundTable> {
+    let text = std::fs::read_to_string(path).with_context(|| format!("reading {path}"))?;
+    serde_json::from_str(&text).with_context(|| format!("parsing {path}"))
+}
+
 #[derive(Debug, Clone, Deserialize)]
 pub struct ChampionConfig {
     /// File stem used by the hero-select screen and portrait atlas.
@@ -267,6 +286,30 @@ impl ChampionConfig {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn shared_sound_table_names_every_sound_the_scene_asks_for() {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data/sounds.json");
+        let table = load_sound_table(path.to_str().unwrap()).expect("data/sounds.json");
+        for name in [
+            "melee_hit",
+            "ranged_hit",
+            "blocked_hit",
+            "player_hurt",
+            "ranged_release",
+            "magic_release",
+            "cast",
+            "shop_buy",
+            "shop_sell",
+            "skill_point",
+            "frame_sound",
+            "structure_fall",
+        ] {
+            let spec = table.get(name).unwrap_or_else(|| panic!("missing {name}"));
+            assert!(spec.volume > 0.0 && spec.volume <= 1.0, "{name} volume");
+            assert!(spec.speed > 0.25 && spec.speed < 4.0, "{name} speed");
+        }
+    }
 
     #[test]
     fn every_champion_file_parses_and_kits_are_complete() {

@@ -256,6 +256,26 @@ impl ActionAnim {
     }
 }
 
+/// A unit's animation clocks at the start of a tick, so frame sounds can be
+/// played for exactly the span the tick advanced.
+struct AnimClock {
+    base_ms: f32,
+    /// The playing one-shot clip (by identity) and its time.
+    action: Option<(*const AnimationClip, f32)>,
+}
+
+impl AnimClock {
+    fn of(unit: &AnimatedUnit) -> Self {
+        Self {
+            base_ms: unit.anim_time_ms,
+            action: unit
+                .action
+                .as_ref()
+                .map(|action| (Arc::as_ptr(&action.clip), action.time_ms)),
+        }
+    }
+}
+
 /// Playback rate that makes `clip`'s `hit` fraction land after `windup`
 /// seconds. Zero wind-up plays the clip at its own speed.
 fn action_rate(clip: &AnimationClip, hit: f32, windup: f32) -> f32 {
@@ -754,6 +774,10 @@ pub struct AnimatedScene {
     pub awowogei: awowogei::AwowogeiState,
     /// The champion's named cache sounds, and sounds waiting to be played.
     sounds: std::collections::BTreeMap<String, crate::champion::SoundSpec>,
+    /// Shared combat and interface sounds (`data/sounds.json`).
+    default_sounds: crate::champion::SoundTable,
+    /// The player's basic-attack release sound, by combat class.
+    player_release_sound: &'static str,
     pub sound_cues: Vec<crate::audio::SoundCue>,
     rng_state: u32,
     pub effects: Vec<Effect>,
@@ -1244,6 +1268,12 @@ impl AnimatedScene {
             cast_flash: None,
             awowogei,
             sounds: champion.sounds.clone(),
+            default_sounds: crate::champion::load_default_sounds(),
+            player_release_sound: if champion.class == "MAGIC" {
+                "magic_release"
+            } else {
+                "ranged_release"
+            },
             sound_cues: Vec::new(),
             rng_state: 0x9E37_79B9,
             effects: Vec::new(),
@@ -1499,6 +1529,8 @@ impl AnimatedScene {
         }
         player.speed = (player.speed - item.speed).max(100.0);
         player.ability_power = (player.ability_power - item.ability).max(0.0);
+        let pos = player.pos;
+        self.play_sound("shop_sell", pos);
         Ok(())
     }
 
@@ -1618,6 +1650,9 @@ impl AnimatedScene {
             return Err("not enough gold");
         }
         player.gold -= item.cost;
+        let pos = player.pos;
+        self.play_sound("shop_buy", pos);
+        let player = &mut self.units[pi];
         let at_base = player.pos.distance(self.player_spawn) <= 900.0;
         if at_base {
             self.apply_item(item);
@@ -1980,6 +2015,7 @@ impl AnimatedScene {
                 look,
             ));
             self.muzzle_flash(from, look);
+            self.play_release_sound(pi, from);
         } else {
             self.melee_slash(pi, target, [255, 235, 200]);
             self.damage_unit_by(target, damage, 0, Some(pi));
@@ -2174,6 +2210,7 @@ impl AnimatedScene {
                 look,
             ));
             self.muzzle_flash(from, look);
+            self.play_release_sound(index, from);
         } else {
             let color = match team {
                 0 => [200, 225, 255],
@@ -2231,6 +2268,10 @@ impl AnimatedScene {
         self.units[pi].attack_pending = false;
         self.units[pi].attack_windup_timer = 0.0;
         self.start_action(pi, true, 0.0);
+        if !self.slot_has_own_sounds(slot) {
+            let pos = self.units[pi].pos;
+            self.play_sound("cast", pos);
+        }
     }
 
     /// Show the held range indicator for the last ability at `aim`, or hide
@@ -2357,23 +2398,87 @@ impl AnimatedScene {
 
     /// Queue the champion's sound `name` at `pos`. Unnamed sounds are
     /// silently skipped, so kits can ask for sounds a file does not list.
+    /// Unnamed sounds fall back to the shared table in `data/sounds.json`.
     pub(crate) fn play_sound(&mut self, name: &str, pos: Vec3) {
-        let Some(spec) = self.sounds.get(name).copied() else {
-            return;
-        };
-        if self.sound_cues.len() < 32 {
-            self.sound_cues.push(crate::audio::SoundCue {
-                id: spec.id,
-                pos,
-                volume: spec.volume,
-                speed: spec.speed,
-            });
+        let spec = self
+            .sounds
+            .get(name)
+            .or_else(|| self.default_sounds.get(name))
+            .copied();
+        if let Some(spec) = spec {
+            self.queue_sound(spec, pos);
         }
     }
 
-    /// Every sound id the champion file names, for preloading.
+    /// Queue a sound from the shared table only: for units other than the
+    /// player's champion, whose own file must not change their sounds.
+    fn play_shared_sound(&mut self, name: &str, pos: Vec3) {
+        if let Some(spec) = self.default_sounds.get(name).copied() {
+            self.queue_sound(spec, pos);
+        }
+    }
+
+    /// One copy of a sound per frame: an area spell striking five minions,
+    /// or a kit hit sound landing with the shared hit sound, plays once.
+    fn queue_sound(&mut self, spec: crate::champion::SoundSpec, pos: Vec3) {
+        if self.sound_cues.len() >= 32 || self.sound_cues.iter().any(|cue| cue.id == spec.id) {
+            return;
+        }
+        self.sound_cues.push(crate::audio::SoundCue {
+            id: spec.id,
+            pos,
+            volume: spec.volume,
+            speed: spec.speed,
+        });
+    }
+
+    /// True when the champion file names any sound for ability `slot`
+    /// (`q_*`, `w_*`, ...), so the shared cast whoosh stays out of a kit
+    /// that scores its own casts.
+    fn slot_has_own_sounds(&self, slot: usize) -> bool {
+        let prefix = ["q_", "w_", "e_", "r_"][slot.min(3)];
+        self.sounds.keys().any(|name| name.starts_with(prefix))
+    }
+
+    /// A champion's basic attack left its hand: a whoosh for the shot.
+    /// Hidden enemies stay silent so sound never leaks through fog.
+    fn play_release_sound(&mut self, index: usize, from: Vec3) {
+        if index == self.player_index {
+            let name = self.player_release_sound;
+            self.play_sound(name, from);
+        } else if self.units[index].is_champion && self.units[index].visible {
+            self.play_shared_sound("ranged_release", from);
+        }
+    }
+
+    /// Every sound id the champion file and the shared table name, plus the
+    /// frame sounds of every loaded unit clip, for preloading.
     pub fn sound_ids(&self) -> Vec<u32> {
-        self.sounds.values().map(|spec| spec.id).collect()
+        let mut ids: Vec<u32> = self
+            .sounds
+            .values()
+            .chain(
+                self.default_sounds
+                    .iter()
+                    .filter(|(name, _)| name.as_str() != "frame_sound")
+                    .map(|(_, spec)| spec),
+            )
+            .map(|spec| spec.id)
+            .collect();
+        for unit in &self.units {
+            let clips = [
+                Some(&unit.idle),
+                unit.walk.as_ref(),
+                unit.attack_clip.as_ref(),
+                unit.cast_clip.as_ref(),
+            ];
+            for clip in clips.into_iter().flatten() {
+                ids.extend(clip.sequence.sounds.iter().map(|sound| sound.id as u32));
+            }
+        }
+        ids.sort_unstable();
+        ids.dedup();
+        ids
     }
 
     fn add_decal(&mut self, pos: Vec3, radius: f32, color: [u8; 3], duration: f32) {
@@ -3145,6 +3250,8 @@ impl AnimatedScene {
     }
 
     pub fn update(&mut self, dt: f32, height: &HeightGrid, collision: &WorldCollision) {
+        // Frame sounds play for the span each clip advances this tick.
+        let start_clocks: Vec<AnimClock> = self.units.iter().map(AnimClock::of).collect();
         self.hud_time += dt;
         // Floating numbers drift up and fade, announcements and the kill feed
         // time out, and the minimap ping decays.
@@ -3450,6 +3557,58 @@ impl AnimatedScene {
             if moved > 0.01 && moved <= limit && unit.walk_loop_ms > 0.0 && unit.walk_stride > 0.0 {
                 unit.anim_time_ms += moved / unit.walk_stride * unit.walk_loop_ms - dt * 1000.0;
             }
+        }
+        self.play_frame_sounds(&start_clocks);
+    }
+
+    /// Play the sounds the cache attaches to animation frames (opcode 14):
+    /// footsteps, swings and roars on the clips units actually played this
+    /// tick. Only units the player can see are heard, and each sound keeps
+    /// to its cache audible range.
+    fn play_frame_sounds(&mut self, start: &[AnimClock]) {
+        let Some(spec) = self.default_sounds.get("frame_sound").copied() else {
+            return;
+        };
+        let listener = self.units[self.player_index].pos;
+        let mut queued = Vec::new();
+        for (unit, before) in self.units.iter().zip(start) {
+            if !unit.visible || unit.spawn_delay > 0.0 || unit.health <= 0.0 {
+                continue;
+            }
+            let base = if unit.moving {
+                unit.walk.as_ref().unwrap_or(&unit.idle)
+            } else {
+                &unit.idle
+            };
+            let mut sounds = base
+                .sequence
+                .sounds_between(before.base_ms, unit.anim_time_ms, true);
+            if let Some(action) = &unit.action {
+                let from = match before.action {
+                    Some((clip, time)) if std::ptr::eq(clip, Arc::as_ptr(&action.clip)) => time,
+                    _ => 0.0,
+                };
+                sounds.extend(
+                    action
+                        .clip
+                        .sequence
+                        .sounds_between(from, action.time_ms, false),
+                );
+            }
+            for sound in sounds {
+                let range = if sound.range == 0 {
+                    crate::audio::HEARING_RANGE
+                } else {
+                    sound.range as f32 * 128.0
+                };
+                if planar_delta(listener, unit.pos).length() <= range {
+                    let id = sound.id as u32;
+                    queued.push((crate::champion::SoundSpec { id, ..spec }, unit.pos));
+                }
+            }
+        }
+        for (spec, pos) in queued {
+            self.queue_sound(spec, pos);
         }
     }
 
@@ -4187,6 +4346,7 @@ impl AnimatedScene {
         };
         let tint = self.hitsplat_tint(aggressor);
         self.push_hitsplat(index, amount, hit_kind, tint);
+        self.play_hit_sound(index, aggressor, amount);
         if amount > 0.0 {
             let color = if index == self.player_index {
                 [255, 110, 100]
@@ -4258,6 +4418,10 @@ impl AnimatedScene {
                 self.deaths[victim_team as usize] += 1;
             }
         }
+        if target_kind.is_structure() {
+            let pos = self.units[index].pos;
+            self.play_shared_sound("structure_fall", pos);
+        }
         match target_kind {
             UnitKind::Nexus => {
                 self.match_over = Some(attacker_team);
@@ -4310,6 +4474,38 @@ impl AnimatedScene {
                 }
             }
             _ => {}
+        }
+    }
+
+    /// The hit sound for one landed blow. Like the reference client, only
+    /// fights the player is in make hit noises (the player struck, or was
+    /// struck), plus visible champion duels nearby; minion and tower trades
+    /// stay quiet so a lane does not drown the player's own hits.
+    fn play_hit_sound(&mut self, index: usize, aggressor: Option<usize>, amount: f32) {
+        let pos = self.units[index].pos;
+        if index == self.player_index {
+            if amount > 0.5 {
+                self.play_sound("player_hurt", pos);
+            }
+            return;
+        }
+        let from_player = aggressor == Some(self.player_index);
+        let champion_duel = aggressor.is_some_and(|a| self.units[a].is_champion)
+            && self.units[index].is_champion
+            && self.units[index].visible;
+        if !from_player && !champion_duel {
+            return;
+        }
+        let ranged = aggressor.is_some_and(|a| self.units[a].ranged_auto);
+        let name = match (amount > 0.5, ranged) {
+            (false, _) => "blocked_hit",
+            (true, true) => "ranged_hit",
+            (true, false) => "melee_hit",
+        };
+        if from_player {
+            self.play_sound(name, pos);
+        } else {
+            self.play_shared_sound(name, pos);
         }
     }
 

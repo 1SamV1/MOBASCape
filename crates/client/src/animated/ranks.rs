@@ -123,6 +123,8 @@ impl AnimatedScene {
         }
         self.skill_points -= 1;
         self.ability_ranks[slot] += 1;
+        let pos = self.units[self.player_index].pos;
+        self.play_sound("skill_point", pos);
         let rank = self.ability_ranks[slot];
         // A shorter cooldown applies to a cooldown already running.
         let cooldown = self.rank_cooldown(slot, f32::MAX);

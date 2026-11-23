@@ -1,0 +1,14 @@
+{
+  "melee_hit": { "id": 2498, "volume": 0.55 },
+  "ranged_hit": { "id": 2498, "volume": 0.4, "speed": 1.15 },
+  "blocked_hit": { "id": 511, "volume": 0.5 },
+  "player_hurt": { "id": 510, "volume": 0.5 },
+  "ranged_release": { "id": 1930, "volume": 0.3, "speed": 1.8 },
+  "magic_release": { "id": 1930, "volume": 0.3, "speed": 1.1 },
+  "cast": { "id": 1930, "volume": 0.45, "speed": 1.3 },
+  "shop_buy": { "id": 3924, "volume": 0.7 },
+  "shop_sell": { "id": 3928, "volume": 0.7 },
+  "skill_point": { "id": 2266, "volume": 0.6 },
+  "frame_sound": { "id": 0, "volume": 0.6 },
+  "structure_fall": { "id": 2734, "volume": 0.85, "speed": 0.85 }
+}

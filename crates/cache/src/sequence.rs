@@ -134,6 +134,44 @@ impl Sequence {
 
         Ok(def)
     }
+
+    /// Start time of frame `index` in milliseconds (one cache tick is
+    /// 20 ms, and a zero-length frame still lasts one tick, as in
+    /// [`AnimationClip::loop_ms`]).
+    pub fn frame_start_ms(&self, index: usize) -> f32 {
+        self.frame_lengths
+            .iter()
+            .take(index)
+            .map(|&length| length.max(1) as f32 * 20.0)
+            .sum()
+    }
+
+    /// The frame sounds whose frame starts in `[from_ms, to_ms)`. With
+    /// `looping`, times wrap around one pass of the sequence, so a looping
+    /// walk cycle replays its footsteps; a span longer than a pass plays each
+    /// sound once. A one-shot sequence only plays sounds inside its length.
+    pub fn sounds_between(&self, from_ms: f32, to_ms: f32, looping: bool) -> Vec<FrameSound> {
+        if self.sounds.is_empty() || to_ms <= from_ms {
+            return Vec::new();
+        }
+        let pass = self.frame_start_ms(self.frame_lengths.len()).max(1.0);
+        let (from, to) = if looping {
+            let from = from_ms.rem_euclid(pass);
+            (from, from + (to_ms - from_ms).min(pass))
+        } else {
+            (from_ms, to_ms)
+        };
+        self.sounds
+            .iter()
+            .filter(|sound| (sound.frame as usize) < self.frame_lengths.len().max(1))
+            .filter(|sound| {
+                let start = self.frame_start_ms(sound.frame as usize);
+                let hit = |t: f32| t >= from && t < to;
+                hit(start) || (looping && hit(start + pass))
+            })
+            .copied()
+            .collect()
+    }
 }
 
 #[derive(Debug, Clone, Default)]
@@ -399,6 +437,56 @@ impl Frame {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn stomping_sequence() -> Sequence {
+        // Four frames of 5 ticks (100 ms each): a 400 ms pass, with
+        // footsteps on frames 1 and 3.
+        let step = |frame, id| FrameSound {
+            frame,
+            id,
+            ..Default::default()
+        };
+        Sequence {
+            frame_lengths: vec![5, 5, 5, 5],
+            sounds: vec![step(1, 10), step(3, 30)],
+            ..Default::default()
+        }
+    }
+
+    fn ids(sounds: Vec<FrameSound>) -> Vec<u16> {
+        sounds.into_iter().map(|sound| sound.id).collect()
+    }
+
+    #[test]
+    fn frame_sounds_fire_once_as_their_frame_starts() {
+        let seq = stomping_sequence();
+        assert_eq!(seq.frame_start_ms(3), 300.0);
+        assert_eq!(ids(seq.sounds_between(0.0, 99.0, false)), Vec::<u16>::new());
+        assert_eq!(ids(seq.sounds_between(90.0, 110.0, false)), vec![10]);
+        assert_eq!(ids(seq.sounds_between(100.0, 120.0, false)), vec![10]);
+        assert_eq!(
+            ids(seq.sounds_between(120.0, 140.0, false)),
+            Vec::<u16>::new()
+        );
+        assert_eq!(
+            ids(seq.sounds_between(50.0, 50.0, false)),
+            Vec::<u16>::new()
+        );
+    }
+
+    #[test]
+    fn looping_frame_sounds_wrap_but_one_shots_do_not() {
+        let seq = stomping_sequence();
+        // 390..510 wraps past the end of the pass into frame 1 again.
+        assert_eq!(ids(seq.sounds_between(390.0, 510.0, true)), vec![10]);
+        assert_eq!(ids(seq.sounds_between(2_290.0, 2_310.0, true)), vec![30]);
+        assert_eq!(
+            ids(seq.sounds_between(390.0, 510.0, false)),
+            Vec::<u16>::new()
+        );
+        // A long hitch plays each footstep once, not a burst.
+        assert_eq!(ids(seq.sounds_between(0.0, 5_000.0, true)), vec![10, 30]);
+    }
 
     #[test]
     fn parses_framemap_and_frame() {
