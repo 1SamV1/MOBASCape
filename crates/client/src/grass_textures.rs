@@ -77,13 +77,19 @@ impl GrassTextures {
 
     fn from_sources(sources: Vec<RgbaImage>) -> Result<Self> {
         debug_assert_eq!(sources.len(), LAYERS as usize);
+        let mut sources: Vec<RgbaImage> = sources
+            .into_iter()
+            .map(|source| {
+                if source.width() == SOURCE && source.height() == SOURCE {
+                    source
+                } else {
+                    image::imageops::resize(&source, SOURCE, SOURCE, FilterType::Nearest)
+                }
+            })
+            .collect();
+        normalize_brightness(&mut sources);
         let mut pixels = Vec::new();
         for source in sources {
-            let source = if source.width() == SOURCE && source.height() == SOURCE {
-                source
-            } else {
-                image::imageops::resize(&source, SOURCE, SOURCE, FilterType::Nearest)
-            };
             let mut level = mirror_tile(&source);
             bake_alpha_noise(&mut level);
             pixels.extend_from_slice(level.as_raw());
@@ -108,6 +114,47 @@ impl GrassTextures {
             mip_levels: MIPS,
             pixels,
         })
+    }
+}
+
+/// Pull every variant's mean brightness most of the way to the classic
+/// grass (layer 0), in linear light, keeping each sprite's hue and texture.
+/// The cache "lush" grass (203) is several times darker than the classic
+/// sprite; a biome pocket using it read as a flat dark slab across the
+/// jungle. `KEEP` retains part of each variant's own brightness so biomes
+/// still differ in tone.
+fn normalize_brightness(sources: &mut [RgbaImage]) {
+    const KEEP: f32 = 0.3;
+    let to_linear = |v: u8| crate::scene::srgb_to_linear(v as f32 / 255.0);
+    let to_srgb = |v: f32| {
+        let v = v.clamp(0.0, 1.0);
+        let s = if v <= 0.003_130_8 {
+            v * 12.92
+        } else {
+            1.055 * v.powf(1.0 / 2.4) - 0.055
+        };
+        (s * 255.0).round().clamp(0.0, 255.0) as u8
+    };
+    let mean_luma = |image: &RgbaImage| {
+        let mut sum = 0.0f64;
+        for p in image.pixels() {
+            let [r, g, b, _] = p.0;
+            sum += (0.2126 * to_linear(r) + 0.7152 * to_linear(g) + 0.0722 * to_linear(b)) as f64;
+        }
+        (sum / (image.width() * image.height()) as f64).max(1e-4) as f32
+    };
+    let Some(target) = sources.first().map(mean_luma) else {
+        return;
+    };
+    for (index, image) in sources.iter_mut().enumerate().skip(1) {
+        let mean = mean_luma(image);
+        let gain = (target / mean).powf(1.0 - KEEP).clamp(0.5, 3.0);
+        for p in image.pixels_mut() {
+            for c in 0..3 {
+                p.0[c] = to_srgb(to_linear(p.0[c]) * gain);
+            }
+        }
+        tracing::info!("grass variant {index}: mean luma {mean:.3} -> gain {gain:.2}");
     }
 }
 
@@ -238,5 +285,18 @@ mod tests {
         assert!(max - min > 100, "noise too flat: {min}..{max}");
         // Colour is untouched.
         assert_eq!(&image.get_pixel(5, 5).0[..3], &[10, 20, 30]);
+    }
+
+    #[test]
+    fn brightness_normalisation_lifts_dark_variants_toward_the_first() {
+        let bright = RgbaImage::from_pixel(8, 8, image::Rgba([120, 170, 60, 255]));
+        let dark = RgbaImage::from_pixel(8, 8, image::Rgba([30, 50, 20, 255]));
+        let mut layers = vec![bright.clone(), dark.clone()];
+        normalize_brightness(&mut layers);
+        assert_eq!(layers[0], bright, "the reference layer is untouched");
+        let lifted = layers[1].get_pixel(0, 0).0;
+        assert!(lifted[1] > 50 && lifted[1] < 170, "green {}", lifted[1]);
+        // Hue survives: green stays the dominant channel.
+        assert!(lifted[1] > lifted[0] && lifted[0] > lifted[2]);
     }
 }
