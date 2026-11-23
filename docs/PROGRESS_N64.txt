@@ -1,42 +1,42 @@
 +====================================================================================================================================================+
   MOBASCAPE 64          // 64-BIT HERO ARENA //                                             OSRS DESIGN PASS II             BUILD dce5262
 +====================================================================================================================================================+
-
-                                                            ######        ##      ##
-                                                           ##    ##      ###      ###
-                                                           ##            ###      ###
-                                                           ##            ###      ###
-                                                            ######       ############
-                                                                 ##               ###
-                                                                 ##               ###
-                                                           ##    ##               ###
-                                                            ######                ###
-
-
-                                                            P R O G R E S S   R E P O R T
-                                            C A C H E - N A T I V E   C O M B A T   /   B O T H   H U D S
-
 |                                                                                                                                                    |
-   [OK] CACHE HITMARKS .......     DAMAGE / MAX / POISON / VENOM / DISEASE / [OK] TINTED RIVAL HITS ....   DARK COOL TINT
-   [OK] PK SKULL + NO SAFE ...     WHITE SKULL 439 + YELLOW TAG              [OK] MAX-HIT SPLAT ........   GOLD-TRIMMED SPRITE 3571
-   [OK] CAMP NAME PLATES .....     --UI-LIVE + LEGACY, LEVEL CHIP RIGHT      [OK] HITMARK STACKING .....   DOWN THE BODY, 1.2 S FADE
-   [OK] 2X HERO NAMES ........     SOLID TEAM / CAMP COLOURS                 [OK] PLATE NUDGE ..........   SHARED BETWEEN BOTH HUDS
-
+|                                                           ######        ##      ##                                                                 |
+|                                                          ##    ##      ###      ###                                                                |
+|                                                          ##            ###      ###                                                                |
+|                                                          ##            ###      ###                                                                |
+|                                                           ######       ############                                                                |
+|                                                                ##               ###                                                                |
+|                                                                ##               ###                                                                |
+|                                                          ##    ##               ###                                                                |
+|                                                           ######                ###                                                                |
 |                                                                                                                                                    |
-   TESTS ......  cargo test --workspace                 121 CLIENT / 20 UI / ALL CRATES PASS
-   CLIPPY .....  cargo clippy --workspace -D warnings          CLEAN
-   VISUAL .....  1280x720 --demo-hitsplats / --ui-live --demo-duel / --ui-live --demo-camp                   PASS
-   COMMITS ....  dce5262  ui: PK markers, max hits and assembled hitmarks
-                 7a1824e  ui: cache-native OSRS hitmarks and overhead plates
-
 |                                                                                                                                                    |
-                                      +--------------------------------------------+
-                                      |              PRESS START TO CONTINUE       |
-                                      +--------------------------------------------+
-   CHECKING CONTROLLER PAK ... OK    MEMORY CARD 1: 123 BLOCKS FREE       (C) 2026 MOBASCAPE PROJECT     NOT AFFILIATED WITH NINTENDO
-
+|                                                           P R O G R E S S   R E P O R T                                                            |
+|                                           C A C H E - N A T I V E   C O M B A T   /   B O T H   H U D S                                            |
+|                                                                                                                                                    |
+|                                                                                                                                                    |
+|  [OK] CACHE HITMARKS .......  DMG/MAX/POISON/VENOM/DISEASE/HEAL/MISS            [OK] TINTED RIVAL HITS ....   DARK COOL TINT                       |
+|  [OK] PK SKULL + NO SAFE ...     WHITE SKULL 439 + YELLOW TAG                   [OK] MAX-HIT SPLAT ........   GOLD-TRIMMED SPRITE 3571             |
+|  [OK] CAMP NAME PLATES .....     --UI-LIVE + LEGACY, LEVEL CHIP RIGHT           [OK] HITMARK STACKING .....   DOWN THE BODY, 1.2 S FADE            |
+|  [OK] 2X HERO NAMES ........     SOLID TEAM / CAMP COLOURS                      [OK] PLATE NUDGE ..........   SHARED BETWEEN BOTH HUDS             |
+|                                                                                                                                                    |
+|                                                                                                                                                    |
+|  TESTS ......  cargo test --workspace                 121 CLIENT / 20 UI / ALL CRATES PASS                                                         |
+|  CLIPPY .....  cargo clippy --workspace -D warnings          CLEAN                                                                                 |
+|  VISUAL .....  1280x720 --demo-hitsplats / --ui-live --demo-duel / --ui-live --demo-camp                   PASS                                    |
+|  COMMITS ....  dce5262  ui: PK markers, max hits and assembled hitmarks                                                                            |
+|                7a1824e  ui: cache-native OSRS hitmarks and overhead plates                                                                         |
+|                                                                                                                                                    |
+|                                                                                                                                                    |
+|                                     +--------------------------------------------+                                                                 |
+|                                     |              PRESS START TO CONTINUE       |                                                                 |
+|                                     +--------------------------------------------+                                                                 |
+|  CHECKING CONTROLLER PAK ... OK    MEMORY CARD 1: 123 BLOCKS FREE       (C) 2026 MOBASCAPE PROJECT     NOT AFFILIATED WITH NINTENDO                |
+|                                                                                                                                                    |
 +====================================================================================================================================================+
-   CONTROLS:  Q W E R ABILITIES    B SHOP    LMB MOVE / ATTACK    Z / X CAMERA    F FOLLOW    ESC CLOSE
-   HITMARK KEYS:  RED DAMAGE  /  GOLD MAX  /  GREEN POISON  /  TEAL VENOM  /  ORANGE DISEASE  /  PURPLE HEAL  /  BLUE MISS
-   PK MARKER:  WHITE SKULL + NO SAFE  //  TINTED HITS = ANOTHER CHAMPION'S DAMAGE
+|  CONTROLS:  Q W E R ABILITIES    B SHOP    LMB MOVE / ATTACK    Z / X CAMERA    F FOLLOW    ESC CLOSE                                              |
+|  HITMARK KEYS:  RED DAMAGE  /  GOLD MAX  /  GREEN POISON  /  TEAL VENOM  /  ORANGE DISEASE  /  PURPLE HEAL  /  BLUE MISS                           |
+|  PK MARKER:  WHITE SKULL + NO SAFE  //  TINTED HITS = ANOTHER CHAMPION'S DAMAGE                                                                    |
 +====================================================================================================================================================+
