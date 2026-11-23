@@ -139,8 +139,12 @@ Implemented:
 - **64-unit river surface.** The water sheet now follows the carved water
   mask at half-tile resolution with soft shoreline opacity, removing the
   128-unit bank staircase.
-- **Bridge decks.** The three crossings are levelled after lane grading and
-  covered by cache-textured wooden decks with low rails.
+- **Bridge decks.** The three crossings are covered by cache-textured wooden
+  decks with low rails.
+- **Shallow water flicker.** The water pipeline is depth-biased and the sheet
+  is lifted 0.75 units, so it no longer fights the carved bed as the camera
+  moves. Low-ground colours, dark grass, overlays, biome edges and bank reeds
+  were lifted for the flat dark-patch problem.
 - **Cache-only ground cover.** 1,839 deterministic low-poly flowers, ferns,
   grass and mushrooms, plus 244 slope boulders, all selected from cache object
   definitions. No new art assets; the model mesh rose from 674k to 835k

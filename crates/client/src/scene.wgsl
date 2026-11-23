@@ -250,9 +250,18 @@ fn water_surface(input: VsOut) -> vec4<f32> {
     var color = mix(deep, sky, fresnel * 0.80);
     color += scene.sun_color.rgb * sun * 0.85;
 
+    // A shallow rim at the mask edge keeps the water from ending in a flat
+    // dark cut. The river mesh stores the water mask in uv.x.
+    let shore = 1.0 - smoothstep(0.06, 0.42, input.uv.x);
+    color = mix(color, vec3<f32>(0.42, 0.62, 0.58), shore * 0.20);
+
     let fog = fog_factor(input);
     color = mix(color, scene.fog_color.rgb, fog * 0.82);
-    let alpha = clamp(input.color.a * (0.52 + fresnel * 0.48), 0.0, 0.92);
+    let alpha = clamp(
+        input.color.a * (0.52 + fresnel * 0.48) + shore * 0.10,
+        0.0,
+        0.95
+    );
     return vec4<f32>(color, alpha);
 }
 
@@ -363,6 +372,10 @@ fn albedo(input: VsOut) -> vec3<f32> {
         let grass_raw = grass_macro * (0.88 + field_tone * 0.24);
         let grass_luma = dot(grass_raw, vec3<f32>(0.299, 0.587, 0.114));
         let grass = mix(vec3<f32>(grass_luma), grass_raw, 1.18) * vec3<f32>(0.98, 1.10, 1.02);
+        // The dark biome grass sprites are nearly black in linear light and
+        // read as flat fog/water in low jungle. Lift the linear values while
+        // preserving the sprite's texture and hue.
+        let grass_lit = pow(max(grass, vec3<f32>(0.0)), vec3<f32>(0.80));
 
         // Project the soil and rock sprites onto the face closest to the
         // camera. A flat xz projection stretches one texel over four world
@@ -427,7 +440,15 @@ fn albedo(input: VsOut) -> vec3<f32> {
                 input.world.xz / 128.0,
                 overlay_texture
             ).rgb;
-            tex = mix(tex, overlay * (0.86 + c * 0.28), overlay_weight);
+            // Match the overlay's brightness to the classified ground. Some
+            // OSRS overlays are very dark marsh/grass art; replacing the
+            // whole tile made low ground read as flat fog/water.
+            let base_luma = max(dot(tex, vec3<f32>(0.299, 0.587, 0.114)), 0.03);
+            let overlay_luma = max(dot(overlay, vec3<f32>(0.299, 0.587, 0.114)), 0.03);
+            let corrected = overlay
+                * clamp(base_luma / overlay_luma, 0.65, 1.35)
+                * (0.86 + c * 0.28);
+            tex = mix(tex, corrected, overlay_weight);
         }
 
         let steep = smoothstep(0.10, 0.38, slope);

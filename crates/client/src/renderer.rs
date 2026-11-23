@@ -1024,7 +1024,13 @@ impl Renderer {
                 depth_write_enabled: Some(false),
                 depth_compare: Some(wgpu::CompareFunction::Less),
                 stencil: wgpu::StencilState::default(),
-                bias: wgpu::DepthBiasState::default(),
+                // Bias the water toward the camera so a shallow riverbed and
+                // the sheet do not alternate depth winner as the view moves.
+                bias: wgpu::DepthBiasState {
+                    constant: -1,
+                    slope_scale: -1.0,
+                    clamp: 0.0,
+                },
             }),
             multisample: wgpu::MultisampleState {
                 count: msaa_samples,

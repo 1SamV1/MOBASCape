@@ -226,8 +226,14 @@ not move, so the existing dither stayed.
   texture array and blends it over the classifier.
 - The river surface is generated from the water mask at 64-unit resolution
   with soft shoreline opacity (111k vertices / 37k triangles).
-- The three crossings are levelled after lane grading and covered by
-  cache-textured wooden decks with low rails (`texture_0022` / `texture_0005`).
+- The three crossings are covered by cache-textured wooden decks with low
+  rails (`texture_0022` / `texture_0005`); the dry shelf is narrow and the
+  deck sits flush with the lane.
+- Shallow water now has a negative depth bias and a small vertical lift, so
+  the river/swamp sheet no longer flickers against the carved bed.
+- Dark ground is lifted toward a shadow floor, dark grass gets a shader
+  gamma lift, overlay art is brightness-matched, and 205 cache reeds/ferns
+  line the banks.
 - 1,839 deterministic cache plants and 244 slope boulders add ground cover;
   the static model mesh is now 835k triangles (674k before).
 - Post grade is less desaturated; sun/ambient is slightly more directional.

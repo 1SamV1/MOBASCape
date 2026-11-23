@@ -1,6 +1,26 @@
 # Status
 
-Last updated: cache-textured bridge decks, 2026-11-22.
+Last updated: water flicker and low-ground readability, 2026-11-23.
+
+## 2026-11-23 — Stop shallow-water flicker and lift low-ground readability
+
+- The water pipeline now uses a small negative depth bias and the water sheet
+  sits 0.75 units above the sampled river level, so a shallow bed and the
+  water plane no longer alternate depth winner as the camera moves.
+- Removed the bridge-corridor terrain flattening that produced a broad flat
+  dark pad; the deck is now a flush cache-wood boardwalk, the dry bridge shelf
+  is narrower, and the surrounding ground keeps its natural shape.
+- Low-ground readability: the darkest terrain channels are lifted toward a
+  shadow floor, dark biome grass is gamma-lifted in the shader, overlay art is
+  brightness-matched and weighted lower, biome edges are wider and
+  noise-warped with lifted tints, and 205 cache reeds/ferns/mushrooms now
+  line the banks. The water shader adds a shallow shore rim.
+- Captures: `/tmp/opencode/flickerfix.png` (bridge) and
+  `/tmp/opencode/flickerfix_high.png` (wide lowland view).
+- GPU time remains healthy: auto 1920×1008 frame **12.57 ms** (scene 11.30),
+  native frame **14.24 ms** (scene 13.01). CPU benchmark figures were noisy
+  because of the desktop load.
+- Verified: 272 tests pass, 4 ignored; workspace clippy clean.
 
 ## 2026-11-22 — Cache-textured bridge decks
 

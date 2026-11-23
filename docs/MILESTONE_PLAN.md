@@ -42,7 +42,11 @@ reference, using only cache-scraped terrain, textures and models.
 - **Done:** per-tile cache overlay textures packed into the terrain vertex
   ID and blended over the classifier.
 - **Done:** 64-unit mask-driven river surface with soft shoreline opacity.
-- **Done:** three levelled, cache-wood bridge decks with low rails.
+- **Done:** three cache-wood bridge decks with low rails, now flush with the
+  natural ford.
+- **Done:** shallow-water depth bias and a small lift eliminate river/swamp
+  flicker; low-ground colours, dark grass, overlays, biome edges and bank
+  reeds were lifted for readability.
 - **Tried and reverted:** alpha-tested foliage cutouts. This cache's canopy
   alphas are not cutout masks; preserving them punched sky holes through the
   canopies. Keep the opaque average-colour fill.

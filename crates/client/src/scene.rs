@@ -35,8 +35,7 @@ const DECOR_MODEL_BLOCKLIST: &[u32] = &[3951, 4730, 32530];
 /// deck is laid over it, aligned with the lane.
 const BRIDGE_HALF_LENGTH: f32 = 4.5 * 128.0;
 const BRIDGE_HALF_WIDTH: f32 = 2.6 * 128.0;
-const BRIDGE_TRANSITION: f32 = 2.0 * 128.0;
-const BRIDGE_DECK_LIFT: f32 = 2.0;
+const BRIDGE_DECK_LIFT: f32 = 0.5;
 
 /// Convert an sRGB channel to linear light. The surface is an sRGB target, so
 /// shader output must be linear or the palette is double-gamma corrected.
@@ -1357,7 +1356,7 @@ pub fn build(
                 if let Some(overlay) = overlays.get(&(tile.overlay_id as u32))
                     && overlay.texture != 0
                 {
-                    let weight = if overlay.hide_underlay { 255 } else { 160 };
+                    let weight = if overlay.hide_underlay { 200 } else { 130 };
                     tile_overlay[idx] = pack_ground_overlay(overlay.texture, weight);
                 }
             }
@@ -1438,19 +1437,23 @@ pub fn build(
                 }
                 let idx = gy as usize * size + gx as usize;
                 let tile = terrain.tile(0, sx as usize, sy as usize);
-                // Blend the pocket into the surrounding ground over the
-                // outer seven tiles so the seam is hidden.
+                // Blend the pocket into the surrounding ground over a wide,
+                // noise-warped border. The old seven-tile rectangle read as
+                // a flat dark patch of fog/water in the low jungle.
                 let edge = lx
                     .min(ly)
                     .min(pw.saturating_sub(1).saturating_sub(lx))
                     .min(ph.saturating_sub(1).saturating_sub(ly)) as f32;
-                let blend = (edge / 7.0).clamp(0.0, 1.0);
+                let wobble = (value_noise(map_tx as f32 * 0.17 + 4.0, map_ty as f32 * 0.17 - 9.0)
+                    - 0.5)
+                    * 5.0;
+                let blend = ((edge + wobble) / 12.0).clamp(0.0, 1.0);
                 let blend = blend * blend * (3.0 - 2.0 * blend);
                 tile_overlay[idx] = 0;
                 if let Some(overlay) = overlays.get(&(tile.overlay_id as u32))
                     && overlay.texture != 0
                 {
-                    let base_weight = if overlay.hide_underlay { 255.0 } else { 160.0 };
+                    let base_weight = if overlay.hide_underlay { 200.0 } else { 130.0 };
                     let weight = (base_weight * blend).round() as u8;
                     if weight > 0 {
                         tile_overlay[idx] = pack_ground_overlay(overlay.texture, weight);
@@ -1459,10 +1462,17 @@ pub fn build(
                 let pocket_h = tile.height as f32 * 8.0;
                 heights[idx] = heights[idx] * (1.0 - blend) + pocket_h * blend;
                 let c = tile_color(terrain, &underlays, &overlays, sx as usize, sy as usize);
+                // Keep the biome hue but lift the darkest antique tints; a
+                // 0.5x multiply turned large low pockets into flat dark slabs.
+                let tint = [
+                    0.70 + biome.tint[0] * 0.35,
+                    0.70 + biome.tint[1] * 0.35,
+                    0.70 + biome.tint[2] * 0.35,
+                ];
                 let tinted = [
-                    (c[0] as f32 * biome.tint[0]).clamp(0.0, 255.0) as u8,
-                    (c[1] as f32 * biome.tint[1]).clamp(0.0, 255.0) as u8,
-                    (c[2] as f32 * biome.tint[2]).clamp(0.0, 255.0) as u8,
+                    (c[0] as f32 * tint[0]).clamp(0.0, 255.0) as u8,
+                    (c[1] as f32 * tint[1]).clamp(0.0, 255.0) as u8,
+                    (c[2] as f32 * tint[2]).clamp(0.0, 255.0) as u8,
                 ];
                 for k in 0..3 {
                     colors[idx][k] = (colors[idx][k] as f32 * (1.0 - blend)
@@ -1492,7 +1502,6 @@ pub fn build(
     let mut river_blocked: Vec<(i32, i32)> = Vec::new();
     let mut water_mask = vec![0.0f32; size * size];
     let mut water_level = vec![0.0f32; size * size];
-    let mut river_levels: Vec<f32> = Vec::new();
     if let Some(river) = &map.river {
         let points = &river.points;
         if points.len() >= 2 {
@@ -1521,7 +1530,6 @@ pub fn build(
                     levels[index] = levels[index - 1] - 0.5;
                 }
             }
-            river_levels = levels.clone();
             for gy in 0..size - 1 {
                 for gx in 0..size - 1 {
                     let tx = (origin_tile_x + gx as i32) as f32;
@@ -1535,10 +1543,13 @@ pub fn build(
                     if k <= 0.001 {
                         continue;
                     }
+                    // Keep the dry bridge shelf narrow. The old 5.5-tile
+                    // radius left a large flat green patch around every deck;
+                    // the deck itself already covers the walkable crossing.
                     let bridge = river
                         .bridges
                         .iter()
-                        .any(|b| (b.0 - tx) * (b.0 - tx) + (b.1 - ty) * (b.1 - ty) < 30.0);
+                        .any(|b| (b.0 - tx) * (b.0 - tx) + (b.1 - ty) * (b.1 - ty) < 8.0);
                     let depth = if bridge {
                         river.depth * 0.2
                     } else {
@@ -1551,9 +1562,13 @@ pub fn build(
                     }
                     let bed = (level - depth).min(heights[idx]);
                     heights[idx] = heights[idx] * (1.0 - k) + bed * k;
-                    let water = [40u8, 84, 126];
+                    // Tint a little beyond the carved depth so the shallow
+                    // shelf reads as water instead of a flat dark-green slab.
+                    let tint_k = (k * 1.8).min(1.0);
+                    let water = [46u8, 94, 132];
                     for c in 0..3 {
-                        colors[idx][c] = (colors[idx][c] as f32 * (1.0 - k) + water[c] as f32 * k)
+                        colors[idx][c] = (colors[idx][c] as f32 * (1.0 - tint_k)
+                            + water[c] as f32 * tint_k)
                             .clamp(0.0, 255.0) as u8;
                     }
                     if !bridge && k > 0.55 {
@@ -1590,6 +1605,21 @@ pub fn build(
     let mut smooth_colors = colors.clone();
     for _ in 0..2 {
         smooth_colors = box_blur_colors(&smooth_colors, size, 2);
+    }
+    // Lift the darkest ground. Low jungle/riverbank tiles otherwise read as
+    // flat dark fog/water against the brighter fields; preserve highlights
+    // instead of applying a global gamma that washes out the grass.
+    const SHADOW_FLOOR: f32 = 140.0;
+    for color in &mut smooth_colors {
+        for channel in color {
+            let value = *channel as f32;
+            let lifted = if value < SHADOW_FLOOR {
+                SHADOW_FLOOR - (SHADOW_FLOOR - value) * 0.35
+            } else {
+                value
+            };
+            *channel = lifted.clamp(0.0, 255.0) as u8;
+        }
     }
 
     // ------------------------------------------------------------------
@@ -1629,17 +1659,6 @@ pub fn build(
             }
         }
     }
-
-    // Level the bridge corridors after lane grading so the final terrain and
-    // the bridge deck share one flat surface.
-    flatten_bridge_crossings(
-        &mut heights,
-        size,
-        origin_tile_x,
-        origin_tile_y,
-        &map,
-        &river_levels,
-    );
 
     let mut terrain_mesh = MeshData::new();
     for gy in 0..size - 1 {
@@ -2206,6 +2225,87 @@ pub fn build(
     }
     tracing::info!("slope boulders: {} props", boulders);
     decor_placements += boulders;
+
+    // ------------------------------------------------------------------
+    // Shoreline reeds and ferns. The low riverbanks were large flat dark
+    // patches because the location-driven decor is sparse there. A bank
+    // pass with cache reed/fern/grass models gives the water a natural edge.
+    // ------------------------------------------------------------------
+    let shore_models: &[(u32, GroundDecor)] = &[
+        (1674, GroundDecor::Grass),
+        (1696, GroundDecor::Fern),
+        (1707, GroundDecor::Fern),
+        (3795, GroundDecor::Grass),
+        (1610, GroundDecor::Flower),
+        (1686, GroundDecor::Mushroom),
+    ];
+    let mut shoreline = 0usize;
+    for gy in 4..size.saturating_sub(4) {
+        for gx in 4..size.saturating_sub(4) {
+            let idx = gy * size + gx;
+            if water_mask[idx] > 0.05 {
+                continue;
+            }
+            let mut near_water = false;
+            for dy in -2i32..=2 {
+                for dx in -2i32..=2 {
+                    let sx = gx as i32 + dx;
+                    let sy = gy as i32 + dy;
+                    if sx < 0 || sy < 0 || sx >= size as i32 || sy >= size as i32 {
+                        continue;
+                    }
+                    if water_mask[sy as usize * size + sx as usize] > 0.18 {
+                        near_water = true;
+                        break;
+                    }
+                }
+                if near_water {
+                    break;
+                }
+            }
+            if !near_water {
+                continue;
+            }
+            let seed = (gx as u32)
+                .wrapping_mul(0xD1B5_4A35)
+                .wrapping_add((gy as u32) << 19)
+                .wrapping_add(0x85EB_CA6B);
+            if hash01(seed) > 0.16 {
+                continue;
+            }
+            let wx = (origin_tile_x + gx as i32) as f32 * 128.0
+                + (hash01(seed ^ 0x9E37_79B9) - 0.5) * 112.0;
+            let wz = (origin_tile_y + gy as i32) as f32 * 128.0
+                + (hash01(seed ^ 0x27D4_EB2F) - 0.5) * 112.0;
+            if map.distance_to_lane(wx, wz) < 1.6 * 128.0 {
+                continue;
+            }
+            if point_in_tile_rects(&castle_keep, wx / 128.0, wz / 128.0) {
+                continue;
+            }
+            if base_keep_clear
+                .iter()
+                .any(|p| p.distance(Vec3::new(wx, p.y, wz)) < 2.2 * 128.0)
+            {
+                continue;
+            }
+            let template = shore_models[((hash01(seed ^ 0x2F6E_2B1D) * shore_models.len() as f32)
+                as usize)
+                .min(shore_models.len() - 1)];
+            let model = cached_model(cache, &mut model_cache, template.0)?;
+            let base = Vec3::new(wx, height.height_at(wx, wz), wz);
+            let scale = 0.72 + hash01(seed ^ 0x8A5C_D3E9) * 0.55;
+            let angle = hash01(seed ^ 0x7B1D_3C4F) * std::f32::consts::TAU;
+            append_ground_decor(&mut model_mesh, model, base, angle, scale, template.1, seed);
+            let shadow = template.1.shadow_size() * scale;
+            if shadow > 0.0 {
+                push_blob_quad(&mut shadow_mesh, base, shadow, 0.14);
+            }
+            shoreline += 1;
+        }
+    }
+    tracing::info!("shoreline scatter: {} props", shoreline);
+    decor_placements += shoreline;
 
     // ------------------------------------------------------------------
     // Biome pocket scenery: real OSRS objects taken from each pocket's
@@ -3479,71 +3579,6 @@ impl Rng {
     }
 }
 
-/// Smooth value noise used to wobble the lane edges.
-/// Place a simple cache-textured deck over every authored river crossing.
-/// The deck follows the lane direction at the bridge point and samples the
-/// terrain at its corners, so it covers the dry ford without floating.
-fn flatten_bridge_crossings(
-    heights: &mut [f32],
-    size: usize,
-    origin_tile_x: i32,
-    origin_tile_y: i32,
-    map: &MapLayout,
-    river_levels: &[f32],
-) {
-    let Some(river) = map.river.as_ref() else {
-        return;
-    };
-    for bridge in &river.bridges {
-        let bx = bridge.0 * 128.0;
-        let bz = bridge.1 * 128.0;
-        let Some((tx, tz)) = nearest_lane_tangent(&map.lanes, bx, bz) else {
-            continue;
-        };
-        let (nx, nz) = (-tz, tx);
-        let sample = |x: f32, z: f32| {
-            bilinear(
-                heights,
-                size,
-                x / 128.0 - origin_tile_x as f32,
-                z / 128.0 - origin_tile_y as f32,
-            )
-        };
-        let bank_a = sample(
-            bx + tx * (BRIDGE_HALF_LENGTH - 128.0),
-            bz + tz * (BRIDGE_HALF_LENGTH - 128.0),
-        );
-        let bank_b = sample(
-            bx - tx * (BRIDGE_HALF_LENGTH - 128.0),
-            bz - tz * (BRIDGE_HALF_LENGTH - 128.0),
-        );
-        let centre = sample(bx, bz);
-        let water_level = bridge_water_level(river, river_levels, bridge.0, bridge.1);
-        let target = bank_a.max(bank_b).max(centre + 2.0).max(water_level + 14.0);
-        let reach = BRIDGE_HALF_LENGTH + BRIDGE_HALF_WIDTH + 128.0;
-        let gx0 = (((bx - reach) / 128.0).floor() as i32 - origin_tile_x).max(1);
-        let gx1 = (((bx + reach) / 128.0).ceil() as i32 - origin_tile_x).min(size as i32 - 2);
-        let gy0 = (((bz - reach) / 128.0).floor() as i32 - origin_tile_y).max(1);
-        let gy1 = (((bz + reach) / 128.0).ceil() as i32 - origin_tile_y).min(size as i32 - 2);
-        for gy in gy0..=gy1 {
-            for gx in gx0..=gx1 {
-                let wx = (origin_tile_x + gx) as f32 * 128.0;
-                let wz = (origin_tile_y + gy) as f32 * 128.0;
-                let along = (wx - bx) * tx + (wz - bz) * tz;
-                let across = (wx - bx) * nx + (wz - bz) * nz;
-                let inside =
-                    (BRIDGE_HALF_LENGTH - along.abs()).min(BRIDGE_HALF_WIDTH - across.abs());
-                if inside <= 0.0 {
-                    continue;
-                }
-                let t = smoothstep(0.0, BRIDGE_TRANSITION, inside);
-                let index = gy as usize * size + gx as usize;
-                heights[index] = heights[index] * (1.0 - t) + target * t;
-            }
-        }
-    }
-}
-
 fn append_bridge_decks(mesh: &mut MeshData, map: &MapLayout, height: &HeightGrid) -> usize {
     let Some(river) = map.river.as_ref() else {
         return 0;
@@ -3565,9 +3600,10 @@ fn append_bridge_decks(mesh: &mut MeshData, map: &MapLayout, height: &HeightGrid
             let z = bz + tz * BRIDGE_HALF_LENGTH * along + nz * BRIDGE_HALF_WIDTH * across;
             corners[index] = Vec3::new(x, 0.0, z);
         }
-        // The deck edge can sit just outside the levelled corridor; key the
-        // height off the corridor centre so the whole crossing clears it.
-        let deck_y = height.height_at(bx, bz) + BRIDGE_DECK_LIFT + 2.0;
+        // The deck is a boardwalk laid over the ford, not a raised platform;
+        // keep it flush with the lane so heroes stand on it rather than under
+        // it. The rails still give the crossing a bridge silhouette.
+        let deck_y = height.height_at(bx, bz) + BRIDGE_DECK_LIFT;
         tracing::info!(
             "bridge deck {:?}: deck_y={:.1}, terrain_center={:.1}",
             bridge,
@@ -3725,7 +3761,7 @@ fn build_water_surface(
             if masks.iter().copied().fold(0.0, f32::max) < 0.02 || level_weight <= 0.0 {
                 continue;
             }
-            let level = level_sum / level_weight;
+            let level = level_sum / level_weight + 0.75;
             let x0 = (origin_tile_x as f32 + tx) * 128.0;
             let z0 = (origin_tile_y as f32 + ty) * 128.0;
             let x1 = x0 + step;
@@ -3735,6 +3771,10 @@ fn build_water_surface(
             let mut v10 = SceneVertex::new(Vec3::new(x1, level, z0), Vec3::Y, [255, 255, 255]);
             let mut v01 = SceneVertex::new(Vec3::new(x0, level, z1), Vec3::Y, [255, 255, 255]);
             let mut v11 = SceneVertex::new(Vec3::new(x1, level, z1), Vec3::Y, [255, 255, 255]);
+            v00.uv[0] = masks[0];
+            v10.uv[0] = masks[1];
+            v01.uv[0] = masks[2];
+            v11.uv[0] = masks[3];
             v00.color[3] = opacity(masks[0]);
             v10.color[3] = opacity(masks[1]);
             v01.color[3] = opacity(masks[2]);
@@ -3761,16 +3801,6 @@ fn bilinear(values: &[f32], size: usize, x: f32, y: f32) -> f32 {
     let top = values[i] * (1.0 - fx) + values[i + 1] * fx;
     let bottom = values[i + size] * (1.0 - fx) + values[i + size + 1] * fx;
     top * (1.0 - fy) + bottom * fy
-}
-
-fn bridge_water_level(river: &RiverSpec, levels: &[f32], x: f32, z: f32) -> f32 {
-    if levels.is_empty() {
-        return 0.0;
-    }
-    let (_, segment, along) = nearest_on_polyline(&river.points, x, z);
-    let start = levels.get(segment).copied().unwrap_or(0.0);
-    let end = levels.get(segment + 1).copied().unwrap_or(start);
-    start + (end - start) * along
 }
 
 /// Distance to a polyline plus the index of the closest segment and how far
