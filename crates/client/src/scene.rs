@@ -1305,6 +1305,10 @@ pub fn build(
     // bits 16..23 are the blend weight. The low byte carries the grass
     // variant when the terrain triangle is built.
     let mut tile_overlay = vec![0u32; size * size];
+    // Cache sea: no underlay and a blue water overlay. Parts of the block
+    // under the castle are open sea off Karamja; they are turned into land
+    // once the map layout is known.
+    let mut sea = vec![false; size * size];
 
     for gy in 0..size {
         for gx in 0..size {
@@ -1356,6 +1360,9 @@ pub fn build(
             let ly = (ty & 63) as usize;
             if let Some(terrain) = terrains.get(&(rx, ry)) {
                 let tile = terrain.tile(0, lx, ly);
+                // OSRS land always carries an underlay; a tile with only an
+                // overlay (usually the textured water overlay) is sea.
+                sea[idx] = tile.underlay_id == 0 && tile.overlay_id != 0;
                 if let Some(overlay) = overlays.get(&(tile.overlay_id as u32))
                     && overlay.texture != 0
                 {
@@ -1504,9 +1511,27 @@ pub fn build(
                 if tile.underlay_id == 0 {
                     pocket_water.push((gx, gy));
                 }
+                // The pocket replaces the block's own tile; follow its
+                // water/land status where the pocket dominates.
+                if blend > 0.5 {
+                    sea[idx] = tile.underlay_id == 0 && tile.overlay_id != 0;
+                }
             }
         }
     }
+
+    // Pockets are in; reclaim cache sea and pocket ponds as land before the
+    // authored river is carved.
+    reclaim_sea(
+        &mut heights,
+        &mut colors,
+        &mut tile_overlay,
+        &sea,
+        size,
+        origin_tile_x,
+        origin_tile_y,
+        map.castle.as_ref(),
+    );
 
     // ------------------------------------------------------------------
     // The river: a diagonal waterway that splits the rift into a radiant
@@ -1575,13 +1600,19 @@ pub fn build(
                     }
                     let bed = (level - depth).min(heights[idx]);
                     heights[idx] = heights[idx] * (1.0 - k) + bed * k;
-                    // Tint a little beyond the carved depth so the shallow
-                    // shelf reads as water instead of a flat dark-green slab.
-                    let tint_k = (k * 1.8).min(1.0);
+                    // Water blue only where the water sheet actually covers
+                    // the bed; the band beyond it becomes a wet-soil bank.
+                    // Blue past the sheet was classified as water by the
+                    // terrain shader and drew a flat near-black slab along
+                    // every shore.
+                    let water_k = smoothstep(0.45, 0.8, k);
+                    let bank_k = ((k * 1.8).min(1.0) - water_k).max(0.0) * 0.85;
                     let water = [46u8, 94, 132];
+                    let bank = [104u8, 90, 60];
                     for c in 0..3 {
-                        colors[idx][c] = (colors[idx][c] as f32 * (1.0 - tint_k)
-                            + water[c] as f32 * tint_k)
+                        let base = colors[idx][c] as f32;
+                        let banked = base * (1.0 - bank_k) + bank[c] as f32 * bank_k;
+                        colors[idx][c] = (banked * (1.0 - water_k) + water[c] as f32 * water_k)
                             .clamp(0.0, 255.0) as u8;
                     }
                     if !bridge && k > 0.55 {
@@ -2565,6 +2596,7 @@ pub fn build(
         .map(|camp| camp.pos)
         .chain(map.structures.iter().map(|structure| structure.pos))
         .collect();
+    let mut flat_planes_skipped = 0usize;
     for biome in &map.biomes {
         let Some((_, locations)) = pocket_data.get(&biome.id) else {
             continue;
@@ -2628,6 +2660,10 @@ pub fn build(
                 model_cache.insert(model_id, model);
                 model_cache.get(&model_id).unwrap()
             };
+            if is_flat_ground_plane(model) {
+                flat_planes_skipped += 1;
+                continue;
+            }
             let map_tx = biome.origin.0 + sx as i32 - rx as i32;
             let map_ty = biome.origin.1 + sy as i32 - ry as i32;
             let wx = (map_tx as f32 + 0.5) * 128.0;
@@ -2736,6 +2772,7 @@ pub fn build(
         pocket_water.len()
     );
 
+    tracing::info!("pocket scenery: skipped {flat_planes_skipped} flat ground planes");
     // ------------------------------------------------------------------
     // Tree lines: OSRS tree models form a natural barrier along both sides
     // of every lane. Spacing, distance, scale and species are seeded from a
@@ -2925,8 +2962,11 @@ pub fn build(
     );
 
     // A distant ground plane hides the loaded-block edge and gives the sky a
-    // horizon to meet. It sits below the terrain and fades into fog.
-    let backdrop_y = -24.0;
+    // horizon to meet. It must sit below every terrain vertex: at a fixed
+    // y = -24 it poked through the carved river banks and low ground as flat,
+    // untextured dark-green slabs outlined by the -24 contour.
+    let lowest_ground = height.heights.iter().copied().fold(f32::MAX, f32::min);
+    let backdrop_y = lowest_ground.min(-24.0) - 60.0;
     let backdrop = 220_000.0;
     let bx0 = center.x - backdrop;
     let bx1 = center.x + backdrop;
@@ -3530,6 +3570,97 @@ fn load_overlays(cache: &Cache) -> Result<HashMap<u32, OverlayDefinition>> {
         }
     }
     Ok(out)
+}
+
+/// Turn cache sea inside the playable castle bounds into land. The rift is
+/// laid over a 5x5 region block whose corner is open sea; left alone, those
+/// tiles kept the water overlay's colour and the flat sea floor, and read as
+/// a murky dark-green basin next to the blue base. The colour becomes the
+/// map's mean land colour, the overlay is dropped, and the height is filled
+/// by relaxing only the sea tiles against the fixed land around them. The
+/// authored river is carved later and is unaffected.
+#[allow(clippy::too_many_arguments)]
+fn reclaim_sea(
+    heights: &mut [f32],
+    colors: &mut [[u8; 3]],
+    tile_overlay: &mut [u32],
+    sea: &[bool],
+    size: usize,
+    origin_tile_x: i32,
+    origin_tile_y: i32,
+    castle: Option<&CastleSpec>,
+) -> usize {
+    let Some(castle) = castle else { return 0 };
+    let (x0, z0, x1, z1) = castle.bounds;
+    let margin = 6.0;
+    let inside = |gx: usize, gy: usize| {
+        let tx = (origin_tile_x + gx as i32) as f32;
+        let tz = (origin_tile_y + gy as i32) as f32;
+        tx >= x0 - margin && tx <= x1 + margin && tz >= z0 - margin && tz <= z1 + margin
+    };
+    let mut targets = vec![false; size * size];
+    let mut land_sum = [0.0f64; 3];
+    let mut land_count = 0.0f64;
+    let mut land_height = 0.0f64;
+    let mut count = 0usize;
+    for gy in 0..size {
+        for gx in 0..size {
+            let i = gy * size + gx;
+            if !inside(gx, gy) {
+                continue;
+            }
+            if sea[i] {
+                targets[i] = true;
+                count += 1;
+            } else {
+                for c in 0..3 {
+                    land_sum[c] += colors[i][c] as f64;
+                }
+                land_height += heights[i] as f64;
+                land_count += 1.0;
+            }
+        }
+    }
+    if count == 0 || land_count == 0.0 {
+        return count;
+    }
+    let land = [
+        (land_sum[0] / land_count) as u8,
+        (land_sum[1] / land_count) as u8,
+        (land_sum[2] / land_count) as u8,
+    ];
+    let start = (land_height / land_count) as f32;
+    let mut textures: Vec<u32> = targets
+        .iter()
+        .zip(tile_overlay.iter())
+        .filter(|(t, _)| **t)
+        .map(|(_, o)| (o >> 8) & 0xFF)
+        .collect();
+    textures.sort_unstable();
+    textures.dedup();
+    tracing::info!("sea overlay textures replaced: {textures:?}");
+    for (i, target) in targets.iter().enumerate() {
+        if *target {
+            colors[i] = land;
+            tile_overlay[i] = 0;
+            heights[i] = start;
+        }
+    }
+    // Harmonic fill: start the sea at the mean neighbouring land height and
+    // relax only the sea tiles, so the reclaimed ground meets every shore.
+    for _ in 0..160 {
+        let src = heights.to_vec();
+        for gy in 1..size - 1 {
+            for gx in 1..size - 1 {
+                let i = gy * size + gx;
+                if targets[i] {
+                    heights[i] = (src[i - 1] + src[i + 1] + src[i - size] + src[i + size]) * 0.25;
+                }
+            }
+        }
+    }
+    tracing::info!("reclaimed {count} cache sea tiles inside the castle as land ({land:?})");
+    count
 }
 
 /// Gaussian-relax the heightfield to remove single-tile rock spikes while
@@ -4187,6 +4318,17 @@ fn is_pocket_scenery(def: &ObjectDefinition) -> bool {
     ]
     .iter()
     .any(|needle| name.contains(needle))
+}
+
+/// A cache model that is a large, nearly flat ground plane: marsh and floor
+/// decorations, rugs, pond beds. Transplanted into a pocket they render as
+/// untextured dark slabs over the terrain (and used to block movement and
+/// sight), so pockets skip them; the terrain already carries the ground.
+fn is_flat_ground_plane(model: &Model) -> bool {
+    let (min, max) = model.bounds();
+    let height = (max[1] - min[1]) as f32;
+    let footprint = ((max[0] - min[0]) as f32).max((max[2] - min[2]) as f32);
+    height < 24.0 && footprint > 150.0
 }
 
 /// Order pocket scenery so landmark objects are placed before clutter.
