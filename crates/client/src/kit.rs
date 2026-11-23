@@ -66,6 +66,10 @@ pub enum Action {
         spread: f32,
         #[serde(default)]
         explode: f32,
+        /// Projectile look from `fx::LOOKS` (for example `fire_wave`).
+        /// Without one the shot is an orb tinted by the ability colour.
+        #[serde(default)]
+        visual: Option<String>,
         #[serde(default)]
         on_hit: Vec<Status>,
     },

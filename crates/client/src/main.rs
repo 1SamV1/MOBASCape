@@ -2,6 +2,7 @@ mod animated;
 mod champion;
 mod devtools;
 mod font;
+mod fx;
 mod gpu_timing;
 mod grass_textures;
 mod hero_select;
@@ -130,6 +131,14 @@ struct Cli {
     /// champion's kit, logging what each did.
     #[arg(long)]
     demo_abilities: bool,
+    /// Demo: stand beside a jungle camp and basic-attack it, to check
+    /// attack animations, reach and projectiles.
+    #[arg(long)]
+    demo_attack: bool,
+    /// Dev: show the held ability indicator for this slot (0-3) aimed at
+    /// the nearest jungle camp, as if right mouse were held.
+    #[arg(long)]
+    hold_indicator: Option<usize>,
     /// Demo: grant gold, open the shop, and buy one of every item.
     #[arg(long)]
     demo_shop: bool,
@@ -467,6 +476,7 @@ fn main() -> Result<()> {
         follow: true,
         mouse_pos: (640.0, 360.0),
         lmb_down: false,
+        rmb_down: false,
         lmb_press: None,
         initial_distance: cli.distance,
         initial_pitch: cli.pitch,
@@ -500,6 +510,9 @@ fn main() -> Result<()> {
         demo_abilities: cli.demo_abilities,
         demo_abilities_timer: 0.0,
         demo_abilities_stage: 0,
+        demo_attack: cli.demo_attack,
+        demo_attack_stage: 0,
+        hold_indicator: cli.hold_indicator,
         shop,
         event_log: vec![
             "FOUNTAIN HEALS".to_string(),
@@ -602,6 +615,8 @@ struct App {
     mouse_pos: (f64, f64),
     lmb_down: bool,
     lmb_press: Option<Instant>,
+    /// Right mouse held: preview the last ability's range at the cursor.
+    rmb_down: bool,
     initial_distance: f32,
     initial_pitch: Option<f32>,
     debug_hud: bool,
@@ -638,6 +653,9 @@ struct App {
     demo_abilities: bool,
     demo_abilities_timer: f32,
     demo_abilities_stage: u8,
+    demo_attack: bool,
+    demo_attack_stage: u8,
+    hold_indicator: Option<usize>,
     shop: ItemShop,
     event_log: Vec<String>,
     last_level: u32,
@@ -869,6 +887,12 @@ impl ApplicationHandler for App {
                 self.mouse_pos = (position.x, position.y);
             }
             WindowEvent::MouseInput { state, button, .. } => {
+                if button == MouseButton::Right {
+                    // Casting stays instant; holding right mouse only shows
+                    // the last ability's range and aim shape.
+                    self.rmb_down = state == ElementState::Pressed;
+                    return;
+                }
                 if button != MouseButton::Left {
                     return;
                 }
@@ -1743,6 +1767,22 @@ impl App {
                 }
             }
 
+            if self.demo_attack && self.demo_attack_stage == 0 {
+                if let Some(camp) = animated.nearest_camp(animated.player_pos())
+                    && let Some(pos) = animated.unit_pos(camp)
+                {
+                    let spot = pos + Vec3::new(-1000.0, 0.0, 160.0);
+                    animated.teleport_player(Vec3::new(
+                        spot.x,
+                        height.height_at(spot.x, spot.z),
+                        spot.z,
+                    ));
+                    let ok = animated.set_attack_target(camp, collision, height);
+                    tracing::info!("demo attack: camp {camp} ordered={ok}");
+                }
+                self.demo_attack_stage = 1;
+            }
+
             if self.demo_kit {
                 self.demo_kit_timer += dt;
                 if self.demo_kit_stage == 0 && self.demo_kit_timer >= 1.0 {
@@ -1910,6 +1950,19 @@ impl App {
             self.last_health = current_health;
             self.damage_flash = (self.damage_flash - dt * 2.4).max(0.0);
             animated.refresh_visibility(dt, collision);
+            let indicator = if let Some(slot) = self.hold_indicator {
+                animated.last_cast_slot = Some(slot.min(3));
+                let from = animated.player_pos();
+                animated
+                    .nearest_camp(from)
+                    .and_then(|camp| animated.unit_pos(camp))
+                    .or(Some(from + Vec3::new(600.0, 0.0, 0.0)))
+            } else if self.rmb_down && !self.shop.open {
+                renderer.pick_ground(self.mouse_pos.0, self.mouse_pos.1, height)
+            } else {
+                None
+            };
+            animated.set_indicator_aim(indicator);
             let mesh_start = Instant::now();
             animated.prepare_render(
                 height,
@@ -1920,6 +1973,7 @@ impl App {
                 camera_forward,
             );
             renderer.set_dynamic_mesh(&animated.vertices, &animated.indices);
+            renderer.set_fx_mesh(&animated.fx.vertices, &animated.fx.indices);
             renderer.set_shadow_mesh(&animated.shadow_vertices, &animated.shadow_indices);
             renderer.set_caster_mesh(&animated.caster_vertices, &animated.caster_indices);
             renderer.set_lights(&animated.lights());
@@ -2441,6 +2495,7 @@ impl App {
                 forward,
             );
             renderer.set_dynamic_mesh(&animated.vertices, &animated.indices);
+            renderer.set_fx_mesh(&animated.fx.vertices, &animated.fx.indices);
             renderer.set_shadow_mesh(&animated.shadow_vertices, &animated.shadow_indices);
             renderer.set_caster_mesh(&animated.caster_vertices, &animated.caster_indices);
             renderer.set_lights(&animated.lights());
@@ -2503,6 +2558,7 @@ impl App {
                 forward,
             );
             renderer.set_dynamic_mesh(&animated.vertices, &animated.indices);
+            renderer.set_fx_mesh(&animated.fx.vertices, &animated.fx.indices);
             renderer.set_shadow_mesh(&animated.shadow_vertices, &animated.shadow_indices);
             renderer.set_caster_mesh(&animated.caster_vertices, &animated.caster_indices);
             renderer.set_lights(&animated.lights());
@@ -2562,6 +2618,7 @@ impl App {
         self.title_frames = 0;
         self.app_time = 0.0;
         self.lmb_down = false;
+        self.rmb_down = false;
         self.lmb_press = None;
         self.selected = None;
         self.held.clear();

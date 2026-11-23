@@ -11,8 +11,10 @@ use glam::{Vec2, Vec3};
 use rift_cache::{AnimationClip, Model};
 
 use super::{
-    AnimatedScene, Effect, Particle, UnitAssets, UnitKind, build_unit, planar_delta, turn_toward,
+    AnimatedScene, Effect, Particle, ShotVisual, UnitAssets, UnitKind, advance_trail, build_unit,
+    planar_delta, turn_toward,
 };
+use crate::fx;
 use crate::kit::{self, Action, Anchor, Passive, Status};
 use crate::scene::{HeightGrid, WorldCollision};
 
@@ -53,6 +55,15 @@ struct KitShot {
     from: Vec3,
     /// Basic attack: counts for passives and empowers.
     basic: bool,
+    /// Projectile look, and a colour that overrides it for shots without a
+    /// named look.
+    look: usize,
+    tint: Option<[u8; 3]>,
+    trail: Vec<Vec3>,
+    age: f32,
+    ember_timer: f32,
+    /// Homing basic attack: steers onto this unit and hits only it.
+    target: Option<usize>,
 }
 
 struct PendingArea {
@@ -118,6 +129,10 @@ struct TransformState {
     range: f32,
     damage: f32,
     move_speed: f32,
+    /// The champion's own attack and cast clips, parked because they
+    /// animate a different skeleton from the transformed model.
+    attack_clip: Option<Arc<AnimationClip>>,
+    cast_clip: Option<Arc<AnimationClip>>,
 }
 
 /// Per-match kit state for the player's champion.
@@ -466,9 +481,14 @@ impl AnimatedScene {
                 count,
                 spread,
                 explode,
+                visual,
                 on_hit,
             } => {
                 let count = (*count).max(1);
+                let (look, tint) = match visual {
+                    Some(name) => (fx::look_by_name(name), None),
+                    None => (fx::DEFAULT_LOOK, Some(ctx.color)),
+                };
                 let base = ctx.dir.z.atan2(ctx.dir.x);
                 let height = self.units[pi].scale * 80.0;
                 for i in 0..count {
@@ -493,6 +513,12 @@ impl AnimatedScene {
                         color: ctx.color,
                         from: ctx.origin,
                         basic: false,
+                        look,
+                        tint,
+                        trail: Vec::new(),
+                        age: 0.0,
+                        ember_timer: 0.0,
+                        target: None,
                     });
                 }
             }
@@ -782,6 +808,9 @@ impl AnimatedScene {
         let old_idle = std::mem::replace(&mut player.idle, idle);
         let old_walk = std::mem::replace(&mut player.walk, walk);
         let old_scale = std::mem::replace(&mut player.scale, scale);
+        let attack_clip = player.attack_clip.take();
+        let cast_clip = player.cast_clip.take();
+        player.action = None;
         player.attack_range += range;
         player.attack_damage *= 1.0 + damage;
         self.kit_rt.transform = Some(TransformState {
@@ -793,6 +822,8 @@ impl AnimatedScene {
             range,
             damage,
             move_speed,
+            attack_clip,
+            cast_clip,
         });
     }
 
@@ -806,6 +837,9 @@ impl AnimatedScene {
         player.idle = state.idle;
         player.walk = state.walk;
         player.scale = state.scale;
+        player.attack_clip = state.attack_clip;
+        player.cast_clip = state.cast_clip;
+        player.action = None;
         player.attack_range -= state.range;
         player.attack_damage /= 1.0 + state.damage;
     }
@@ -970,25 +1004,34 @@ impl AnimatedScene {
             _ => None,
         };
         if ranged {
-            let dir = (target_pos - from).normalize_or_zero();
-            let reach = self.units[pi].attack_range + 260.0;
+            let aim = self.unit_chest(target);
+            let dir = (aim - from).normalize_or_zero();
+            let look = self.units[pi].look;
             self.kit_rt.shots.push(KitShot {
                 pos: from,
                 dir,
                 speed: 1400.0,
-                remaining: reach,
+                remaining: (aim - from).length().max(1.0),
                 width: 80.0,
                 damage,
                 pierce: false,
                 explode: splash.map_or(0.0, |(radius, _)| radius),
                 on_hit: statuses,
                 hit: Vec::new(),
-                color: [255, 170, 90],
+                color: fx::look(look).glow,
                 from: self.units[pi].pos,
                 basic: true,
+                look,
+                tint: None,
+                trail: Vec::new(),
+                age: 0.0,
+                ember_timer: 0.0,
+                target: Some(target),
             });
+            self.muzzle_flash(from, look);
             return;
         }
+        self.melee_slash(pi, target, [255, 235, 200]);
         self.kit_hit(target, damage, &statuses, self.units[pi].pos);
         let killed = self.units[target].health <= 0.0;
         if killed {
@@ -1179,43 +1222,58 @@ impl AnimatedScene {
         let shots = std::mem::take(&mut self.kit_rt.shots);
         let mut survivors = Vec::with_capacity(shots.len());
         for mut shot in shots {
+            let look = fx::look(shot.look).tinted(shot.tint);
+            shot.age += dt;
             let step = shot.speed * dt;
-            shot.pos += shot.dir * step;
-            shot.remaining -= step;
-            let ground = height.height_at(shot.pos.x, shot.pos.z);
-            if shot.pos.y < ground + 30.0 {
-                shot.pos.y = ground + 30.0;
-            }
-            if self.particles.len() < 300 {
-                self.particles.push(Particle {
-                    pos: shot.pos,
-                    vel: -shot.dir * 50.0,
-                    color: shot.color,
-                    size: if shot.basic { 9.0 } else { 15.0 },
-                    remaining: 0.18,
-                    duration: 0.18,
-                    gravity: 0.0,
-                    drag: 2.5,
-                });
-            }
             let mut hits = Vec::new();
-            for index in 0..self.units.len() {
-                if shot.hit.contains(&index) || !self.is_kit_enemy(index) {
+            if let Some(ti) = shot.target {
+                // Homing basic attack: chase the target and land on arrival.
+                if self.units.get(ti).is_none_or(|unit| unit.health <= 0.0) {
                     continue;
                 }
-                let unit = &self.units[index];
-                let flat = Vec2::new(unit.pos.x - shot.pos.x, unit.pos.z - shot.pos.z);
-                if flat.length() <= shot.width * 0.5 + unit.hit_radius.max(50.0) * 0.6 {
-                    hits.push(index);
-                    if !shot.pierce {
-                        break;
+                let aim = self.unit_chest(ti);
+                let to = aim - shot.pos;
+                let distance = to.length();
+                if distance > 1.0 {
+                    shot.dir = to / distance;
+                }
+                if distance <= step + 6.0 {
+                    shot.pos = aim;
+                    hits.push(ti);
+                } else {
+                    shot.pos += shot.dir * step;
+                }
+            } else {
+                shot.pos += shot.dir * step;
+                shot.remaining -= step;
+                let ground = height.height_at(shot.pos.x, shot.pos.z);
+                if shot.pos.y < ground + 30.0 {
+                    shot.pos.y = ground + 30.0;
+                }
+                for index in 0..self.units.len() {
+                    if shot.hit.contains(&index) || !self.is_kit_enemy(index) {
+                        continue;
+                    }
+                    let unit = &self.units[index];
+                    let flat = Vec2::new(unit.pos.x - shot.pos.x, unit.pos.z - shot.pos.z);
+                    if flat.length() <= shot.width * 0.5 + unit.hit_radius.max(50.0) * 0.6 {
+                        hits.push(index);
+                        if !shot.pierce {
+                            break;
+                        }
                     }
                 }
+            }
+            advance_trail(&mut shot.trail, shot.pos, look.trail_points, shot.speed);
+            shot.ember_timer -= dt;
+            if look.embers > 0.0 && shot.ember_timer <= 0.0 {
+                shot.ember_timer = 1.0 / look.embers;
+                self.shed_ember(shot.pos, shot.dir, &look);
             }
             for &index in &hits {
                 shot.hit.push(index);
                 self.kit_hit(index, shot.damage, &shot.on_hit, shot.from);
-                self.emit_burst(shot.pos, shot.color, 8, 200.0, 12.0, 0.4);
+                self.impact_burst(shot.pos, &look);
                 if shot.explode > 0.0 {
                     let center = shot.pos;
                     self.effects.push(Effect {
@@ -1240,12 +1298,47 @@ impl AnimatedScene {
                     }
                 }
             }
-            let spent = (!hits.is_empty() && !shot.pierce) || shot.remaining <= 0.0;
+            let spent = (!hits.is_empty() && (!shot.pierce || shot.target.is_some()))
+                || (shot.target.is_none() && shot.remaining <= 0.0);
+            if shot.target.is_none() && shot.remaining <= 0.0 && hits.is_empty() {
+                self.effects.push(Effect {
+                    pos: shot.pos,
+                    radius: look.glow_size * 0.8,
+                    remaining: 0.22,
+                    duration: 0.22,
+                    color: look.glow,
+                });
+            }
             if !spent {
                 survivors.push(shot);
             }
         }
         self.kit_rt.shots.extend(survivors);
+    }
+
+    /// Drawing data for every kit shot in flight.
+    pub(super) fn kit_shot_visuals(&self) -> Vec<ShotVisual> {
+        self.kit_rt
+            .shots
+            .iter()
+            .map(|shot| ShotVisual {
+                pos: shot.pos,
+                dir: shot.dir,
+                look: shot.look,
+                trail: shot.trail.clone(),
+                age: shot.age,
+                tint: shot.tint,
+            })
+            .collect()
+    }
+
+    /// The look a kit shot should be drawn and lit with.
+    pub(super) fn kit_shot_lights(&self) -> Vec<(Vec3, fx::ProjectileLook)> {
+        self.kit_rt
+            .shots
+            .iter()
+            .map(|shot| (shot.pos, fx::look(shot.look).tinted(shot.tint)))
+            .collect()
     }
 
     fn update_kit_areas(&mut self, dt: f32) {

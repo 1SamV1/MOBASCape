@@ -9,6 +9,7 @@ use rift_cache::{AnimationClip, AnimationScratch, Cache, Model, model::hsl_to_rg
 mod kit_runtime;
 
 use crate::champion::ChampionConfig;
+use crate::fx::{self, FxMesh};
 use crate::items::ItemConfig;
 use crate::motion::PlayerMotion;
 use crate::scene::{
@@ -37,6 +38,14 @@ const BANANARANG_DURATION: f32 = 1.0 / 0.3;
 const BANANARANG_MODEL_SCALE: f32 = 6.25;
 /// Trial by Combat unit-target range: 5x the original 15-tile range.
 const TRIAL_RANGE: f32 = 75.0 * 128.0;
+/// The shared meteor lands at the cursor, clamped to this cast range.
+const METEOR_RANGE: f32 = 1_100.0;
+/// While a committed attack winds up, the target may drift this much past
+/// attack range before the swing is abandoned.
+const WINDUP_LEASH: f32 = 90.0;
+/// Seconds a one-shot clip takes to blend in and out of the base pose.
+const ACTION_BLEND_IN: f32 = 0.06;
+const ACTION_BLEND_OUT: f32 = 0.12;
 const MINION_AGGRO: f32 = 520.0;
 const MAX_MINIONS_PER_TEAM: usize = 36;
 const DEATH_SINK_TIME: f32 = 0.45;
@@ -206,6 +215,206 @@ pub struct AnimatedUnit {
     pub lock_range: f32,
     /// Crowd control from kit abilities, and summon lifetime.
     pub cc: crate::kit::Afflictions,
+    /// One-shot clips for basic attacks and ability casts.
+    pub attack_clip: Option<Arc<AnimationClip>>,
+    pub cast_clip: Option<Arc<AnimationClip>>,
+    /// Fraction of `attack_clip` at which the blow connects.
+    pub attack_hit: f32,
+    /// The one-shot clip playing over idle/walk, if any.
+    pub action: Option<ActionAnim>,
+    /// A computer-controlled attack winding up toward its hit.
+    pub strike: Option<PendingStrike>,
+    /// Basic-attack projectile look (`fx::LOOKS` index).
+    pub look: usize,
+    /// Footprint radius used for edge-to-edge attack range. Smaller than
+    /// `hit_radius`, which is a generous projectile hit box.
+    pub body_radius: f32,
+}
+
+/// A one-shot animation (attack or cast) played over the base pose.
+#[derive(Clone)]
+pub struct ActionAnim {
+    pub clip: Arc<AnimationClip>,
+    pub time_ms: f32,
+    /// Playback speed; attacks are time scaled to their wind-up.
+    pub rate: f32,
+    pub length_ms: f32,
+    /// 1 while playing; falls to 0 when the clip is cancelled.
+    pub fade: f32,
+    pub cancelling: bool,
+}
+
+impl ActionAnim {
+    fn new(clip: Arc<AnimationClip>, rate: f32) -> Self {
+        let length_ms = clip.loop_ms();
+        Self {
+            clip,
+            time_ms: 0.0,
+            rate: rate.clamp(0.25, 4.0),
+            length_ms,
+            fade: 1.0,
+            cancelling: false,
+        }
+    }
+
+    /// Blend weight of the clip against the base pose.
+    pub fn weight(&self) -> f32 {
+        let secs = self.time_ms / 1000.0 / self.rate.max(0.01);
+        let left = (self.length_ms - self.time_ms).max(0.0) / 1000.0 / self.rate.max(0.01);
+        let intro = (secs / ACTION_BLEND_IN).clamp(0.0, 1.0);
+        let outro = (left / ACTION_BLEND_OUT).clamp(0.0, 1.0);
+        intro.min(outro).min(self.fade)
+    }
+
+    /// Advance; false once the clip is over.
+    fn advance(&mut self, dt: f32) -> bool {
+        self.time_ms += dt * 1000.0 * self.rate;
+        if self.cancelling {
+            self.fade -= dt / ACTION_BLEND_OUT;
+        }
+        self.time_ms < self.length_ms && self.fade > 0.0
+    }
+}
+
+/// Playback rate that makes `clip`'s `hit` fraction land after `windup`
+/// seconds. Zero wind-up plays the clip at its own speed.
+fn action_rate(clip: &AnimationClip, hit: f32, windup: f32) -> f32 {
+    if windup <= 0.0 {
+        return 1.0;
+    }
+    let hit_ms = clip.loop_ms() * hit.clamp(0.05, 1.0);
+    (hit_ms / (windup * 1000.0)).clamp(0.25, 4.0)
+}
+
+/// A wind-up for a computer-controlled attack. The blow (or projectile)
+/// lands when `timer` runs out.
+#[derive(Clone, Copy)]
+pub struct PendingStrike {
+    pub target: usize,
+    pub timer: f32,
+    pub damage: f32,
+    pub ranged: bool,
+}
+
+/// A cache spot animation prepared for drawing: model with palette swaps,
+/// its clip, the pivot that centres it, and the definition's resize.
+pub struct SpotModel {
+    model: Model,
+    clip: Option<AnimationClip>,
+    /// Cache-space centre of the rest pose.
+    center: [f32; 3],
+    scale_xz: f32,
+    scale_y: f32,
+    length_ms: f32,
+    rgb: Vec<[u8; 3]>,
+}
+
+impl SpotModel {
+    fn load(cache: &Cache, id: u32) -> Result<Self> {
+        let data = cache.config(rift_cache::spotanim::SPOTANIM_ARCHIVE, id)?;
+        let def = rift_cache::SpotAnimDefinition::parse(id, &data)?;
+        anyhow::ensure!(def.model_id > 0, "spotanim {id} has no model");
+        let mut model = load_model(cache, def.model_id)?;
+        if !def.recolors.is_empty() {
+            let (find, replace): (Vec<i16>, Vec<i16>) = def
+                .recolors
+                .iter()
+                .map(|&(f, r)| (f as i16, r as i16))
+                .unzip();
+            model.recolor(&find, &replace);
+        }
+        let clip = if def.animation_id >= 0 {
+            AnimationClip::load(cache, def.animation_id as u32).ok()
+        } else {
+            None
+        };
+        let (min, max) = model.bounds();
+        let center = [
+            (min[0] + max[0]) as f32 * 0.5,
+            (min[1] + max[1]) as f32 * 0.5,
+            (min[2] + max[2]) as f32 * 0.5,
+        ];
+        let length_ms = clip.as_ref().map_or(600.0, |clip| clip.loop_ms());
+        let rgb = model
+            .face_colors
+            .iter()
+            .map(|&hsl| hsl_to_rgb(hsl, 1.0))
+            .collect();
+        let (scale_xz, scale_y) = def.scale();
+        Ok(Self {
+            model,
+            clip,
+            center,
+            scale_xz,
+            scale_y,
+            length_ms,
+            rgb,
+        })
+    }
+}
+
+/// How a spot animation model is drawn.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum SpotDraw {
+    /// A projectile: looping clip, solid faces lit with the scene.
+    Flying,
+    /// An impact splash: plays once, every face added to the glow pass.
+    Burst,
+}
+
+/// A spot animation played once in the world (an impact splash).
+pub struct SpotBurst {
+    pub spotanim: u32,
+    pub pos: Vec3,
+    pub yaw: f32,
+    pub time_ms: f32,
+    pub scale: f32,
+}
+
+/// A bright arc streak across a target struck in melee.
+pub struct Slash {
+    pub pos: Vec3,
+    pub dir: Vec3,
+    pub color: [u8; 3],
+    pub size: f32,
+    pub remaining: f32,
+    pub duration: f32,
+}
+
+/// Everything the renderer needs to draw one flying projectile.
+pub struct ShotVisual {
+    pub pos: Vec3,
+    pub dir: Vec3,
+    pub look: usize,
+    pub trail: Vec<Vec3>,
+    pub age: f32,
+    /// Overrides the look's glow and trail colours (kit shots without a
+    /// named look take their ability colour).
+    pub tint: Option<[u8; 3]>,
+}
+
+/// Shape drawn on the ground while the ability indicator is held.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Indicator {
+    /// A range circle around the caster.
+    Range { radius: f32 },
+    /// A skillshot lane from the caster toward the aim.
+    Line { length: f32, width: f32, angle: f32 },
+    /// A targeted circle at the aim, clamped to `range`.
+    Target { range: f32, radius: f32 },
+    /// A cone in front of the caster.
+    Cone { radius: f32, arc: f32 },
+    /// A circle around the caster's feet.
+    SelfArea { radius: f32 },
+    /// A dash or blink, drawn as a lane with an arrowhead. `to_cursor`
+    /// dashes stop at the aim point.
+    Dash {
+        length: f32,
+        backwards: bool,
+        to_cursor: bool,
+    },
+    /// Bananarang's rounded trapezoid path, in the caster's frame.
+    Path,
 }
 
 /// What the shop does with a purchase.
@@ -374,15 +583,6 @@ pub struct DuelPeel {
     pub duration: f32,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Default)]
-pub enum ProjectileStyle {
-    /// The chunky orange orb used by mage spells and tower bolts.
-    #[default]
-    Bolt,
-    /// A small pale blowpipe dart.
-    Dart,
-}
-
 pub struct Projectile {
     pub pos: Vec3,
     pub dir: Vec3,
@@ -395,7 +595,17 @@ pub struct Projectile {
     pub attacker: Option<usize>,
     /// Tower and watchtower bolts cannot reach Trial by Combat participants.
     pub tower_shot: bool,
-    pub style: ProjectileStyle,
+    /// Look from `fx::LOOKS`.
+    pub look: usize,
+    /// Homing basic attack: steers onto this unit and can hit nothing else.
+    pub target: Option<usize>,
+    /// Straight-line distance at launch; drives the lob of `arc` looks.
+    pub flight: f32,
+    pub travelled: f32,
+    pub age: f32,
+    /// Recent drawn positions, newest first, for the trail ribbon.
+    pub trail: Vec<Vec3>,
+    pub ember_timer: f32,
     /// Piercing shots fly on and can hit each unit only once.
     pub pierce: bool,
     pub hit: Vec<usize>,
@@ -405,10 +615,83 @@ pub struct Projectile {
     pub execute: f32,
 }
 
+impl Projectile {
+    /// A straight skillshot with no extras; set the other fields after.
+    fn new(
+        pos: Vec3,
+        dir: Vec3,
+        speed: f32,
+        life: f32,
+        damage: f32,
+        team: u8,
+        look: usize,
+    ) -> Self {
+        Self {
+            pos,
+            dir,
+            speed,
+            life,
+            damage,
+            team,
+            attacker: None,
+            tower_shot: false,
+            look,
+            target: None,
+            flight: speed * life,
+            travelled: 0.0,
+            age: 0.0,
+            trail: Vec::new(),
+            ember_timer: 0.0,
+            pierce: false,
+            hit: Vec::new(),
+            venom: 0.0,
+            execute: 0.0,
+        }
+    }
+
+    /// A homing basic attack that cannot miss `target`.
+    #[allow(clippy::too_many_arguments)]
+    fn homing(
+        from: Vec3,
+        target: usize,
+        target_pos: Vec3,
+        speed: f32,
+        damage: f32,
+        team: u8,
+        attacker: Option<usize>,
+        look: usize,
+    ) -> Self {
+        let delta = target_pos - from;
+        let mut shot = Self::new(
+            from,
+            delta.normalize_or_zero(),
+            speed,
+            8.0,
+            damage,
+            team,
+            look,
+        );
+        shot.target = Some(target);
+        shot.attacker = attacker;
+        shot.flight = delta.length().max(1.0);
+        shot
+    }
+
+    /// Where the shot is drawn: the path position lifted by its lob.
+    pub fn draw_pos(&self) -> Vec3 {
+        let arc = fx::look(self.look).arc;
+        if arc <= 0.0 {
+            return self.pos;
+        }
+        self.pos + Vec3::Y * fx::arc_offset(arc, self.travelled / self.flight.max(1.0))
+    }
+}
+
 struct MinionTemplate {
     model: Arc<Model>,
     idle: Arc<AnimationClip>,
     walk: Arc<AnimationClip>,
+    attack: Option<Arc<AnimationClip>>,
     health: f32,
     range: f32,
     damage: f32,
@@ -431,6 +714,20 @@ pub struct AnimatedScene {
     pub shadow_indices: Vec<u32>,
     pub marker: Option<(Vec3, f32)>,
     pub projectiles: Vec<Projectile>,
+    /// Additive effects rebuilt every frame (glows, trails, indicators).
+    pub fx: FxMesh,
+    /// Cache spot animations used by projectile looks, keyed by id.
+    spot_models: HashMap<u32, Arc<SpotModel>>,
+    /// Impact splashes playing once.
+    pub spot_bursts: Vec<SpotBurst>,
+    /// Melee hit streaks.
+    pub slashes: Vec<Slash>,
+    /// Ability slot most recently cast, for the held range indicator.
+    pub last_cast_slot: Option<usize>,
+    /// Cursor ground point while the indicator is held (right mouse).
+    pub indicator_aim: Option<Vec3>,
+    /// Brief range flash after a cast: slot and seconds left.
+    cast_flash: Option<(usize, f32)>,
     pub bananarangs: Vec<Bananarang>,
     /// Cache-native banana mesh used by the Bananarang; billboard fallback if
     /// the cache revision lacks model 2387.
@@ -629,6 +926,8 @@ impl AnimatedScene {
             player.armor = champion.armor;
             player.walk_arm = champion.walk_arm;
             player.attack_windup = champion.attack_windup;
+            player.attack_hit = champion.attack_hit;
+            player.look = champion_look(champion);
             player.q_damage = champion.q_damage;
             player.r_damage = champion.r_damage;
             player.e_heal = champion.e_heal;
@@ -652,6 +951,9 @@ impl AnimatedScene {
         units[player_index].walk_loop_ms = walk_loop_ms;
         units[player_index].walk_stride = walk_stride;
         units[player_index].motion = Some(PlayerMotion::new(champion, walk_loop_ms));
+        let (attack_clip, cast_clip) = champion_clips(&mut assets, champion);
+        units[player_index].attack_clip = attack_clip;
+        units[player_index].cast_clip = cast_clip;
 
         // A training dummy next to the spawn keeps combat testable without
         // waiting for the first wave to meet in the middle.
@@ -756,6 +1058,9 @@ impl AnimatedScene {
             )?;
             unit.respawn_time = camp.respawn;
             unit.camp_buff = Some(camp.buff);
+            if camp.range > 300.0 {
+                unit.look = fx::look_by_name("earth_blast");
+            }
             unit.home = camp.pos;
             unit.aggro_range = camp.aggro;
             unit.leash_range = camp.leash;
@@ -848,6 +1153,8 @@ impl AnimatedScene {
             model: assets.model(19982)?,
             idle: assets.clip(171)?,
             walk: assets.clip(168)?,
+            // Imp sword swing.
+            attack: assets.clip(169).ok(),
             health: 90.0,
             range: 100.0,
             damage: 7.0,
@@ -860,6 +1167,8 @@ impl AnimatedScene {
             model: assets.model(2857)?,
             idle: assets.clip(112)?,
             walk: assets.clip(106)?,
+            // Fairy wand flick.
+            attack: assets.clip(110).ok(),
             health: 65.0,
             range: 380.0,
             damage: 9.0,
@@ -900,6 +1209,18 @@ impl AnimatedScene {
             }
         };
 
+        // Projectile and impact models for every look. A missing spot
+        // animation only costs that look its model; the glow still draws.
+        let mut spot_models = HashMap::new();
+        for id in fx::spotanim_ids() {
+            match SpotModel::load(cache, id) {
+                Ok(spot) => {
+                    spot_models.insert(id, Arc::new(spot));
+                }
+                Err(err) => tracing::warn!("fx: spotanim {id} unavailable: {err:#}"),
+            }
+        }
+
         let kit_rt = match &champion.kit {
             Some(kit) => kit_runtime::KitRuntime::load(cache, &mut assets, kit),
             None => kit_runtime::KitRuntime::default(),
@@ -915,6 +1236,13 @@ impl AnimatedScene {
             shadow_indices: Vec::new(),
             marker: None,
             projectiles: Vec::new(),
+            fx: FxMesh::default(),
+            spot_models,
+            spot_bursts: Vec::new(),
+            slashes: Vec::new(),
+            last_cast_slot: None,
+            indicator_aim: None,
+            cast_flash: None,
             bananarangs: Vec::new(),
             banana_model,
             duel: None,
@@ -1473,13 +1801,14 @@ impl AnimatedScene {
         }
         let target_pos = target.pos;
         self.steer_wish = None;
-        let player = &mut self.units[self.player_index];
+        let pi = self.player_index;
+        let in_range = self.in_reach(pi, index, self.units[pi].attack_range);
+        let player = &mut self.units[pi];
         player.attack_target = Some(index);
         player.attack_pending = false;
         player.attack_windup_timer = 0.0;
         player.target = Some(target_pos);
-        let distance = player.pos.distance(target_pos);
-        if distance > player.attack_range {
+        if !in_range {
             player.path = collision.path_world(player.pos, target_pos, height);
             player.path_index = 0;
         } else {
@@ -1594,34 +1923,345 @@ impl AnimatedScene {
         let ranged = unit.ranged_auto;
         let from = unit.pos + Vec3::Y * (unit.scale * 80.0);
         let team = unit.team;
-        let target_pos = self.units[target].pos;
+        let look = unit.look;
+        let target_pos = self.unit_chest(target);
         if ranged {
-            let dir = (target_pos - from).normalize_or_zero();
-            self.projectiles.push(Projectile {
-                pos: from,
-                dir,
-                speed: 1400.0,
-                life: 1.2,
+            self.projectiles.push(Projectile::homing(
+                from,
+                target,
+                target_pos,
+                1400.0,
                 damage,
                 team,
-                attacker: None,
-                tower_shot: false,
-                style: if self.champion_id == "ranger" {
-                    ProjectileStyle::Dart
-                } else {
-                    ProjectileStyle::Bolt
-                },
-                pierce: false,
-                hit: Vec::new(),
-                venom: 0.0,
-                execute: 0.0,
-            });
+                Some(pi),
+                look,
+            ));
+            self.muzzle_flash(from, look);
         } else {
-            self.damage_unit(target, damage, 0);
+            self.melee_slash(pi, target, [255, 235, 200]);
+            self.damage_unit_by(target, damage, 0, Some(pi));
             if self.units[target].health <= 0.0 {
                 self.units[pi].attack_target = None;
             }
         }
+    }
+
+    /// Planar centre distance minus the target's footprint: the gap an
+    /// attack has to close. Height differences do not shorten reach.
+    fn reach_gap(&self, attacker: usize, target: usize) -> f32 {
+        let a = &self.units[attacker];
+        let t = &self.units[target];
+        planar_delta(a.pos, t.pos).length() - t.body_radius
+    }
+
+    /// True when `target`'s edge is within `range` of `attacker`'s centre.
+    fn in_reach(&self, attacker: usize, target: usize, range: f32) -> bool {
+        self.reach_gap(attacker, target) <= range
+    }
+
+    /// Where shots aim on a unit: about a third of the way up its bar.
+    fn unit_chest(&self, index: usize) -> Vec3 {
+        let unit = &self.units[index];
+        let lift = if unit.kind.is_structure() {
+            unit.bar_height * 0.45
+        } else {
+            (unit.bar_height * 0.30).clamp(40.0, 180.0)
+        };
+        unit.pos + Vec3::Y * lift
+    }
+
+    /// Launch point of a unit's ranged attack.
+    fn unit_muzzle(&self, index: usize) -> Vec3 {
+        let unit = &self.units[index];
+        let forward = Vec3::new(unit.yaw.sin(), 0.0, unit.yaw.cos());
+        let lift = match unit.kind {
+            UnitKind::RangedMinion => 90.0,
+            UnitKind::Camp => 140.0,
+            _ => unit.scale * 80.0,
+        };
+        unit.pos + Vec3::Y * lift + forward * 30.0
+    }
+
+    /// A quick flash and a puff of embers where a projectile leaves.
+    fn muzzle_flash(&mut self, pos: Vec3, look: usize) {
+        let look = fx::look(look);
+        self.effects.push(Effect {
+            pos,
+            radius: look.glow_size * 0.9,
+            remaining: 0.16,
+            duration: 0.16,
+            color: look.glow,
+        });
+        let sparks = (look.impact_sparks / 3).max(2);
+        self.emit_burst(
+            pos,
+            look.ember_color,
+            sparks,
+            160.0,
+            look.glow_size * 0.16,
+            0.3,
+        );
+    }
+
+    /// A bright streak across `target` from `attacker`'s swing.
+    fn melee_slash(&mut self, attacker: usize, target: usize, color: [u8; 3]) {
+        let from = self.units[attacker].pos;
+        let at = self.unit_chest(target);
+        let dir = planar_delta(from, at).normalize_or_zero();
+        let size = (self.units[target].body_radius * 1.6).clamp(70.0, 260.0);
+        self.slashes.push(Slash {
+            pos: at,
+            dir,
+            color,
+            size,
+            remaining: 0.22,
+            duration: 0.22,
+        });
+        if self.slashes.len() > 48 {
+            self.slashes.remove(0);
+        }
+        self.emit_burst(at, color, 6, 220.0, 10.0, 0.3);
+    }
+
+    /// Play a one-shot clip on a unit. `windup` is when the clip's hit
+    /// moment should land (0 plays it at its own speed).
+    fn start_action(&mut self, index: usize, cast: bool, windup: f32) {
+        let unit = &mut self.units[index];
+        let clip = if cast {
+            unit.cast_clip.clone()
+        } else {
+            unit.attack_clip.clone()
+        };
+        let Some(clip) = clip else {
+            return;
+        };
+        let rate = if cast {
+            // Casts are snappy: no slower than real time, at most ~0.6 s.
+            (clip.loop_ms() / 600.0).max(1.0)
+        } else {
+            action_rate(&clip, unit.attack_hit, windup)
+        };
+        unit.action = Some(ActionAnim::new(clip, rate));
+    }
+
+    /// Start blending a unit's one-shot clip out.
+    fn cancel_action(&mut self, index: usize) {
+        if let Some(action) = self.units[index].action.as_mut() {
+            action.cancelling = true;
+        }
+    }
+
+    /// Start a computer-controlled attack: the attack clip plays and the
+    /// hit lands on its swing. A unit without a clip hits at once.
+    fn begin_strike(&mut self, index: usize, target: usize, damage: f32, ranged: bool) {
+        let unit = &mut self.units[index];
+        let interval = unit.attack_interval / unit.attack_speed_mult.max(0.1);
+        unit.attack_cooldown = interval;
+        let strike = PendingStrike {
+            target,
+            timer: 0.0,
+            damage,
+            ranged,
+        };
+        match unit.attack_clip.clone() {
+            Some(clip) => {
+                let natural = clip.loop_ms() * unit.attack_hit.clamp(0.05, 1.0) / 1000.0;
+                let windup = natural.min(interval * 0.55).max(0.08);
+                unit.action = Some(ActionAnim::new(
+                    clip.clone(),
+                    action_rate(&clip, unit.attack_hit, windup),
+                ));
+                unit.strike = Some(PendingStrike {
+                    timer: windup,
+                    ..strike
+                });
+            }
+            None => self.release_strike(index, strike),
+        }
+    }
+
+    /// Count down every wind-up and land the ones that are due. A strike
+    /// whose attacker or target died is dropped.
+    fn update_strikes(&mut self, dt: f32) {
+        for index in 0..self.units.len() {
+            let Some(mut strike) = self.units[index].strike else {
+                continue;
+            };
+            let attacker_ok = self.units[index].health > 0.0 && self.units[index].stun_timer <= 0.0;
+            let target_ok = self
+                .units
+                .get(strike.target)
+                .is_some_and(|unit| unit.health > 0.0);
+            if !attacker_ok || !target_ok {
+                self.units[index].strike = None;
+                continue;
+            }
+            strike.timer -= dt;
+            if strike.timer > 0.0 {
+                self.units[index].strike = Some(strike);
+                continue;
+            }
+            self.units[index].strike = None;
+            self.release_strike(index, strike);
+        }
+    }
+
+    fn release_strike(&mut self, index: usize, strike: PendingStrike) {
+        let team = self.units[index].team;
+        if strike.ranged {
+            let from = self.unit_muzzle(index);
+            let target_pos = self.unit_chest(strike.target);
+            let speed = match self.units[index].kind {
+                UnitKind::RangedMinion => 950.0,
+                UnitKind::Camp => 850.0,
+                _ => 1400.0,
+            };
+            let look = self.units[index].look;
+            self.projectiles.push(Projectile::homing(
+                from,
+                strike.target,
+                target_pos,
+                speed,
+                strike.damage,
+                team,
+                Some(index),
+                look,
+            ));
+            self.muzzle_flash(from, look);
+        } else {
+            let color = match team {
+                0 => [200, 225, 255],
+                1 => [255, 200, 190],
+                _ => [255, 230, 170],
+            };
+            self.melee_slash(index, strike.target, color);
+            self.damage_unit_by(strike.target, strike.damage, team, Some(index));
+        }
+    }
+
+    /// Cast the Q slot. King Awowogei throws his Bananarang, the Blowpipe
+    /// Ranger looses a poisoned dart, kits run their data, and everyone else
+    /// keeps the shared arcane bolt aimed at the cursor.
+    pub fn cast_q(&mut self, target: Vec3) -> bool {
+        let ok = self.cast_q_inner(target);
+        self.after_cast(0, ok);
+        ok
+    }
+
+    pub fn cast_w(
+        &mut self,
+        target: Vec3,
+        collision: &WorldCollision,
+        height: &HeightGrid,
+    ) -> bool {
+        let ok = self.cast_w_inner(target, collision, height);
+        self.after_cast(1, ok);
+        ok
+    }
+
+    pub fn cast_e(&mut self, collision: &WorldCollision, height: &HeightGrid) -> bool {
+        let ok = self.cast_e_inner(collision, height);
+        self.after_cast(2, ok);
+        ok
+    }
+
+    /// Cast the R slot. King Awowogei challenges an enemy champion to Trial
+    /// by Combat; other champions keep the shared ground-targeted meteor.
+    pub fn cast_r(
+        &mut self,
+        target: Vec3,
+        target_index: Option<usize>,
+        height: &HeightGrid,
+    ) -> bool {
+        let ok = self.cast_r_inner(target, target_index, height);
+        self.after_cast(3, ok);
+        ok
+    }
+
+    /// A successful cast plays the cast clip, remembers the slot for the
+    /// held indicator and flashes its range briefly.
+    fn after_cast(&mut self, slot: usize, ok: bool) {
+        if !ok {
+            return;
+        }
+        let pi = self.player_index;
+        self.last_cast_slot = Some(slot);
+        self.cast_flash = Some((slot, 0.45));
+        // A cast interrupts a basic attack that has not landed yet.
+        self.units[pi].attack_pending = false;
+        self.units[pi].attack_windup_timer = 0.0;
+        self.start_action(pi, true, 0.0);
+    }
+
+    /// Show the held range indicator for the last ability at `aim`, or hide
+    /// it with `None`.
+    pub fn set_indicator_aim(&mut self, aim: Option<Vec3>) {
+        self.indicator_aim = aim;
+    }
+
+    /// Ground shapes that describe an ability slot's reach.
+    pub fn ability_indicators(&self, slot: usize) -> Vec<Indicator> {
+        if let Some(kit) = self.kit.as_ref() {
+            return kit
+                .abilities
+                .get(slot)
+                .map(|ability| {
+                    kit_indicators(&ability.actions, self.units[self.player_index].attack_range)
+                })
+                .unwrap_or_default();
+        }
+        let player = &self.units[self.player_index];
+        match (self.champion_id.as_str(), slot) {
+            ("monkey", 0) => vec![Indicator::Path],
+            ("monkey", 3) => vec![Indicator::Range {
+                radius: TRIAL_RANGE,
+            }],
+            ("ranger", 0) => vec![Indicator::Line {
+                length: 1500.0 * 1.2,
+                width: 70.0,
+                angle: 0.0,
+            }],
+            ("ranger", 1) => (-2..=2)
+                .map(|i| Indicator::Line {
+                    length: 1400.0 * 1.1,
+                    width: 60.0,
+                    angle: i as f32 * 0.22,
+                })
+                .collect(),
+            ("ranger", 2) => vec![Indicator::Dash {
+                length: 512.0,
+                backwards: true,
+                to_cursor: false,
+            }],
+            ("ranger", 3) => vec![Indicator::Line {
+                length: 1800.0 * 1.6,
+                width: 90.0,
+                angle: 0.0,
+            }],
+            (_, 0) => vec![Indicator::Line {
+                length: 950.0 * 1.4,
+                width: 90.0,
+                angle: 0.0,
+            }],
+            (_, 1) => vec![Indicator::Dash {
+                length: player.w_distance,
+                backwards: false,
+                to_cursor: true,
+            }],
+            (_, 2) => vec![Indicator::SelfArea { radius: 160.0 }],
+            _ => vec![Indicator::Target {
+                range: METEOR_RANGE,
+                radius: 384.0,
+            }],
+        }
+    }
+
+    /// Colour of an ability slot's indicator.
+    fn ability_color(&self, slot: usize) -> [u8; 3] {
+        self.kit
+            .as_ref()
+            .and_then(|kit| kit.abilities.get(slot))
+            .map_or([120, 200, 255], |ability| ability.color)
     }
 
     fn next_random(&mut self) -> f32 {
@@ -1679,10 +2319,7 @@ impl AnimatedScene {
         });
     }
 
-    /// Cast the Q slot. King Awowogei throws his Bananarang, the Blowpipe
-    /// Ranger looses a poisoned dart, and everyone else keeps the shared
-    /// arcane bolt aimed at the cursor.
-    pub fn cast_q(&mut self, target: Vec3) -> bool {
+    fn cast_q_inner(&mut self, target: Vec3) -> bool {
         if self.kit.is_some() {
             return self.cast_kit(0, target);
         }
@@ -1764,21 +2401,18 @@ impl AnimatedScene {
         let team = player.team;
         player.mana -= 30.0;
         player.cooldowns[0] = 5.0;
-        self.projectiles.push(Projectile {
+        let mut shot = Projectile::new(
             pos,
             dir,
-            speed: 1500.0,
-            life: 1.2,
+            1500.0,
+            1.2,
             damage,
             team,
-            attacker: Some(pi),
-            tower_shot: false,
-            style: ProjectileStyle::Dart,
-            pierce: false,
-            hit: Vec::new(),
-            venom: 4.0,
-            execute: 0.0,
-        });
+            fx::look_by_name("dart"),
+        );
+        shot.attacker = Some(pi);
+        shot.venom = 4.0;
+        self.projectiles.push(shot);
         self.emit_burst(pos, [120, 255, 120], 8, 190.0, 14.0, 0.4);
         true
     }
@@ -1809,21 +2443,18 @@ impl AnimatedScene {
             let angle = index as f32 * 0.22;
             let (sin, cos) = angle.sin_cos();
             let rotated = Vec3::new(dir.x * cos - dir.z * sin, 0.0, dir.x * sin + dir.z * cos);
-            self.projectiles.push(Projectile {
-                pos: origin + rotated * 40.0,
-                dir: rotated,
-                speed: 1400.0,
-                life: 1.1,
+            let mut shot = Projectile::new(
+                origin + rotated * 40.0,
+                rotated,
+                1400.0,
+                1.1,
                 damage,
                 team,
-                attacker: Some(pi),
-                tower_shot: false,
-                style: ProjectileStyle::Dart,
-                pierce: false,
-                hit: Vec::new(),
-                venom: 3.0,
-                execute: 0.0,
-            });
+                fx::look_by_name("dart"),
+            );
+            shot.attacker = Some(pi);
+            shot.venom = 3.0;
+            self.projectiles.push(shot);
         }
         true
     }
@@ -1890,21 +2521,20 @@ impl AnimatedScene {
         let team = player.team;
         player.mana -= 80.0;
         player.cooldowns[3] = 75.0;
-        self.projectiles.push(Projectile {
+        let mut shot = Projectile::new(
             pos,
             dir,
-            speed: 1800.0,
-            life: 1.6,
+            1800.0,
+            1.6,
             damage,
             team,
-            attacker: Some(pi),
-            tower_shot: false,
-            style: ProjectileStyle::Dart,
-            pierce: true,
-            hit: Vec::new(),
-            venom: 2.0,
-            execute: 0.35,
-        });
+            fx::look_by_name("blood"),
+        );
+        shot.attacker = Some(pi);
+        shot.pierce = true;
+        shot.venom = 2.0;
+        shot.execute = 0.35;
+        self.projectiles.push(shot);
         self.emit_burst(pos, [255, 90, 70], 14, 260.0, 16.0, 0.5);
         true
     }
@@ -1929,21 +2559,15 @@ impl AnimatedScene {
         player.mana -= 25.0;
         player.cooldowns[0] = Q_COOLDOWN;
         let damage = player.q_damage * (1.0 + player.ability_power / 100.0);
-        self.projectiles.push(Projectile {
+        self.projectiles.push(Projectile::new(
             pos,
             dir,
-            speed: 950.0,
-            life: 1.4,
+            950.0,
+            1.4,
             damage,
             team,
-            attacker: None,
-            tower_shot: false,
-            style: ProjectileStyle::Bolt,
-            pierce: false,
-            hit: Vec::new(),
-            venom: 0.0,
-            execute: 0.0,
-        });
+            fx::look_by_name("fire_blast"),
+        ));
         self.effects.push(Effect {
             pos,
             radius: 110.0,
@@ -1955,7 +2579,7 @@ impl AnimatedScene {
         true
     }
 
-    pub fn cast_w(
+    fn cast_w_inner(
         &mut self,
         target: Vec3,
         collision: &WorldCollision,
@@ -2018,7 +2642,7 @@ impl AnimatedScene {
         true
     }
 
-    pub fn cast_e(&mut self, collision: &WorldCollision, height: &HeightGrid) -> bool {
+    fn cast_e_inner(&mut self, collision: &WorldCollision, height: &HeightGrid) -> bool {
         if self.kit.is_some() {
             let target = self.kit_aim;
             return self.cast_kit(2, target);
@@ -2054,9 +2678,7 @@ impl AnimatedScene {
         true
     }
 
-    /// Cast the R slot. King Awowogei challenges an enemy champion to Trial
-    /// by Combat; other champions keep the shared ground-targeted meteor.
-    pub fn cast_r(
+    fn cast_r_inner(
         &mut self,
         target: Vec3,
         target_index: Option<usize>,
@@ -2167,6 +2789,13 @@ impl AnimatedScene {
         {
             return false;
         }
+        let offset = planar_delta(player.pos, target);
+        let target = if offset.length() > METEOR_RANGE {
+            let p = player.pos + offset.normalize_or_zero() * METEOR_RANGE;
+            Vec3::new(p.x, target.y, p.z)
+        } else {
+            target
+        };
         player.mana -= 80.0;
         player.cooldowns[3] = 45.0;
         let radius = 384.0;
@@ -2481,6 +3110,12 @@ impl AnimatedScene {
         unit.model_yaw_offset = champion.model_yaw;
         unit.walk_arm = champion.walk_arm;
         unit.attack_windup = champion.attack_windup;
+        unit.attack_hit = champion.attack_hit;
+        unit.ranged_auto = champion.ranged_auto;
+        unit.look = champion_look(champion);
+        let (attack_clip, cast_clip) = champion_clips(&mut assets, champion);
+        unit.attack_clip = attack_clip;
+        unit.cast_clip = cast_clip;
         if champion.walk_sway < 1.0 {
             if let Some(walk) = unit.walk.as_mut() {
                 Arc::make_mut(walk).damp_side_rotation(champion.walk_sway);
@@ -2738,6 +3373,27 @@ impl AnimatedScene {
             effect.remaining -= dt;
         }
         self.effects.retain(|effect| effect.remaining > 0.0);
+        if self.effects.len() > 160 {
+            let excess = self.effects.len() - 160;
+            self.effects.drain(..excess);
+        }
+        for slash in &mut self.slashes {
+            slash.remaining -= dt;
+        }
+        self.slashes.retain(|slash| slash.remaining > 0.0);
+        let spot_models = &self.spot_models;
+        self.spot_bursts.retain_mut(|burst| {
+            burst.time_ms += dt * 1000.0;
+            spot_models
+                .get(&burst.spotanim)
+                .is_some_and(|spot| burst.time_ms < spot.length_ms)
+        });
+        if let Some((_, remaining)) = self.cast_flash.as_mut() {
+            *remaining -= dt;
+            if *remaining <= 0.0 {
+                self.cast_flash = None;
+            }
+        }
 
         for particle in &mut self.particles {
             particle.remaining -= dt;
@@ -2857,6 +3513,16 @@ impl AnimatedScene {
                 }
             }
             unit.anim_time_ms += dt * 1000.0;
+            if let Some(action) = unit.action.as_mut() {
+                // Walking off cancels the backswing (and the swing itself;
+                // the player's order code clears the pending hit).
+                if unit.moving || unit.health <= 0.0 {
+                    action.cancelling = true;
+                }
+                if !action.advance(dt) {
+                    unit.action = None;
+                }
+            }
             if unit.kind == UnitKind::Player {
                 let target = if unit.moving { 1.0 } else { 0.0 };
                 let rate = if target > unit.walk_blend { 9.0 } else { 6.0 };
@@ -2928,6 +3594,7 @@ impl AnimatedScene {
             }
         }
 
+        self.update_strikes(dt);
         self.apply_duel_bounds(height);
         self.update_duel(dt);
         self.update_bananarangs(dt, height);
@@ -2999,8 +3666,17 @@ impl AnimatedScene {
             if target_alive {
                 let target_pos = self.units[ti].pos;
                 let player_pos = self.units[pi].pos;
-                let distance = player_pos.distance(target_pos);
-                if distance > self.units[pi].attack_range {
+                // A committed swing tolerates a little drift before it is
+                // abandoned, so a target stepping back does not eat it.
+                let leash = if self.units[pi].attack_pending {
+                    WINDUP_LEASH
+                } else {
+                    0.0
+                };
+                if !self.in_reach(pi, ti, self.units[pi].attack_range + leash) {
+                    if self.units[pi].attack_pending {
+                        self.cancel_action(pi);
+                    }
                     let unit = &mut self.units[pi];
                     unit.attack_pending = false;
                     unit.attack_windup_timer = 0.0;
@@ -3032,6 +3708,10 @@ impl AnimatedScene {
                             self.units[pi].attack_pending = false;
                         }
                     } else if cooldown <= 0.0 && facing < 0.35 {
+                        // Wind-up shortens with attack speed, like the
+                        // interval does.
+                        let windup = windup / self.units[pi].attack_speed_mult.max(0.1);
+                        self.start_action(pi, false, windup);
                         if windup > 0.0 {
                             self.units[pi].attack_pending = true;
                             self.units[pi].attack_windup_timer = windup;
@@ -3114,8 +3794,8 @@ impl AnimatedScene {
 
         if let Some(target) = target {
             let target_pos = self.units[target].pos;
-            let distance = pos.distance(target_pos);
-            if distance <= self.units[index].attack_range {
+            let _ = pos;
+            if self.in_reach(index, target, self.units[index].attack_range) {
                 let unit = &mut self.units[index];
                 unit.moving = false;
                 unit.attack_target = Some(target);
@@ -3123,29 +3803,10 @@ impl AnimatedScene {
                 if dir.length_squared() > 1e-6 {
                     turn_toward(unit, dir.x.atan2(dir.z), dt);
                 }
-                if unit.attack_cooldown <= 0.0 {
-                    unit.attack_cooldown = unit.attack_interval;
+                if unit.attack_cooldown <= 0.0 && unit.strike.is_none() {
                     let damage = unit.attack_damage * aura;
-                    if unit.kind == UnitKind::RangedMinion {
-                        let dir = (target_pos - unit.pos).normalize_or_zero();
-                        self.projectiles.push(Projectile {
-                            pos: unit.pos + Vec3::Y * 80.0 + dir * 20.0,
-                            dir,
-                            speed: 650.0,
-                            life: 1.4,
-                            damage,
-                            team: unit.team,
-                            attacker: None,
-                            tower_shot: false,
-                            style: ProjectileStyle::Bolt,
-                            pierce: false,
-                            hit: Vec::new(),
-                            venom: 0.0,
-                            execute: 0.0,
-                        });
-                    } else {
-                        self.damage_unit_by(target, damage, team, Some(index));
-                    }
+                    let ranged = unit.kind == UnitKind::RangedMinion;
+                    self.begin_strike(index, target, damage, ranged);
                 }
             } else {
                 self.units[index].attack_target = Some(target);
@@ -3188,17 +3849,17 @@ impl AnimatedScene {
             return;
         };
         let target_pos = self.units[target].pos;
-        let (distance, attack_range, cooldown_ready, damage, interval) = {
+        let _ = team;
+        let (in_range, cooldown_ready, damage, ranged) = {
             let unit = &self.units[index];
             (
-                unit.pos.distance(target_pos),
-                unit.attack_range,
-                unit.attack_cooldown <= 0.0,
+                self.in_reach(index, target, unit.attack_range),
+                unit.attack_cooldown <= 0.0 && unit.strike.is_none(),
                 unit.attack_damage,
-                unit.attack_interval,
+                unit.ranged_auto,
             )
         };
-        if distance <= attack_range {
+        if in_range {
             let unit = &mut self.units[index];
             unit.moving = false;
             unit.attack_target = Some(target);
@@ -3207,8 +3868,7 @@ impl AnimatedScene {
                 turn_toward(unit, dir.x.atan2(dir.z), dt);
             }
             if cooldown_ready {
-                unit.attack_cooldown = interval / unit.attack_speed_mult.max(0.1);
-                self.damage_unit_by(target, damage, team, Some(index));
+                self.begin_strike(index, target, damage, ranged);
             }
         } else {
             self.units[index].attack_target = Some(target);
@@ -3245,8 +3905,7 @@ impl AnimatedScene {
                 return;
             }
 
-            let distance = self.units[index].pos.distance(target_pos);
-            if distance <= self.units[index].attack_range {
+            if self.in_reach(index, ti, self.units[index].attack_range) {
                 self.units[index].attack_target = Some(ti);
                 self.units[index].moving = false;
                 let dir = target_pos - self.units[index].pos;
@@ -3254,29 +3913,10 @@ impl AnimatedScene {
                     let yaw = dir.x.atan2(dir.z);
                     turn_toward(&mut self.units[index], yaw, dt);
                 }
-                if self.units[index].attack_cooldown <= 0.0 {
-                    self.units[index].attack_cooldown = self.units[index].attack_interval;
+                if self.units[index].attack_cooldown <= 0.0 && self.units[index].strike.is_none() {
                     let damage = self.units[index].attack_damage;
-                    if self.units[index].attack_range > 300.0 {
-                        let dir = (target_pos - self.units[index].pos).normalize_or_zero();
-                        self.projectiles.push(Projectile {
-                            pos: self.units[index].pos + Vec3::Y * 140.0 + dir * 20.0,
-                            dir,
-                            speed: 620.0,
-                            life: 1.6,
-                            damage,
-                            team: 2,
-                            attacker: None,
-                            tower_shot: false,
-                            style: ProjectileStyle::Bolt,
-                            pierce: false,
-                            hit: Vec::new(),
-                            venom: 0.0,
-                            execute: 0.0,
-                        });
-                    } else {
-                        self.damage_unit_by(ti, damage, 2, Some(index));
-                    }
+                    let ranged = self.units[index].attack_range > 300.0;
+                    self.begin_strike(index, ti, damage, ranged);
                 }
             } else {
                 self.units[index].attack_target = Some(ti);
@@ -3383,21 +4023,13 @@ impl AnimatedScene {
         let damage = self.units[index].attack_damage;
         let from = tower_pos + Vec3::Y * 240.0;
         let shot_dir = (target_pos - from).normalize_or_zero();
-        self.projectiles.push(Projectile {
-            pos: from,
-            dir: shot_dir,
-            speed: 280.0,
-            life: 3.5,
-            damage,
-            team,
-            attacker: Some(index),
-            tower_shot: true,
-            style: ProjectileStyle::Bolt,
-            pierce: false,
-            hit: Vec::new(),
-            venom: 0.0,
-            execute: 0.0,
-        });
+        // Watchtower bolts stay slow dodgeable skillshots by design.
+        let look = fx::look_by_name("watchtower");
+        let mut shot = Projectile::new(from, shot_dir, 280.0, 3.5, damage, team, look);
+        shot.attacker = Some(index);
+        shot.tower_shot = true;
+        self.projectiles.push(shot);
+        self.muzzle_flash(from, look);
     }
 
     /// Watchtowers prefer heroes, then lane minions, then jungle camps.
@@ -3448,24 +4080,21 @@ impl AnimatedScene {
         if let Some(target) = target {
             if self.units[index].attack_cooldown <= 0.0 {
                 self.units[index].attack_cooldown = self.units[index].attack_interval;
-                let target_pos = self.units[target].pos;
-                let dir = (target_pos - pos).normalize_or_zero();
+                let target_pos = self.unit_chest(target);
                 let damage = self.units[index].attack_damage;
-                self.projectiles.push(Projectile {
-                    pos: pos + Vec3::Y * 380.0,
-                    dir,
-                    speed: 700.0,
-                    life: 1.6,
-                    damage,
-                    team,
-                    attacker: None,
-                    tower_shot: true,
-                    style: ProjectileStyle::Bolt,
-                    pierce: false,
-                    hit: Vec::new(),
-                    venom: 0.0,
-                    execute: 0.0,
-                });
+                let look = if team == 0 {
+                    fx::look_by_name("tower_blue")
+                } else {
+                    fx::look_by_name("tower_red")
+                };
+                let from = pos + Vec3::Y * 380.0;
+                // Tower shots home like basic attacks; the attacker stays
+                // unset so tower kills never pull a camp.
+                let mut shot =
+                    Projectile::homing(from, target, target_pos, 900.0, damage, team, None, look);
+                shot.tower_shot = true;
+                self.projectiles.push(shot);
+                self.muzzle_flash(from, look);
             }
         }
     }
@@ -4085,33 +4714,73 @@ impl AnimatedScene {
         let mut survivors = Vec::with_capacity(projectiles.len());
 
         for mut projectile in projectiles {
-            // Trail: a couple of soft sparks behind every player projectile.
-            if projectile.team == 0 && self.particles.len() < 280 {
-                let (trail_color, trail_size) = match projectile.style {
-                    ProjectileStyle::Dart => ([120, 255, 140], 7.0),
-                    ProjectileStyle::Bolt => ([255, 170, 70], 10.0),
-                };
-                self.particles.push(Particle {
-                    pos: projectile.pos,
-                    vel: -projectile.dir * 40.0 + Vec3::Y * 18.0,
-                    color: trail_color,
-                    size: trail_size,
-                    remaining: 0.22,
-                    duration: 0.22,
-                    gravity: 0.0,
-                    drag: 2.0,
-                });
-            }
+            let look = *fx::look(projectile.look);
+            projectile.age += dt;
             projectile.life -= dt;
-            projectile.pos += projectile.dir * projectile.speed * dt;
 
-            if projectile.life <= 0.0
-                || projectile.pos.y <= height.height_at(projectile.pos.x, projectile.pos.z)
-            {
+            // Homing basic attacks steer onto the target every frame and
+            // land when this frame's step reaches it, so they never miss.
+            if let Some(ti) = projectile.target {
+                if self.units.get(ti).is_none_or(|unit| unit.health <= 0.0) {
+                    self.projectile_fizzle(&projectile);
+                    continue;
+                }
+                let aim = self.unit_chest(ti);
+                let to = aim - projectile.pos;
+                let distance = to.length();
+                if distance > 1.0 {
+                    projectile.dir = to / distance;
+                }
+                let step = projectile.speed * dt;
+                if distance <= step + 6.0 {
+                    projectile.pos = aim;
+                    projectile.travelled = projectile.flight;
+                    self.apply_projectile_hit(&projectile, ti);
+                    self.projectile_impact(&projectile, aim);
+                    continue;
+                }
+                projectile.pos += projectile.dir * step;
+                projectile.travelled += step;
+                // A long chase stretches the lob instead of snapping it.
+                projectile.flight = projectile
+                    .flight
+                    .max(projectile.travelled + distance - step);
+                if projectile.life <= 0.0 {
+                    continue;
+                }
+            } else {
+                let step = projectile.speed * dt;
+                projectile.pos += projectile.dir * step;
+                projectile.travelled += step;
+                if projectile.life <= 0.0
+                    || projectile.pos.y <= height.height_at(projectile.pos.x, projectile.pos.z)
+                {
+                    self.projectile_fizzle(&projectile);
+                    continue;
+                }
+            }
+
+            let head = projectile.draw_pos();
+            advance_trail(
+                &mut projectile.trail,
+                head,
+                look.trail_points,
+                projectile.speed,
+            );
+            projectile.ember_timer -= dt;
+            if look.embers > 0.0 && projectile.ember_timer <= 0.0 {
+                projectile.ember_timer = 1.0 / look.embers;
+                let pos = projectile.draw_pos();
+                let dir = projectile.dir;
+                self.shed_ember(pos, dir, &look);
+            }
+
+            if projectile.target.is_some() {
+                survivors.push(projectile);
                 continue;
             }
 
-            let mut hits: Vec<(usize, f32)> = Vec::new();
+            let mut hits: Vec<usize> = Vec::new();
             for (i, unit) in self.units.iter().enumerate() {
                 if unit.team == projectile.team
                     || unit.health <= 0.0
@@ -4130,54 +4799,141 @@ impl AnimatedScene {
                 if projectile.pos.distance(center) > radius {
                     continue;
                 }
-                projectile.hit.push(i);
-                let mut damage = projectile.damage;
-                if projectile.execute > 0.0 && unit.health < unit.max_health * 0.25 {
-                    damage *= 1.0 + projectile.execute;
-                }
-                hits.push((i, damage));
+                hits.push(i);
                 if !projectile.pierce {
                     break;
                 }
             }
             let hit_count = hits.len();
-            for (index, damage) in hits {
-                if projectile.venom > 0.0 {
-                    let poisoned = &mut self.units[index];
-                    if poisoned.venom_timer <= 0.0 {
-                        poisoned.venom_tick = 1.0;
-                    }
-                    poisoned.venom_timer = 6.0;
-                    poisoned.venom_damage = poisoned.venom_damage.max(projectile.venom);
-                    poisoned.venom_team = projectile.team;
-                }
-                let damage = if index == self.player_index {
-                    damage * self.kit_projectile_taken()
-                } else {
-                    damage
-                };
-                self.damage_unit_by(index, damage, projectile.team, projectile.attacker);
-                let (hit_color, hit_radius) = match projectile.style {
-                    ProjectileStyle::Dart => ([120, 255, 150], 120.0),
-                    ProjectileStyle::Bolt => ([255, 140, 50], 180.0),
-                };
-                self.effects.push(Effect {
-                    pos: projectile.pos,
-                    radius: hit_radius,
-                    remaining: 0.7,
-                    duration: 0.7,
-                    color: hit_color,
-                });
-                self.emit_burst(projectile.pos, hit_color, 10, 240.0, 14.0, 0.45);
-                if projectile.venom > 0.0 {
-                    self.add_decal(projectile.pos, 70.0, [34, 78, 44], 3.2);
-                }
+            for index in hits {
+                projectile.hit.push(index);
+                self.apply_projectile_hit(&projectile, index);
+                self.projectile_impact(&projectile, projectile.pos);
             }
-            if hit_count == 0 {
+            if hit_count == 0 || projectile.pierce {
                 survivors.push(projectile);
             }
         }
         self.projectiles = survivors;
+    }
+
+    /// Damage, venom and execute from a projectile reaching `index`.
+    fn apply_projectile_hit(&mut self, projectile: &Projectile, index: usize) {
+        if projectile.tower_shot
+            && self
+                .duel
+                .as_ref()
+                .is_some_and(|duel| index == self.player_index || index == duel.target)
+        {
+            return;
+        }
+        let mut damage = projectile.damage;
+        {
+            let unit = &self.units[index];
+            if projectile.execute > 0.0 && unit.health < unit.max_health * 0.25 {
+                damage *= 1.0 + projectile.execute;
+            }
+        }
+        if projectile.venom > 0.0 {
+            let poisoned = &mut self.units[index];
+            if poisoned.venom_timer <= 0.0 {
+                poisoned.venom_tick = 1.0;
+            }
+            poisoned.venom_timer = 6.0;
+            poisoned.venom_damage = poisoned.venom_damage.max(projectile.venom);
+            poisoned.venom_team = projectile.team;
+        }
+        let damage = if index == self.player_index {
+            damage * self.kit_projectile_taken()
+        } else {
+            damage
+        };
+        self.damage_unit_by(index, damage, projectile.team, projectile.attacker);
+    }
+
+    /// Flash, shock ring, sparks, light and the look's impact model.
+    fn projectile_impact(&mut self, projectile: &Projectile, pos: Vec3) {
+        let look = *fx::look(projectile.look);
+        self.impact_burst(pos, &look);
+        if projectile.venom > 0.0 {
+            let ground = Vec3::new(pos.x, pos.y - 60.0, pos.z);
+            self.add_decal(ground, 70.0, [34, 78, 44], 3.2);
+        }
+    }
+
+    /// The shared impact for a look, also used by kit shots.
+    fn impact_burst(&mut self, pos: Vec3, look: &fx::ProjectileLook) {
+        self.effects.push(Effect {
+            pos,
+            radius: look.impact_radius,
+            remaining: 0.45,
+            duration: 0.45,
+            color: look.impact_color,
+        });
+        self.emit_burst(
+            pos,
+            look.impact_color,
+            look.impact_sparks,
+            look.impact_radius * 1.5,
+            (look.glow_size * 0.18).clamp(6.0, 22.0),
+            0.5,
+        );
+        if let Some(id) = look.hit_spotanim
+            && self.spot_models.contains_key(&id)
+            && self.spot_bursts.len() < 32
+        {
+            let yaw = self.next_random() * std::f32::consts::TAU;
+            self.spot_bursts.push(SpotBurst {
+                spotanim: id,
+                pos,
+                yaw,
+                time_ms: 0.0,
+                scale: look.model_scale,
+            });
+        }
+    }
+
+    /// A shot that ran out or hit the ground dissolves into a small puff.
+    fn projectile_fizzle(&mut self, projectile: &Projectile) {
+        let look = *fx::look(projectile.look);
+        let pos = projectile.draw_pos();
+        self.effects.push(Effect {
+            pos,
+            radius: look.glow_size * 0.8,
+            remaining: 0.22,
+            duration: 0.22,
+            color: look.glow,
+        });
+        self.emit_burst(pos, look.ember_color, 4, 120.0, look.glow_size * 0.12, 0.35);
+    }
+
+    /// One drifting ember behind a projectile.
+    fn shed_ember(&mut self, pos: Vec3, dir: Vec3, look: &fx::ProjectileLook) {
+        if self.particles.len() >= 300 {
+            return;
+        }
+        let jitter = Vec3::new(
+            self.next_random() - 0.5,
+            self.next_random() - 0.3,
+            self.next_random() - 0.5,
+        ) * 90.0;
+        let life = 0.25 + self.next_random() * 0.25;
+        let spread = look.glow_size * 0.35;
+        let offset = Vec3::new(
+            self.next_random() - 0.5,
+            self.next_random() - 0.5,
+            self.next_random() - 0.5,
+        ) * spread;
+        self.particles.push(Particle {
+            pos: pos + offset,
+            vel: -dir * 60.0 + jitter,
+            color: look.ember_color,
+            size: (look.glow_size * 0.14).clamp(4.0, 18.0),
+            remaining: life,
+            duration: life,
+            gravity: 40.0,
+            drag: 2.4,
+        });
     }
 
     fn spawn_wave(&mut self, team: u8, lane_index: usize, height: &HeightGrid) {
@@ -4350,6 +5106,17 @@ impl AnimatedScene {
                 ambient_seed: 0,
                 lock_range: 0.0,
                 cc: Default::default(),
+                attack_clip: template.attack.clone(),
+                cast_clip: None,
+                attack_hit: 0.5,
+                action: None,
+                strike: None,
+                look: if team == 0 {
+                    fx::look_by_name("minion_blue")
+                } else {
+                    fx::look_by_name("minion_red")
+                },
+                body_radius: if super_minion { 55.0 } else { 40.0 },
             };
             self.units.push(unit);
         }
@@ -4411,15 +5178,20 @@ impl AnimatedScene {
                 intensity: 1.2 * fade,
             });
         }
-        for projectile in &self.projectiles {
-            if !self.in_team_vision(projectile.pos) {
+        let shots = self
+            .projectiles
+            .iter()
+            .map(|projectile| (projectile.draw_pos(), *fx::look(projectile.look)))
+            .chain(self.kit_shot_lights());
+        for (pos, look) in shots {
+            if !self.in_team_vision(pos) {
                 continue;
             }
             lights.push(SceneLight {
-                pos: projectile.pos + Vec3::Y * 30.0,
-                color: [1.0, 0.45, 0.12],
-                radius: 520.0,
-                intensity: 1.6,
+                pos: pos + Vec3::Y * 20.0,
+                color: look.light,
+                radius: look.light_radius,
+                intensity: 1.5,
             });
         }
         for impact in &self.pending_impacts {
@@ -4436,6 +5208,279 @@ impl AnimatedScene {
             });
         }
         lights
+    }
+
+    /// A projectile: trail ribbon, layered glow and its cache model.
+    fn draw_shot(&mut self, shot: &ShotVisual, right: Vec3, up: Vec3, forward: Vec3) {
+        let look = fx::look(shot.look).tinted(shot.tint);
+        // Trails start at the head so the ribbon never lags the model.
+        let mut trail = Vec::with_capacity(shot.trail.len() + 1);
+        trail.push(shot.pos);
+        trail.extend(shot.trail.iter().skip(1).copied());
+        if trail.len() >= 2 {
+            self.fx
+                .ribbon(&trail, look.trail_width, look.trail, 1.8, forward);
+            self.fx.ribbon(
+                &trail,
+                look.trail_width * 0.35,
+                [255, 255, 255],
+                0.45,
+                forward,
+            );
+        }
+        let flicker = 1.0 + 0.12 * (shot.age * 41.0).sin() + 0.06 * (shot.age * 97.0).sin();
+        self.fx.glow(
+            shot.pos,
+            look.glow_size * 1.7,
+            look.glow,
+            0.45 * look.glow_intensity,
+            right,
+            up,
+        );
+        self.fx.glow(
+            shot.pos,
+            look.glow_size * 0.75 * flicker,
+            look.glow,
+            look.glow_intensity * flicker,
+            right,
+            up,
+        );
+        if let Some(spot) = look
+            .spotanim
+            .and_then(|id| self.spot_models.get(&id))
+            .cloned()
+        {
+            let basis = flight_basis(shot.dir, shot.age * look.spin);
+            self.append_spot_model(
+                &spot,
+                shot.age * 1000.0,
+                shot.pos,
+                basis,
+                look.model_scale,
+                1.0,
+                SpotDraw::Flying,
+            );
+        }
+    }
+
+    /// Draw a spot animation model. Opaque faces join the lit scene;
+    /// translucent faces (spell shells) are added to the glow pass.
+    #[allow(clippy::too_many_arguments)]
+    fn append_spot_model(
+        &mut self,
+        spot: &SpotModel,
+        time_ms: f32,
+        pos: Vec3,
+        basis: Mat3,
+        scale: f32,
+        glow: f32,
+        mode: SpotDraw,
+    ) {
+        let looping = mode == SpotDraw::Flying;
+        let time = if looping {
+            time_ms.rem_euclid(spot.length_ms.max(1.0))
+        } else {
+            time_ms.min(spot.length_ms - 1.0).max(0.0)
+        };
+        let positions = match spot.clip.as_ref() {
+            Some(clip) => spot.model.animated_positions(clip, time),
+            None => spot
+                .model
+                .animated_positions(&AnimationClip::default(), 0.0),
+        };
+        let [cx, cy, cz] = spot.center;
+        let sxz = spot.scale_xz * scale;
+        let sy = spot.scale_y * scale;
+        let place = |i: u32| -> Vec3 {
+            let p = positions.get(i as usize).copied().unwrap_or([cx, cy, cz]);
+            pos + basis * Vec3::new((p[0] - cx) * sxz, -(p[1] - cy) * sy, (p[2] - cz) * sxz)
+        };
+        for (face, &[a, b, c]) in spot.model.faces.iter().enumerate() {
+            let (pa, pb, pc) = (place(a), place(b), place(c));
+            let rgb = spot.rgb.get(face).copied().unwrap_or([255, 255, 255]);
+            let alpha = spot
+                .model
+                .face_alphas
+                .as_ref()
+                .and_then(|alphas| alphas.get(face))
+                .copied()
+                .unwrap_or(0);
+            if alpha > 0 || mode == SpotDraw::Burst {
+                let opacity = 1.0 - alpha as f32 / 255.0;
+                self.fx.triangle([pa, pb, pc], rgb, opacity * 1.5 * glow);
+                continue;
+            }
+            let normal = (pb - pa).cross(pc - pa).normalize_or_zero();
+            // Spell models read as light sources, so their solid faces are
+            // drawn unlit and slightly boosted.
+            let lifted = rgb.map(|c| (c as f32 * 1.12).min(255.0) as u8);
+            let mut va = SceneVertex::unlit(pa, lifted);
+            let mut vb = SceneVertex::unlit(pb, lifted);
+            let mut vc = SceneVertex::unlit(pc, lifted);
+            for v in [&mut va, &mut vb, &mut vc] {
+                v.normal = normal.to_array();
+            }
+            let base = self.vertices.len() as u32;
+            self.vertices.extend_from_slice(&[va, vb, vc]);
+            self.indices.extend_from_slice(&[base, base + 1, base + 2]);
+        }
+    }
+
+    /// Ground indicators: the held right-mouse preview of the last ability
+    /// and the brief range flash after every cast.
+    fn draw_indicators(&mut self, height: &HeightGrid) {
+        let pi = self.player_index;
+        if self.units[pi].health <= 0.0 {
+            return;
+        }
+        let origin = self.units[pi].pos;
+        let yaw = self.units[pi].yaw;
+        let facing = Vec3::new(yaw.sin(), 0.0, yaw.cos());
+        if let Some(aim) = self.indicator_aim {
+            let slot = self.last_cast_slot.unwrap_or(0);
+            let ready = self.units[pi].cooldowns[slot] <= 0.0;
+            let mut color = self.ability_color(slot);
+            if !ready {
+                // On cooldown: same shapes, drained of colour.
+                let grey = (color[0] as u32 + color[1] as u32 + color[2] as u32) / 3;
+                color = [grey as u8; 3].map(|c| (c as f32 * 0.55 + 40.0) as u8);
+            }
+            let intensity = if ready { 1.0 } else { 0.55 };
+            for indicator in self.ability_indicators(slot) {
+                self.draw_indicator(height, &indicator, origin, facing, aim, color, intensity);
+            }
+        }
+        if let Some((slot, remaining)) = self.cast_flash {
+            if self.indicator_aim.is_none() {
+                let fade = (remaining / 0.45).clamp(0.0, 1.0);
+                let color = self.ability_color(slot);
+                if let Some(radius) = self
+                    .ability_indicators(slot)
+                    .iter()
+                    .map(indicator_reach)
+                    .fold(None, |best: Option<f32>, r| {
+                        Some(best.map_or(r, |b| b.max(r)))
+                    })
+                {
+                    self.fx
+                        .ground_ring(height, origin, radius, 10.0, color, 0.9 * fade);
+                }
+            }
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn draw_indicator(
+        &mut self,
+        height: &HeightGrid,
+        indicator: &Indicator,
+        origin: Vec3,
+        facing: Vec3,
+        aim: Vec3,
+        color: [u8; 3],
+        intensity: f32,
+    ) {
+        let to_aim = planar_delta(origin, aim);
+        let aim_dir = if to_aim.length_squared() > 1.0 {
+            to_aim.normalize()
+        } else {
+            facing
+        };
+        match *indicator {
+            Indicator::Range { radius } => {
+                self.fx
+                    .ground_ring(height, origin, radius, 9.0, color, 0.9 * intensity);
+            }
+            Indicator::Line {
+                length,
+                width,
+                angle,
+            } => {
+                let (sin, cos) = angle.sin_cos();
+                let dir = Vec3::new(
+                    aim_dir.x * cos - aim_dir.z * sin,
+                    0.0,
+                    aim_dir.x * sin + aim_dir.z * cos,
+                );
+                self.fx.ground_rect(
+                    height,
+                    origin,
+                    dir,
+                    length,
+                    width * 0.5,
+                    color,
+                    0.9 * intensity,
+                );
+                self.fx.ground_arrow(
+                    height,
+                    origin + dir * length,
+                    dir,
+                    (width * 0.9).clamp(40.0, 120.0),
+                    color,
+                    1.2 * intensity,
+                );
+            }
+            Indicator::Target { range, radius } => {
+                self.fx
+                    .ground_ring(height, origin, range, 8.0, color, 0.55 * intensity);
+                let reach = to_aim.length().min(range);
+                let at = origin + aim_dir * reach;
+                self.fx
+                    .ground_area(height, at, radius, 360.0, aim_dir, color, intensity);
+            }
+            Indicator::Cone { radius, arc } => {
+                self.fx
+                    .ground_area(height, origin, radius, arc, aim_dir, color, intensity);
+            }
+            Indicator::SelfArea { radius } => {
+                self.fx
+                    .ground_area(height, origin, radius, 360.0, aim_dir, color, intensity);
+            }
+            Indicator::Dash {
+                length,
+                backwards,
+                to_cursor,
+            } => {
+                let dir = if backwards { -facing } else { aim_dir };
+                let length = if to_cursor {
+                    length.min(to_aim.length()).max(64.0)
+                } else {
+                    length
+                };
+                self.fx
+                    .ground_ring(height, origin, length, 7.0, color, 0.4 * intensity);
+                self.fx
+                    .ground_rect(height, origin, dir, length, 42.0, color, 0.8 * intensity);
+                self.fx.ground_arrow(
+                    height,
+                    origin + dir * length,
+                    dir,
+                    90.0,
+                    color,
+                    1.3 * intensity,
+                );
+            }
+            Indicator::Path => {
+                let right = Vec3::Y.cross(facing);
+                let base = Vec3::new(origin.x, 0.0, origin.z);
+                let path = bananarang_local_path()
+                    .into_iter()
+                    .map(|p| base + right * p.x + facing * p.z)
+                    .collect::<Vec<_>>();
+                for pair in path.windows(2) {
+                    let delta = planar_delta(pair[0], pair[1]);
+                    self.fx.ground_strip(
+                        height,
+                        pair[0],
+                        delta,
+                        delta.length(),
+                        26.0,
+                        color,
+                        intensity,
+                    );
+                }
+            }
+        }
     }
 
     fn rebuild_mesh(
@@ -4455,6 +5500,7 @@ impl AnimatedScene {
         // without bound.
         self.caster_vertices.clear();
         self.caster_indices.clear();
+        self.fx.clear();
 
         let mut units = std::mem::take(&mut self.units);
         let mut mesh_units = 0usize;
@@ -4470,6 +5516,24 @@ impl AnimatedScene {
                 && in_mesh_range(unit.pos, camera_target, cull_radius)
             {
                 mesh_units += 1;
+                let action = unit
+                    .action
+                    .as_ref()
+                    .filter(|_| alive)
+                    .map(|action| (action.clip.clone(), action.time_ms, action.weight()));
+                if let Some((clip, time_ms, weight)) = action.as_ref()
+                    && *weight >= 0.999
+                {
+                    let unit = &mut units[index];
+                    unit.model.animated_positions_into(
+                        clip,
+                        *time_ms,
+                        &mut unit.pose,
+                        &mut unit.pose_scratch,
+                    );
+                    append_unit(self, &units[index], &units[index].pose);
+                    continue;
+                }
                 let blends = unit.walk.is_some()
                     && ((unit.kind == UnitKind::Player && unit.walk_arm < 0.999)
                         || (unit.walk_blend > 0.001 && unit.walk_blend < 0.999));
@@ -4486,6 +5550,10 @@ impl AnimatedScene {
                         &mut unit.pose,
                         &mut unit.pose_scratch,
                     );
+                    if let Some((clip, time_ms, weight)) = action.as_ref() {
+                        let acting = unit.model.animated_positions(clip, *time_ms);
+                        blend_pose(&mut unit.pose, &acting, *weight);
+                    }
                     append_unit(self, &units[index], &units[index].pose);
                     continue;
                 }
@@ -4546,6 +5614,11 @@ impl AnimatedScene {
                 } else {
                     unit.model.animated_positions(&unit.idle, unit.anim_time_ms)
                 };
+                let mut positions = positions;
+                if let Some((clip, time_ms, weight)) = action.as_ref() {
+                    let acting = unit.model.animated_positions(clip, *time_ms);
+                    blend_pose(&mut positions, &acting, *weight);
+                }
                 append_unit(self, unit, &positions);
             }
         }
@@ -4615,22 +5688,25 @@ impl AnimatedScene {
 
         // Attacks are only drawn inside the team's line of sight, so enemy
         // tower bolts do not reveal themselves through the fog of war.
-        let projectile_visuals = self
+        let mut shots = self
             .projectiles
             .iter()
             .filter(|projectile| self.in_team_vision(projectile.pos))
-            .map(|projectile| (projectile.pos, projectile.style))
+            .map(|projectile| ShotVisual {
+                pos: projectile.draw_pos(),
+                dir: projectile.dir,
+                look: projectile.look,
+                trail: projectile.trail.clone(),
+                age: projectile.age,
+                tint: None,
+            })
             .collect::<Vec<_>>();
-        for (pos, style) in projectile_visuals {
-            let (size, color) = match style {
-                ProjectileStyle::Dart => (13.0, [226, 240, 255]),
-                ProjectileStyle::Bolt => (22.0, [255, 150, 40]),
-            };
-            append_billboard(self, pos, size, color, camera_right, camera_up);
+        shots.extend(self.kit_shot_visuals());
+        for shot in &shots {
+            self.draw_shot(shot, camera_right, camera_up, camera_forward);
         }
 
-        // Ability sparks. They fade by dimming toward black because the
-        // opaque scene pipeline has no per-vertex alpha.
+        // Sparks and embers glow additively and fade by dimming.
         let particles = self
             .particles
             .iter()
@@ -4639,17 +5715,67 @@ impl AnimatedScene {
                 let t = (p.remaining / p.duration.max(0.01)).clamp(0.0, 1.0);
                 (
                     p.pos,
-                    p.size * (0.45 + 0.55 * t),
-                    [
-                        (p.color[0] as f32 * (0.30 + 0.70 * t)) as u8,
-                        (p.color[1] as f32 * (0.30 + 0.70 * t)) as u8,
-                        (p.color[2] as f32 * (0.30 + 0.70 * t)) as u8,
-                    ],
+                    p.size * (0.55 + 0.6 * t),
+                    p.color,
+                    1.3 * t * t.sqrt(),
                 )
             })
             .collect::<Vec<_>>();
-        for (pos, size, color) in particles {
-            append_billboard(self, pos, size, color, camera_right, camera_up);
+        for (pos, size, color, intensity) in particles {
+            self.fx
+                .glow(pos, size, color, intensity, camera_right, camera_up);
+        }
+
+        // Melee streaks: a bright arc swept across the struck unit.
+        let slashes = self
+            .slashes
+            .iter()
+            .map(|slash| {
+                let t = 1.0 - (slash.remaining / slash.duration.max(0.01)).clamp(0.0, 1.0);
+                (slash.pos, slash.dir, slash.size, slash.color, t)
+            })
+            .collect::<Vec<_>>();
+        for (pos, dir, size, color, t) in slashes {
+            let side = Vec3::Y.cross(dir).normalize_or_zero();
+            let sweep = (t * 1.8).min(1.0);
+            let points = (0..9)
+                .map(|i| {
+                    let a = 1.2 - 2.4 * sweep * (i as f32 / 8.0);
+                    pos + (side * a.cos() + Vec3::Y * (a.sin() * 0.7) + dir * 0.15) * size * 0.5
+                })
+                .collect::<Vec<_>>();
+            let fade = (1.0 - t).powf(1.3);
+            self.fx
+                .ribbon(&points, size * 0.09, color, 2.2 * fade, camera_forward);
+            self.fx
+                .glow(pos, size * 0.35, color, 0.9 * fade, camera_right, camera_up);
+        }
+
+        // One-shot impact models.
+        let bursts = self
+            .spot_bursts
+            .iter()
+            .filter(|burst| self.in_team_vision(burst.pos))
+            .filter_map(|burst| {
+                let spot = self.spot_models.get(&burst.spotanim)?.clone();
+                Some((spot, burst.pos, burst.yaw, burst.time_ms, burst.scale))
+            })
+            .collect::<Vec<_>>();
+        for (spot, pos, yaw, time_ms, scale) in bursts {
+            let fade = (1.0 - time_ms / spot.length_ms.max(1.0)).clamp(0.0, 1.0);
+            let basis = Mat3::from_rotation_y(yaw);
+            // Impact models are drawn entirely as light: their solid faces
+            // read as flat cardboard once the splash grows past the target.
+            let grow = 0.7 + 0.5 * (time_ms / spot.length_ms.max(1.0)).min(1.0);
+            self.append_spot_model(
+                &spot,
+                time_ms,
+                pos,
+                basis,
+                scale * 0.75 * grow,
+                1.1 * fade,
+                SpotDraw::Burst,
+            );
         }
 
         let player_pos = self.units[self.player_index].pos;
@@ -4901,17 +6027,43 @@ impl AnimatedScene {
             append_billboard(self, meteor, 58.0, [255, 235, 170], camera_right, camera_up);
         }
 
+        // Effects: an expanding soft shock ring on the ground and a flash
+        // that blooms at the start.
         let effects = self
             .effects
             .iter()
+            .filter(|e| self.in_team_vision(e.pos))
             .map(|e| {
-                let t = 1.0 - e.remaining / e.duration.max(0.01);
-                (e.pos, e.radius * (0.35 + t * 0.65), e.color)
+                let t = (1.0 - e.remaining / e.duration.max(0.01)).clamp(0.0, 1.0);
+                (e.pos, e.radius, e.color, t)
             })
             .collect::<Vec<_>>();
-        for (pos, radius, color) in effects {
-            append_ring(self, height, pos, radius, color);
+        for (pos, radius, color, t) in effects {
+            let ease = 1.0 - (1.0 - t) * (1.0 - t);
+            let ring = radius * (0.30 + 0.75 * ease);
+            let fade = (1.0 - t).powf(1.2);
+            self.fx.ground_ring(
+                height,
+                pos,
+                ring,
+                (radius * 0.07).clamp(8.0, 40.0) * (1.0 - 0.5 * t),
+                color,
+                1.6 * fade,
+            );
+            if t < 0.35 {
+                let flash = 1.0 - t / 0.35;
+                self.fx.glow(
+                    pos + Vec3::Y * 30.0,
+                    (radius * 0.55).clamp(30.0, 260.0),
+                    color,
+                    1.4 * flash,
+                    camera_right,
+                    camera_up,
+                );
+            }
         }
+
+        self.draw_indicators(height);
 
         let shield_pos = self.units[self.player_index].pos;
         let shield = self.units[self.player_index].shield;
@@ -5001,6 +6153,31 @@ fn find_nexus(units: &[AnimatedUnit], team: u8) -> Option<Vec3> {
         .iter()
         .find(|u| u.kind == UnitKind::Nexus && u.team == team)
         .map(|u| u.pos)
+}
+
+/// A champion's attack and cast clips. A clip that fails to load is logged
+/// and skipped so a bad id never stops the match from starting.
+fn champion_clips(
+    assets: &mut UnitAssets<'_>,
+    champion: &ChampionConfig,
+) -> (Option<Arc<AnimationClip>>, Option<Arc<AnimationClip>>) {
+    let mut load = |sequence: Option<u32>| {
+        let sequence = sequence?;
+        match assets.clip(sequence) {
+            Ok(clip) if !clip.frames.is_empty() => Some(clip),
+            Ok(_) => {
+                tracing::warn!("{}: sequence {sequence} has no frames", champion.name);
+                None
+            }
+            Err(err) => {
+                tracing::warn!("{}: sequence {sequence}: {err}", champion.name);
+                None
+            }
+        }
+    };
+    let attack = load(champion.attack_anim);
+    let cast = load(champion.cast_anim).or_else(|| attack.clone());
+    (attack, cast)
 }
 
 fn load_model(cache: &Cache, model_id: u32) -> Result<Model> {
@@ -5211,6 +6388,38 @@ fn build_unit(
         ambient_seed: 0,
         lock_range: 0.0,
         cc: Default::default(),
+        attack_clip: None,
+        cast_clip: None,
+        attack_hit: 0.5,
+        action: None,
+        strike: None,
+        look: fx::DEFAULT_LOOK,
+        body_radius: default_body_radius(kind, hit_radius),
+    }
+}
+
+/// Footprint radius for edge-to-edge attack range.
+fn default_body_radius(kind: UnitKind, hit_radius: f32) -> f32 {
+    match kind {
+        UnitKind::Player | UnitKind::EnemyChampion => 65.0,
+        UnitKind::MeleeMinion | UnitKind::RangedMinion => 40.0,
+        UnitKind::Tower => 150.0,
+        UnitKind::Inhibitor => 140.0,
+        UnitKind::Nexus => 230.0,
+        UnitKind::Watchtower => 120.0,
+        UnitKind::Camp => (hit_radius * 0.5).clamp(50.0, 140.0),
+        UnitKind::Dummy => 60.0,
+        _ => 40.0,
+    }
+}
+
+/// Basic-attack look for a champion file: its `projectile`, else a class
+/// default.
+fn champion_look(champion: &ChampionConfig) -> usize {
+    match champion.projectile.as_deref() {
+        Some(name) => fx::look_by_name(name),
+        None if champion.class.eq_ignore_ascii_case("RANGED") => fx::look_by_name("arrow"),
+        None => fx::DEFAULT_LOOK,
     }
 }
 
@@ -5277,6 +6486,160 @@ fn offset_lane(lane: &[Vec3], offset: f32) -> Vec<Vec3> {
 /// slightly different terrain heights than their source waypoints, so a
 /// 3D distance can never fall below the waypoint threshold and leaves units
 /// oscillating in place.
+/// The indicator for a circle or cone anchored at `at`.
+fn area_indicator(at: crate::kit::Anchor, radius: f32, arc: f32, range: f32) -> Indicator {
+    use crate::kit::Anchor;
+    match at {
+        Anchor::Point => Indicator::Target { range, radius },
+        Anchor::Caster if arc < 359.0 => Indicator::Cone { radius, arc },
+        Anchor::Caster => Indicator::SelfArea { radius },
+        // `front` areas sit 160 units ahead of the caster.
+        Anchor::Front => Indicator::Cone {
+            radius: radius + 160.0,
+            arc: arc.min(150.0),
+        },
+    }
+}
+
+/// Indicator shapes for a kit ability's actions. The first action that
+/// reaches beyond the caster decides the main shape; self buffs fall back
+/// to a small circle.
+fn kit_indicators(actions: &[crate::kit::Action], attack_range: f32) -> Vec<Indicator> {
+    use crate::kit::{Action, Anchor};
+    let mut out = Vec::new();
+    for action in actions {
+        match action {
+            Action::Projectile {
+                range,
+                width,
+                count,
+                spread,
+                ..
+            } => {
+                let count = (*count).max(1);
+                for i in 0..count {
+                    let angle = if count == 1 {
+                        0.0
+                    } else {
+                        spread.to_radians() * (i as f32 / (count - 1) as f32 - 0.5)
+                    };
+                    out.push(Indicator::Line {
+                        length: *range,
+                        width: *width,
+                        angle,
+                    });
+                }
+            }
+            Action::Area {
+                at,
+                radius,
+                arc,
+                range,
+                scatter,
+                ..
+            } => out.push(area_indicator(*at, radius + scatter, *arc, *range)),
+            Action::Zone {
+                at, radius, range, ..
+            } => out.push(area_indicator(*at, *radius, 360.0, *range)),
+            Action::Dash {
+                distance,
+                to_cursor,
+                backwards,
+                land,
+                ..
+            } => {
+                out.push(Indicator::Dash {
+                    length: *distance,
+                    backwards: *backwards,
+                    to_cursor: *to_cursor,
+                });
+                // A slam on landing shows its circle at the end of the leap.
+                for landing in land {
+                    if let Action::Area { radius, .. } = landing {
+                        out.push(Indicator::Target {
+                            range: *distance,
+                            radius: *radius,
+                        });
+                    }
+                }
+            }
+            Action::Summon { at, .. } => {
+                if matches!(at, Anchor::Point) {
+                    out.push(Indicator::Range { radius: 700.0 });
+                }
+            }
+            Action::Channel { action, .. } => {
+                out.extend(kit_indicators(std::slice::from_ref(action), attack_range));
+            }
+            Action::Empower { .. } | Action::Transform { .. } => {
+                out.push(Indicator::Range {
+                    radius: attack_range,
+                });
+            }
+            Action::Buff { .. } => {}
+        }
+        if !out.is_empty() {
+            break;
+        }
+    }
+    if out.is_empty() {
+        out.push(Indicator::SelfArea { radius: 140.0 });
+    }
+    out
+}
+
+/// The furthest an indicator reaches from the caster.
+fn indicator_reach(indicator: &Indicator) -> f32 {
+    match *indicator {
+        Indicator::Range { radius } => radius,
+        Indicator::Line { length, .. } => length,
+        Indicator::Target { range, radius } => range + radius,
+        Indicator::Cone { radius, .. } | Indicator::SelfArea { radius } => radius,
+        Indicator::Dash { length, .. } => length,
+        Indicator::Path => BANANARANG_DEPTH,
+    }
+}
+
+/// Blend `pose` toward `other` by `weight` in place.
+fn blend_pose(pose: &mut [[f32; 3]], other: &[[f32; 3]], weight: f32) {
+    let w = weight.clamp(0.0, 1.0);
+    for (out, target) in pose.iter_mut().zip(other) {
+        for axis in 0..3 {
+            out[axis] += (target[axis] - out[axis]) * w;
+        }
+    }
+}
+
+/// A rotation that turns a cache model's forward axis (-Z) along `dir`,
+/// rolled `roll` radians around it.
+fn flight_basis(dir: Vec3, roll: f32) -> Mat3 {
+    let forward = dir.normalize_or_zero();
+    if forward == Vec3::ZERO {
+        return Mat3::from_rotation_z(roll);
+    }
+    let back = -forward;
+    let reference = if back.y.abs() > 0.98 {
+        Vec3::X
+    } else {
+        Vec3::Y
+    };
+    let right = reference.cross(back).normalize();
+    let up = back.cross(right);
+    Mat3::from_cols(right, up, back) * Mat3::from_rotation_z(roll)
+}
+
+/// Keep a trail of drawn positions, newest first, spaced by distance so its
+/// length does not depend on the frame rate.
+fn advance_trail(trail: &mut Vec<Vec3>, head: Vec3, points: usize, speed: f32) {
+    let spacing = (speed * 0.018).max(10.0);
+    if trail.len() < 2 || trail[1].distance(head) >= spacing {
+        trail.insert(0, head);
+    } else {
+        trail[0] = head;
+    }
+    trail.truncate(points.max(2));
+}
+
 fn planar_delta(from: Vec3, to: Vec3) -> Vec3 {
     Vec3::new(to.x - from.x, 0.0, to.z - from.z)
 }
@@ -5955,5 +7318,187 @@ mod tests {
         for (a, b) in left.iter().zip(&right) {
             assert!(a.distance(*b) > 350.0);
         }
+    }
+
+    fn clip(lengths: &[u16]) -> AnimationClip {
+        let mut clip = AnimationClip::default();
+        clip.sequence.frame_lengths = lengths.to_vec();
+        clip
+    }
+
+    #[test]
+    fn an_attack_clip_is_time_scaled_so_its_hit_lands_at_the_windup() {
+        // 50 ticks = 1000 ms; the hit at 40% is 400 ms into the clip.
+        let clip = clip(&[25, 25]);
+        let rate = action_rate(&clip, 0.4, 0.2);
+        assert!((rate - 2.0).abs() < 1e-4, "rate {rate}");
+        assert_eq!(action_rate(&clip, 0.4, 0.0), 1.0);
+        // Absurd wind-ups are clamped rather than freezing or blurring.
+        assert_eq!(action_rate(&clip, 0.5, 100.0), 0.25);
+        assert_eq!(action_rate(&clip, 0.5, 0.001), 4.0);
+    }
+
+    #[test]
+    fn a_one_shot_blends_in_holds_and_blends_out() {
+        let mut action = ActionAnim::new(Arc::new(clip(&[50])), 1.0);
+        assert_eq!(action.weight(), 0.0);
+        assert!(action.advance(0.5));
+        assert!((action.weight() - 1.0).abs() < 1e-4);
+        assert!(action.advance(0.45));
+        assert!(action.weight() < 1.0, "blending out near the end");
+        assert!(!action.advance(0.1), "over after its length");
+    }
+
+    #[test]
+    fn a_cancelled_one_shot_fades_quickly() {
+        let mut action = ActionAnim::new(Arc::new(clip(&[200])), 1.0);
+        action.advance(0.2);
+        action.cancelling = true;
+        assert!(action.advance(ACTION_BLEND_OUT * 0.5));
+        assert!(action.weight() < 0.6);
+        assert!(!action.advance(ACTION_BLEND_OUT));
+    }
+
+    #[test]
+    fn blend_pose_moves_toward_the_other_pose_by_weight() {
+        let mut pose = vec![[0.0, 0.0, 0.0], [10.0, 10.0, 10.0]];
+        blend_pose(&mut pose, &[[10.0, 20.0, 30.0], [10.0, 10.0, 10.0]], 0.5);
+        assert_eq!(pose[0], [5.0, 10.0, 15.0]);
+        assert_eq!(pose[1], [10.0, 10.0, 10.0]);
+    }
+
+    #[test]
+    fn flight_basis_points_the_model_forward_axis_along_the_flight() {
+        for dir in [
+            Vec3::X,
+            Vec3::Z,
+            Vec3::new(1.0, 0.4, -2.0).normalize(),
+            Vec3::Y,
+        ] {
+            let basis = flight_basis(dir, 0.7);
+            let forward = basis * Vec3::NEG_Z;
+            assert!(forward.distance(dir) < 1e-4, "{dir:?} -> {forward:?}");
+            assert!((basis.determinant() - 1.0).abs() < 1e-4);
+        }
+    }
+
+    #[test]
+    fn trails_keep_newest_first_and_stay_bounded() {
+        let mut trail = Vec::new();
+        for i in 0..40 {
+            advance_trail(&mut trail, Vec3::X * (i as f32 * 50.0), 8, 1000.0);
+        }
+        assert_eq!(trail.len(), 8);
+        assert!(trail[0].x > trail[7].x);
+        // Tiny steps update the head instead of piling up points.
+        let mut still = Vec::new();
+        for i in 0..20 {
+            advance_trail(&mut still, Vec3::X * i as f32, 8, 1000.0);
+        }
+        assert!(still.len() <= 3);
+        assert_eq!(still[0].x, 19.0);
+    }
+
+    #[test]
+    fn body_radius_is_tighter_than_the_projectile_hit_box() {
+        assert_eq!(default_body_radius(UnitKind::Player, 240.0), 65.0);
+        assert_eq!(default_body_radius(UnitKind::Nexus, 340.0), 230.0);
+        assert_eq!(default_body_radius(UnitKind::Camp, 160.0), 80.0);
+        assert_eq!(default_body_radius(UnitKind::Camp, 1000.0), 140.0);
+    }
+
+    #[test]
+    fn homing_shots_lob_only_when_their_look_arcs() {
+        let dart = fx::look_by_name("dart");
+        let mut shot =
+            Projectile::homing(Vec3::ZERO, 3, Vec3::X * 1000.0, 1000.0, 5.0, 0, None, dart);
+        assert_eq!(shot.target, Some(3));
+        assert!((shot.flight - 1000.0).abs() < 1e-3);
+        shot.travelled = 500.0;
+        assert!(shot.draw_pos().y > 0.0);
+        let mut orb = Projectile::homing(
+            Vec3::ZERO,
+            3,
+            Vec3::X * 1000.0,
+            1000.0,
+            5.0,
+            0,
+            None,
+            fx::DEFAULT_LOOK,
+        );
+        orb.travelled = 500.0;
+        assert_eq!(orb.draw_pos(), Vec3::ZERO);
+    }
+
+    #[test]
+    fn kit_indicators_follow_the_first_reaching_action() {
+        let parse = |json: &str| -> Vec<crate::kit::Action> { serde_json::from_str(json).unwrap() };
+        let line = kit_indicators(
+            &parse(
+                r#"[{"type":"projectile","speed":1000,"range":900,"damage":1,"width":80,"count":3,"spread":30}]"#,
+            ),
+            300.0,
+        );
+        assert_eq!(line.len(), 3);
+        assert!(
+            matches!(line[1], Indicator::Line { length, angle, .. } if length == 900.0 && angle.abs() < 1e-6)
+        );
+        let target = kit_indicators(
+            &parse(
+                r#"[{"type":"buff","heal":5},{"type":"area","radius":200,"range":800,"scatter":50}]"#,
+            ),
+            300.0,
+        );
+        assert_eq!(
+            target,
+            vec![Indicator::Target {
+                range: 800.0,
+                radius: 250.0
+            }]
+        );
+        let cone = kit_indicators(
+            &parse(r#"[{"type":"area","at":"caster","radius":400,"arc":90}]"#),
+            300.0,
+        );
+        assert_eq!(
+            cone,
+            vec![Indicator::Cone {
+                radius: 400.0,
+                arc: 90.0
+            }]
+        );
+        let leap = kit_indicators(
+            &parse(
+                r#"[{"type":"dash","distance":600,"to_cursor":true,"land":[{"type":"area","at":"caster","radius":250}]}]"#,
+            ),
+            300.0,
+        );
+        assert_eq!(leap.len(), 2);
+        assert!(
+            matches!(leap[0], Indicator::Dash { length, to_cursor: true, .. } if length == 600.0)
+        );
+        let selfish = kit_indicators(&parse(r#"[{"type":"buff","shield":50}]"#), 300.0);
+        assert_eq!(selfish, vec![Indicator::SelfArea { radius: 140.0 }]);
+        let empower = kit_indicators(&parse(r#"[{"type":"empower","bonus":10}]"#), 300.0);
+        assert_eq!(empower, vec![Indicator::Range { radius: 300.0 }]);
+    }
+
+    #[test]
+    fn indicator_reach_is_the_furthest_point() {
+        assert_eq!(
+            indicator_reach(&Indicator::Target {
+                range: 800.0,
+                radius: 100.0
+            }),
+            900.0
+        );
+        assert_eq!(
+            indicator_reach(&Indicator::Line {
+                length: 700.0,
+                width: 50.0,
+                angle: 0.3
+            }),
+            700.0
+        );
     }
 }

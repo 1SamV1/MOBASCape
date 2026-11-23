@@ -350,6 +350,8 @@ pub struct Renderer {
     config: wgpu::SurfaceConfiguration,
     scene_pipeline: wgpu::RenderPipeline,
     water_pipeline: wgpu::RenderPipeline,
+    /// Additive combat effects (`fx.rs`): depth tested, no depth writes.
+    fx_pipeline: wgpu::RenderPipeline,
     /// Kept so `reload_scene_shader` can rebuild the scene pipelines.
     scene_pipeline_layout: wgpu::PipelineLayout,
     scene_format: wgpu::TextureFormat,
@@ -420,6 +422,11 @@ pub struct Renderer {
     dynamic_vertex_capacity: usize,
     dynamic_index_capacity: usize,
     dynamic_index_count: u32,
+    fx_vertex_buffer: wgpu::Buffer,
+    fx_index_buffer: wgpu::Buffer,
+    fx_vertex_capacity: usize,
+    fx_index_capacity: usize,
+    fx_index_count: u32,
     shadow_vertex_buffer: wgpu::Buffer,
     shadow_index_buffer: wgpu::Buffer,
     shadow_vertex_capacity: usize,
@@ -947,7 +954,7 @@ impl Renderer {
         const HUD_ATTRS: [wgpu::VertexAttribute; 3] =
             wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x2, 2 => Float32x4];
 
-        let (scene_pipeline, water_pipeline) = build_scene_pipelines(
+        let (scene_pipeline, water_pipeline, fx_pipeline) = build_scene_pipelines(
             &device,
             &scene_pipeline_layout,
             &scene_shader,
@@ -1381,6 +1388,21 @@ impl Renderer {
             wgpu::BufferUsages::INDEX,
         );
 
+        let fx_vertex_capacity = 4096;
+        let fx_index_capacity = 8192;
+        let fx_vertex_buffer = create_dynamic_buffer(
+            &device,
+            "fx vertices",
+            fx_vertex_capacity * std::mem::size_of::<SceneVertex>(),
+            wgpu::BufferUsages::VERTEX,
+        );
+        let fx_index_buffer = create_dynamic_buffer(
+            &device,
+            "fx indices",
+            fx_index_capacity * std::mem::size_of::<u32>(),
+            wgpu::BufferUsages::INDEX,
+        );
+
         let caster_vertex_capacity = 1024;
         let caster_index_capacity = 3072;
         let caster_vertex_buffer = create_dynamic_buffer(
@@ -1433,6 +1455,7 @@ impl Renderer {
             config,
             scene_pipeline,
             water_pipeline,
+            fx_pipeline,
             scene_pipeline_layout,
             scene_format,
             shader_watch: None,
@@ -1498,6 +1521,11 @@ impl Renderer {
             dynamic_vertex_capacity,
             dynamic_index_capacity,
             dynamic_index_count: 0,
+            fx_vertex_buffer,
+            fx_index_buffer,
+            fx_vertex_capacity,
+            fx_index_capacity,
+            fx_index_count: 0,
             shadow_vertex_buffer,
             shadow_index_buffer,
             shadow_vertex_capacity,
@@ -1562,7 +1590,7 @@ impl Renderer {
                 label: Some("rift scene shader (reloaded)"),
                 source: wgpu::ShaderSource::Wgsl(source.into()),
             });
-        let (scene, water) = build_scene_pipelines(
+        let (scene, water, fx) = build_scene_pipelines(
             &self.device,
             &self.scene_pipeline_layout,
             &module,
@@ -1571,6 +1599,7 @@ impl Renderer {
         );
         self.scene_pipeline = scene;
         self.water_pipeline = water;
+        self.fx_pipeline = fx;
         tracing::info!(
             "reloaded {} in {:.0} ms",
             path.display(),
@@ -1838,6 +1867,39 @@ impl Renderer {
                 .write_buffer(&self.dynamic_index_buffer, 0, bytemuck::cast_slice(indices));
         }
         self.dynamic_index_count = indices.len() as u32;
+    }
+
+    /// Upload this frame's additive effects (`fx::FxMesh`).
+    pub fn set_fx_mesh(&mut self, vertices: &[SceneVertex], indices: &[u32]) {
+        if vertices.len() > self.fx_vertex_capacity {
+            let capacity = vertices.len().next_power_of_two();
+            self.fx_vertex_buffer = create_dynamic_buffer(
+                &self.device,
+                "fx vertices",
+                capacity * std::mem::size_of::<SceneVertex>(),
+                wgpu::BufferUsages::VERTEX,
+            );
+            self.fx_vertex_capacity = capacity;
+        }
+        if indices.len() > self.fx_index_capacity {
+            let capacity = indices.len().next_power_of_two();
+            self.fx_index_buffer = create_dynamic_buffer(
+                &self.device,
+                "fx indices",
+                capacity * std::mem::size_of::<u32>(),
+                wgpu::BufferUsages::INDEX,
+            );
+            self.fx_index_capacity = capacity;
+        }
+        if !vertices.is_empty() {
+            self.queue
+                .write_buffer(&self.fx_vertex_buffer, 0, bytemuck::cast_slice(vertices));
+        }
+        if !indices.is_empty() {
+            self.queue
+                .write_buffer(&self.fx_index_buffer, 0, bytemuck::cast_slice(indices));
+        }
+        self.fx_index_count = indices.len() as u32;
     }
 
     pub fn set_shadow_mesh(&mut self, vertices: &[SceneVertex], indices: &[u32]) {
@@ -2143,6 +2205,15 @@ impl Renderer {
                 );
                 pass.draw_indexed(0..self.shadow_index_count, 0, 0..1);
             }
+            // Additive effects last, so they glow over everything opaque and
+            // feed the bloom pass.
+            if self.fx_index_count > 0 {
+                pass.set_pipeline(&self.fx_pipeline);
+                pass.set_bind_group(0, &self.bind_group, &[]);
+                pass.set_vertex_buffer(0, self.fx_vertex_buffer.slice(..));
+                pass.set_index_buffer(self.fx_index_buffer.slice(..), wgpu::IndexFormat::Uint32);
+                pass.draw_indexed(0..self.fx_index_count, 0, 0..1);
+            }
         }
 
         {
@@ -2372,7 +2443,11 @@ fn build_scene_pipelines(
     scene_shader: &wgpu::ShaderModule,
     scene_format: wgpu::TextureFormat,
     msaa_samples: u32,
-) -> (wgpu::RenderPipeline, wgpu::RenderPipeline) {
+) -> (
+    wgpu::RenderPipeline,
+    wgpu::RenderPipeline,
+    wgpu::RenderPipeline,
+) {
     const SCENE_ATTRS: [wgpu::VertexAttribute; 7] = wgpu::vertex_attr_array![
         0 => Float32x3,
         1 => Float32x3,
@@ -2481,7 +2556,70 @@ fn build_scene_pipelines(
         multiview_mask: None,
         cache: None,
     });
-    (scene, water)
+    let fx = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        label: Some("fx pipeline"),
+        layout: Some(scene_pipeline_layout),
+        vertex: wgpu::VertexState {
+            module: scene_shader,
+            entry_point: Some("vs"),
+            compilation_options: wgpu::PipelineCompilationOptions::default(),
+            buffers: &[Some(wgpu::VertexBufferLayout {
+                array_stride: std::mem::size_of::<SceneVertex>() as wgpu::BufferAddress,
+                step_mode: wgpu::VertexStepMode::Vertex,
+                attributes: &SCENE_ATTRS,
+            })],
+        },
+        fragment: Some(wgpu::FragmentState {
+            module: scene_shader,
+            entry_point: Some("fs_fx"),
+            compilation_options: wgpu::PipelineCompilationOptions::default(),
+            targets: &[Some(wgpu::ColorTargetState {
+                format: scene_format,
+                blend: Some(wgpu::BlendState {
+                    color: wgpu::BlendComponent {
+                        src_factor: wgpu::BlendFactor::One,
+                        dst_factor: wgpu::BlendFactor::One,
+                        operation: wgpu::BlendOperation::Add,
+                    },
+                    alpha: wgpu::BlendComponent {
+                        src_factor: wgpu::BlendFactor::Zero,
+                        dst_factor: wgpu::BlendFactor::One,
+                        operation: wgpu::BlendOperation::Add,
+                    },
+                }),
+                write_mask: wgpu::ColorWrites::ALL,
+            })],
+        }),
+        primitive: wgpu::PrimitiveState {
+            topology: wgpu::PrimitiveTopology::TriangleList,
+            strip_index_format: None,
+            front_face: wgpu::FrontFace::Ccw,
+            cull_mode: None,
+            polygon_mode: wgpu::PolygonMode::Fill,
+            unclipped_depth: false,
+            conservative: false,
+        },
+        depth_stencil: Some(wgpu::DepthStencilState {
+            format: wgpu::TextureFormat::Depth32Float,
+            depth_write_enabled: Some(false),
+            depth_compare: Some(wgpu::CompareFunction::LessEqual),
+            stencil: wgpu::StencilState::default(),
+            // Ground indicators sit a few units over the terrain; a small
+            // bias keeps them from flickering into slopes.
+            bias: wgpu::DepthBiasState {
+                constant: -2,
+                slope_scale: -1.0,
+                clamp: 0.0,
+            },
+        }),
+        multisample: wgpu::MultisampleState {
+            count: msaa_samples,
+            ..Default::default()
+        },
+        multiview_mask: None,
+        cache: None,
+    });
+    (scene, water, fx)
 }
 
 /// Where the dev shader reload reads `scene.wgsl` from: the source tree this

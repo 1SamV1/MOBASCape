@@ -565,3 +565,44 @@ fn fs(input: VsOut) -> @location(0) vec4<f32> {
     lit = mix(lit, fog_tint, fog);
     return vec4<f32>(lit, 1.0);
 }
+
+// Additive combat effects (see `fx.rs`). Colour alpha carries intensity and
+// the material picks the shape; the pipeline adds the result to the scene
+// with depth testing but no depth writes, so glows stack into bloom.
+@fragment
+fn fs_fx(input: VsOut) -> @location(0) vec4<f32> {
+    let intensity = input.color.a;
+    var rgb = input.color.rgb;
+    var shape = 1.0;
+    let m = input.material;
+    if (m == 20u) {
+        // Soft sprite with a hot white core.
+        let r2 = dot(input.uv, input.uv);
+        if (r2 >= 1.0) {
+            discard;
+        }
+        let edge = 1.0 - r2;
+        let glow = exp(-r2 * 3.2) * edge;
+        let core = exp(-r2 * 22.0);
+        rgb = rgb * glow + vec3<f32>(core * 0.40);
+        shape = 1.0;
+    } else if (m == 21u) {
+        // Ribbon: soft across the strip, a brighter spine down the middle.
+        let v = abs(input.uv.y);
+        let soft = pow(max(1.0 - v, 0.0), 1.6);
+        let spine = pow(max(1.0 - v, 0.0), 8.0);
+        rgb = rgb * soft + vec3<f32>(spine * 0.35);
+    } else if (m == 23u) {
+        let v = abs(input.uv.y);
+        shape = pow(max(1.0 - v, 0.0), 1.8);
+    } else if (m == 24u) {
+        // Ground indicator: faint fill, bright rim, a slow inward shimmer.
+        let d = clamp(input.uv.y, 0.0, 1.0);
+        let rim = smoothstep(0.84, 0.97, d) * (1.0 - smoothstep(0.985, 1.0, d) * 0.6);
+        let shimmer = 0.5 + 0.5 * sin(d * 18.0 - scene.tuning.z * 4.0);
+        shape = 0.10 + 0.05 * shimmer + 0.85 * rim;
+    }
+    // Distance haze dims far effects the same way it hazes the scene.
+    let haze = 1.0 - fog_factor(input) * 0.85;
+    return vec4<f32>(rgb * shape * intensity * haze, 0.0);
+}

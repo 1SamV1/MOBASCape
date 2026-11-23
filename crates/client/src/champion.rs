@@ -62,6 +62,21 @@ pub struct ChampionConfig {
     /// instant attacks.
     #[serde(default)]
     pub attack_windup: f32,
+    /// Cache sequence played for each basic attack. The clip is time scaled
+    /// so its `attack_hit` moment lands when the wind-up ends.
+    #[serde(default)]
+    pub attack_anim: Option<u32>,
+    /// Fraction of the attack clip at which the blow connects.
+    #[serde(default = "half")]
+    pub attack_hit: f32,
+    /// Cache sequence played when an ability is cast. Defaults to the
+    /// attack clip.
+    #[serde(default)]
+    pub cast_anim: Option<u32>,
+    /// Basic-attack projectile look from `fx::LOOKS` (ranged champions).
+    /// Defaults by class: darts for RANGED, an arcane orb for MAGIC.
+    #[serde(default)]
+    pub projectile: Option<String>,
     pub health: f32,
     pub mana: f32,
     pub damage: f32,
@@ -114,6 +129,10 @@ fn default_walk_sway() -> f32 {
 
 fn one() -> f32 {
     1.0
+}
+
+fn half() -> f32 {
+    0.5
 }
 
 /// Movement timings derived from a champion's weight, with per-file overrides.
