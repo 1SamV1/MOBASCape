@@ -4,7 +4,7 @@ A champion file in `data/champions/` may carry a `kit`: one passive and four
 abilities. Champions with a kit need no Rust code; the schema lives in
 `crates/client/src/kit.rs` and the runtime in
 `crates/client/src/animated/kit_runtime.rs`. Champions without a kit (King
-Awowogei, Blowpipe Ranger, Jad, Kree'arra) keep their hand-written abilities.
+Awowogei, Blowpipe Ranger) keep their hand-written abilities.
 
 ```json
 "kit": {

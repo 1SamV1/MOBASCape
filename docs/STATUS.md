@@ -1,6 +1,18 @@
 # Status
 
-Last updated: 12 new champions on a data-driven kit system, 2026-11-23.
+Last updated: Jad and Kree on kits, 2026-11-23.
+
+## 2026-11-23 — Jad and Kree'arra get the kits their descriptions promised
+
+- Both used the shared bolt / blink / heal-shield / meteor despite their
+  hero-select text. They now carry kits matching that text, with the same
+  costs and cooldowns: Jad's Guard slows nearby enemies, Teleport is an
+  untargetable blink, Miner's Endurance heals and shields, Earth Splitter
+  knocks up and scatters boulders; Arcane Lance bursts on impact, Kree's
+  Leap is a long dash, Flechtalon Guard heals and shields, Skyfire leaves
+  burning ground. Fourteen of sixteen champions now run on kits; King
+  Awowogei and the Blowpipe Ranger keep their hand-written abilities.
+- `--demo-abilities`: both cast all four abilities and kill the test camp.
 
 ## 2026-11-23 — Twelve new champions on a data-driven kit system
 
