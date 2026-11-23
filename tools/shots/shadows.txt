@@ -1,0 +1,10 @@
+# Sun-shadow review presets. Lit and shadow-only views at the same spots.
+# name          tile_x tile_y [pitch=R] [yaw=R] [distance=U] [view=NAME]
+base_lane       2724   3138   distance=1900
+base_lane_sh    2724   3138   distance=1900 view=shadow
+base_close      2718   3110   distance=1500
+base_close_sh   2718   3110   distance=1500 view=shadow
+jungle          2830   3080
+jungle_sh       2830   3080   view=shadow
+lane_mid        2790   2960
+lane_mid_sh     2790   2960   view=shadow

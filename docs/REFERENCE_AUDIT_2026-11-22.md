@@ -215,9 +215,10 @@ anti-tiling and palette, imp facing.
 
 ### Updated gaps (world art)
 
-1. **Sun shadows.** Oversized tree/wall shadow proxies blanket the ground
-   near the blue base in hard-edged dark regions. Needs tighter proxies,
-   softer PCF and a higher ambient floor in shadow.
+1. ~~Sun shadows~~ **Fixed (misdiagnosed).** The dark patches were the
+   distant backdrop plane showing through terrain below y = -24, plus cache
+   sea tiles; see STATUS 2026-11-23. Sun shadows themselves are subtle and
+   could be strengthened toward the reference later.
 2. **Performance.** Scene GPU rose 11.3 → 14.3 ms at 1920×1008 (62 fps).
    Bake the mottle/macro noise into a small tileable texture (one fetch
    instead of three procedural noises) and consider 2× subdivision only

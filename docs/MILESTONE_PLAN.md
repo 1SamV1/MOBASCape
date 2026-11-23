@@ -55,7 +55,9 @@ reference, using only cache-scraped terrain, textures and models.
   biome edges, grass anti-tiling/palette, imp facing.
 - **Done (2026-11-23):** baked grass noise + adaptive terrain mesh: scene
   GPU 14.3 → 12.0 ms, 73 fps p50 at 1920×1008.
-- **Next:** fix blanket sun shadows from oversized proxies; dress cliffs with
+- **Done (2026-11-23):** dark-slab fix: backdrop below terrain, cache sea
+  reclaimed as land, wet-soil shore bands, grass variant normalisation.
+- **Next:** dress cliffs with
   cache rocks and plateau tree clusters; decide cliff collision (user call);
   water props, tree variety, LOD/instancing, contact AO.
 - **Exit:** base/lane/jungle/river captures read as the reference's world;

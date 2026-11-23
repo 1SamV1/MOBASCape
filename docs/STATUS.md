@@ -1,6 +1,38 @@
 # Status
 
-Last updated: terrain performance recovery, 2026-11-23.
+Last updated: dark-slab fix (backdrop plane, cache sea, shore tint), 2026-11-23.
+
+## 2026-11-23 — Dark green slabs: backdrop plane, cache sea, shore tint
+
+The flat, untextured dark-green patches near the blue base and along the
+river were **not sun shadows** (an earlier note blamed the shadow proxies;
+that was wrong: in lighting, shadow only scales the sun term while ambient
+dominates, so sun shadows are subtle). Diagnosed with a temporary
+material-ID debug view: the slabs were material 0, the distant **backdrop
+plane**, at a fixed y = -24. Wherever the terrain dipped below -24 (carved
+banks, low ground, the old sea floor), the plane drew on top, outlined by
+the -24 contour.
+
+- **Backdrop** now sits 60 units below the lowest terrain vertex.
+- **Cache sea reclaimed.** The rift's 5x5 block includes open sea off
+  Karamja (underlay-free tiles with textured water overlay 133). Inside the
+  castle bounds 8,114 such tiles, plus pocket ponds, become land: mean land
+  colour, no overlay, height harmonically filled from the shores.
+- **Shore tint.** River blue is applied only under the water sheet; the
+  band beyond becomes a wet-soil bank instead of blue the shader classified
+  as near-black water.
+- **Grass variants** are brightness-normalised toward the classic sprite in
+  linear light (30% of each variant's own tone kept): steppe/straw lifted
+  1.2×, dry dimmed 0.6×.
+- **Pocket scenery** skips flat ground-plane models (none in the current
+  pockets, but they would render as slabs and block movement).
+- New `tools/shots/shadows.txt` preset list (lit + shadow views).
+- GPU at 1920×1008 (live UI, auto scale): frame **12.3 ms**, scene
+  **11.05 ms**. Wall-clock p50 was noisy (16–31 ms) under a desktop load
+  average of ~5.
+- Known: a small black rectangle near tile 2850,3040 (a cache object) and
+  a dark cross shape in the river near 2845,3065 remain.
+- Verified: 284 workspace tests pass; clippy clean.
 
 ## 2026-11-23 — Terrain performance recovery: baked noise, adaptive mesh
 
