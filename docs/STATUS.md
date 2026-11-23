@@ -1,6 +1,27 @@
 # Status
 
-Last updated: live ability bar icons and portrait, 2026-11-23.
+Last updated: live interface click routing, 2026-11-23.
+
+## 2026-11-23 — Live interface click routing
+
+- Under `--ui-live`, only the shop and the inventory's Shop button took
+  clicks. A click on the minimap, ability bar, objectives, chat, team frames
+  or target panel fell through to the world, so the hero walked to the
+  ground hidden behind the panel.
+- Now:
+  - **Minimap:** a click on the picture pans the camera there and turns off
+    follow, like the old HUD. `ui_live::world_from_map` is the tested
+    inverse of `map_point`; `minimap::picture_at` skips the stone frame.
+  - **Ability bar:** clicking Q/W/E/R casts like the hotkey
+    (`ability_bar::ability_at` matches the drawn slot geometry).
+  - **Every other panel** swallows its clicks. A claimed press never sets
+    `lmb_down`, so hold-to-steer cannot start on a panel either.
+  - The old HUD's minimap rectangle no longer catches clicks under
+    `--ui-live`, where it is not drawn.
+- Tests: slot and picture hit geometry; minimap click round-trips a dot to
+  within one map pixel. Verified: 289 workspace tests pass; clippy clean.
+  Not verified with a live mouse: the only input tool on this Wayland
+  desktop (`ydotool`) would drive the user's real cursor.
 
 ## 2026-11-23 — Live ability bar: cache spell icons and the champion portrait
 

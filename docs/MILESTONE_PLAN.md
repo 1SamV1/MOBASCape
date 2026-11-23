@@ -74,7 +74,8 @@ interaction, not just its panels.
 - Battle-spell icons (D/F have no gameplay yet), item detail icon,
   target/kill-feed portraits.
 - Populate team frames for a real roster; objective/boss timers and ward count.
-- Route ability bar, minimap, team frames and target panel clicks.
+- **Done (2026-11-23):** ability bar casts, minimap click-to-pan, and every
+  panel swallows its clicks. Team frame and target panel actions remain.
 - Use stone/parchment panels for objectives/target/kill feed.
 - Results, rematch, settings, keybinds and chat input.
 - Then make `--ui-live` the running default.
