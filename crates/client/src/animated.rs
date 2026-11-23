@@ -2268,7 +2268,8 @@ impl AnimatedScene {
         self.units[pi].attack_pending = false;
         self.units[pi].attack_windup_timer = 0.0;
         self.start_action(pi, true, 0.0);
-        if !self.slot_has_own_sounds(slot) {
+        // Kits score their casts per action (`kit_*` sounds) instead.
+        if self.kit.is_none() && !self.slot_has_own_sounds(slot) {
             let pos = self.units[pi].pos;
             self.play_sound("cast", pos);
         }
@@ -2435,7 +2436,7 @@ impl AnimatedScene {
     /// True when the champion file names any sound for ability `slot`
     /// (`q_*`, `w_*`, ...), so the shared cast whoosh stays out of a kit
     /// that scores its own casts.
-    fn slot_has_own_sounds(&self, slot: usize) -> bool {
+    pub(crate) fn slot_has_own_sounds(&self, slot: usize) -> bool {
         let prefix = ["q_", "w_", "e_", "r_"][slot.min(3)];
         self.sounds.keys().any(|name| name.starts_with(prefix))
     }

@@ -10,5 +10,17 @@
   "shop_sell": { "id": 3928, "volume": 0.7 },
   "skill_point": { "id": 2266, "volume": 0.6 },
   "frame_sound": { "id": 0, "volume": 0.6 },
+  "kit_projectile": { "id": 1930, "volume": 0.45, "speed": 1.5 },
+  "kit_area": { "id": 3791, "volume": 0.5, "speed": 0.7 },
+  "kit_zone": { "id": 2596, "volume": 0.6 },
+  "kit_dash": { "id": 1930, "volume": 0.55, "speed": 0.9 },
+  "kit_heal": { "id": 2678, "volume": 0.6 },
+  "kit_shield": { "id": 2687, "volume": 0.6 },
+  "kit_haste": { "id": 2667, "volume": 0.6 },
+  "kit_buff": { "id": 2690, "volume": 0.6 },
+  "kit_summon": { "id": 200, "volume": 0.6 },
+  "kit_channel": { "id": 2670, "volume": 0.55 },
+  "kit_empower": { "id": 2691, "volume": 0.6 },
+  "kit_transform": { "id": 200, "volume": 0.7, "speed": 0.8 },
   "structure_fall": { "id": 2734, "volume": 0.85, "speed": 0.85 }
 }

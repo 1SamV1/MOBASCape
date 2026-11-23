@@ -240,6 +240,46 @@ pub enum Action {
     },
 }
 
+impl Action {
+    /// The shared sound (`data/sounds.json`) this action makes when it
+    /// starts. Buffs are scored by their strongest effect: a heal chimes
+    /// like Rapid Heal, a shield like Steel Skin, a haste like Incredible
+    /// Reflexes. Areas sound when they land, not here.
+    pub fn sound_name(&self) -> Option<&'static str> {
+        Some(match self {
+            Action::Projectile { .. } => "kit_projectile",
+            Action::Area { .. } => return None,
+            Action::Zone { .. } => "kit_zone",
+            Action::Dash { .. } => "kit_dash",
+            Action::Buff {
+                heal,
+                heal_missing,
+                shield,
+                damage_reduction,
+                reflect,
+                untargetable,
+                attack_speed,
+                move_speed,
+                ..
+            } => {
+                if heal + heal_missing > 0.0 {
+                    "kit_heal"
+                } else if shield + damage_reduction + reflect + untargetable > 0.0 {
+                    "kit_shield"
+                } else if attack_speed + move_speed > 0.0 {
+                    "kit_haste"
+                } else {
+                    "kit_buff"
+                }
+            }
+            Action::Summon { .. } => "kit_summon",
+            Action::Channel { .. } => "kit_channel",
+            Action::Empower { .. } => "kit_empower",
+            Action::Transform { .. } => "kit_transform",
+        })
+    }
+}
+
 #[derive(Debug, Clone, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Status {
@@ -493,6 +533,60 @@ fn default_colour() -> [u8; 3] {
 mod tests {
     use super::*;
     use glam::Vec2;
+
+    fn collect_sounds(action: &Action, out: &mut Vec<&'static str>) {
+        out.extend(action.sound_name());
+        match action {
+            Action::Area { .. } => out.push("kit_area"),
+            Action::Dash { land, .. } => land.iter().for_each(|a| collect_sounds(a, out)),
+            Action::Channel { action, .. } => collect_sounds(action, out),
+            _ => {}
+        }
+    }
+
+    #[test]
+    fn every_kit_action_has_a_shared_sound() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data");
+        let table: std::collections::BTreeMap<String, serde_json::Value> =
+            serde_json::from_str(&std::fs::read_to_string(root.join("sounds.json")).unwrap())
+                .unwrap();
+        let mut names = Vec::new();
+        for entry in std::fs::read_dir(root.join("champions")).unwrap() {
+            let text = std::fs::read_to_string(entry.unwrap().path()).unwrap();
+            let config: serde_json::Value = serde_json::from_str(&text).unwrap();
+            let Some(kit) = config.get("kit") else {
+                continue;
+            };
+            let kit: Kit = serde_json::from_value(kit.clone()).unwrap();
+            for ability in &kit.abilities {
+                ability
+                    .actions
+                    .iter()
+                    .for_each(|a| collect_sounds(a, &mut names));
+            }
+        }
+        names.sort_unstable();
+        names.dedup();
+        assert!(names.len() >= 8, "kits use most action types: {names:?}");
+        for name in names {
+            assert!(table.contains_key(name), "data/sounds.json lacks {name}");
+        }
+    }
+
+    #[test]
+    fn buffs_sound_like_their_strongest_effect() {
+        let buff = |json: &str| -> Action { serde_json::from_str(json).unwrap() };
+        let heal = buff(r#"{"type": "buff", "heal": 80, "shield": 50}"#);
+        let shield = buff(r#"{"type": "buff", "damage_reduction": 0.3, "move_speed": 0.2}"#);
+        let haste = buff(r#"{"type": "buff", "attack_speed": 0.4}"#);
+        let plain = buff(r#"{"type": "buff", "rooted": true}"#);
+        assert_eq!(heal.sound_name(), Some("kit_heal"));
+        assert_eq!(shield.sound_name(), Some("kit_shield"));
+        assert_eq!(haste.sound_name(), Some("kit_haste"));
+        assert_eq!(plain.sound_name(), Some("kit_buff"));
+        let area = buff(r#"{"type": "area", "radius": 200}"#);
+        assert_eq!(area.sound_name(), None, "areas thud when they land");
+    }
 
     #[test]
     fn every_action_and_status_parses() {

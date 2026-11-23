@@ -81,6 +81,10 @@ enum Command {
     Sounds {
         #[arg(long, value_delimiter = ',')]
         sequences: Vec<u32>,
+        /// Describe these sound effect ids directly (for example the ids
+        /// named in `data/sounds.json`).
+        #[arg(long, value_delimiter = ',')]
+        ids: Vec<u32>,
         /// Also write each listed sound to this folder as `<id>.wav`.
         #[arg(long)]
         out: Option<PathBuf>,
@@ -214,7 +218,17 @@ fn main() -> Result<()> {
         Command::FindObject { query, limit } => find_object(&cache, &query, limit)?,
         Command::Sequence { id } => sequence(&cache, id)?,
         Command::Sound { id, out } => sound(&cache, id, out.as_deref())?,
-        Command::Sounds { sequences, out } => sounds(&cache, &sequences, out.as_deref())?,
+        Command::Sounds {
+            sequences,
+            ids,
+            out,
+        } => {
+            if ids.is_empty() {
+                sounds(&cache, &sequences, out.as_deref())?
+            } else {
+                sound_ids(&cache, &ids, out.as_deref())?
+            }
+        }
         Command::Animate { model, sequence } => animate(&cache, model, sequence)?,
         Command::Model { id } => model(&cache, id)?,
         Command::ExportObj { id, out } => export_obj(&cache, id, &out)?,
@@ -788,6 +802,24 @@ fn sound(cache: &Cache, id: u32, out: Option<&Path>) -> Result<()> {
     if let Some(out) = out {
         std::fs::write(out, sound.to_wav())?;
         println!("  wrote {}", out.display());
+    }
+    Ok(())
+}
+
+fn sound_ids(cache: &Cache, ids: &[u32], out: Option<&Path>) -> Result<()> {
+    if let Some(dir) = out {
+        std::fs::create_dir_all(dir)?;
+    }
+    for &id in ids {
+        match rift_cache::SoundEffect::load(cache, id) {
+            Ok(sound) => {
+                println!("sound {id}: {}", describe_sound(&sound));
+                if let Some(dir) = out {
+                    std::fs::write(dir.join(format!("{id}.wav")), sound.to_wav())?;
+                }
+            }
+            Err(err) => println!("sound {id}: {err}"),
+        }
     }
     Ok(())
 }

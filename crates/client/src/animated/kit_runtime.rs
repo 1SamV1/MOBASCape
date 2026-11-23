@@ -41,6 +41,9 @@ struct CastCtx {
     /// Reach multiplier from the ability's rank: shot length, cast range
     /// and dash length.
     reach: f32,
+    /// False when the champion file scores this slot itself (`q_*`, ...):
+    /// the shared kit action sounds then stay quiet.
+    shared_sounds: bool,
 }
 
 struct KitShot {
@@ -80,6 +83,8 @@ struct PendingArea {
     on_hit: Vec<Status>,
     color: [u8; 3],
     from: Vec3,
+    /// Thud with the shared `kit_area` sound on landing.
+    sound: bool,
 }
 
 struct Zone {
@@ -437,7 +442,13 @@ impl AnimatedScene {
         };
         let player = &mut self.units[pi];
         player.yaw = dir.x.atan2(dir.z);
+        let shared_sounds = !self.slot_has_own_sounds(slot);
+        if !shared_sounds {
+            let name = ["q_cast", "w_cast", "e_cast", "r_cast"][slot.min(3)];
+            self.play_sound(name, origin);
+        }
         let ctx = CastCtx {
+            shared_sounds,
             color: ability.color,
             origin,
             target,
@@ -476,6 +487,12 @@ impl AnimatedScene {
 
     fn run_action(&mut self, action: &Action, ctx: &CastCtx) {
         let pi = self.player_index;
+        if ctx.shared_sounds
+            && let Some(name) = action.sound_name()
+        {
+            let pos = self.units[pi].pos;
+            self.play_sound(name, pos);
+        }
         match action {
             Action::Projectile {
                 speed,
@@ -565,6 +582,7 @@ impl AnimatedScene {
                         on_hit: on_hit.clone(),
                         color: ctx.color,
                         from: ctx.origin,
+                        sound: ctx.shared_sounds,
                     });
                 }
             }
@@ -1363,6 +1381,9 @@ impl AnimatedScene {
             if area.delay > 0.0 {
                 waiting.push(area);
                 continue;
+            }
+            if area.sound {
+                self.play_sound("kit_area", area.pos);
             }
             let hits = self.kit_enemies_in(area.pos, area.radius, area.facing, area.arc);
             let count = hits.len();
