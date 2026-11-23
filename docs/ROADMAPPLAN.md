@@ -166,6 +166,12 @@ All objects from the cache, placed through the map format
   weapons.
 - Shop window shell with categories, search line, detail and gold.
 
+## Progress
+
+- 2026-11-23: phase 1.1 (team fog of war in the world shader), 1.2
+  (lighting retune, constants in the shader for now; the `lighting.json`
+  reload is still open) and the grass part of 1.3 are done.
+
 ## Started with this plan
 
 Phase 2.1 and 2.2 (first cut): the minimap now draws the team's live

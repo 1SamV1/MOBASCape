@@ -2181,6 +2181,14 @@ impl App {
             // Fog of war is a shader-side circle around the hero, so it has
             // no geometry to fight with the terrain's z levels.
             renderer.set_vision(animated.player_pos(), 2600.0);
+            if animated.visibility_dirty {
+                renderer.set_vision_grid(
+                    animated.vision_origin,
+                    animated.visibility.width,
+                    animated.visibility.height,
+                    &animated.visibility.tiles,
+                );
+            }
             animated.visibility_dirty = false;
             phase_mesh = mesh_start.elapsed().as_secs_f32() * 1000.0;
 
@@ -2774,6 +2782,14 @@ impl App {
             renderer.set_lights(&animated.lights());
             renderer.set_time(self.app_time);
             renderer.set_vision(animated.player_pos(), 2600.0);
+            if animated.visibility_dirty {
+                renderer.set_vision_grid(
+                    animated.vision_origin,
+                    animated.visibility.width,
+                    animated.visibility.height,
+                    &animated.visibility.tiles,
+                );
+            }
             animated.visibility_dirty = false;
             if self.follow {
                 renderer.camera.target = animated.player_pos() + Vec3::Y * 140.0;
@@ -2840,6 +2856,7 @@ impl App {
             renderer.set_lights(&animated.lights());
             renderer.set_time(self.app_time);
             renderer.set_vision(renderer.camera.target, 40_000.0);
+            renderer.clear_vision_grid();
             animated.visibility_dirty = false;
         }
         let version = concat!("V", env!("CARGO_PKG_VERSION"));
@@ -3015,6 +3032,14 @@ impl App {
             renderer.set_lights(&animated.lights());
             renderer.set_time(self.app_time);
             renderer.set_vision(animated.player_pos(), 2600.0);
+            if animated.visibility_dirty {
+                renderer.set_vision_grid(
+                    animated.vision_origin,
+                    animated.visibility.width,
+                    animated.visibility.height,
+                    &animated.visibility.tiles,
+                );
+            }
             animated.visibility_dirty = false;
         }
 

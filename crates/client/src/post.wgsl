@@ -94,7 +94,7 @@ fn grade(uv: vec2<f32>, base: vec3<f32>, dimensions: vec2<f32>) -> vec3<f32> {
     // Desaturate the whole frame. Terrain is the main offender; grading it
     // here keeps props and effects consistent with it.
     let l0 = luma(color);
-    color = mix(vec3<f32>(l0), color, 0.95);
+    color = mix(vec3<f32>(l0), color, 0.86);
 
     // Split tone: shadow blue-grey, highlight warm cream.
     let l1 = luma(color);

@@ -1,6 +1,21 @@
 # Status
 
-Last updated: reference study, roadmap plan and live minimap vision, 2026-11-23.
+Last updated: team fog of war in the world and lighting retune, 2026-11-23.
+
+## 2026-11-23 — Team fog of war and a darker, deeper light
+
+- **The world shows what the team sees.** The line-of-sight grid
+  (`VisibilityGrid`, refreshed every 0.15 s) is uploaded as a 512x512 R8
+  texture (`Renderer::set_vision_grid`, bindings 8 and 9) and sampled with a
+  five-tap soft lookup in `scene.wgsl`. Ground no ally sees drops to about
+  40% brightness and loses most of its saturation; walls and trees cast
+  sight shadows. Menus and dev demos keep the old circle round the hero
+  (`clear_vision_grid`).
+- **Lighting retune** (ROADMAPPLAN phase 1.2): terrain ambient 1.64 to 1.30
+  (units 1.74 to 1.48), sun 0.72 to 0.90, shadow floor 0.52 to 0.36,
+  post-grade saturation 0.95 to 0.86.
+- **Grass palette** (phase 1.3): the lime "dry" field tint is now olive and
+  the grass saturation boost drops from 1.3 to 1.12, darker overall.
 
 ## 2026-11-23 — Reference study and live minimap vision
 

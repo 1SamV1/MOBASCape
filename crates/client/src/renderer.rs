@@ -36,6 +36,45 @@ struct BloomUniform {
     texel: [f32; 2],
 }
 
+/// Edge of the team vision texture in tiles (maps are far smaller).
+const VISION_TEXTURE: u32 = 512;
+
+/// Pack a row-major `width` x `height` seen grid into a `size` x `size` R8
+/// texture (255 = seen). Tiles past the texture edge are dropped.
+fn vision_texels(width: usize, height: usize, seen: &[bool], size: usize) -> Vec<u8> {
+    let mut texels = vec![0u8; size * size];
+    for y in 0..height.min(size) {
+        for x in 0..width.min(size) {
+            if seen.get(y * width + x).copied().unwrap_or(false) {
+                texels[y * size + x] = 255;
+            }
+        }
+    }
+    texels
+}
+
+#[cfg(test)]
+mod vision_tests {
+    use super::vision_texels;
+
+    #[test]
+    fn the_seen_grid_lands_row_by_row_in_the_texture() {
+        // 3 x 2 grid: seen at (2, 0) and (0, 1).
+        let seen = [false, false, true, true, false, false];
+        let texels = vision_texels(3, 2, &seen, 4);
+        assert_eq!(texels.len(), 16);
+        assert_eq!(texels[2], 255);
+        assert_eq!(texels[4], 255, "row 1 starts at the texture's row stride");
+        assert_eq!(texels.iter().filter(|&&t| t == 255).count(), 2);
+    }
+
+    #[test]
+    fn grids_larger_than_the_texture_are_clipped() {
+        let texels = vision_texels(5, 5, &[true; 25], 2);
+        assert_eq!(texels, vec![255; 4]);
+    }
+}
+
 #[repr(C)]
 #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
 struct SceneGlobals {
@@ -55,6 +94,9 @@ struct SceneGlobals {
     tuning: [f32; 4],
     /// xyz = hero position, w = vision radius in world units.
     vision: [f32; 4],
+    /// Team vision texture mapping: x, z of the grid's world origin, 1 /
+    /// texture width in world units, and w = 1 when the grid is in use.
+    vision_grid: [f32; 4],
     lights: [GpuLight; 16],
     light_count: [u32; 4],
 }
@@ -91,6 +133,7 @@ impl SceneGlobals {
             shadow_params: [1.0 / 1024.0, 0.0032, 0.0, 0.0],
             tuning: [1.0, 4.0, 0.0, 0.0],
             vision: [0.0, 0.0, 0.0, 1500.0],
+            vision_grid: [0.0; 4],
             lights: [GpuLight::default(); 16],
             light_count: [0; 4],
         }
@@ -362,6 +405,8 @@ pub struct Renderer {
     hud_pipeline: wgpu::RenderPipeline,
     hud_bind_group: wgpu::BindGroup,
     ui_texture: wgpu::Texture,
+    /// Team line-of-sight grid sampled by the world shader.
+    vision_texture: wgpu::Texture,
     _ui_sampler: wgpu::Sampler,
     _terrain_texture: wgpu::Texture,
     _terrain_sampler: wgpu::Sampler,
@@ -793,7 +838,53 @@ impl Renderer {
                     },
                     count: None,
                 },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 8,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        multisampled: false,
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 9,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                    count: None,
+                },
             ],
+        });
+
+        // The team's line of sight, one texel per tile, starting fully seen.
+        let vision_texture = device.create_texture_with_data(
+            &queue,
+            &wgpu::TextureDescriptor {
+                label: Some("team vision grid"),
+                size: wgpu::Extent3d {
+                    width: VISION_TEXTURE,
+                    height: VISION_TEXTURE,
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: wgpu::TextureFormat::R8Unorm,
+                usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+                view_formats: &[],
+            },
+            wgpu::util::TextureDataOrder::LayerMajor,
+            &vec![255u8; (VISION_TEXTURE * VISION_TEXTURE) as usize],
+        );
+        let vision_view = vision_texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let vision_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("team vision sampler"),
+            address_mode_u: wgpu::AddressMode::ClampToEdge,
+            address_mode_v: wgpu::AddressMode::ClampToEdge,
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Linear,
+            ..Default::default()
         });
 
         let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -831,6 +922,14 @@ impl Renderer {
                 wgpu::BindGroupEntry {
                     binding: 7,
                     resource: wgpu::BindingResource::TextureView(&grass_view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 8,
+                    resource: wgpu::BindingResource::TextureView(&vision_view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 9,
+                    resource: wgpu::BindingResource::Sampler(&vision_sampler),
                 },
             ],
         });
@@ -1465,6 +1564,7 @@ impl Renderer {
             hud_pipeline,
             hud_bind_group,
             ui_texture,
+            vision_texture,
             _ui_sampler: ui_sampler,
             _terrain_texture: terrain_texture,
             _terrain_sampler: terrain_sampler,
@@ -1790,6 +1890,52 @@ impl Renderer {
     }
 
     /// Set the hero-centric vision circle used for the fog of war.
+    /// Upload the team's line-of-sight grid (`width` x `height` tiles from
+    /// tile `origin`), so the world shader dims what no ally sees.
+    pub fn set_vision_grid(
+        &mut self,
+        origin: (i32, i32),
+        width: usize,
+        height: usize,
+        seen: &[bool],
+    ) {
+        let texels = vision_texels(width, height, seen, VISION_TEXTURE as usize);
+        self.queue.write_texture(
+            wgpu::TexelCopyTextureInfo {
+                texture: &self.vision_texture,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
+            &texels,
+            wgpu::TexelCopyBufferLayout {
+                offset: 0,
+                bytes_per_row: Some(VISION_TEXTURE),
+                rows_per_image: Some(VISION_TEXTURE),
+            },
+            wgpu::Extent3d {
+                width: VISION_TEXTURE,
+                height: VISION_TEXTURE,
+                depth_or_array_layers: 1,
+            },
+        );
+        self.scene_globals.vision_grid = [
+            origin.0 as f32 * 128.0,
+            origin.1 as f32 * 128.0,
+            1.0 / (VISION_TEXTURE as f32 * 128.0),
+            1.0,
+        ];
+        self.upload_globals();
+    }
+
+    /// Back to the circle fog (menus, demos without a team grid).
+    pub fn clear_vision_grid(&mut self) {
+        if self.scene_globals.vision_grid[3] != 0.0 {
+            self.scene_globals.vision_grid[3] = 0.0;
+            self.upload_globals();
+        }
+    }
+
     pub fn set_vision(&mut self, center: Vec3, radius: f32) {
         self.scene_globals.vision = [center.x, center.y, center.z, radius.max(1.0)];
         self.upload_globals();

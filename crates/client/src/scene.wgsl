@@ -20,6 +20,7 @@ struct SceneGlobals {
     shadow_params: vec4<f32>,
     tuning: vec4<f32>,
     vision: vec4<f32>,
+    vision_grid: vec4<f32>,
     lights: array<Light, 16>,
     light_count: vec4<u32>,
 };
@@ -32,6 +33,9 @@ struct SceneGlobals {
 @group(0) @binding(5) var model_textures: texture_2d_array<f32>;
 @group(0) @binding(6) var model_sampler: sampler;
 @group(0) @binding(7) var grass_textures: texture_2d_array<f32>;
+// The team's line-of-sight grid, one texel per 128-unit tile (1 = seen).
+@group(0) @binding(8) var vision_texture: texture_2d<f32>;
+@group(0) @binding(9) var vision_sampler: sampler;
 
 struct VsIn {
     @location(0) position: vec3<f32>,
@@ -147,16 +151,32 @@ fn lighting(input: VsOut) -> vec3<f32> {
     );
     // Keep a fifth of the sunlight inside shadow so the shadowed ground
     // retains its albedo instead of collapsing to a black polygon.
-    let sun = scene.sun_color.rgb * 0.72 * mix(0.52, 1.0, shadow);
+    // Phase 1 retune: a stronger key light and deeper shadows over a lower
+    // ambient, so trees and walls ground themselves like the reference.
+    let sun = scene.sun_color.rgb * 0.90 * mix(0.36, 1.0, shadow);
     // Camera facing fill keeps the fronts of models readable even when the
     // sun is behind them, which a top down MOBA camera hits constantly.
     let unit_fill = select(0.24, 0.40, input.material == 3u);
     let fill = max(dot(N, V), 0.0) * unit_fill;
-    let ambient = select(1.64, 1.74, input.material == 3u);
+    let ambient = select(1.30, 1.48, input.material == 3u);
     var lit = albedo(input) * (hemi * ambient + sun * ndotl + fill) * input.ao * 1.02;
 
     lit += input.color.rgb * dynamic_lighting(input);
     return lit;
+}
+
+// How much of the team sees this ground point (0..1), softened over about
+// one tile with a five-tap filtered lookup so edges fade instead of
+// stepping per tile.
+fn vision_seen(xz: vec2<f32>) -> f32 {
+    let uv = (xz - scene.vision_grid.xy) * scene.vision_grid.z;
+    let t = scene.vision_grid.z * 96.0;
+    var sum = textureSampleLevel(vision_texture, vision_sampler, uv, 0.0).r * 2.0;
+    sum += textureSampleLevel(vision_texture, vision_sampler, uv + vec2<f32>(t, 0.0), 0.0).r;
+    sum += textureSampleLevel(vision_texture, vision_sampler, uv - vec2<f32>(t, 0.0), 0.0).r;
+    sum += textureSampleLevel(vision_texture, vision_sampler, uv + vec2<f32>(0.0, t), 0.0).r;
+    sum += textureSampleLevel(vision_texture, vision_sampler, uv - vec2<f32>(0.0, t), 0.0).r;
+    return smoothstep(0.15, 0.85, sum / 6.0);
 }
 
 fn fog_factor(input: VsOut) -> f32 {
@@ -385,12 +405,14 @@ fn albedo(input: VsOut) -> vec3<f32> {
         // green and away from lime/olive; slow patches of lusher and drier
         // grass give fields scale without a visible tile.
         let grass_luma = dot(grass_raw, vec3<f32>(0.299, 0.587, 0.114));
-        let lush = vec3<f32>(0.52, 0.90, 0.50);
-        let dry = vec3<f32>(0.84, 0.92, 0.48);
+        // Retuned 2026-11-23 against the reference study (ROADMAPPLAN.md
+        // phase 1): the old dry tint pushed fields to highlighter lime.
+        let lush = vec3<f32>(0.50, 0.84, 0.50);
+        let dry = vec3<f32>(0.70, 0.82, 0.50);
         let field_tint = mix(lush, dry, smoothstep(0.45, 0.85, macro_n));
-        let grass = mix(vec3<f32>(grass_luma), grass_raw, 1.3)
+        let grass = mix(vec3<f32>(grass_luma), grass_raw, 1.12)
             * field_tint
-            * (0.66 + 0.30 * mottle);
+            * (0.58 + 0.30 * mottle);
         // The dark biome grass sprites are nearly black in linear light and
         // read as flat fog/water in low jungle. Lift the linear values while
         // preserving the sprite's texture and hue.
@@ -550,12 +572,20 @@ fn fs(input: VsOut) -> @location(0) vec4<f32> {
     }
 
     var lit = lighting(input);
-    // Fog of war: a consistent lateral circle around the hero. This is a
-    // shader term rather than a mesh, so it never fights with terrain z
-    // levels and the boundary is a smooth radius instead of a tile edge.
-    let los_distance = length(input.world.xz - scene.vision.xz);
-    let los = 1.0 - smoothstep(scene.vision.w * 0.72, scene.vision.w * 1.45, los_distance);
-    lit = mix(lit * 0.55, lit, los);
+    // Fog of war. In a match it is the team's line-of-sight grid: everything
+    // an ally (hero, minion, tower) sees is lit, the rest of the map falls
+    // to a dim, greyed version of itself. Without a grid (menus, demos) it
+    // is the old circle around the hero.
+    var seen = 1.0;
+    if (scene.vision_grid.w > 0.5) {
+        seen = vision_seen(input.world.xz);
+    } else {
+        let los_distance = length(input.world.xz - scene.vision.xz);
+        seen = 1.0 - smoothstep(scene.vision.w * 0.72, scene.vision.w * 1.45, los_distance);
+    }
+    let hidden_grey = vec3<f32>(dot(lit, vec3<f32>(0.299, 0.587, 0.114)));
+    let hidden = mix(hidden_grey, lit, 0.45) * vec3<f32>(0.40, 0.42, 0.47);
+    lit = mix(hidden, lit, seen);
     let fog = fog_factor(input);
     let sun_amount = max(
         dot(normalize(input.world - scene.camera_pos.xyz), normalize(scene.sun_dir.xyz)),
