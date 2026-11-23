@@ -26,22 +26,47 @@
     {
       "key": "Q",
       "name": "MANDIBLE CRUSH",
-      "description": "A crushing bite in front that stuns."
+      "description": "A crushing bite in front that stuns.",
+      "ranks": [
+        { "damage": 60, "range": 260, "cooldown": 8 },
+        { "damage": 85, "range": 260, "cooldown": 7.5 },
+        { "damage": 110, "range": 260, "cooldown": 7 },
+        { "damage": 135, "range": 260, "cooldown": 6.5 }
+      ]
     },
     {
       "key": "W",
       "name": "BURROW",
-      "description": "Digs to a point; she cannot be hit while underground."
+      "description": "Digs to a point; she cannot be hit while underground.",
+      "ranks": [
+        { "damage": 40, "range": 750, "cooldown": 12 },
+        { "damage": 60, "range": 800, "cooldown": 11 },
+        { "damage": 80, "range": 850, "cooldown": 10 },
+        { "damage": 100, "range": 900, "cooldown": 9 }
+      ]
     },
     {
       "key": "E",
       "name": "CHITIN",
-      "description": "Hardens her shell: less damage taken and melee attackers are hurt."
+      "description": "Hardens her shell: less damage taken and melee attackers are hurt.",
+      "damage_label": "Defence",
+      "damage_note": "25% less damage, 40% reflected",
+      "ranks": [
+        { "range": 0, "cooldown": 14 },
+        { "range": 0, "cooldown": 13 },
+        { "range": 0, "cooldown": 12 },
+        { "range": 0, "cooldown": 11 }
+      ]
     },
     {
       "key": "R",
       "name": "SWARM",
-      "description": "Kalphite workers burst out and charge in a line."
+      "description": "Kalphite workers burst out and charge in a line.",
+      "ranks": [
+        { "damage": 110, "range": 1100, "cooldown": 70 },
+        { "damage": 165, "range": 1150, "cooldown": 62 },
+        { "damage": 220, "range": 1200, "cooldown": 54 }
+      ]
     }
   ],
   "ability_icons": [

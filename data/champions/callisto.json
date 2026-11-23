@@ -24,22 +24,47 @@
     {
       "key": "Q",
       "name": "MAUL",
-      "description": "A heavy swipe that knocks enemies back."
+      "description": "A heavy swipe that knocks enemies back.",
+      "ranks": [
+        { "damage": 55, "range": 260, "cooldown": 7 },
+        { "damage": 75, "range": 260, "cooldown": 6.5 },
+        { "damage": 95, "range": 260, "cooldown": 6 },
+        { "damage": 115, "range": 260, "cooldown": 5.5 }
+      ]
     },
     {
       "key": "W",
       "name": "CHARGE",
-      "description": "Charges at the cursor and knocks back whatever it hits."
+      "description": "Charges at the cursor and knocks back whatever it hits.",
+      "ranks": [
+        { "damage": 40, "range": 800, "cooldown": 12 },
+        { "damage": 60, "range": 800, "cooldown": 11 },
+        { "damage": 80, "range": 850, "cooldown": 10 },
+        { "damage": 100, "range": 900, "cooldown": 9 }
+      ]
     },
     {
       "key": "E",
       "name": "HIBERNATE",
-      "description": "Settles for 1.5 seconds to heal a quarter of missing health."
+      "description": "Settles for 1.5 seconds to heal a quarter of missing health.",
+      "damage_label": "Heal",
+      "damage_note": "25% of missing health",
+      "ranks": [
+        { "range": 0, "cooldown": 16 },
+        { "range": 0, "cooldown": 14.5 },
+        { "range": 0, "cooldown": 13 },
+        { "range": 0, "cooldown": 11.5 }
+      ]
     },
     {
       "key": "R",
       "name": "SHOCKWAVE",
-      "description": "A huge roar down a line that knocks back and stuns."
+      "description": "A huge roar down a line that knocks back and stuns.",
+      "ranks": [
+        { "damage": 140, "range": 1100, "cooldown": 70 },
+        { "damage": 210, "range": 1200, "cooldown": 60 },
+        { "damage": 280, "range": 1300, "cooldown": 50 }
+      ]
     }
   ],
   "ability_icons": [

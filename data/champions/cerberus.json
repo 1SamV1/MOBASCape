@@ -26,22 +26,45 @@
     {
       "key": "Q",
       "name": "TRIPLE BITE",
-      "description": "Three quick bites in front; the last one slows."
+      "description": "Three quick bites in front; the last one slows.",
+      "ranks": [
+        { "damage": 66, "range": 230, "cooldown": 6 },
+        { "damage": 90, "range": 230, "cooldown": 5.5 },
+        { "damage": 114, "range": 230, "cooldown": 5 },
+        { "damage": 138, "range": 230, "cooldown": 4.5 }
+      ]
     },
     {
       "key": "W",
       "name": "LAVA POOLS",
-      "description": "Spits three pools of lava that burn enemies standing in them."
+      "description": "Spits three pools of lava that burn enemies standing in them.",
+      "ranks": [
+        { "damage": 112, "range": 900, "cooldown": 10 },
+        { "damage": 150, "range": 950, "cooldown": 9.5 },
+        { "damage": 190, "range": 1000, "cooldown": 9 },
+        { "damage": 230, "range": 1050, "cooldown": 8.5 }
+      ]
     },
     {
       "key": "E",
       "name": "SUMMONED SOULS",
-      "description": "A ranger, mage and warrior soul fly out in a line, draining mana."
+      "description": "A ranger, mage and warrior soul fly out in a line, draining mana.",
+      "ranks": [
+        { "damage": 38, "range": 1000, "cooldown": 12 },
+        { "damage": 52, "range": 1000, "cooldown": 11 },
+        { "damage": 66, "range": 1000, "cooldown": 10 },
+        { "damage": 80, "range": 1000, "cooldown": 9 }
+      ]
     },
     {
       "key": "R",
       "name": "HELLHOUND HOWL",
-      "description": "Every nearby enemy flees in fear."
+      "description": "Every nearby enemy flees in fear.",
+      "ranks": [
+        { "damage": 80, "range": 520, "cooldown": 65 },
+        { "damage": 130, "range": 520, "cooldown": 58 },
+        { "damage": 180, "range": 520, "cooldown": 50 }
+      ]
     }
   ],
   "ability_icons": [

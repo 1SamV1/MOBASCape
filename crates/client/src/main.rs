@@ -135,6 +135,11 @@ struct Cli {
     /// attack animations, reach and projectiles.
     #[arg(long)]
     demo_attack: bool,
+    /// Demo: level the hero to 7, spend four skill points (Q twice, W and R
+    /// once), leave two unspent so the slots glow, and hover this slot (0-3)
+    /// so its ability tooltip shows.
+    #[arg(long)]
+    demo_ranks: Option<usize>,
     /// Dev: show the held ability indicator for this slot (0-3) aimed at
     /// the nearest jungle camp, as if right mouse were held.
     #[arg(long)]
@@ -512,6 +517,8 @@ fn main() -> Result<()> {
         demo_abilities_stage: 0,
         demo_attack: cli.demo_attack,
         demo_attack_stage: 0,
+        demo_ranks: cli.demo_ranks,
+        demo_ranks_done: false,
         hold_indicator: cli.hold_indicator,
         shop,
         event_log: vec![
@@ -655,6 +662,8 @@ struct App {
     demo_abilities_stage: u8,
     demo_attack: bool,
     demo_attack_stage: u8,
+    demo_ranks: Option<usize>,
+    demo_ranks_done: bool,
     hold_indicator: Option<usize>,
     shop: ItemShop,
     event_log: Vec<String>,
@@ -1764,6 +1773,30 @@ impl App {
                 if self.demo_abilities_stage == 5 && t >= 7.0 {
                     tracing::info!("demo abilities: {}", animated.debug_kit_report());
                     self.demo_abilities = false;
+                }
+            }
+
+            if let Some(slot) = self.demo_ranks {
+                if !self.demo_ranks_done {
+                    animated.dev_level_to(7);
+                    let spent = [0, 0, 1, 3].map(|slot| animated.upgrade_ability(slot));
+                    tracing::info!(
+                        "demo ranks: level 7, spent {spent:?}, ranks {:?}, {} points left",
+                        animated.ability_ranks(),
+                        animated.skill_points
+                    );
+                    self.demo_ranks_done = true;
+                }
+                // Keep the cursor on the slot so the tooltip is captured.
+                if let Some(area) = self.ui_placed.as_ref().and_then(|placed| {
+                    placed
+                        .get(rift_ui::hud::Piece::Ability)
+                        .map(|a| (a, placed.scale as i32))
+                }) {
+                    let (area, scale) = area;
+                    let x = area.x + (92 + slot.min(3) as i32 * 42 + 20) * scale;
+                    let y = area.y + 30 * scale;
+                    self.mouse_pos = (x as f64, y as f64);
                 }
             }
 
@@ -2883,6 +2916,13 @@ impl App {
             && let Some(slot) = rift_ui::hud::ability_bar::ability_at(area, scale, mouse)
         {
             tracing::info!("ability bar: slot {slot} clicked");
+            // With a skill point to spend, a click ranks the ability up
+            // instead of casting it.
+            if let Some(animated) = self.animated.as_mut()
+                && animated.upgrade_ability(slot)
+            {
+                return true;
+            }
             match slot {
                 0 => self.cast_q(),
                 1 => self.cast_w(),
@@ -3178,6 +3218,9 @@ fn draw_ui_overlay(
                 state.announcement = crate::ui_live::announcement(player);
                 state.gold = player.gold;
             }
+            if let Some(animated) = animated {
+                crate::ui_live::ability_ranks(&mut state.ability, animated);
+            }
             if let (Some(player), Some(animated)) = (player, animated) {
                 state.death = crate::ui_live::death(player, animated);
                 state.allies = crate::ui_live::allies(animated);
@@ -3198,6 +3241,20 @@ fn draw_ui_overlay(
         }
         let placed = rift_ui::hud::place(&state, renderer.size, scale);
         placed_out = Some(placed.clone());
+        // Hovering Q, W, E or R explains the ability and its ranks.
+        if live
+            && state.death.is_none()
+            && let (Some(animated), Some(area)) =
+                (animated, placed.get(rift_ui::hud::Piece::Ability))
+            && let Some(slot) =
+                rift_ui::hud::ability_bar::ability_at(area, placed.scale as i32, mouse)
+        {
+            // Anchor above the bar, centred on the slot, so it never covers
+            // the slots themselves.
+            let scale = placed.scale as i32;
+            let anchor = (area.x + (92 + slot as i32 * 42 + 20) * scale, area.y);
+            state.ability_tooltip = crate::ui_live::ability_tooltip(animated, slot, anchor);
+        }
         let detail = format!(
             "requested {:?}, drawn {}, usual {:.1}%, steps {:?}, conflicts {:?}",
             placed.requested,
@@ -3261,6 +3318,7 @@ fn has_demo_flags(cli: &Cli) -> bool {
         || cli.demo_duel
         || cli.demo_trial
         || cli.demo_camp
+        || cli.demo_ranks.is_some()
         || cli.demo_watchtower
         || cli.demo_delivery
         || cli.demo_kit

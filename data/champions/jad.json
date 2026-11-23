@@ -29,22 +29,47 @@
     {
       "key": "Q",
       "name": "JAD'S GUARD",
-      "description": "A burst of earth magic that damages and slows nearby enemies."
+      "description": "A burst of earth magic that damages and slows nearby enemies.",
+      "ranks": [
+        { "damage": 50, "range": 360, "cooldown": 5 },
+        { "damage": 70, "range": 360, "cooldown": 4.75 },
+        { "damage": 90, "range": 360, "cooldown": 4.5 },
+        { "damage": 110, "range": 360, "cooldown": 4.25 }
+      ]
     },
     {
       "key": "W",
       "name": "TELEPORT",
-      "description": "Jad blinks across the battlefield to escape or to close the gap."
+      "description": "Jad blinks across the battlefield to escape or to close the gap.",
+      "damage_note": "Blink, no damage",
+      "ranks": [
+        { "range": 640, "cooldown": 8 },
+        { "range": 700, "cooldown": 7.5 },
+        { "range": 760, "cooldown": 7 },
+        { "range": 820, "cooldown": 6.5 }
+      ]
     },
     {
       "key": "E",
       "name": "MINER'S ENDURANCE",
-      "description": "Jad drinks in the earth, healing himself and raising a rocky shield."
+      "description": "Jad drinks in the earth, healing himself and raising a rocky shield.",
+      "damage_label": "Shield",
+      "ranks": [
+        { "damage": 160, "range": 0, "cooldown": 12 },
+        { "damage": 200, "range": 0, "cooldown": 11.5 },
+        { "damage": 240, "range": 0, "cooldown": 11 },
+        { "damage": 280, "range": 0, "cooldown": 10.5 }
+      ]
     },
     {
       "key": "R",
       "name": "EARTH SPLITTER",
-      "description": "The ground erupts under the cursor, hurling boulders at everything nearby."
+      "description": "The ground erupts under the cursor, hurling boulders at everything nearby.",
+      "ranks": [
+        { "damage": 270, "range": 1100, "cooldown": 45 },
+        { "damage": 380, "range": 1150, "cooldown": 40 },
+        { "damage": 490, "range": 1200, "cooldown": 35 }
+      ]
     }
   ],
   "ability_icons": [

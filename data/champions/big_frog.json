@@ -26,22 +26,46 @@
     {
       "key": "Q",
       "name": "TONGUE LASH",
-      "description": "Flicks its tongue down a line, dragging the first enemy hit toward the frog."
+      "description": "Flicks its tongue down a line, dragging the first enemy hit toward the frog.",
+      "ranks": [
+        { "damage": 45, "range": 850, "cooldown": 7 },
+        { "damage": 65, "range": 850, "cooldown": 6.5 },
+        { "damage": 85, "range": 900, "cooldown": 6 },
+        { "damage": 105, "range": 950, "cooldown": 5.5 }
+      ]
     },
     {
       "key": "W",
       "name": "BIG LEAP",
-      "description": "Bounds to the cursor and lands with a splash that knocks enemies up."
+      "description": "Bounds to the cursor and lands with a splash that knocks enemies up.",
+      "ranks": [
+        { "damage": 40, "range": 650, "cooldown": 10 },
+        { "damage": 60, "range": 700, "cooldown": 9.5 },
+        { "damage": 80, "range": 750, "cooldown": 9 },
+        { "damage": 100, "range": 800, "cooldown": 8.5 }
+      ]
     },
     {
       "key": "E",
       "name": "SWAMP CROAK",
-      "description": "A booming croak that slows everything nearby and toughens the frog's hide."
+      "description": "A booming croak that slows everything nearby and toughens the frog's hide.",
+      "damage_label": "Shield",
+      "ranks": [
+        { "damage": 90, "range": 340, "cooldown": 12 },
+        { "damage": 115, "range": 340, "cooldown": 11.5 },
+        { "damage": 140, "range": 340, "cooldown": 11 },
+        { "damage": 165, "range": 340, "cooldown": 10 }
+      ]
     },
     {
       "key": "R",
       "name": "PLAGUE OF FROGS",
-      "description": "Frogs rain from the sky around the cursor, and three of them stay to fight."
+      "description": "Frogs rain from the sky around the cursor, and three of them stay to fight.",
+      "ranks": [
+        { "damage": 210, "range": 900, "cooldown": 60 },
+        { "damage": 300, "range": 1000, "cooldown": 52 },
+        { "damage": 390, "range": 1100, "cooldown": 44 }
+      ]
     }
   ],
   "ability_icons": [

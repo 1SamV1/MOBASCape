@@ -261,6 +261,8 @@ pub struct HudState {
     pub feed: Vec<KillFeedEntry>,
     pub announcement: Option<String>,
     pub tooltip: Option<TooltipState>,
+    /// The hovered ability's tooltip, when the mouse is over Q, W, E or R.
+    pub ability_tooltip: Option<AbilityTooltipState>,
     pub shop: ShopState,
     pub death: Option<DeathState>,
 }
@@ -289,6 +291,56 @@ pub struct AbilityState {
     pub portrait: Option<String>,
     /// Theme sprite roles for the Q, W, E and R icons, when baked.
     pub icons: [Option<String>; 4],
+    /// Current rank of each ability, drawn as pips under its slot.
+    pub ranks: [u8; 4],
+    /// Ranks each ability has (pips drawn per slot).
+    pub max_ranks: [u8; 4],
+    /// Slots that would take a skill point if clicked: their hotkey glows
+    /// gold and the slot shimmers.
+    pub upgradable: [bool; 4],
+    /// Seconds, for the shimmer animation.
+    pub time: f32,
+}
+
+/// The ability tooltip shown over a hovered Q, W, E or R slot:
+/// "Name: summary", the rank, the numbers now, and every upgrade left.
+#[derive(Debug, Clone, PartialEq)]
+pub struct AbilityTooltipState {
+    /// Hotkey: Q, W, E or R.
+    pub key: String,
+    pub name: String,
+    pub summary: String,
+    pub rank: u8,
+    pub max_rank: u8,
+    pub current: AbilityNumbers,
+    /// Ranks still to come, next one first.
+    pub upgrades: Vec<AbilityUpgrade>,
+    /// What an ability without a damage number does, e.g. "Heal: 25% of
+    /// missing health".
+    pub note: Option<String>,
+    /// "Click to rank up" style hint when a point can be spent here.
+    pub hint: Option<String>,
+    /// Window pixel the tooltip sits above, centred (the top middle of the
+    /// hovered slot's bar).
+    pub at: (i32, i32),
+}
+
+/// Damage, range and cooldown, already formatted for display.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AbilityNumbers {
+    /// What the first number is: "Damage", "Shield", "Heal" ...
+    pub damage_label: String,
+    pub damage: String,
+    pub range: String,
+    pub cooldown: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AbilityUpgrade {
+    pub rank: u8,
+    pub numbers: AbilityNumbers,
+    /// Champion level this rank still waits for, when it is locked.
+    pub needs_level: Option<u32>,
 }
 
 /// A point in the minimap's own 254 by 252 picture.

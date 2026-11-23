@@ -26,22 +26,48 @@
     {
       "key": "Q",
       "name": "SMASH",
-      "description": "Slams the ground in a cone, damaging and slowing enemies."
+      "description": "Slams the ground in a cone, damaging and slowing enemies.",
+      "ranks": [
+        { "damage": 55, "range": 430, "cooldown": 7 },
+        { "damage": 80, "range": 430, "cooldown": 6.5 },
+        { "damage": 105, "range": 430, "cooldown": 6 },
+        { "damage": 130, "range": 430, "cooldown": 5.5 }
+      ]
     },
     {
       "key": "W",
       "name": "BODYGUARDS",
-      "description": "Summons Strongstack, Steelwill and Grimspike to fight for 8 seconds."
+      "description": "Summons Strongstack, Steelwill and Grimspike to fight for 8 seconds.",
+      "damage_label": "Guard hit",
+      "ranks": [
+        { "damage": 11, "range": 0, "cooldown": 18 },
+        { "damage": 14, "range": 0, "cooldown": 17 },
+        { "damage": 17, "range": 0, "cooldown": 16 },
+        { "damage": 20, "range": 0, "cooldown": 15 }
+      ]
     },
     {
       "key": "E",
       "name": "WAR CRY",
-      "description": "Takes 30% less damage for 4 seconds and taunts nearby enemies."
+      "description": "Takes 30% less damage for 4 seconds and taunts nearby enemies.",
+      "damage_label": "Defence",
+      "damage_note": "30% less damage taken",
+      "ranks": [
+        { "range": 320, "cooldown": 13 },
+        { "range": 320, "cooldown": 12 },
+        { "range": 320, "cooldown": 11 },
+        { "range": 320, "cooldown": 10 }
+      ]
     },
     {
       "key": "R",
       "name": "BANDOS' WRATH",
-      "description": "Leaps to a location and knocks every enemy there into the air."
+      "description": "Leaps to a location and knocks every enemy there into the air.",
+      "ranks": [
+        { "damage": 150, "range": 900, "cooldown": 70 },
+        { "damage": 225, "range": 1000, "cooldown": 62 },
+        { "damage": 300, "range": 1100, "cooldown": 54 }
+      ]
     }
   ],
   "ability_icons": [

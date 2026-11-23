@@ -105,19 +105,30 @@ pub fn draw(theme: &Theme, list: &mut DrawList, area: Rect, state: &AbilityState
     icon(list, state.portrait.as_ref(), 9, 10, 76, 76);
     slot(list, 68, 68, 18, 18, &state.level.to_string(), title);
 
-    // Four ability slots and the two battle spells.
+    // Four ability slots and the two battle spells. A slot that would take
+    // a skill point pulses a gold border, shimmers and lights its hotkey.
+    let gold: Colour = [1.0, 0.82, 0.30, 1.0];
     for (n, label) in ["Q", "W", "E", "R"].iter().enumerate() {
         let x = 92 + n as i32 * 42;
         let role = state.icons.get(n).and_then(Option::as_ref);
         let has_icon = role.is_some_and(|role| theme.has_sprite(role));
-        slot(list, x, 10, 40, 40, if has_icon { "" } else { label }, text);
-        if icon(list, role, x, 10, 40, 40) {
-            // The hotkey stays readable as a small corner badge.
-            if let Some(font) = small {
-                let (kx, ky) = at(x + 3, 10 + 2);
-                list.text(font, label, kx, ky + font.ascent * s, title);
-            }
-        }
+        let upgradable = state.upgradable.get(n).copied().unwrap_or(false);
+        let pulse = 0.5 + 0.5 * (state.time * 5.0 + n as f32 * 0.7).sin();
+        let letter = if upgradable {
+            [1.0, 0.78 + 0.18 * pulse, 0.25 + 0.35 * pulse, 1.0]
+        } else {
+            title
+        };
+        slot(
+            list,
+            x,
+            10,
+            40,
+            40,
+            if has_icon { "" } else { label },
+            if upgradable { letter } else { text },
+        );
+        let drew_icon = icon(list, role, x, 10, 40, 40);
         let cooldown = state.cooldowns.get(n).copied().unwrap_or(0.0);
         if cooldown > 0.0 {
             let (ox, oy) = at(x, 10);
@@ -134,10 +145,63 @@ pub fn draw(theme: &Theme, list: &mut DrawList, area: Rect, state: &AbilityState
                 );
             }
         }
-        // A thin rank strip under each ability.
-        let (rx, ry) = at(x, 50);
-        list.rect(Rect::new(rx, ry, 40 * s, 6 * s), back);
-        list.rect(Rect::new(rx, ry, 20 * s, 6 * s), [0.62, 0.52, 0.24, 1.0]);
+        if upgradable {
+            let (ox, oy) = at(x, 10);
+            let frame = Rect::new(ox, oy, 40 * s, 40 * s);
+            // A soft wash, then a band of light sweeping across.
+            list.rect(frame, [1.0, 0.78, 0.25, 0.08 + 0.10 * pulse]);
+            list.push_clip(frame);
+            let sweep = (state.time * 0.9 + n as f32 * 0.23).fract();
+            let band_x = ox + ((sweep * 64.0 - 12.0) * s as f32) as i32;
+            list.rect(Rect::new(band_x, oy, 9 * s, 40 * s), [1.0, 0.9, 0.55, 0.22]);
+            list.rect(
+                Rect::new(band_x + 3 * s, oy, 3 * s, 40 * s),
+                [1.0, 0.97, 0.8, 0.30],
+            );
+            list.pop_clip();
+            let edge = [1.0, 0.80, 0.28, 0.55 + 0.45 * pulse];
+            let t = 2 * s;
+            list.rect(Rect::new(ox, oy, frame.w, t), edge);
+            list.rect(Rect::new(ox, oy + frame.h - t, frame.w, t), edge);
+            list.rect(Rect::new(ox, oy, t, frame.h), edge);
+            list.rect(Rect::new(ox + frame.w - t, oy, t, frame.h), edge);
+        }
+        if drew_icon {
+            // The hotkey stays readable as a small corner badge; it glows
+            // gold while the slot can take a point.
+            if let Some(font) = small {
+                let (kx, ky) = at(x + 3, 10 + 2);
+                if upgradable {
+                    let w = font.width(label) * s;
+                    list.rect(
+                        Rect::new(kx - s, ky, w + 3 * s, font.ascent * s + 3 * s),
+                        [0.35, 0.22, 0.02, 0.55 + 0.35 * pulse],
+                    );
+                }
+                list.text(font, label, kx, ky + font.ascent * s, letter);
+            }
+        }
+        // Rank pips under the slot: gold for each rank learned.
+        let ranks = state.max_ranks.get(n).copied().unwrap_or(0).max(1) as i32;
+        let rank = state.ranks.get(n).copied().unwrap_or(0) as i32;
+        let gap = 2;
+        let pip_w = (40 - gap * (ranks - 1)) / ranks;
+        for pip in 0..ranks {
+            let (px, py) = at(x + pip * (pip_w + gap), 50);
+            let cell = Rect::new(px, py, pip_w * s, 6 * s);
+            list.rect(cell, back);
+            if pip < rank {
+                list.rect(
+                    Rect::new(cell.x + s, cell.y + s, cell.w - 2 * s, cell.h - 2 * s),
+                    gold,
+                );
+            } else if upgradable && pip == rank {
+                list.rect(
+                    Rect::new(cell.x + s, cell.y + s, cell.w - 2 * s, cell.h - 2 * s),
+                    [1.0, 0.82, 0.30, 0.25 + 0.45 * pulse],
+                );
+            }
+        }
     }
     slot(list, 278, 10, 40, 40, "D", quiet);
     slot(list, 324, 10, 40, 40, "F", quiet);

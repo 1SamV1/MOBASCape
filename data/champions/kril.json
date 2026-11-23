@@ -29,22 +29,46 @@
     {
       "key": "Q",
       "name": "FLAMES OF ZAMORAK",
-      "description": "A line of hellfire that scorches everything it passes."
+      "description": "A line of hellfire that scorches everything it passes.",
+      "ranks": [
+        { "damage": 55, "range": 950, "cooldown": 6 },
+        { "damage": 80, "range": 950, "cooldown": 5.5 },
+        { "damage": 105, "range": 1000, "cooldown": 5 },
+        { "damage": 130, "range": 1050, "cooldown": 4.5 }
+      ]
     },
     {
       "key": "W",
       "name": "DEMONIC CHARGE",
-      "description": "Charges forward, damaging enemies in the way."
+      "description": "Charges forward, damaging enemies in the way.",
+      "ranks": [
+        { "damage": 45, "range": 650, "cooldown": 10 },
+        { "damage": 65, "range": 700, "cooldown": 9.5 },
+        { "damage": 85, "range": 750, "cooldown": 9 },
+        { "damage": 105, "range": 800, "cooldown": 8.5 }
+      ]
     },
     {
       "key": "E",
       "name": "INFERNAL SHIELD",
-      "description": "A shield and lifesteal from the next hits."
+      "description": "A shield and lifesteal from the next hits.",
+      "damage_label": "Shield",
+      "ranks": [
+        { "damage": 110, "range": 0, "cooldown": 12 },
+        { "damage": 140, "range": 0, "cooldown": 11 },
+        { "damage": 170, "range": 0, "cooldown": 10 },
+        { "damage": 200, "range": 0, "cooldown": 9 }
+      ]
     },
     {
       "key": "R",
       "name": "YARRRRRRR!",
-      "description": "A crushing blow for 30% of the target's current health; their healing is cut."
+      "description": "A crushing blow for 30% of the target's current health; their healing is cut.",
+      "ranks": [
+        { "damage": 90, "range": 200, "cooldown": 60 },
+        { "damage": 140, "range": 200, "cooldown": 52 },
+        { "damage": 190, "range": 200, "cooldown": 44 }
+      ]
     }
   ],
   "ability_icons": [

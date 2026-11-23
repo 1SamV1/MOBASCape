@@ -25,22 +25,46 @@
     {
       "key": "Q",
       "name": "ICY BREATH",
-      "description": "A cone of frost that chills enemies."
+      "description": "A cone of frost that chills enemies.",
+      "ranks": [
+        { "damage": 55, "range": 520, "cooldown": 6 },
+        { "damage": 75, "range": 520, "cooldown": 5.5 },
+        { "damage": 95, "range": 520, "cooldown": 5 },
+        { "damage": 115, "range": 520, "cooldown": 4.5 }
+      ]
     },
     {
       "key": "W",
       "name": "TAIL SWEEP",
-      "description": "Sweeps its tail, knocking nearby enemies away."
+      "description": "Sweeps its tail, knocking nearby enemies away.",
+      "ranks": [
+        { "damage": 45, "range": 300, "cooldown": 11 },
+        { "damage": 65, "range": 300, "cooldown": 10 },
+        { "damage": 85, "range": 300, "cooldown": 9 },
+        { "damage": 105, "range": 300, "cooldown": 8 }
+      ]
     },
     {
       "key": "E",
       "name": "ANCIENT WARD",
-      "description": "Frozen scales shield it and cut incoming damage."
+      "description": "Frozen scales shield it and cut incoming damage.",
+      "damage_label": "Shield",
+      "ranks": [
+        { "damage": 120, "range": 0, "cooldown": 14 },
+        { "damage": 150, "range": 0, "cooldown": 13 },
+        { "damage": 180, "range": 0, "cooldown": 12 },
+        { "damage": 210, "range": 0, "cooldown": 11 }
+      ]
     },
     {
       "key": "R",
       "name": "FROST STORM",
-      "description": "A blizzard at the cursor that chills everything inside."
+      "description": "A blizzard at the cursor that chills everything inside.",
+      "ranks": [
+        { "damage": 208, "range": 1000, "cooldown": 65 },
+        { "damage": 300, "range": 1100, "cooldown": 55 },
+        { "damage": 390, "range": 1200, "cooldown": 45 }
+      ]
     }
   ],
   "ability_icons": [

@@ -115,6 +115,10 @@ fn base() -> HudState {
             cooldowns: [0.0, 3.2, 0.0, 18.5],
             portrait: None,
             icons: Default::default(),
+            ranks: [3, 2, 1, 1],
+            max_ranks: [4, 4, 4, 3],
+            upgradable: [false; 4],
+            time: 0.0,
         },
         minimap: MinimapState {
             lanes: vec![
@@ -425,6 +429,7 @@ fn base() -> HudState {
             text: "Every fourth strike deals 15% more damage.".to_string(),
             at: (0, 0),
         }),
+        ability_tooltip: None,
         shop: ShopState {
             open: true,
             categories: vec!["Items".to_string()],

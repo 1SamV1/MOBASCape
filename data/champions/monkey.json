@@ -33,22 +33,48 @@
     {
       "key": "Q",
       "name": "BANANARANG",
-      "description": "A comically large banana boomerang that sweeps out in a rounded trapezoid, striking every enemy it passes."
+      "description": "A comically large banana boomerang that sweeps out in a rounded trapezoid, striking every enemy it passes.",
+      "ranks": [
+        { "damage": 38, "range": 1300, "cooldown": 8 },
+        { "damage": 52, "range": 1300, "cooldown": 7.5 },
+        { "damage": 66, "range": 1300, "cooldown": 7 },
+        { "damage": 80, "range": 1300, "cooldown": 6.5 }
+      ]
     },
     {
       "key": "W",
       "name": "ROYAL DASH",
-      "description": "The king blinks a short distance along the ground, leaving his enemies behind."
+      "description": "The king blinks a short distance along the ground, leaving his enemies behind.",
+      "damage_note": "Blink, no damage",
+      "ranks": [
+        { "range": 768, "cooldown": 8 },
+        { "range": 832, "cooldown": 7.5 },
+        { "range": 896, "cooldown": 7 },
+        { "range": 960, "cooldown": 6.5 }
+      ]
     },
     {
       "key": "E",
       "name": "KING'S DECREE",
-      "description": "A royal decree restores health and shields the king for a few seconds."
+      "description": "A royal decree restores health and shields the king for a few seconds.",
+      "damage_label": "Shield",
+      "ranks": [
+        { "damage": 120, "range": 0, "cooldown": 12 },
+        { "damage": 150, "range": 0, "cooldown": 11 },
+        { "damage": 180, "range": 0, "cooldown": 10 },
+        { "damage": 210, "range": 0, "cooldown": 9 }
+      ]
     },
     {
       "key": "R",
       "name": "TRIAL BY COMBAT",
-      "description": "A barrier traps the king and an enemy champion. Monkey subjects hurl banana peels that strip armor until one of them falls."
+      "description": "A barrier traps the king and an enemy champion. Monkey subjects hurl banana peels that strip armor until one of them falls.",
+      "damage_note": "10 s duel; peels strip armour",
+      "ranks": [
+        { "range": 9600, "cooldown": 90 },
+        { "range": 9600, "cooldown": 75 },
+        { "range": 9600, "cooldown": 60 }
+      ]
     }
   ],
   "ability_icons": [

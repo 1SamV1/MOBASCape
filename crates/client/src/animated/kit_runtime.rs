@@ -36,8 +36,11 @@ struct CastCtx {
     target: Vec3,
     /// Planar aim direction.
     dir: Vec3,
-    /// Ability damage multiplier (power, level, passives).
+    /// Ability damage multiplier (power, level, passives, rank).
     mult: f32,
+    /// Reach multiplier from the ability's rank: shot length, cast range
+    /// and dash length.
+    reach: f32,
 }
 
 struct KitShot {
@@ -398,18 +401,19 @@ impl AnimatedScene {
                 return false;
             }
         }
+        let cooldown = self.rank_cooldown(slot, ability.cooldown);
         if ability.charges > 1 {
             if self.kit_rt.charges[slot] == 0 {
                 return false;
             }
             if self.kit_rt.charges[slot] == ability.charges {
-                self.kit_rt.recharge[slot] = ability.cooldown;
+                self.kit_rt.recharge[slot] = cooldown;
             }
             self.kit_rt.charges[slot] -= 1;
         } else if self.units[pi].cooldowns[slot] > 0.0 {
             return false;
         } else {
-            self.units[pi].cooldowns[slot] = ability.cooldown;
+            self.units[pi].cooldowns[slot] = cooldown;
         }
         self.units[pi].mana -= ability.cost;
 
@@ -438,7 +442,8 @@ impl AnimatedScene {
             origin,
             target,
             dir,
-            mult: self.kit_ability_mult(),
+            mult: self.kit_ability_mult() * self.rank_damage_mult(slot),
+            reach: self.rank_reach_mult(slot),
         };
         self.effects.push(Effect {
             pos: origin,
@@ -503,7 +508,7 @@ impl AnimatedScene {
                         pos: ctx.origin + Vec3::Y * height + dir * 40.0,
                         dir,
                         speed: *speed,
-                        remaining: *range,
+                        remaining: *range * ctx.reach,
                         width: *width,
                         damage: damage * ctx.mult,
                         pierce: *pierce,
@@ -535,7 +540,7 @@ impl AnimatedScene {
                 heal_per_hit,
                 on_hit,
             } => {
-                let center = self.anchor_point(*at, *range, ctx);
+                let center = self.anchor_point(*at, *range * ctx.reach, ctx);
                 for r in 0..(*repeat).max(1) {
                     let jitter = if *scatter > 0.0 {
                         let a = self.next_random() * std::f32::consts::TAU;
@@ -576,7 +581,7 @@ impl AnimatedScene {
                 heal_caster,
                 on_tick,
             } => {
-                let center = self.anchor_point(*at, *range, ctx);
+                let center = self.anchor_point(*at, *range * ctx.reach, ctx);
                 for i in 0..(*count).max(1) {
                     let pos = center + ctx.dir * (spacing * i as f32);
                     self.add_decal(pos, *radius, dim(ctx.color), *duration);
@@ -605,7 +610,7 @@ impl AnimatedScene {
                 land,
             } => {
                 let dir = if *backwards { -ctx.dir } else { ctx.dir };
-                let mut distance = *distance;
+                let mut distance = *distance * ctx.reach;
                 if *to_cursor {
                     distance = distance.min(planar_delta(ctx.origin, ctx.target).length());
                 }
@@ -1075,8 +1080,12 @@ impl AnimatedScene {
             return;
         };
         let pi = self.player_index;
-        let charges: [(u8, f32); 4] =
-            std::array::from_fn(|slot| (kit.abilities[slot].charges, kit.abilities[slot].cooldown));
+        let charges: [(u8, f32); 4] = std::array::from_fn(|slot| {
+            (
+                kit.abilities[slot].charges,
+                self.rank_cooldown(slot, kit.abilities[slot].cooldown),
+            )
+        });
 
         // Recharge multi-charge abilities; show the recharge only when empty.
         for (slot, (max, cooldown)) in charges.into_iter().enumerate() {

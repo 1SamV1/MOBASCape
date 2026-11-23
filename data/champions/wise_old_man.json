@@ -35,22 +35,46 @@
     {
       "key": "Q",
       "name": "TELEKINETIC GRAB",
-      "description": "Yanks the first enemy hit toward him."
+      "description": "Yanks the first enemy hit toward him.",
+      "ranks": [
+        { "damage": 35, "range": 1000, "cooldown": 9 },
+        { "damage": 55, "range": 1000, "cooldown": 8.5 },
+        { "damage": 75, "range": 1050, "cooldown": 8 },
+        { "damage": 95, "range": 1100, "cooldown": 7.5 }
+      ]
     },
     {
       "key": "W",
       "name": "TELEPORT OTHER",
-      "description": "Hurls nearby enemies away from him."
+      "description": "Hurls nearby enemies away from him.",
+      "ranks": [
+        { "damage": 30, "range": 360, "cooldown": 12 },
+        { "damage": 50, "range": 360, "cooldown": 11 },
+        { "damage": 70, "range": 360, "cooldown": 10 },
+        { "damage": 90, "range": 360, "cooldown": 9 }
+      ]
     },
     {
       "key": "E",
       "name": "WARD OF AGES",
-      "description": "Shields himself and heals over the next hits."
+      "description": "Shields himself and heals over the next hits.",
+      "damage_label": "Shield",
+      "ranks": [
+        { "damage": 130, "range": 0, "cooldown": 13 },
+        { "damage": 160, "range": 0, "cooldown": 12 },
+        { "damage": 190, "range": 0, "cooldown": 11 },
+        { "damage": 220, "range": 0, "cooldown": 10 }
+      ]
     },
     {
       "key": "R",
       "name": "PARTY ROOM BALLOONS",
-      "description": "Balloons pop across an area: enemies are stunned, he is healed."
+      "description": "Balloons pop across an area: enemies are stunned, he is healed.",
+      "ranks": [
+        { "damage": 320, "range": 1000, "cooldown": 70 },
+        { "damage": 450, "range": 1100, "cooldown": 62 },
+        { "damage": 580, "range": 1200, "cooldown": 54 }
+      ]
     }
   ],
   "ability_icons": [

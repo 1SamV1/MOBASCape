@@ -62,6 +62,46 @@ the planar distance to its target minus the target's footprint radius is
 within `attack_range`. Basic-attack projectiles home and cannot miss;
 ability projectiles stay skillshots.
 
+## Ability ranks and the tooltip
+
+Every entry in `abilities` carries hand-authored numbers per rank:
+
+```json
+{
+  "key": "E", "name": "SWAMP CROAK", "description": "...",
+  "damage_label": "Shield",
+  "ranks": [
+    { "damage": 90, "range": 340, "cooldown": 12 },
+    { "damage": 115, "range": 340, "cooldown": 11.5 },
+    { "damage": 140, "range": 340, "cooldown": 11 },
+    { "damage": 165, "range": 340, "cooldown": 10 }
+  ]
+}
+```
+
+- Q, W and E have four ranks, R three. Every ability starts at rank 1, and
+  rank 1 must match the kit (same cooldown, same headline damage). A test
+  checks this, and that later ranks never get worse.
+- Each level gained gives a skill point. While points are left, the slots
+  that can take one glow gold and shimmer; clicking a slot spends the point
+  there instead of casting (hotkeys still cast). R's ranks 2 and 3 need
+  champion levels 6 and 9 (`ULTIMATE_RANK_LEVELS` in
+  `animated/ranks.rs`).
+- At runtime, `damage` scales every damage, heal and shield the ability
+  deals by `damage / rank_1_damage`. `range` scales shot length, cast range
+  and dash length by `range / rank_1_range`. `cooldown` replaces the kit's.
+  Caster-centred sizes (cones, self areas) do not scale with range, so keep
+  `range` flat across ranks for them.
+- `damage_label` names the headline number ("Shield", "Heal", ...). Leave
+  `damage` out when the ability has no number that scales (a blink, a
+  percentage buff), and give `damage_note` instead, e.g. "25% of missing
+  health". `range: 0` shows as "Self".
+- Hovering a slot shows "Name: description", the rank with pips, and a
+  table: the current rank's damage, range and cooldown in green, then each
+  rank still to come. Values that would change are gold, and locked R ranks
+  show the level they need. Damage includes the hero's current ability
+  power and level, so it is what a cast would do now.
+
 ## Statuses (`on_hit`, `on_tick`)
 
 `slow {pct, duration}`, `root`, `stun`, `knockup`, `fear`, `taunt`

@@ -10,6 +10,33 @@ pub struct ChampionAbility {
     pub key: String,
     pub name: String,
     pub description: String,
+    /// Hand-authored numbers for each rank, rank 1 first. Q, W and E have
+    /// four ranks and R three; the ability bar tooltip lists them and the
+    /// runtime applies them (see `AnimatedScene::rank_*`).
+    #[serde(default)]
+    pub ranks: Vec<AbilityRank>,
+    /// What the headline number means: "Damage" unless set (for example
+    /// "Shield" or "Heal" on a defensive ability).
+    #[serde(default)]
+    pub damage_label: Option<String>,
+    /// Shown instead of a number when the ranks carry no `damage`, e.g.
+    /// "25% of missing health".
+    #[serde(default)]
+    pub damage_note: Option<String>,
+}
+
+/// One rank of an ability. Damage scales every damage, heal and shield the
+/// ability deals by `damage / rank_1_damage`; range scales its reach (shot
+/// length, cast range, dash length) by `range / rank_1_range`; the cooldown
+/// replaces the kit's.
+#[derive(Debug, Clone, Copy, PartialEq, Deserialize)]
+pub struct AbilityRank {
+    #[serde(default)]
+    pub damage: Option<f32>,
+    /// World units; 0 means the ability is centred on the caster.
+    pub range: f32,
+    /// Seconds.
+    pub cooldown: f32,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -253,6 +280,45 @@ mod tests {
             kits >= 12,
             "expected the twelve kit champions, found {kits}"
         );
+    }
+
+    #[test]
+    fn every_ability_has_hand_authored_ranks_that_only_improve() {
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data/champions");
+        for entry in std::fs::read_dir(&dir).expect("champion dir") {
+            let path = entry.expect("entry").path();
+            if path.extension().and_then(|e| e.to_str()) != Some("json") {
+                continue;
+            }
+            let text = std::fs::read_to_string(&path).expect("read");
+            let config: ChampionConfig = serde_json::from_str(&text).expect("parse");
+            for (slot, ability) in config.abilities.iter().enumerate() {
+                let at = format!("{} {}", path.display(), ability.key);
+                let want = if slot == 3 { 3 } else { 4 };
+                assert_eq!(ability.ranks.len(), want, "{at}");
+                if let Some(kit) = &config.kit {
+                    assert_eq!(
+                        ability.ranks[0].cooldown, kit.abilities[slot].cooldown,
+                        "{at}: rank 1 keeps the kit's cooldown"
+                    );
+                }
+                for pair in ability.ranks.windows(2) {
+                    assert!(pair[1].cooldown <= pair[0].cooldown, "{at}: cooldown");
+                    assert!(pair[1].cooldown > 0.0, "{at}: cooldown");
+                    assert!(pair[1].range >= pair[0].range, "{at}: range");
+                    assert_eq!(pair[0].damage.is_some(), pair[1].damage.is_some(), "{at}");
+                    if let (Some(a), Some(b)) = (pair[0].damage, pair[1].damage) {
+                        assert!(b > a, "{at}: damage");
+                    }
+                }
+                if ability.ranks[0].damage.is_none() {
+                    assert!(
+                        ability.damage_note.is_some(),
+                        "{at}: no number needs a note"
+                    );
+                }
+            }
+        }
     }
 
     #[test]

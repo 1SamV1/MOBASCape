@@ -26,22 +26,46 @@
     {
       "key": "Q",
       "name": "WEB",
-      "description": "Spits a web that roots the first enemy hit."
+      "description": "Spits a web that roots the first enemy hit.",
+      "ranks": [
+        { "damage": 40, "range": 950, "cooldown": 8 },
+        { "damage": 60, "range": 950, "cooldown": 7.5 },
+        { "damage": 80, "range": 1000, "cooldown": 7 },
+        { "damage": 100, "range": 1050, "cooldown": 6.5 }
+      ]
     },
     {
       "key": "W",
       "name": "POUNCE",
-      "description": "Leaps onto the cursor and bites everything she lands on."
+      "description": "Leaps onto the cursor and bites everything she lands on.",
+      "ranks": [
+        { "damage": 55, "range": 700, "cooldown": 10 },
+        { "damage": 80, "range": 750, "cooldown": 9.5 },
+        { "damage": 105, "range": 800, "cooldown": 9 },
+        { "damage": 130, "range": 850, "cooldown": 8.5 }
+      ]
     },
     {
       "key": "E",
       "name": "SPIDERLINGS",
-      "description": "Three spiderlings hatch and hunt for 6 seconds."
+      "description": "Three spiderlings hatch and hunt for 6 seconds.",
+      "damage_label": "Spiderling hit",
+      "ranks": [
+        { "damage": 9, "range": 0, "cooldown": 14 },
+        { "damage": 12, "range": 0, "cooldown": 13 },
+        { "damage": 15, "range": 0, "cooldown": 12 },
+        { "damage": 18, "range": 0, "cooldown": 11 }
+      ]
     },
     {
       "key": "R",
       "name": "TOXIC BLOOM",
-      "description": "A growing cloud of venom that poisons and slows."
+      "description": "A growing cloud of venom that poisons and slows.",
+      "ranks": [
+        { "damage": 176, "range": 900, "cooldown": 60 },
+        { "damage": 250, "range": 1000, "cooldown": 52 },
+        { "damage": 330, "range": 1100, "cooldown": 44 }
+      ]
     }
   ],
   "ability_icons": [

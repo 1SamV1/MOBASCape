@@ -37,22 +37,46 @@
     {
       "key": "Q",
       "name": "TOXIC DART",
-      "description": "A fast poisoned dart that leaves the target venomed."
+      "description": "A fast poisoned dart that leaves the target venomed.",
+      "ranks": [
+        { "damage": 28, "range": 1800, "cooldown": 5 },
+        { "damage": 40, "range": 1800, "cooldown": 4.5 },
+        { "damage": 52, "range": 1900, "cooldown": 4 },
+        { "damage": 64, "range": 2000, "cooldown": 3.5 }
+      ]
     },
     {
       "key": "W",
       "name": "DART VOLLEY",
-      "description": "A fan of five darts that poisons every enemy it hits."
+      "description": "A fan of five darts that poisons every enemy it hits.",
+      "ranks": [
+        { "damage": 15.4, "range": 1540, "cooldown": 12 },
+        { "damage": 21, "range": 1540, "cooldown": 11 },
+        { "damage": 27, "range": 1540, "cooldown": 10 },
+        { "damage": 33, "range": 1540, "cooldown": 9 }
+      ]
     },
     {
       "key": "E",
       "name": "RANGER'S FOOTWORK",
-      "description": "The ranger hops backwards and attacks faster for a few seconds."
+      "description": "The ranger hops backwards and attacks faster for a few seconds.",
+      "damage_note": "Hop back, +40% attack speed",
+      "ranks": [
+        { "range": 512, "cooldown": 14 },
+        { "range": 512, "cooldown": 13 },
+        { "range": 512, "cooldown": 12 },
+        { "range": 512, "cooldown": 11 }
+      ]
     },
     {
       "key": "R",
       "name": "DEADSHOT",
-      "description": "A piercing blowpipe shot that hits everything in its line and finishes off wounded targets."
+      "description": "A piercing blowpipe shot that hits everything in its line and finishes off wounded targets.",
+      "ranks": [
+        { "damage": 110, "range": 2880, "cooldown": 75 },
+        { "damage": 165, "range": 3000, "cooldown": 65 },
+        { "damage": 220, "range": 3120, "cooldown": 55 }
+      ]
     }
   ],
   "ability_icons": [45, 58, 61, 133]

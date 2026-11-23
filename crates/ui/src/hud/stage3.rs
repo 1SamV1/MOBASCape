@@ -5,8 +5,9 @@
 use crate::draw::DrawList;
 use crate::hud::layout::{Layout, Piece};
 use crate::hud::{
-    ability_bar, announcements, chat, death, inventory, kill_feed, minimap, objectives,
-    score_strip, shop, sketch, state::HudState, target_panel, team_frames, tooltip, unit_plates,
+    ability_bar, ability_tooltip, announcements, chat, death, inventory, kill_feed, minimap,
+    objectives, score_strip, shop, sketch, state::HudState, target_panel, team_frames, tooltip,
+    unit_plates,
 };
 use crate::theme::Theme;
 
@@ -67,6 +68,9 @@ pub fn build(theme: &Theme, layout: &Layout, state: &HudState) -> DrawList {
         }
         if let Some(tooltip) = state.tooltip.as_ref() {
             tooltip::draw(theme, &mut list, tooltip);
+        }
+        if let Some(tip) = state.ability_tooltip.as_ref() {
+            ability_tooltip::draw(theme, &mut list, tip);
         }
     }
     list

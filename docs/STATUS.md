@@ -1,6 +1,33 @@
 # Status
 
-Last updated: AppImage packed in-repo, 2026-11-23.
+Last updated: ability ranks and tooltips, 2026-11-23.
+
+## 2026-11-23 — Ability ranks, skill points and ability tooltips
+
+- **Ranks:** every ability starts at rank 1; Q/W/E go to rank 4, R to 3.
+  Each level gives a skill point. While points are left, the slots that can
+  take one glow gold, their hotkey letters pulse and a band of light sweeps
+  across them; clicking a glowing slot spends the point instead of casting.
+  R's ranks 2 and 3 need levels 6 and 9. Rank pips (gold per rank) replace
+  the old placeholder strip under each slot.
+- **Hand-authored numbers:** all 64 abilities have damage, range and
+  cooldown per rank in their champion file (`abilities[].ranks`, plus
+  `damage_label` / `damage_note`). Rank 1 equals the previous numbers, so
+  nothing changes until a point is spent. Kits apply them as ratios: damage
+  scales every damage, heal and shield; range scales shot length, cast range
+  and dash length (indicators follow); cooldown replaces the kit's. The
+  hand-written Monkey and Ranger abilities and the HUD cooldown fills follow
+  the rank too. The Bananarang's crit and stun now grow with its rank
+  instead of champion level. All numbers are a first pass and have not been
+  playtested.
+- **Tooltip:** hovering Q/W/E/R shows "Name: summary", the rank with pips,
+  and a table of the current rank's damage, range and cooldown (green) and
+  every rank left (changed values gold, locked R ranks marked "(Lv 9)"),
+  plus "Click to spend a skill point (N left)". Damage includes current
+  ability power and level.
+- New `--demo-ranks SLOT` dev flag. Verified by screenshots of Big Frog Q,
+  E and R and Callisto E (a no-damage ability with a note). 333 workspace
+  tests pass; clippy clean.
 
 ## 2026-11-23 — AppImage packed without external tools
 

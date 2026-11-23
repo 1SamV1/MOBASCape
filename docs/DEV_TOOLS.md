@@ -108,6 +108,9 @@ it to see where load time goes before optimising.
   and basic-attack it (attack clip, reach, projectile, impact).
 - `--hold-indicator SLOT`: draw the held ability indicator for slot 0-3
   aimed at that camp, as if right mouse were held.
+- `--demo-ranks SLOT`: level the hero to 7, spend four skill points (Q
+  twice, W and R once), leave two unspent so the slots glow, and hold the
+  cursor on slot 0-3 so its ability tooltip is in the screenshot.
 - Combine with `--screenshot out.png --screenshot-after N` and step `N` to
   capture a projectile in flight.
 - `rift-tools spotanim ID`, `rift-tools spotanims --from A --to B --sheet

@@ -27,22 +27,47 @@
     {
       "key": "Q",
       "name": "SARADOMIN STRIKE",
-      "description": "Lightning strikes the cursor after a short delay."
+      "description": "Lightning strikes the cursor after a short delay.",
+      "ranks": [
+        { "damage": 70, "range": 850, "cooldown": 6 },
+        { "damage": 95, "range": 850, "cooldown": 5.5 },
+        { "damage": 120, "range": 900, "cooldown": 5 },
+        { "damage": 145, "range": 950, "cooldown": 4.5 }
+      ]
     },
     {
       "key": "W",
       "name": "BLESSED DASH",
-      "description": "A quick dash; holds two charges."
+      "description": "A quick dash; holds two charges.",
+      "ranks": [
+        { "damage": 20, "range": 480, "cooldown": 8 },
+        { "damage": 30, "range": 480, "cooldown": 7.5 },
+        { "damage": 40, "range": 520, "cooldown": 7 },
+        { "damage": 50, "range": 560, "cooldown": 6.5 }
+      ]
     },
     {
       "key": "E",
       "name": "STARLIGHT",
-      "description": "Heals her and nearby allies."
+      "description": "Heals her and nearby allies.",
+      "damage_label": "Heal",
+      "ranks": [
+        { "damage": 90, "range": 0, "cooldown": 14 },
+        { "damage": 115, "range": 0, "cooldown": 13 },
+        { "damage": 140, "range": 0, "cooldown": 12 },
+        { "damage": 165, "range": 0, "cooldown": 11 }
+      ]
     },
     {
       "key": "R",
       "name": "GODSWORD SPECIAL",
-      "description": "Her next hit deals huge damage; a kill resets Blessed Dash."
+      "description": "Her next hit deals huge damage; a kill resets Blessed Dash.",
+      "damage_label": "Bonus damage",
+      "ranks": [
+        { "damage": 150, "range": 0, "cooldown": 50 },
+        { "damage": 225, "range": 0, "cooldown": 44 },
+        { "damage": 300, "range": 0, "cooldown": 38 }
+      ]
     }
   ],
   "ability_icons": [

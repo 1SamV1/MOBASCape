@@ -7,6 +7,7 @@ use glam::{Mat3, Vec3};
 use rift_cache::{AnimationClip, AnimationScratch, Cache, Model, model::hsl_to_rgb};
 
 mod kit_runtime;
+pub mod ranks;
 
 use crate::champion::ChampionConfig;
 use crate::fx::{self, FxMesh};
@@ -17,6 +18,8 @@ use crate::scene::{
     model_dominant_texture, model_vertex_animated,
 };
 
+/// Highest champion level.
+const MAX_LEVEL: u32 = 11;
 const Q_COOLDOWN: f32 = 5.0;
 /// King Awowogei's Bananarang replaces the shared Q bolt.
 const BANANARANG_COOLDOWN: f32 = 8.0;
@@ -417,6 +420,21 @@ pub enum Indicator {
     Path,
 }
 
+impl Indicator {
+    /// Stretch the parts of the shape that follow an ability's reach (lane
+    /// length, cast range, dash length); areas around the caster keep their
+    /// size.
+    pub fn scale_reach(&mut self, reach: f32) {
+        match self {
+            Indicator::Range { radius } => *radius *= reach,
+            Indicator::Line { length, .. } => *length *= reach,
+            Indicator::Target { range, .. } => *range *= reach,
+            Indicator::Dash { length, .. } => *length *= reach,
+            Indicator::Cone { .. } | Indicator::SelfArea { .. } | Indicator::Path => {}
+        }
+    }
+}
+
 /// What the shop does with a purchase.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BuyOutcome {
@@ -804,6 +822,15 @@ pub struct AnimatedScene {
     /// Data-driven kit, when the champion file has one.
     kit: Option<crate::kit::Kit>,
     kit_rt: kit_runtime::KitRuntime,
+    /// The champion file's Q, W, E and R entries: names, summaries and the
+    /// hand-authored numbers per rank.
+    ability_info: Vec<crate::champion::ChampionAbility>,
+    /// Current rank of Q, W, E and R (every ability starts at rank 1).
+    ability_ranks: [u8; 4],
+    /// Unspent skill points: one per level gained.
+    pub skill_points: u32,
+    /// Seconds since the scene started, for interface shimmer.
+    pub hud_time: f32,
     /// Cursor ground point for kit abilities whose entry point takes none.
     pub kit_aim: Vec3,
     /// Direction requested by hold-to-steer this frame. Consumed by
@@ -1301,6 +1328,10 @@ impl AnimatedScene {
             champion_id: champion.id.clone(),
             kit: champion.kit.clone(),
             kit_rt,
+            ability_info: champion.abilities.clone(),
+            ability_ranks: [1; 4],
+            skill_points: 0,
+            hud_time: 0.0,
             kit_aim: Vec3::ZERO,
             steer_wish: None,
             melee_template,
@@ -1422,12 +1453,15 @@ impl AnimatedScene {
             armor: p.armor,
             ranged: p.ranged,
             attack_interval: p.attack_interval,
-            cooldown_maxima: if let Some(kit) = &self.kit {
-                kit.cooldowns()
-            } else if self.champion_id == "monkey" {
-                [BANANARANG_COOLDOWN, 8.0, 12.0, TRIAL_COOLDOWN]
-            } else {
-                [Q_COOLDOWN, 8.0, 12.0, 45.0]
+            cooldown_maxima: {
+                let fallback = if let Some(kit) = &self.kit {
+                    kit.cooldowns()
+                } else if self.champion_id == "monkey" {
+                    [BANANARANG_COOLDOWN, 8.0, 12.0, TRIAL_COOLDOWN]
+                } else {
+                    [Q_COOLDOWN, 8.0, 12.0, 45.0]
+                };
+                std::array::from_fn(|slot| self.rank_cooldown(slot, fallback[slot]))
             },
             speed: p.speed,
             ability_power: p.ability_power,
@@ -2201,6 +2235,18 @@ impl AnimatedScene {
 
     /// Ground shapes that describe an ability slot's reach.
     pub fn ability_indicators(&self, slot: usize) -> Vec<Indicator> {
+        let reach = self.rank_reach_mult(slot);
+        let mut shapes = self.base_ability_indicators(slot);
+        if (reach - 1.0).abs() > 1e-3 {
+            for shape in &mut shapes {
+                shape.scale_reach(reach);
+            }
+        }
+        shapes
+    }
+
+    /// The slot's shapes at rank 1.
+    fn base_ability_indicators(&self, slot: usize) -> Vec<Indicator> {
         if let Some(kit) = self.kit.as_ref() {
             return kit
                 .abilities
@@ -2332,6 +2378,12 @@ impl AnimatedScene {
 
     fn cast_bananarang(&mut self) -> bool {
         let pi = self.player_index;
+        // The Bananarang's path is fixed, so its rank changes damage and cooldown.
+        let (rank_damage, rank_cooldown) = (
+            self.rank_damage_mult(0),
+            self.rank_cooldown(0, BANANARANG_COOLDOWN),
+        );
+        let rank = self.ability_ranks[0];
         let player = &mut self.units[pi];
         if player.health <= 0.0
             || player.stun_timer > 0.0
@@ -2340,9 +2392,7 @@ impl AnimatedScene {
         {
             return false;
         }
-        let rank = player.q_rank();
-        let rank_scale = 1.0 + 0.35 * (rank.saturating_sub(1)) as f32;
-        let base = player.q_damage * (1.0 + player.ability_power / 100.0) * rank_scale;
+        let base = player.q_damage * (1.0 + player.ability_power / 100.0) * rank_damage;
         let forward = Vec3::new(player.yaw.sin(), 0.0, player.yaw.cos());
         let right = Vec3::Y.cross(forward);
         // The path is authored in local XZ space: +X right, +Z forward. It
@@ -2356,7 +2406,7 @@ impl AnimatedScene {
         let (path_lengths, path_length) = path_length_table(&path);
         let start = player.pos + Vec3::Y * (player.scale * 55.0);
         player.mana -= 40.0;
-        player.cooldowns[0] = BANANARANG_COOLDOWN;
+        player.cooldowns[0] = rank_cooldown;
         self.bananarangs.push(Bananarang {
             path,
             path_lengths,
@@ -2383,6 +2433,11 @@ impl AnimatedScene {
     /// Blowpipe Ranger Q: a fast poisoned dart that stacks venom.
     fn cast_toxic_dart(&mut self, target: Vec3) -> bool {
         let pi = self.player_index;
+        let (rank_damage, rank_reach, rank_cooldown) = (
+            self.rank_damage_mult(0),
+            self.rank_reach_mult(0),
+            self.rank_cooldown(0, 5.0),
+        );
         let player = &mut self.units[pi];
         if player.health <= 0.0
             || player.stun_timer > 0.0
@@ -2396,16 +2451,19 @@ impl AnimatedScene {
             return false;
         }
         let dir = flat.normalize();
-        let damage = player.q_damage * player.ranged_scale() * (1.0 + player.ability_power / 100.0);
+        let damage = player.q_damage
+            * player.ranged_scale()
+            * (1.0 + player.ability_power / 100.0)
+            * rank_damage;
         let pos = player.pos + Vec3::Y * (player.scale * 80.0) + dir * 40.0;
         let team = player.team;
         player.mana -= 30.0;
-        player.cooldowns[0] = 5.0;
+        player.cooldowns[0] = rank_cooldown;
         let mut shot = Projectile::new(
             pos,
             dir,
             1500.0,
-            1.2,
+            1.2 * rank_reach,
             damage,
             team,
             fx::look_by_name("dart"),
@@ -2420,6 +2478,11 @@ impl AnimatedScene {
     /// Blowpipe Ranger W: a fan of darts that poisons everything it hits.
     fn cast_dart_volley(&mut self, target: Vec3) -> bool {
         let pi = self.player_index;
+        let (rank_damage, rank_reach, rank_cooldown) = (
+            self.rank_damage_mult(1),
+            self.rank_reach_mult(1),
+            self.rank_cooldown(1, 12.0),
+        );
         let player = &mut self.units[pi];
         if player.health <= 0.0
             || player.stun_timer > 0.0
@@ -2433,12 +2496,15 @@ impl AnimatedScene {
             return false;
         }
         let dir = flat.normalize();
-        let damage =
-            player.q_damage * 0.55 * player.ranged_scale() * (1.0 + player.ability_power / 100.0);
+        let damage = player.q_damage
+            * 0.55
+            * player.ranged_scale()
+            * (1.0 + player.ability_power / 100.0)
+            * rank_damage;
         let team = player.team;
         let origin = player.pos + Vec3::Y * (player.scale * 80.0);
         player.mana -= 50.0;
-        player.cooldowns[1] = 12.0;
+        player.cooldowns[1] = rank_cooldown;
         for index in -2..=2 {
             let angle = index as f32 * 0.22;
             let (sin, cos) = angle.sin_cos();
@@ -2447,7 +2513,7 @@ impl AnimatedScene {
                 origin + rotated * 40.0,
                 rotated,
                 1400.0,
-                1.1,
+                1.1 * rank_reach,
                 damage,
                 team,
                 fx::look_by_name("dart"),
@@ -2463,6 +2529,11 @@ impl AnimatedScene {
     /// OSRS ranger kites with a blowpipe.
     fn cast_footwork(&mut self, collision: &WorldCollision, height: &HeightGrid) -> bool {
         let pi = self.player_index;
+        let (rank_damage, rank_reach, rank_cooldown) = (
+            self.rank_damage_mult(2),
+            self.rank_reach_mult(2),
+            self.rank_cooldown(2, 14.0),
+        );
         let player = &mut self.units[pi];
         if player.health <= 0.0
             || player.stun_timer > 0.0
@@ -2471,6 +2542,7 @@ impl AnimatedScene {
         {
             return false;
         }
+        let _ = (rank_damage, rank_reach);
         let forward = Vec3::new(player.yaw.sin(), 0.0, player.yaw.cos());
         let mut destination = player.pos;
         for step in (1..=4).rev() {
@@ -2484,7 +2556,7 @@ impl AnimatedScene {
         player.attack_speed_mult = 1.4;
         player.attack_speed_timer = 5.0;
         player.mana -= 25.0;
-        player.cooldowns[2] = 14.0;
+        player.cooldowns[2] = rank_cooldown;
         player.path.clear();
         player.path_index = 0;
         let pos = player.pos;
@@ -2503,6 +2575,11 @@ impl AnimatedScene {
     /// Blowpipe Ranger R: a piercing shot that executes wounded targets.
     fn cast_deadshot(&mut self, target: Vec3) -> bool {
         let pi = self.player_index;
+        let (rank_damage, rank_reach, rank_cooldown) = (
+            self.rank_damage_mult(3),
+            self.rank_reach_mult(3),
+            self.rank_cooldown(3, 75.0),
+        );
         let player = &mut self.units[pi];
         if player.health <= 0.0
             || player.stun_timer > 0.0
@@ -2516,16 +2593,19 @@ impl AnimatedScene {
             return false;
         }
         let dir = flat.normalize();
-        let damage = player.r_damage * player.ranged_scale() * (1.0 + player.ability_power / 100.0);
+        let damage = player.r_damage
+            * player.ranged_scale()
+            * (1.0 + player.ability_power / 100.0)
+            * rank_damage;
         let pos = player.pos + Vec3::Y * (player.scale * 80.0) + dir * 40.0;
         let team = player.team;
         player.mana -= 80.0;
-        player.cooldowns[3] = 75.0;
+        player.cooldowns[3] = rank_cooldown;
         let mut shot = Projectile::new(
             pos,
             dir,
             1800.0,
-            1.6,
+            1.6 * rank_reach,
             damage,
             team,
             fx::look_by_name("blood"),
@@ -2541,6 +2621,11 @@ impl AnimatedScene {
 
     fn cast_arcane_bolt(&mut self, target: Vec3) -> bool {
         let pi = self.player_index;
+        let (rank_damage, rank_reach, rank_cooldown) = (
+            self.rank_damage_mult(0),
+            self.rank_reach_mult(0),
+            self.rank_cooldown(0, Q_COOLDOWN),
+        );
         let player = &mut self.units[pi];
         if player.health <= 0.0
             || player.stun_timer > 0.0
@@ -2557,13 +2642,13 @@ impl AnimatedScene {
         let pos = player.pos + Vec3::Y * (player.scale * 80.0) + dir * 40.0;
         let team = player.team;
         player.mana -= 25.0;
-        player.cooldowns[0] = Q_COOLDOWN;
-        let damage = player.q_damage * (1.0 + player.ability_power / 100.0);
+        player.cooldowns[0] = rank_cooldown;
+        let damage = player.q_damage * (1.0 + player.ability_power / 100.0) * rank_damage;
         self.projectiles.push(Projectile::new(
             pos,
             dir,
             950.0,
-            1.4,
+            1.4 * rank_reach,
             damage,
             team,
             fx::look_by_name("fire_blast"),
@@ -2591,6 +2676,7 @@ impl AnimatedScene {
         if self.champion_id == "ranger" {
             return self.cast_dart_volley(target);
         }
+        let (rank_reach, rank_cooldown) = (self.rank_reach_mult(1), self.rank_cooldown(1, 8.0));
         let pi = self.player_index;
         let player = &mut self.units[pi];
         if player.health <= 0.0
@@ -2607,7 +2693,8 @@ impl AnimatedScene {
         let dir = flat.normalize();
         let start = player.pos;
         let mut destination = start;
-        let steps = (player.w_distance / 64.0).ceil().max(1.0) as i32;
+        let distance = player.w_distance * rank_reach;
+        let steps = (distance / 64.0).ceil().max(1.0) as i32;
         for step in (1..=steps).rev() {
             let p = start + dir * (step as f32 * 64.0);
             if collision.is_walkable_world(p.x, p.z) {
@@ -2620,7 +2707,7 @@ impl AnimatedScene {
         }
         player.pos = destination;
         player.mana -= 30.0;
-        player.cooldowns[1] = 8.0;
+        player.cooldowns[1] = rank_cooldown;
         player.path.clear();
         player.path_index = 0;
         self.effects.push(Effect {
@@ -2650,6 +2737,7 @@ impl AnimatedScene {
         if self.champion_id == "ranger" {
             return self.cast_footwork(collision, height);
         }
+        let (rank_damage, rank_cooldown) = (self.rank_damage_mult(2), self.rank_cooldown(2, 12.0));
         let pi = self.player_index;
         let player = &mut self.units[pi];
         if player.health <= 0.0
@@ -2660,8 +2748,8 @@ impl AnimatedScene {
             return false;
         }
         player.mana -= 40.0;
-        player.cooldowns[2] = 12.0;
-        let ability_mult = 1.0 + player.ability_power / 100.0;
+        player.cooldowns[2] = rank_cooldown;
+        let ability_mult = (1.0 + player.ability_power / 100.0) * rank_damage;
         player.health = (player.health + player.e_heal * ability_mult).min(player.max_health);
         player.shield = player.e_shield * ability_mult;
         player.shield_timer = 4.0;
@@ -2699,6 +2787,7 @@ impl AnimatedScene {
             return false;
         };
         let pi = self.player_index;
+        let rank_cooldown = self.rank_cooldown(3, TRIAL_COOLDOWN);
         if self.duel.is_some() || target_index == pi || target_index >= self.units.len() {
             return false;
         }
@@ -2724,7 +2813,7 @@ impl AnimatedScene {
         {
             let player = &mut self.units[pi];
             player.mana -= 100.0;
-            player.cooldowns[3] = TRIAL_COOLDOWN;
+            player.cooldowns[3] = rank_cooldown;
             player.path.clear();
             player.path_index = 0;
             player.target = None;
@@ -2781,6 +2870,11 @@ impl AnimatedScene {
 
     fn cast_meteor(&mut self, target: Vec3) -> bool {
         let pi = self.player_index;
+        let (rank_damage, rank_reach, rank_cooldown) = (
+            self.rank_damage_mult(3),
+            self.rank_reach_mult(3),
+            self.rank_cooldown(3, 45.0),
+        );
         let player = &mut self.units[pi];
         if player.health <= 0.0
             || player.stun_timer > 0.0
@@ -2790,16 +2884,17 @@ impl AnimatedScene {
             return false;
         }
         let offset = planar_delta(player.pos, target);
-        let target = if offset.length() > METEOR_RANGE {
-            let p = player.pos + offset.normalize_or_zero() * METEOR_RANGE;
+        let reach = METEOR_RANGE * rank_reach;
+        let target = if offset.length() > reach {
+            let p = player.pos + offset.normalize_or_zero() * reach;
             Vec3::new(p.x, target.y, p.z)
         } else {
             target
         };
         player.mana -= 80.0;
-        player.cooldowns[3] = 45.0;
+        player.cooldowns[3] = rank_cooldown;
         let radius = 384.0;
-        let damage = player.r_damage * (1.0 + player.ability_power / 100.0);
+        let damage = player.r_damage * (1.0 + player.ability_power / 100.0) * rank_damage;
         // Telegraph first, damage later. The rock is visible falling for the
         // whole delay, so a mobile target can walk out of the circle.
         self.pending_impacts.push(PendingImpact {
@@ -3313,6 +3408,7 @@ impl AnimatedScene {
     }
 
     pub fn update(&mut self, dt: f32, height: &HeightGrid, collision: &WorldCollision) {
+        self.hud_time += dt;
         // Floating numbers drift up and fade, announcements and the kill feed
         // time out, and the minimap ping decays.
         self.floats.retain_mut(|float| {
@@ -4433,15 +4529,26 @@ impl AnimatedScene {
         let player = &mut self.units[pi];
         player.gold = player.gold.saturating_add(gold);
         player.xp += xp;
-        while player.level < 11 && player.xp >= xp_for_level(player.level) {
+        loop {
+            let player = &mut self.units[pi];
+            if player.level >= MAX_LEVEL || player.xp < xp_for_level(player.level) {
+                break;
+            }
             player.xp -= xp_for_level(player.level);
-            player.level += 1;
-            player.max_health += 40.0;
-            player.health = (player.health + 40.0).min(player.max_health);
-            player.max_mana += 20.0;
-            player.mana = (player.mana + 20.0).min(player.max_mana);
-            player.attack_damage += 2.0;
+            self.level_up_player();
         }
+    }
+
+    /// One level gained: stats grow and a skill point is earned.
+    fn level_up_player(&mut self) {
+        let player = &mut self.units[self.player_index];
+        player.level += 1;
+        player.max_health += 40.0;
+        player.health = (player.health + 40.0).min(player.max_health);
+        player.max_mana += 20.0;
+        player.mana = (player.mana + 20.0).min(player.max_mana);
+        player.attack_damage += 2.0;
+        self.skill_points += 1;
     }
 
     pub fn refresh_visibility(&mut self, dt: f32, collision: &WorldCollision) {
@@ -6082,10 +6189,6 @@ impl AnimatedUnit {
     /// Ranged level scaling, matching the OSRS stat panel.
     fn ranged_scale(&self) -> f32 {
         1.0 + self.ranged / 100.0
-    }
-
-    fn q_rank(&self) -> u8 {
-        (1 + self.level.saturating_sub(1) / 2).min(5) as u8
     }
 
     fn is_minion_of(&self, team: u8) -> bool {

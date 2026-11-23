@@ -2,16 +2,18 @@
 //! Every slice now comes from the match; the stage 3 sample only fills a
 //! field when its live source is absent (for example before the first frame).
 
+use crate::animated::ranks::{UpgradeBlock, rank_level};
 use crate::animated::{AnimatedScene, UnitKind};
+use crate::champion::{AbilityRank, ChampionAbility};
 use crate::hud::{PlayerHud, UnitFrame};
 use crate::items::{CATEGORY_LABELS, ItemConfig, ItemShop};
 use crate::scene::{CampBuff, SceneData};
 use glam::{Vec2, Vec3};
 use rift_ui::hud::state::{
-    AbilityState, AllyState, CampState, ChatKind, ChatLine, DamageSource, DeathState,
-    InventoryItem, KillFeedEntry, LaneState, MapPoint, MinimapState, NexusState, ObjectivesState,
-    PlateKind, ScoreState, ShopItem, ShopState, StructureMark, TargetStat, TargetState,
-    TooltipState, UnitPlate,
+    AbilityNumbers, AbilityState, AbilityTooltipState, AbilityUpgrade, AllyState, CampState,
+    ChatKind, ChatLine, DamageSource, DeathState, InventoryItem, KillFeedEntry, LaneState,
+    MapPoint, MinimapState, NexusState, ObjectivesState, PlateKind, ScoreState, ShopItem,
+    ShopState, StructureMark, TargetStat, TargetState, TooltipState, UnitPlate,
 };
 
 pub fn score(player: &PlayerHud) -> ScoreState {
@@ -692,7 +694,126 @@ pub fn ability_from(
         cooldowns: cooldowns.map(|seconds| seconds.max(0.0)),
         portrait: None,
         icons: Default::default(),
+        ranks: [1; 4],
+        max_ranks: [4, 4, 4, 3],
+        upgradable: [false; 4],
+        time: 0.0,
     }
+}
+
+/// Fill the bar's rank pips and upgrade glow from the match.
+pub fn ability_ranks(state: &mut AbilityState, animated: &AnimatedScene) {
+    state.ranks = animated.ability_ranks();
+    state.max_ranks = std::array::from_fn(|slot| animated.max_rank(slot));
+    state.upgradable = std::array::from_fn(|slot| animated.can_upgrade(slot));
+    state.time = animated.hud_time;
+}
+
+/// The tooltip for a hovered ability slot.
+pub fn ability_tooltip(
+    animated: &AnimatedScene,
+    slot: usize,
+    mouse: (i32, i32),
+) -> Option<AbilityTooltipState> {
+    let info = animated.ability_info(slot)?;
+    let rank = animated.ability_rank(slot);
+    let max_rank = animated.max_rank(slot);
+    let power = animated.ability_power_mult();
+    let level = animated.player_level();
+    let numbers = |rank: u8| {
+        animated
+            .rank_entry(slot, rank)
+            .map(|entry| ability_numbers(info, &entry, power))
+            .unwrap_or_else(|| AbilityNumbers {
+                damage_label: damage_label(info),
+                damage: "-".to_string(),
+                range: "-".to_string(),
+                cooldown: "-".to_string(),
+            })
+    };
+    let upgrades = (rank + 1..=max_rank)
+        .map(|next| AbilityUpgrade {
+            rank: next,
+            numbers: numbers(next),
+            needs_level: Some(rank_level(slot, next)).filter(|needs| *needs > level),
+        })
+        .collect();
+    let hint = match animated.upgrade_block(slot) {
+        None => Some(format!(
+            "Click to spend a skill point ({} left)",
+            animated.skill_points
+        )),
+        Some(UpgradeBlock::NeedsLevel(needs)) if animated.skill_points > 0 => {
+            Some(format!("Next rank unlocks at level {needs}"))
+        }
+        _ => None,
+    };
+    Some(AbilityTooltipState {
+        key: ["Q", "W", "E", "R"][slot.min(3)].to_string(),
+        name: title_case(&info.name),
+        summary: info.description.clone(),
+        rank,
+        max_rank,
+        current: numbers(rank),
+        upgrades,
+        note: info
+            .damage_note
+            .as_ref()
+            .map(|note| format!("{}: {note}", damage_label(info))),
+        hint,
+        at: mouse,
+    })
+}
+
+fn damage_label(info: &ChampionAbility) -> String {
+    info.damage_label
+        .clone()
+        .unwrap_or_else(|| "Damage".to_string())
+}
+
+/// One rank's numbers as the tooltip shows them: damage with the hero's
+/// current power applied, range in world units ("Self" for abilities
+/// centred on the caster), cooldown in seconds.
+pub fn ability_numbers(info: &ChampionAbility, rank: &AbilityRank, power: f32) -> AbilityNumbers {
+    AbilityNumbers {
+        damage_label: damage_label(info),
+        damage: rank
+            .damage
+            .map(|damage| format!("{}", (damage * power).round() as i64))
+            .unwrap_or_else(|| "-".to_string()),
+        range: if rank.range <= 0.0 {
+            "Self".to_string()
+        } else {
+            format!("{}", rank.range.round() as i64)
+        },
+        cooldown: seconds(rank.cooldown),
+    }
+}
+
+fn seconds(value: f32) -> String {
+    let text = format!("{value:.2}");
+    let text = text.trim_end_matches('0').trim_end_matches('.');
+    format!("{text}s")
+}
+
+/// "PLAGUE OF FROGS" -> "Plague of Frogs"; "BANDOS' WRATH" -> "Bandos' Wrath".
+pub fn title_case(name: &str) -> String {
+    const SMALL: [&str; 8] = ["of", "the", "a", "an", "and", "to", "in", "on"];
+    name.split(' ')
+        .enumerate()
+        .map(|(n, word)| {
+            let lower = word.to_lowercase();
+            if n > 0 && SMALL.contains(&lower.as_str()) {
+                return lower;
+            }
+            let mut chars = lower.chars();
+            match chars.next() {
+                Some(first) => first.to_uppercase().chain(chars).collect(),
+                None => String::new(),
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 fn count(value: f32) -> u32 {
@@ -702,6 +823,26 @@ fn count(value: f32) -> u32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn ability_names_and_numbers_read_cleanly() {
+        assert_eq!(title_case("PLAGUE OF FROGS"), "Plague of Frogs");
+        assert_eq!(title_case("BANDOS' WRATH"), "Bandos' Wrath");
+        assert_eq!(title_case("YARRRRRRR!"), "Yarrrrrrr!");
+        assert_eq!(seconds(6.5), "6.5s");
+        assert_eq!(seconds(7.0), "7s");
+        assert_eq!(seconds(4.75), "4.75s");
+        let info: ChampionAbility = serde_json::from_str(
+            r#"{"key":"E","name":"SWAMP CROAK","description":"Croak.","damage_label":"Shield",
+                "ranks":[{"damage":90,"range":0,"cooldown":12}]}"#,
+        )
+        .unwrap();
+        let numbers = ability_numbers(&info, &info.ranks[0], 1.5);
+        assert_eq!(numbers.damage_label, "Shield");
+        assert_eq!(numbers.damage, "135");
+        assert_eq!(numbers.range, "Self");
+        assert_eq!(numbers.cooldown, "12s");
+    }
 
     #[test]
     fn minimap_click_inverts_the_dot_mapping() {
