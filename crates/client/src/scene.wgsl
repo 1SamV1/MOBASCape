@@ -354,24 +354,40 @@ fn albedo(input: VsOut) -> vec3<f32> {
         let variant = min(packed & 0xFFu, 5u);
         let overlay_texture = (packed >> 8u) & 0xFFu;
         let overlay_weight = f32((packed >> 16u) & 0xFFu) / 255.0;
-        let grass_macro = textureSampleGrad(
-            grass_textures,
-            terrain_sampler,
-            uv,
-            variant,
-            dpdx(uv),
-            dpdy(uv)
+        // Two samples of the grass sprite: the 384-unit base and a rotated
+        // 1150-unit layer. Mixing them (and pulling both toward the
+        // sprite's mean colour from the smallest mip) hides the repeat,
+        // which was the most visible "low res" artefact on open fields.
+        // The grass array mirror-tiles each 128px sprite, so a single
+        // axis-aligned sample shows a seam grid every ~96 units. Two samples
+        // at unrelated rotations and scales cancel each other's seams, and
+        // a procedural two-octave mottle supplies irregular variation.
+        let rot_a = mat2x2<f32>(0.921, -0.391, 0.391, 0.921);
+        let rot_b = mat2x2<f32>(0.755, 0.656, -0.656, 0.755);
+        let uv_a = (rot_a * input.world.xz) / 430.0;
+        let uv_b = (rot_b * input.world.xz) / 1030.0 + vec2<f32>(0.37, 0.71);
+        let grass_a = textureSampleGrad(
+            grass_textures, terrain_sampler, uv_a, variant, dpdx(uv_a), dpdy(uv_a)
         ).rgb;
-        // Reuse the sampled grass luma for patch variation instead of four
-        // extra hash evaluations per fragment.
-        let field_tone = clamp(
-            dot(grass_macro, vec3<f32>(0.9, 1.1, 0.7)) * 1.8,
-            0.0,
-            1.0
-        );
-        let grass_raw = grass_macro * (0.88 + field_tone * 0.24);
+        let grass_b = textureSampleGrad(
+            grass_textures, terrain_sampler, uv_b, variant, dpdx(uv_b), dpdy(uv_b)
+        ).rgb;
+        let grass_mean = textureSampleLevel(grass_textures, terrain_sampler, uv, variant, 12.0).rgb;
+        let macro_n = noise2(input.world.xz / 2300.0);
+        let mottle = noise2(input.world.xz / 520.0 + vec2<f32>(17.0, 3.0)) * 0.65
+            + noise2(input.world.xz / 150.0 - vec2<f32>(5.0, 11.0)) * 0.35;
+        let grass_detail = mix(grass_a, grass_b, 0.45);
+        let grass_raw = mix(grass_mean, grass_detail, 0.7);
+        // Push the palette towards the reference's deep, saturated OSRS
+        // green and away from lime/olive; slow patches of lusher and drier
+        // grass give fields scale without a visible tile.
         let grass_luma = dot(grass_raw, vec3<f32>(0.299, 0.587, 0.114));
-        let grass = mix(vec3<f32>(grass_luma), grass_raw, 1.18) * vec3<f32>(0.98, 1.10, 1.02);
+        let lush = vec3<f32>(0.52, 0.90, 0.50);
+        let dry = vec3<f32>(0.84, 0.92, 0.48);
+        let field_tint = mix(lush, dry, smoothstep(0.45, 0.85, macro_n));
+        let grass = mix(vec3<f32>(grass_luma), grass_raw, 1.3)
+            * field_tint
+            * (0.66 + 0.30 * mottle);
         // The dark biome grass sprites are nearly black in linear light and
         // read as flat fog/water in low jungle. Lift the linear values while
         // preserving the sprite's texture and hue.
@@ -427,8 +443,13 @@ fn albedo(input: VsOut) -> vec3<f32> {
             + stone * stone_weight
             + sand * sand_weight
             + water * water_weight) / weight_total;
-        let cliff = smoothstep(0.30, 0.62, slope);
-        tex = mix(tex, stone * (0.82 + 0.18 * c), cliff * 0.88);
+        // Terraces make slopes bimodal: fields are near flat and cliff
+        // risers are steep. Rock belongs only on the risers, with a cool
+        // grey-brown grade and horizontal strata so faces read as stone.
+        let cliff = smoothstep(0.13, 0.32, slope);
+        let strata = 0.84 + 0.16 * noise2(vec2<f32>(input.world.y / 22.0, (input.world.x + input.world.z) / 300.0));
+        let rock = stone * vec3<f32>(0.92, 0.90, 0.86) * strata * (0.80 + 0.2 * c);
+        tex = mix(tex, rock, cliff);
 
         // Cache overlay art wins where the source tile carries a textured
         // overlay. This restores real OSRS paths, dirt and biome ground that
@@ -451,8 +472,8 @@ fn albedo(input: VsOut) -> vec3<f32> {
             tex = mix(tex, corrected, overlay_weight);
         }
 
-        let steep = smoothstep(0.10, 0.38, slope);
-        tex *= 1.0 - steep * 0.16;
+        let steep = smoothstep(0.08, 0.30, slope);
+        tex *= 1.0 - steep * 0.12;
 
         // Lanes are baked into the terrain; the road sprites are blended in
         // world space so there is no ribbon hovering over the ground.
@@ -473,7 +494,9 @@ fn albedo(input: VsOut) -> vec3<f32> {
         }
 
         // The sprite carries the palette; the vertex colour only nudges it.
-        let tint = 0.86 + c * 1.05;
+        // Cliff faces skip the nudge: the underlay colour is grass green
+        // and would moss over the stone.
+        let tint = mix(0.86 + c * 1.05, vec3<f32>(1.0), cliff);
         c = tex * tint;
     }
     return c;

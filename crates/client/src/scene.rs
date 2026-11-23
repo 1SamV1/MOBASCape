@@ -139,14 +139,17 @@ impl MeshData {
 pub struct HeightGrid {
     origin_tile_x: i32,
     origin_tile_y: i32,
+    /// World units between samples: 128 for the per-tile grid, smaller
+    /// for the subdivided display terrain.
+    step: f32,
     size: usize,
     heights: Vec<f32>,
 }
 
 impl HeightGrid {
     pub fn height_at(&self, world_x: f32, world_z: f32) -> f32 {
-        let gx = world_x / 128.0 - self.origin_tile_x as f32;
-        let gy = world_z / 128.0 - self.origin_tile_y as f32;
+        let gx = (world_x - self.origin_tile_x as f32 * 128.0) / self.step;
+        let gy = (world_z - self.origin_tile_y as f32 * 128.0) / self.step;
         if gx < 0.0 || gy < 0.0 || gx >= (self.size - 1) as f32 || gy >= (self.size - 1) as f32 {
             return 0.0;
         }
@@ -164,8 +167,8 @@ impl HeightGrid {
     }
 
     pub fn contains(&self, world_x: f32, world_z: f32) -> bool {
-        let gx = world_x / 128.0 - self.origin_tile_x as f32;
-        let gy = world_z / 128.0 - self.origin_tile_y as f32;
+        let gx = (world_x - self.origin_tile_x as f32 * 128.0) / self.step;
+        let gy = (world_z - self.origin_tile_y as f32 * 128.0) / self.step;
         gx >= 0.0 && gy >= 0.0 && gx < (self.size - 1) as f32 && gy < (self.size - 1) as f32
     }
 }
@@ -1368,6 +1371,7 @@ pub fn build(
     let provisional_height = HeightGrid {
         origin_tile_x,
         origin_tile_y,
+        step: 128.0,
         size,
         heights: heights.clone(),
     };
@@ -1416,6 +1420,11 @@ pub fn build(
     }
 
     let mut pocket_water: Vec<(i32, i32)> = Vec::new();
+    // Per-tile biome coverage and variant, so the display mesh can choose
+    // the grass variant on a smooth contour per cell instead of dithering
+    // whole tiles (which left a scatter of square patches at every edge).
+    let mut biome_coverage = vec![0.0f32; size * size];
+    let mut biome_variant = vec![0u8; size * size];
     for biome in &map.biomes {
         let Some((terrain, _)) = pocket_data.get(&biome.id) else {
             continue;
@@ -1483,6 +1492,10 @@ pub fn build(
                 // biome transitions read as a natural field change rather
                 // than a rectangular tile boundary.
                 let coverage = blend.clamp(0.0, 1.0);
+                if coverage > biome_coverage[idx] {
+                    biome_coverage[idx] = coverage;
+                    biome_variant[idx] = biome.grass_variant;
+                }
                 if coverage >= 1.0
                     || value_noise(map_tx as f32 * 0.55, map_ty as f32 * 0.55) < coverage
                 {
@@ -1660,91 +1673,218 @@ pub fn build(
         }
     }
 
+    // ------------------------------------------------------------------
+    // Display terrain at TERRAIN_SUBDIV vertices per tile. Heights are a
+    // Catmull-Rom upsample of the conditioned tile grid plus terraced
+    // plateaus evaluated at full resolution, so cliff lips and feet are
+    // crisp instead of being smeared across one 128-unit quad. Colours and
+    // masks are bilinear; the packed ground identity stays per tile.
+    // ------------------------------------------------------------------
+    const TERRAIN_SUBDIV: usize = 2;
+    let fine_step = 128.0 / TERRAIN_SUBDIV as f32;
+    let fine_size = (size - 1) * TERRAIN_SUBDIV + 1;
+    let inv = 1.0 / TERRAIN_SUBDIV as f32;
+    let origin_wx = origin_tile_x as f32 * 128.0;
+    let origin_wz = origin_tile_y as f32 * 128.0;
+    let channel = |c: usize| {
+        smooth_colors
+            .iter()
+            .map(|v| v[c] as f32)
+            .collect::<Vec<f32>>()
+    };
+    let (red, green, blue) = (channel(0), channel(1), channel(2));
+    let mut fine_heights = vec![0.0f32; fine_size * fine_size];
+    let mut fine_colors = vec![[0u8; 3]; fine_size * fine_size];
+    let mut fine_lane = vec![0.0f32; fine_size * fine_size];
+    let mut fine_water = vec![0.0f32; fine_size * fine_size];
+    let mut plateau_cells = 0usize;
+    for fy in 0..fine_size {
+        for fx in 0..fine_size {
+            let gx = fx as f32 * inv;
+            let gy = fy as f32 * inv;
+            let wx = origin_wx + fx as f32 * fine_step;
+            let wz = origin_wz + fy as f32 * fine_step;
+            let water_k = sample_bilinear(&water_mask, size, gx, gy);
+            let base = sample_bicubic(&heights, size, gx, gy);
+            let clearance = if water_k > 0.01 {
+                0.0
+            } else {
+                plateau_clearance(&map, wx, wz)
+            };
+            let lift = plateau_height(wx, wz, clearance);
+            if lift > TERRACE_STEP * 0.5 {
+                plateau_cells += 1;
+            }
+            let i = fy * fine_size + fx;
+            fine_heights[i] = base + lift;
+            fine_water[i] = water_k;
+            fine_lane[i] = sample_bilinear(&lane_mask, size, gx, gy);
+            fine_colors[i] = [
+                sample_bilinear(&red, size, gx, gy).clamp(0.0, 255.0) as u8,
+                sample_bilinear(&green, size, gx, gy).clamp(0.0, 255.0) as u8,
+                sample_bilinear(&blue, size, gx, gy).clamp(0.0, 255.0) as u8,
+            ];
+        }
+    }
+    tracing::info!(
+        "terrain: {}x{} vertices at {} units, {:.1}% plateau",
+        fine_size,
+        fine_size,
+        fine_step,
+        plateau_cells as f32 * 100.0 / (fine_size * fine_size) as f32
+    );
+
+    // Overlay weight per display cell: a bilinear blend between the
+    // centres of neighbouring tiles that carry the same overlay texture.
+    // That halves the hard square edge the per-tile weight produced.
+    let overlay_for_cell = |fx: usize, fy: usize| -> u32 {
+        let tile_x = (fx / TERRAIN_SUBDIV).min(size - 2);
+        let tile_y = (fy / TERRAIN_SUBDIV).min(size - 2);
+        let own = tile_overlay[tile_y * size + tile_x];
+        let texture = (own >> 8) & 0xFF;
+        if texture == 0 {
+            return 0;
+        }
+        let u = (fx as f32 + 0.5) * inv - 0.5;
+        let v = (fy as f32 + 0.5) * inv - 0.5;
+        let x0 = u.floor() as i32;
+        let y0 = v.floor() as i32;
+        let tu = u - x0 as f32;
+        let tv = v - y0 as f32;
+        let mut weight = 0.0f32;
+        for (dx, dy, w) in [
+            (0, 0, (1.0 - tu) * (1.0 - tv)),
+            (1, 0, tu * (1.0 - tv)),
+            (0, 1, (1.0 - tu) * tv),
+            (1, 1, tu * tv),
+        ] {
+            let x = (x0 + dx).clamp(0, size as i32 - 2) as usize;
+            let y = (y0 + dy).clamp(0, size as i32 - 2) as usize;
+            let other = tile_overlay[y * size + x];
+            if (other >> 8) & 0xFF == texture {
+                weight += ((other >> 16) & 0xFF) as f32 * w;
+            }
+        }
+        pack_ground_overlay(texture as u8, weight.round().clamp(0.0, 255.0) as u8)
+    };
+
+    let normal_at = |vx: usize, vy: usize| {
+        let i = vy * fine_size + vx;
+        let h = fine_heights[i];
+        let hl = if vx > 0 { fine_heights[i - 1] } else { h };
+        let hr = if vx + 1 < fine_size {
+            fine_heights[i + 1]
+        } else {
+            h
+        };
+        let hd = if vy > 0 {
+            fine_heights[i - fine_size]
+        } else {
+            h
+        };
+        let hu = if vy + 1 < fine_size {
+            fine_heights[i + fine_size]
+        } else {
+            h
+        };
+        Vec3::new(hl - hr, 2.0 * fine_step, hd - hu).normalize_or_zero()
+    };
+    // Cavity AO over a two-cell radius so it measures the same 128-unit
+    // neighbourhood as before, plus a cliff-foot term from the plateau.
+    let ao_at = |vx: usize, vy: usize| {
+        let i = vy * fine_size + vx;
+        let h = fine_heights[i];
+        let r = TERRAIN_SUBDIV;
+        let hl = if vx >= r { fine_heights[i - r] } else { h };
+        let hr = if vx + r < fine_size {
+            fine_heights[i + r]
+        } else {
+            h
+        };
+        let hd = if vy >= r {
+            fine_heights[i - r * fine_size]
+        } else {
+            h
+        };
+        let hu = if vy + r < fine_size {
+            fine_heights[i + r * fine_size]
+        } else {
+            h
+        };
+        let cavity = (((hl + hr + hd + hu) * 0.25 - h) / 96.0).clamp(-1.0, 1.0);
+        (0.82 - cavity * 0.30).clamp(0.52, 1.0)
+    };
+
     let mut terrain_mesh = MeshData::new();
-    for gy in 0..size - 1 {
-        for gx in 0..size - 1 {
-            let idx = gy * size + gx;
-            let x0 = (origin_tile_x + gx as i32) as f32 * 128.0;
-            let z0 = (origin_tile_y + gy as i32) as f32 * 128.0;
-            let x1 = x0 + 128.0;
-            let z1 = z0 + 128.0;
-            let p00 = Vec3::new(x0, heights[idx], z0);
-            let p10 = Vec3::new(x1, heights[idx + 1], z0);
-            let p01 = Vec3::new(x0, heights[idx + size], z1);
-            let p11 = Vec3::new(x1, heights[idx + size + 1], z1);
-
-            let c00 = smooth_colors[idx];
-            let c10 = smooth_colors[idx + 1];
-            let c01 = smooth_colors[idx + size];
-            let c11 = smooth_colors[idx + size + 1];
-
-            let normal_at = |vx: usize, vy: usize| {
-                let i = vy * size + vx;
-                let h = heights[i];
-                let hl = if vx > 0 { heights[i - 1] } else { h };
-                let hr = if vx + 1 < size { heights[i + 1] } else { h };
-                let hd = if vy > 0 { heights[i - size] } else { h };
-                let hu = if vy + 1 < size { heights[i + size] } else { h };
-                Vec3::new(hl - hr, 2.0 * 128.0, hd - hu).normalize_or_zero()
+    for fy in 0..fine_size - 1 {
+        for fx in 0..fine_size - 1 {
+            let tile_x = (fx / TERRAIN_SUBDIV).min(size - 2);
+            let tile_y = (fy / TERRAIN_SUBDIV).min(size - 2);
+            let tile = tile_y * size + tile_x;
+            // Biome edges: threshold the bilinear coverage against a slow
+            // noise so the variant boundary is an organic contour stepped
+            // at cell size, not a salt-and-pepper of whole tiles.
+            let mut variant = grass_variant[tile];
+            if biome_coverage[tile] > 0.0 || biome_variant[tile] != 0 {
+                let cx = (fx as f32 + 0.5) * inv;
+                let cy = (fy as f32 + 0.5) * inv;
+                let cover = sample_bilinear(&biome_coverage, size, cx, cy);
+                let wx = origin_wx + cx * 128.0;
+                let wz = origin_wz + cy * 128.0;
+                let edge = value_noise(wx * 0.0021 + 3.0, wz * 0.0021 - 6.0) * 0.7
+                    + value_noise(wx * 0.0065, wz * 0.0065 + 2.0) * 0.3;
+                if cover >= 0.999 || cover > edge {
+                    variant = biome_variant[tile];
+                } else if grass_variant[tile] == biome_variant[tile] {
+                    // The tile was dithered into the biome; fall back to
+                    // the open-country default carried by the neighbours.
+                    variant = 0;
+                }
+            }
+            let ground = overlay_for_cell(fx, fy) | variant as u32;
+            let corner = |cx: usize, cy: usize| {
+                let i = cy * fine_size + cx;
+                let p = Vec3::new(
+                    origin_wx + cx as f32 * fine_step,
+                    fine_heights[i],
+                    origin_wz + cy as f32 * fine_step,
+                );
+                let n = normal_at(cx, cy);
+                let mut v = SceneVertex::new(p, n, fine_colors[i]);
+                // The lane mask rides in the vertex alpha for the terrain.
+                v.color[3] = fine_lane[i];
+                // uv.x carries the baked slope so the shader can add cliff
+                // detail without warping UVs from the per-fragment normal;
+                // uv.y carries the river mask so the road shader can stop
+                // the lane soil from painting the river bed.
+                v.uv = [(1.0 - n.y).clamp(0.0, 1.0), fine_water[i]];
+                v.ao = ao_at(cx, cy);
+                v.material = 4;
+                // Low byte: grass variant; upper bytes: cache overlay
+                // texture and weight. Flat interpolation keeps both
+                // triangles equal.
+                v.texture_id = ground;
+                v
             };
-            let n00 = normal_at(gx, gy);
-            let n10 = normal_at(gx + 1, gy);
-            let n01 = normal_at(gx, gy + 1);
-            let n11 = normal_at(gx + 1, gy + 1);
-            let ao_at = |vx: usize, vy: usize| {
-                let i = vy * size + vx;
-                let h = heights[i];
-                let hl = if vx > 0 { heights[i - 1] } else { h };
-                let hr = if vx + 1 < size { heights[i + 1] } else { h };
-                let hd = if vy > 0 { heights[i - size] } else { h };
-                let hu = if vy + 1 < size { heights[i + size] } else { h };
-                let cavity = (((hl + hr + hd + hu) * 0.25 - h) / 96.0).clamp(-1.0, 1.0);
-                (0.82 - cavity * 0.22).clamp(0.58, 1.0)
-            };
-            let ao00 = ao_at(gx, gy);
-            let ao10 = ao_at(gx + 1, gy);
-            let ao01 = ao_at(gx, gy + 1);
-            let ao11 = ao_at(gx + 1, gy + 1);
-
-            let mut v00 = SceneVertex::new(p00, n00, c00);
-            let mut v10 = SceneVertex::new(p10, n10, c10);
-            let mut v01 = SceneVertex::new(p01, n01, c01);
-            let mut v11 = SceneVertex::new(p11, n11, c11);
-            // The lane mask rides in the vertex alpha for the terrain.
-            v00.color[3] = lane_mask[idx];
-            v10.color[3] = lane_mask[idx + 1];
-            v01.color[3] = lane_mask[idx + size];
-            v11.color[3] = lane_mask[idx + size + 1];
-            // uv.x carries the baked slope so the shader can add cliff
-            // detail without warping UVs from the per-fragment normal.
-            v00.uv[0] = (1.0 - n00.y).clamp(0.0, 1.0);
-            v10.uv[0] = (1.0 - n10.y).clamp(0.0, 1.0);
-            v01.uv[0] = (1.0 - n01.y).clamp(0.0, 1.0);
-            v11.uv[0] = (1.0 - n11.y).clamp(0.0, 1.0);
-            // uv.y carries the river mask so the road shader can stop the
-            // lane soil from painting the river bed.
-            v00.uv[1] = water_mask[idx];
-            v10.uv[1] = water_mask[idx + 1];
-            v01.uv[1] = water_mask[idx + size];
-            v11.uv[1] = water_mask[idx + size + 1];
-            v00.ao = ao00;
-            v10.ao = ao10;
-            v01.ao = ao01;
-            v11.ao = ao11;
-            v00.material = 4;
-            v10.material = 4;
-            v01.material = 4;
-            v11.material = 4;
-            // One packed ground identity per tile: low byte is the grass
-            // variant, the upper bytes carry the cache overlay texture and
-            // its weight. Flat interpolation keeps both triangles equal.
-            let ground = tile_overlay[idx] | grass_variant[idx] as u32;
-            v00.texture_id = ground;
-            v10.texture_id = ground;
-            v01.texture_id = ground;
-            v11.texture_id = ground;
-            terrain_mesh.push_triangle(v00, v01, v10);
-            terrain_mesh.push_triangle(v10, v01, v11);
+            let v00 = corner(fx, fy);
+            let v10 = corner(fx + 1, fy);
+            let v01 = corner(fx, fy + 1);
+            let v11 = corner(fx + 1, fy + 1);
+            // Split each quad along the diagonal that best follows the
+            // surface, so cliff lips do not zig-zag.
+            let d0 = (fine_heights[fy * fine_size + fx]
+                - fine_heights[(fy + 1) * fine_size + fx + 1])
+                .abs();
+            let d1 = (fine_heights[fy * fine_size + fx + 1]
+                - fine_heights[(fy + 1) * fine_size + fx])
+                .abs();
+            if d0 <= d1 {
+                terrain_mesh.push_triangle(v00, v01, v11);
+                terrain_mesh.push_triangle(v00, v11, v10);
+            } else {
+                terrain_mesh.push_triangle(v00, v01, v10);
+                terrain_mesh.push_triangle(v10, v01, v11);
+            }
         }
     }
 
@@ -1774,8 +1914,9 @@ pub fn build(
     let height = HeightGrid {
         origin_tile_x,
         origin_tile_y,
-        size,
-        heights,
+        step: fine_step,
+        size: fine_size,
+        heights: fine_heights,
     };
 
     // Re-seat map features on the final terrain: pockets and the river can
@@ -3338,8 +3479,14 @@ fn sculpt_terrain(
     water: &[f32],
     castle: Option<&CastleSpec>,
 ) {
-    // The broad shape is warped by another low-frequency field so hills do
-    // not read as round blobs on a grid.
+    // The playable floor should be calm. The reference map reads as flat,
+    // readable fields with elevation concentrated in terraces and cliffs
+    // (added at display resolution by `plateau_height`), not as a blanket
+    // of noise hills. Compress the cache's tile-scale bumps towards a
+    // heavily smoothed copy, then add one very broad, low swell so long
+    // views still roll gently.
+    let mut smooth = heights.to_vec();
+    relax_heights(&mut smooth, size, water, 10);
     for gy in 0..size {
         for gx in 0..size {
             let i = gy * size + gx;
@@ -3348,33 +3495,115 @@ fn sculpt_terrain(
             }
             let wx = (origin_tile_x + gx as i32) as f32 * 128.0;
             let wz = (origin_tile_y + gy as i32) as f32 * 128.0;
-            let warp_x = (value_noise(wx * 0.00017 + 13.1, wz * 0.00017 + 7.7) - 0.5) * 2.4;
-            let warp_z = (value_noise(wx * 0.00017 - 5.3, wz * 0.00017 + 19.2) - 0.5) * 2.4;
-
-            let broad = (value_noise(wx * 0.00023 + warp_x, wz * 0.00023 + warp_z) - 0.5) * 520.0;
-            let medium = (value_noise(
-                wx * 0.00072 + 31.0 + warp_x * 0.35,
-                wz * 0.00072 + 7.0 + warp_z * 0.35,
-            ) - 0.5)
-                * 170.0;
-            let ridge = (1.0
-                - (value_noise(wx * 0.00039 + 61.0, wz * 0.00039 - 23.0) * 2.0 - 1.0).abs()
-                - 0.5)
-                * 190.0;
-            let fine = (value_noise(wx * 0.0022 - 9.0, wz * 0.0022 + 4.0) - 0.5) * 36.0;
-
             let settle = castle_settlement_mask(
                 (origin_tile_x + gx as i32) as f32,
                 (origin_tile_y + gy as i32) as f32,
                 castle,
             );
-            heights[i] += (broad + medium + ridge + fine) * settle;
+            let floor = smooth[i] + (heights[i] - smooth[i]) * 0.3;
+            let swell = (value_noise(wx * 0.00011 + 13.1, wz * 0.00011 + 7.7) - 0.5) * 150.0
+                + (value_noise(wx * 0.00042 + 31.0, wz * 0.00042 + 7.0) - 0.5) * 34.0;
+            heights[i] = heights[i] * (1.0 - settle) + (floor + swell) * settle;
         }
     }
-
-    // One light relaxation pass removes any one-tile stair the fine octave
-    // leaves behind without flattening the broad shapes.
     relax_heights(heights, size, water, 1);
+}
+
+/// World units of one terrace step: a little under two tiles, so a cliff
+/// reads as a wall a hero cannot see over, but never towers over trees.
+const TERRACE_STEP: f32 = 210.0;
+
+/// Where the jungle may rise into plateaus, 0..1. Lanes, the river, camps,
+/// base courtyards and the castle wall bands stay on the floor, with a few
+/// tiles of grass margin so cliffs never crowd a lane or a fight.
+fn plateau_clearance(map: &MapLayout, wx: f32, wz: f32) -> f32 {
+    let tx = wx / 128.0;
+    let tz = wz / 128.0;
+    let (_, lane_distance) = map.nearest_lane_point(wx, wz);
+    let mut clear = smoothstep(4.5 * 128.0, 9.0 * 128.0, lane_distance);
+    if let Some(river) = &map.river
+        && river.points.len() >= 2
+    {
+        let (d, _, _) = nearest_on_polyline(&river.points, tx, tz);
+        clear *= smoothstep(river.width * 2.2 + 2.0, river.width * 2.2 + 7.0, d);
+    }
+    for camp in &map.camps {
+        let d = ((camp.pos.x - wx).powi(2) + (camp.pos.z - wz).powi(2)).sqrt() / 128.0;
+        clear *= smoothstep(5.0, 10.0, d);
+    }
+    if let Some(castle) = &map.castle {
+        let (x0, z0, x1, z1) = castle.bounds;
+        let mut distance = distance_to_rect_border(tx, tz, x0, z0, x1, z1);
+        for base in &castle.bases {
+            let (bx0, bz0, bx1, bz1) = castle.base_rect(base);
+            distance = distance.min(distance_to_rect_edge(tx, tz, bx0, bz0, bx1, bz1));
+        }
+        clear *= smoothstep(6.0, 14.0, distance);
+    }
+    clear
+}
+
+/// Terraced plateau height at a world position, before clearance.
+/// A warped low-frequency field is cut at two contour levels; each cut is
+/// a narrow smoothstep, so the ground is flat on top and at the foot with a
+/// steep riser between. Rock noise roughens only the riser band so cliff
+/// faces read as stone while the plateau tops stay walkable-flat.
+fn plateau_height(wx: f32, wz: f32, clearance: f32) -> f32 {
+    if clearance <= 0.0 {
+        return 0.0;
+    }
+    let warp_x = (value_noise(wx * 0.00021 + 3.7, wz * 0.00021 - 8.1) - 0.5) * 1.6;
+    let warp_z = (value_noise(wx * 0.00021 - 11.3, wz * 0.00021 + 2.9) - 0.5) * 1.6;
+    let field = value_noise(wx * 0.00048 + warp_x + 41.0, wz * 0.00048 + warp_z - 17.0) * 0.72
+        + value_noise(wx * 0.0013 + 5.0, wz * 0.0013 + 9.0) * 0.20
+        + value_noise(wx * 0.0042 - 2.0, wz * 0.0042 + 7.0) * 0.08;
+    // Pull the field down outside the clearance so contours bend away from
+    // lanes and the river instead of ramping into them.
+    let field = field - (1.0 - clearance) * 0.6;
+    let lower = smoothstep(0.585, 0.625, field);
+    let upper = smoothstep(0.745, 0.785, field);
+    let riser = 4.0 * (lower * (1.0 - lower) + upper * (1.0 - upper));
+    let rock = (value_noise(wx * 0.006 + 1.3, wz * 0.006 - 4.2) - 0.5) * 70.0
+        + (value_noise(wx * 0.017 - 7.0, wz * 0.017 + 3.0) - 0.5) * 26.0;
+    (lower + upper) * TERRACE_STEP + riser.min(1.0) * rock
+}
+
+/// Catmull-Rom sample of a square grid at fractional grid coordinates.
+fn sample_bicubic(values: &[f32], size: usize, gx: f32, gy: f32) -> f32 {
+    let x1 = gx.floor() as i32;
+    let y1 = gy.floor() as i32;
+    let fx = gx - x1 as f32;
+    let fy = gy - y1 as f32;
+    let at = |x: i32, y: i32| {
+        let x = x.clamp(0, size as i32 - 1) as usize;
+        let y = y.clamp(0, size as i32 - 1) as usize;
+        values[y * size + x]
+    };
+    let cubic = |p0: f32, p1: f32, p2: f32, p3: f32, t: f32| {
+        p1 + 0.5
+            * t
+            * (p2 - p0
+                + t * (2.0 * p0 - 5.0 * p1 + 4.0 * p2 - p3 + t * (3.0 * (p1 - p2) + p3 - p0)))
+    };
+    let mut rows = [0.0f32; 4];
+    for (k, row) in rows.iter_mut().enumerate() {
+        let y = y1 - 1 + k as i32;
+        *row = cubic(at(x1 - 1, y), at(x1, y), at(x1 + 1, y), at(x1 + 2, y), fx);
+    }
+    cubic(rows[0], rows[1], rows[2], rows[3], fy)
+}
+
+/// Bilinear sample of a square grid at fractional grid coordinates.
+fn sample_bilinear(values: &[f32], size: usize, gx: f32, gy: f32) -> f32 {
+    let gx = gx.clamp(0.0, (size - 1) as f32);
+    let gy = gy.clamp(0.0, (size - 1) as f32);
+    let x0 = (gx.floor() as usize).min(size - 2);
+    let y0 = (gy.floor() as usize).min(size - 2);
+    let fx = gx - x0 as f32;
+    let fy = gy - y0 as f32;
+    let a = values[y0 * size + x0] * (1.0 - fx) + values[y0 * size + x0 + 1] * fx;
+    let b = values[(y0 + 1) * size + x0] * (1.0 - fx) + values[(y0 + 1) * size + x0 + 1] * fx;
+    a * (1.0 - fy) + b * fy
 }
 
 /// 0 on castle wall bands and base courtyards, 1 in open country. The
@@ -3695,11 +3924,12 @@ fn value_noise(x: f32, z: f32) -> f32 {
     let fz = z - iz;
     let ux = fx * fx * (3.0 - 2.0 * fx);
     let uz = fz * fz * (3.0 - 2.0 * fz);
-    let h = |dx: u32, dz: u32| {
-        let mut seed = (ix as i32 as u32).wrapping_mul(73856093);
-        seed ^= (iz as i32 as u32).wrapping_mul(19349663);
-        seed ^= dx << 8;
-        seed ^= dz;
+    // Hash the neighbouring lattice point itself. The old version hashed
+    // the cell plus a corner flag, so adjacent cells disagreed on their
+    // shared corners and the field jumped at every integer line.
+    let h = |dx: i32, dz: i32| {
+        let mut seed = ((ix as i32).wrapping_add(dx) as u32).wrapping_mul(73856093);
+        seed ^= ((iz as i32).wrapping_add(dz) as u32).wrapping_mul(19349663);
         hash01(seed)
     };
     let a = h(0, 0);
@@ -4978,11 +5208,109 @@ mod tests {
         assert_eq!(first, second);
         assert_eq!(first[20 * size + 20], -37.0);
 
-        let min = first.iter().copied().fold(f32::MAX, f32::min);
-        let max = first.iter().copied().fold(f32::MIN, f32::max);
-        assert!(max - min > 100.0, "relief too flat: {}", max - min);
-        assert!(max - min < 1_200.0, "relief too extreme: {}", max - min);
+        // The floor is calm: the broad swell rolls, but no noise hills.
+        let dry: Vec<f32> = first
+            .iter()
+            .enumerate()
+            .filter(|(i, _)| water[*i] == 0.0)
+            .map(|(_, h)| *h)
+            .collect();
+        let min = dry.iter().copied().fold(f32::MAX, f32::min);
+        let max = dry.iter().copied().fold(f32::MIN, f32::max);
+        assert!(max - min > 5.0, "floor lost its swell: {}", max - min);
+        assert!(max - min < 220.0, "floor too hilly: {}", max - min);
         assert!(first.iter().all(|height| height.is_finite()));
+    }
+
+    #[test]
+    fn terrain_sculpting_compresses_tile_bumps() {
+        let size = 48usize;
+        let water = vec![0.0f32; size * size];
+        let mut bumpy = vec![0.0f32; size * size];
+        for (i, h) in bumpy.iter_mut().enumerate() {
+            *h = if (i / size + i % size) % 2 == 0 {
+                80.0
+            } else {
+                -80.0
+            };
+        }
+        let mut flat = vec![0.0f32; size * size];
+        sculpt_terrain(&mut bumpy, size, 0, 0, &water, None);
+        sculpt_terrain(&mut flat, size, 0, 0, &water, None);
+        // The relaxation leaves the outermost ring alone; judge the inside.
+        let worst = (2..size - 2)
+            .flat_map(|y| (2..size - 2).map(move |x| y * size + x))
+            .map(|i| (bumpy[i] - flat[i]).abs())
+            .fold(0.0f32, f32::max);
+        assert!(worst < 30.0, "checkerboard survived: {worst}");
+    }
+
+    #[test]
+    fn value_noise_is_continuous_across_lattice_lines() {
+        for k in 0..64 {
+            let x = k as f32 * 0.73 - 20.0;
+            for edge in [3.0f32, -2.0, 17.0] {
+                let below = value_noise(edge - 1e-4, x);
+                let above = value_noise(edge + 1e-4, x);
+                assert!(
+                    (below - above).abs() < 1e-2,
+                    "jump at x={edge}: {below} vs {above}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn plateaus_are_terraced_and_respect_clearance() {
+        let mut levels = [0usize; 3];
+        for gy in 0..200 {
+            for gx in 0..200 {
+                let wx = gx as f32 * 96.0;
+                let wz = gy as f32 * 96.0;
+                assert_eq!(plateau_height(wx, wz, 0.0), 0.0);
+                let h = plateau_height(wx, wz, 1.0);
+                assert!(h.is_finite() && h > -60.0 && h < TERRACE_STEP * 2.0 + 60.0);
+                // Most ground sits on a level, not on a riser.
+                for (level, count) in levels.iter_mut().enumerate() {
+                    if (h - level as f32 * TERRACE_STEP).abs() < 12.0 {
+                        *count += 1;
+                    }
+                }
+            }
+        }
+        let on_level: usize = levels.iter().sum();
+        assert!(on_level > 200 * 200 * 3 / 4, "too much riser: {on_level}");
+        assert!(levels[1] > 0, "no plateaus at all");
+    }
+
+    #[test]
+    fn bicubic_and_bilinear_hit_grid_points() {
+        let size = 6usize;
+        let values: Vec<f32> = (0..size * size).map(|i| (i * 7 % 11) as f32).collect();
+        for gy in 0..size {
+            for gx in 0..size {
+                let v = values[gy * size + gx];
+                assert!((sample_bicubic(&values, size, gx as f32, gy as f32) - v).abs() < 1e-4);
+                assert!((sample_bilinear(&values, size, gx as f32, gy as f32) - v).abs() < 1e-4);
+            }
+        }
+    }
+
+    #[test]
+    fn height_grid_honours_its_sample_step() {
+        let grid = HeightGrid {
+            origin_tile_x: 10,
+            origin_tile_y: 20,
+            step: 64.0,
+            size: 3,
+            heights: vec![0.0, 10.0, 20.0, 0.0, 10.0, 20.0, 0.0, 10.0, 20.0],
+        };
+        let x = 10.0 * 128.0;
+        let z = 20.0 * 128.0;
+        assert!((grid.height_at(x + 64.0, z + 32.0) - 10.0).abs() < 1e-4);
+        assert!((grid.height_at(x + 96.0, z) - 15.0).abs() < 1e-4);
+        assert!(grid.contains(x + 100.0, z + 100.0));
+        assert!(!grid.contains(x + 130.0, z));
     }
 
     #[test]
