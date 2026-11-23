@@ -1,5 +1,5 @@
 +====================================================================================================================================================+
-  MOBASCAPE 64          // 64-BIT HERO ARENA //                                             OSRS DESIGN PASS II             BUILD dce5262
+  MOBASCAPE 64          // 64-BIT HERO ARENA //                                             CACHE-NATIVE PASS               BUILD 91c96a2
 +====================================================================================================================================================+
 |                                                                                                                                                    |
 |                                                           ######        ##      ##                                                                 |
@@ -14,29 +14,29 @@
 |                                                                                                                                                    |
 |                                                                                                                                                    |
 |                                                           P R O G R E S S   R E P O R T                                                            |
-|                                           C A C H E - N A T I V E   C O M B A T   /   B O T H   H U D S                                            |
+|                            L E G A C Y   H U D   V I S U A L S   //   O N L Y   S C R A P E D   O S R S   C O N T E N T                            |
 |                                                                                                                                                    |
 |                                                                                                                                                    |
-|  [OK] CACHE HITMARKS .......  DMG/MAX/POISON/VENOM/DISEASE/HEAL/MISS            [OK] TINTED RIVAL HITS ....   DARK COOL TINT                       |
-|  [OK] PK SKULL + NO SAFE ...     WHITE SKULL 439 + YELLOW TAG                   [OK] MAX-HIT SPLAT ........   GOLD-TRIMMED SPRITE 3571             |
-|  [OK] CAMP NAME PLATES .....     --UI-LIVE + LEGACY, LEVEL CHIP RIGHT           [OK] HITMARK STACKING .....   DOWN THE BODY, 1.2 S FADE            |
-|  [OK] 2X HERO NAMES ........     SOLID TEAM / CAMP COLOURS                      [OK] PLATE NUDGE ..........   SHARED BETWEEN BOTH HUDS             |
+|  [OK] ITEM ICONS .........    89 CACHE ITEM-MODEL RENDERS                       [OK] ABILITY ICONS .....    4 CHAMPIONS x 4 CACHE SPRITES          |
+|  [OK] SCORE ICONS ........    SWORDS 442 / SKULL 439                            [OK] FONTS + HITMARKS ..    P11 / P12 / B12 + 8 SPLATS             |
+|  [OK] EXTERNAL PNG TREE ..    RETIRED FOR VISUALS                               [OK] FALLBACKS .........    PROCEDURAL PANELS ONLY                 |
+|  [OK] SHOP / INVENTORY ...    OSRS ITEM ART, NO PLACEHOLDERS                    [OK] ABILITY BAR .......    CACHE ICONS, NO LETTERS                |
 |                                                                                                                                                    |
 |                                                                                                                                                    |
 |  TESTS ......  cargo test --workspace                 121 CLIENT / 20 UI / ALL CRATES PASS                                                         |
 |  CLIPPY .....  cargo clippy --workspace -D warnings          CLEAN                                                                                 |
-|  VISUAL .....  1280x720 --demo-hitsplats / --ui-live --demo-duel / --ui-live --demo-camp                   PASS                                    |
-|  COMMITS ....  dce5262  ui: PK markers, max hits and assembled hitmarks                                                                            |
-|                7a1824e  ui: cache-native OSRS hitmarks and overhead plates                                                                         |
+|  VISUAL .....  1280x720 --demo-shop --timescale 4 / --demo-camp / normal HUD                           PASS                                        |
+|  COMMIT .....  91c96a2  ui: cache-native item and ability icons for the legacy HUD                                                                 |
+|                Every visual asset above is scraped from cache index 8, index 10/7 or index 13.                                                     |
 |                                                                                                                                                    |
 |                                                                                                                                                    |
 |                                     +--------------------------------------------+                                                                 |
 |                                     |              PRESS START TO CONTINUE       |                                                                 |
 |                                     +--------------------------------------------+                                                                 |
-|  CHECKING CONTROLLER PAK ... OK    MEMORY CARD 1: 123 BLOCKS FREE       (C) 2026 MOBASCAPE PROJECT     NOT AFFILIATED WITH NINTENDO                |
+|  CHECKING CACHE ... OK     MEMORY CARD 1: 123 BLOCKS FREE     (C) 2026 MOBASCAPE PROJECT     NOT AFFILIATED WITH NINTENDO                          |
 |                                                                                                                                                    |
 +====================================================================================================================================================+
 |  CONTROLS:  Q W E R ABILITIES    B SHOP    LMB MOVE / ATTACK    Z / X CAMERA    F FOLLOW    ESC CLOSE                                              |
-|  HITMARK KEYS:  RED DAMAGE  /  GOLD MAX  /  GREEN POISON  /  TEAL VENOM  /  ORANGE DISEASE  /  PURPLE HEAL  /  BLUE MISS                           |
-|  PK MARKER:  WHITE SKULL + NO SAFE  //  TINTED HITS = ANOTHER CHAMPION'S DAMAGE                                                                    |
+|  CACHE ROLES:  ITEM ICONS = ITEM MODELS  /  ABILITY ICONS = CHAMPION SPRITES  /  SCORE ICONS = SPRITES 442 + 439                                   |
+|  RULE:  NO WIKI IMAGES. NO EXTERNAL PNG TREE. ONLY SCRAPED OSRS CACHE CONTENT FOR VISUALS.                                                         |
 +====================================================================================================================================================+
