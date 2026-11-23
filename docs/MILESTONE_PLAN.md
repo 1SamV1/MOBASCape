@@ -151,8 +151,7 @@ Goal: enough content for a real session.
 
 - **Done (2026-11-23):** data-driven kit system (`docs/KITS.md`) and twelve
   new champions (16 total), each with a passive and four abilities.
-- Remaining: balance against enemy heroes, Jad/Kree real kits, Animaya for
-  Vardorvis, ally targeting for supports, VFX and voice barks.
+- Remaining: balance against enemy heroes, Jad/Kree real kits, ally targeting for supports, VFX and voice barks.
 - Item tree (components, upgrades, actives), consumables, recall.
 - Boss objective (dragon/rift Herald analogue), buffs, soul/objective economy.
 - Second map; map editor carve/place/export loop.
