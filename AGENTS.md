@@ -49,6 +49,7 @@ crates/cache/    cache reader + decoders (terrain, locations, configs, models)
 crates/tools/    rift-tools CLI (inspect, dump, export OBJ)
 crates/client/   winit + wgpu client (world, animation, HUD, lane, combat)
 crates/sim/      deterministic tile grid, collision, A* pathfinding
+crates/appimage/ AppImage packer + runtime (tools/appimage/build.sh)
 data/maps/       authored lane waypoints, structures, wave timing
 crates/data/     (planned) serde content types + hot reload
 crates/proto/    (planned) wire messages + snapshot encoding

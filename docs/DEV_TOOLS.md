@@ -23,8 +23,16 @@ the snapshot bundled in the AppImage. `MOBASCAPE_NO_PULL=1` and
 `MOBASCAPE_NO_BUILD=1` turn steps 2 and 3 off. The log is at
 `~/.local/state/mobascape/launcher.log`. Rebuild the AppImage only when
 `AppRun` changes or the checkout moves. It contains no cache or `assets/`
-(the OSRS cache stays in `.cache/`). `build.sh` fetches `appimagetool` into
-`.cache/tools` the first time it runs.
+(the OSRS cache stays in `.cache/`).
+
+Packing needs no external tools. `crates/appimage` (`rift-appimage`) writes
+the squashfs (gzip, via `backhand`) and appends it to its own runtime
+(`rift-appimage-runtime`). The runtime is a standard type-2 layout: `AI\x02`
+at ELF offset 8, with the squashfs starting at the end of the ELF section
+headers. It extracts once into `~/.cache/rift-appimage/<content hash>`
+(older copies are removed) and runs `AppRun`, so FUSE is not needed. A warm
+start adds about 20 ms. `--appimage-extract [DIR]`, `--appimage-offset` and
+`--appimage-version` behave like the reference runtime's.
 
 ## Batch screenshots (`--shots`)
 

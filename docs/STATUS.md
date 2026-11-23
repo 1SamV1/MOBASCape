@@ -1,6 +1,20 @@
 # Status
 
-Last updated: self-updating AppImage launcher, 2026-11-23.
+Last updated: AppImage packed in-repo, 2026-11-23.
+
+## 2026-11-23 — AppImage packed without external tools
+
+- Packing first needed `appimagetool`, downloaded from GitHub and run, which
+  was blocked. The new `crates/appimage` replaces it: a packer
+  (`rift-appimage`) that writes the squashfs with `backhand` (gzip only) and
+  a runtime (`rift-appimage-runtime`) with the type-2 magic that extracts
+  once to a content-keyed cache and runs `AppRun`.
+- `tools/appimage/build.sh` now produces `dist/MobaScape-x86_64.AppImage`
+  (6.1 MiB) entirely from this workspace.
+- Verified: 4 crate tests (ELF offset, pack→extract round trip with modes and
+  symlinks, refusing trailing runtime bytes, content key); clippy clean. The
+  real AppImage ran from `/tmp`: extracted, rebuilt as a no-op, launched the
+  client and wrote a screenshot. Warm start overhead: 23 ms.
 
 ## 2026-11-23 — Self-updating AppImage launcher
 

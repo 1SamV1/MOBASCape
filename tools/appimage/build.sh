@@ -6,7 +6,8 @@
 #
 # Contents: AppRun, desktop file, icon, the checkout path and a snapshot
 # rift-client binary as a fallback. No cache, no assets/: Jagex data never
-# goes into the AppImage.
+# goes into the AppImage. Packing uses crates/appimage (squashfs + runtime),
+# so no external tool is downloaded.
 #
 # Usage: tools/appimage/build.sh [--install]
 #   --install  also copy it to ~/Applications and add a menu entry.
@@ -16,12 +17,9 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 SRC="$ROOT/tools/appimage"
 APPDIR="$ROOT/target/appimage/MobaScape.AppDir"
 OUT="$ROOT/dist/MobaScape-x86_64.AppImage"
-TOOL_DIR="$ROOT/.cache/tools"
-TOOL="$TOOL_DIR/appimagetool-x86_64.AppImage"
-TOOL_URL="https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage"
 
-echo "==> building rift-client (release)"
-cargo build --release -p rift-client --manifest-path "$ROOT/Cargo.toml"
+echo "==> building rift-client and the AppImage packer (release)"
+cargo build --release -p rift-client -p rift-appimage --manifest-path "$ROOT/Cargo.toml"
 
 echo "==> staging $APPDIR"
 rm -rf "$APPDIR"
@@ -36,20 +34,9 @@ ln -sf mobascape.svg "$APPDIR/.DirIcon"
 printf '%s\n' "$ROOT" >"$APPDIR/repo-path"
 git -C "$ROOT" log -1 --format='%H %s' >"$APPDIR/snapshot-commit" 2>/dev/null || true
 
-if [ ! -x "$TOOL" ]; then
-    echo "==> fetching appimagetool"
-    mkdir -p "$TOOL_DIR"
-    curl -fL --retry 3 -o "$TOOL.part" "$TOOL_URL"
-    chmod +x "$TOOL.part"
-    mv "$TOOL.part" "$TOOL"
-fi
-
 echo "==> packing $OUT"
-mkdir -p "$ROOT/dist"
-# Extract-and-run avoids needing FUSE for the tool itself.
-ARCH=x86_64 APPIMAGE_EXTRACT_AND_RUN=1 "$TOOL" --no-appstream "$APPDIR" "$OUT"
-chmod +x "$OUT"
-echo "==> wrote $OUT ($(du -h "$OUT" | cut -f1))"
+# In-repo packer and runtime (crates/appimage): no appimagetool download.
+"$ROOT/target/release/rift-appimage" "$ROOT/target/release/rift-appimage-runtime" "$APPDIR" "$OUT"
 
 if [ "${1:-}" = "--install" ]; then
     APPS="$HOME/Applications"

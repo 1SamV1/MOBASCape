@@ -1,0 +1,19 @@
+[package]
+name = "rift-appimage"
+description = "Pack and run MobaScape AppImages without external tools"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "rift-appimage"
+path = "src/main.rs"
+
+[[bin]]
+name = "rift-appimage-runtime"
+path = "src/bin/runtime.rs"
+
+[dependencies]
+anyhow.workspace = true
+backhand = { version = "0.25", default-features = false, features = ["gzip"] }
