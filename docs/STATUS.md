@@ -1,6 +1,16 @@
 # Status
 
-Last updated: attack animations, reach and projectile effects, 2026-11-23.
+Last updated: Big Frog ability icons, 2026-11-23.
+
+## 2026-11-23 — Big Frog ability icons
+
+- The Big Frog's bar used Vardorvis's leftover sprites. It now has its own
+  green set picked from the cache sprite sheets (`rift-tools dump-sprites`):
+  60 (tendrils) Tongue Lash, 364 (falling green comet) Big Leap, 205 (swamp
+  herb) Swamp Croak, 332 (three falling bolts) Plague of Frogs.
+- Verified by `--ui-live` screenshot: all four read clearly on the bar.
+- Balance checked on paper only: 580 HP, 28 armour, 15 damage, 270 range
+  sits inside the melee band. Still needs a hand playtest.
 
 ## 2026-11-23 — Attack animations, reach and projectile effects
 
@@ -38,7 +48,6 @@ Last updated: attack animations, reach and projectile effects, 2026-11-23.
 - **Big Frog replaces Vardorvis**, whose Animaya model could not animate:
   NPC 8701 (model 6947), tongue-lash attack 1793, Tongue Lash pull, Big Leap
   slam, Swamp Croak slow and shield, Plague of Frogs rain plus three frogs.
-  Its ability icons are still the old Vardorvis sprites.
 - Fixed while here: player basic-attack last hits never counted as CS, and
   allied ranged-minion kills paid out hero rewards (both passed no
   attacker).
