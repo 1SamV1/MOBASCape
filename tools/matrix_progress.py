@@ -112,62 +112,62 @@ def big(y, word):
 
 panel(16, 1, W - 17, 11)
 big(3, "MOBASCAPE")
-center(9, "K I T   A U D I O   //   E V E R Y   S P E L L   H A S   A   S O U N D", WHITE)
+center(9, "F R O N T   E N D   //   M E N U ,   S P O T L I G H T ,   S T E E L   I N   H A N D", WHITE)
 
 panel(6, 13, W - 7, 17, "TRANSMISSION")
-text(9, 14, "> I know kung fu.", BRIGHT)
-text(9, 15, "> Show me.  Twelve kit champions cast with one shared whoosh. Now each action speaks for itself.", MID)
-text(9, 16, "> Buffs chant the OSRS prayer chimes. Slams land with an anvil. Pools roar with fire.", BRIGHT)
+text(9, 14, "> This is the construct. Our loading program.", BRIGHT)
+text(9, 15, "> The AppImage now wakes in a braziers-and-gold main menu. Pick a mode, beat the clock, pick a hero.", MID)
+text(9, 16, "> Guns. Lots of guns.  Humanoid heroes now hold the weapon in their inventory.", BRIGHT)
 
-# Left: action -> sound.
-panel(6, 19, 74, 33, "KIT ACTION  ->  SOUND")
+# Left: the flow.
+panel(6, 19, 74, 33, "BOOT FLOW")
 rows = [
-    ("projectile", "1930", "whoosh, pitched up"),
-    ("dash", "1930", "whoosh, pitched down"),
-    ("area (landing)", "3791", "SMITH_ANVIL_TONK, deep"),
-    ("zone", "2596", "FIRE_WOOSH"),
-    ("summon", " 200", "TELEPORT_VWOOP"),
-    ("transform", " 200", "TELEPORT_VWOOP, lower"),
-    ("channel", "2670", "prayer: Mystic Will"),
-    ("empower", "2691", "prayer: Ultimate Strength"),
+    ("main menu", "NEW", "flames, stone tablet, orbit cam"),
+    ("BOT MATCH", "LIVE", "5v5 vs bots"),
+    ("PUBLIC MATCH", "STUB", "offline: bots fill"),
+    ("PRIVATE MATCH", "STUB", "offline: bots fill"),
+    ("pick timer", "NEW", "30 s, auto lock, beeps <= 5"),
+    ("type roster", "NEW", "MELEE / RANGED / MAGIC"),
+    ("spotlight", "NEW", "cast intro -> idle, 24 fps"),
+    ("lobby -> match", "LIVE", "unchanged, live portrait rebake"),
 ]
 for i, (k, n, v) in enumerate(rows):
     text(9, 21 + i, "[OK]", HEAD)
     text(14, 21 + i, f"{k} ".ljust(18, "."), MID)
-    text(33, 21 + i, n, HEAD)
+    text(33, 21 + i, n, HEAD if n != "STUB" else AMBER)
     text(39, 21 + i, v, BRIGHT)
-text(9, 30, "names: kit_projectile ... kit_transform", DIM)
-text(9, 31, "champion `sounds` overrides by name; q_* keys", AMBER)
-text(9, 32, "silence a slot and play q_cast instead", AMBER)
+text(9, 30, "keys: arrows/WS + Enter, 1-3, Esc (select -> menu)", DIM)
+text(9, 31, "AppImage passes --ui-live: menu now opens first", AMBER)
+text(9, 32, "--start-select bot|public|private [--champion]", AMBER)
 
-# Right: buffs.
-panel(76, 19, W - 7, 33, "BUFF  ->  STRONGEST EFFECT  ->  PRAYER CHIME")
+# Right: wielding.
+panel(76, 19, W - 7, 33, "WIELD  //  ITEM WIELD MODELS ON THE PLAYER SKELETON")
 ids = [
-    ("heal / heal_missing", "2678", "Rapid Heal"),
-    ("shield / dmg reduction", "2687", "Steel Skin"),
-    ("reflect / untargetable", "2687", "Steel Skin"),
-    ("attack / move speed", "2667", "Incredible Reflexes"),
-    ("anything else", "2690", "Thick Skin"),
+    ("kolodion", "1387", "staff of fire  [534, 567]"),
+    ("wise old man", "1381", "staff of air   [534, 567]"),
+    ("ranger", "12926", "toxic blowpipe  14403"),
+    ("bosses (13)", "----", "own skeleton: cannot wield"),
 ]
 for i, (use, n, src) in enumerate(ids):
-    text(79, 21 + i, use.ljust(26), BRIGHT)
-    text(106, 21 + i, n, HEAD)
-    text(112, 21 + i, src, MID)
-text(79, 27, "LIVE CUES   --demo-kit --timescale 4   (W / E / R)", WHITE)
-text(79, 28, "cerberus   2596  1930  3791", BRIGHT)
-text(79, 29, "graardor    200  2687+3791  1930", BRIGHT)
-text(79, 30, "venenatis  1930(+3791 pounce)  200  2596", BRIGHT)
-text(79, 31, "awowogei   own kit sounds kept, no shared noise", BRIGHT)
-text(79, 32, "rift-tools sounds --ids: 17 / 17 ids decode", AMBER)
+    text(79, 21 + i, use.ljust(16), BRIGHT)
+    text(96, 21 + i, n, HEAD)
+    text(103, 21 + i, src, MID)
+text(79, 26, "RULE  first weapon in inventory > cosmetic default", WHITE)
+text(79, 27, "opcodes 23 (+offset) / 24 / 78 read from item config", BRIGHT)
+text(79, 28, "merged before animation: swings with the hand", BRIGHT)
+text(79, 29, "fix: face colour cache keyed (ptr, faces) - no green", BRIGHT)
+text(79, 30, "spotlight loads a hero in ~68 ms, CPU raster", BRIGHT)
+text(79, 31, "streams into HUD atlas slot (1024,760) 384x512", AMBER)
+text(79, 32, "screens: hud/screens.rs   state: menu.rs", AMBER)
 
 # Verification strip.
 panel(6, 35, W - 7, 42, "OPERATOR CHECKS")
 checks = [
-    ("TESTS", "cargo test --workspace", "361 PASS / 0 FAIL", "+2 new: kit actions covered, buff chime choice"),
-    ("CLIPPY", "cargo clippy -D warnings", "CLEAN", "cargo fmt --check clean"),
-    ("LIVE", "--demo-kit --timescale 4", "CUES TRACED", "3 kit heroes x W/E/R + hand-written king"),
-    ("COMMITS", "9105a06  audio: kit abilities sound by action type", "", ""),
-    ("", "d2a3733  docs: record kit action sounds", "", ""),
+    ("TESTS", "cargo test --workspace", "374 PASS / 0 FAIL", "+13: menu, roster groups, timer, wield, spotlight"),
+    ("CLIPPY", "cargo clippy -D warnings", "CLEAN", "cargo fmt clean"),
+    ("LIVE", "--ui-live / --start-select", "SCREENSHOTS", "menu, King Awowogei, Kolodion + staff of fire"),
+    ("COMMITS", "d4984aa  client: main menu, hero spotlight select, wielded weapons", "", ""),
+    ("", "eac4365  docs: main menu, spotlight hero select and wielding", "", ""),
 ]
 for i, (k, cmd, res, note) in enumerate(checks):
     y = 36 + i
@@ -180,11 +180,11 @@ for i, (k, cmd, res, note) in enumerate(checks):
 
 # Next steps.
 panel(6, 44, W - 7, 48, "NEXT  //  THE ORACLE SAYS")
-text(9, 45, "1. Signature sounds per champion (your ear, your call).   2. Announcer + music hook (M9).", BRIGHT)
-text(9, 46, "3. By-ear volume pass on data/sounds.json.   4. Item tree: components, upgrades, actives.", BRIGHT)
-text(9, 47, "Not heard by a person yet: the right ids fire at the right moments; the mix is untested.", AMBER)
+text(9, 45, "1. Match server (M7) to light up Public / Private.   2. Menu music + click sounds by ear.", BRIGHT)
+text(9, 46, "3. Settings / profile buttons on the tablet.   4. Off-hand shields & two-handers for humanoids.", BRIGHT)
+text(9, 47, "Not clicked through by a person yet: menu -> select -> lobby was verified by screenshots and tests.", AMBER)
 
-center(49, " DO NOT TRY TO BEND THE SPOON.  ONLY TRY TO REALISE THE PRAYER CHIME. ", HEAD)
+center(49, " THERE IS NO SPOON.  THERE IS A STAFF OF FIRE, AND IT IS IN YOUR HAND. ", HEAD)
 
 # --- outputs -------------------------------------------------------------
 with open(out + ".txt", "w") as f:
