@@ -6,6 +6,8 @@ use anyhow::Result;
 use glam::{Mat3, Vec3};
 use rift_cache::{AnimationClip, AnimationScratch, Cache, Model, model::hsl_to_rgb};
 
+mod kit_runtime;
+
 use crate::champion::ChampionConfig;
 use crate::items::ItemConfig;
 use crate::motion::PlayerMotion;
@@ -198,6 +200,8 @@ pub struct AnimatedUnit {
     pub ambient_seed: u32,
     /// Range at which a watchtower acquires its first target.
     pub lock_range: f32,
+    /// Crowd control from kit abilities, and summon lifetime.
+    pub cc: crate::kit::Afflictions,
 }
 
 /// What the shop does with a purchase.
@@ -497,6 +501,11 @@ pub struct AnimatedScene {
     pub champion_name: String,
     /// File stem from `data/champions`; gates champion-specific kit pieces.
     champion_id: String,
+    /// Data-driven kit, when the champion file has one.
+    kit: Option<crate::kit::Kit>,
+    kit_rt: kit_runtime::KitRuntime,
+    /// Cursor ground point for kit abilities whose entry point takes none.
+    pub kit_aim: Vec3,
     /// Direction requested by hold-to-steer this frame. Consumed by
     /// `update_player` so both movement modes share the same weighted model.
     steer_wish: Option<Vec3>,
@@ -888,6 +897,10 @@ impl AnimatedScene {
             }
         };
 
+        let kit_rt = match &champion.kit {
+            Some(kit) => kit_runtime::KitRuntime::load(cache, &mut assets, kit),
+            None => kit_runtime::KitRuntime::default(),
+        };
         let mut animated = Self {
             units,
             player_index,
@@ -955,6 +968,9 @@ impl AnimatedScene {
             team_buffs: [None, None],
             champion_name: champion.name.clone(),
             champion_id: champion.id.clone(),
+            kit: champion.kit.clone(),
+            kit_rt,
+            kit_aim: Vec3::ZERO,
             steer_wish: None,
             melee_template,
             ranged_template,
@@ -1075,7 +1091,9 @@ impl AnimatedScene {
             armor: p.armor,
             ranged: p.ranged,
             attack_interval: p.attack_interval,
-            cooldown_maxima: if self.champion_id == "monkey" {
+            cooldown_maxima: if let Some(kit) = &self.kit {
+                kit.cooldowns()
+            } else if self.champion_id == "monkey" {
                 [BANANARANG_COOLDOWN, 8.0, 12.0, TRIAL_COOLDOWN]
             } else {
                 [Q_COOLDOWN, 8.0, 12.0, 45.0]
@@ -1144,6 +1162,63 @@ impl AnimatedScene {
             .iter()
             .filter(|u| u.super_minion && u.health > 0.0)
             .count()
+    }
+
+    pub fn debug_refill_mana(&mut self) {
+        let unit = &mut self.units[self.player_index];
+        unit.mana = unit.max_mana;
+    }
+
+    /// One line on what the kit did: hurt and crowd-controlled enemies,
+    /// live summons, and the player's state.
+    pub fn debug_kit_report(&self) -> String {
+        let player = &self.units[self.player_index];
+        let near: Vec<&AnimatedUnit> = self
+            .units
+            .iter()
+            .filter(|u| u.team != 0 && u.team != 3 && u.pos.distance(player.pos) < 2200.0)
+            .filter(|u| {
+                matches!(
+                    u.kind,
+                    UnitKind::Camp
+                        | UnitKind::MeleeMinion
+                        | UnitKind::RangedMinion
+                        | UnitKind::EnemyChampion
+                )
+            })
+            .collect();
+        let hurt = near.iter().filter(|u| u.health < u.max_health).count();
+        let dead = near.iter().filter(|u| u.health <= 0.0).count();
+        let cc = near
+            .iter()
+            .filter(|u| {
+                u.stun_timer > 0.0
+                    || u.cc.slow_timer > 0.0
+                    || u.cc.root_timer > 0.0
+                    || u.cc.fear_timer > 0.0
+                    || u.cc.taunt_timer > 0.0
+                    || u.venom_timer > 0.0
+            })
+            .count();
+        let summons = self
+            .units
+            .iter()
+            .filter(|u| u.cc.summoned && u.health > 0.0)
+            .count();
+        format!(
+            "enemies near {} hurt {} dead {} afflicted {} | summons {} | hp {:.0}/{:.0} shield {:.0} range {:.0} scale {:.2} cds {:?}",
+            near.len(),
+            hurt,
+            dead,
+            cc,
+            summons,
+            player.health,
+            player.max_health,
+            player.shield,
+            player.attack_range,
+            player.scale,
+            player.cooldowns
+        )
     }
 
     pub fn debug_damage_player(&mut self, amount: f32) {
@@ -1502,6 +1577,10 @@ impl AnimatedScene {
     }
 
     fn player_land_attack(&mut self, target: usize) {
+        if self.kit.is_some() {
+            self.kit_land_attack(target);
+            return;
+        }
         let pi = self.player_index;
         let unit = &mut self.units[pi];
         unit.attack_cooldown = unit.attack_interval / unit.attack_speed_mult.max(0.1);
@@ -1601,6 +1680,9 @@ impl AnimatedScene {
     /// Ranger looses a poisoned dart, and everyone else keeps the shared
     /// arcane bolt aimed at the cursor.
     pub fn cast_q(&mut self, target: Vec3) -> bool {
+        if self.kit.is_some() {
+            return self.cast_kit(0, target);
+        }
         match self.champion_id.as_str() {
             "monkey" => self.cast_bananarang(),
             "ranger" => self.cast_toxic_dart(target),
@@ -1876,6 +1958,9 @@ impl AnimatedScene {
         collision: &WorldCollision,
         height: &HeightGrid,
     ) -> bool {
+        if self.kit.is_some() {
+            return self.cast_kit(1, target);
+        }
         if self.champion_id == "ranger" {
             return self.cast_dart_volley(target);
         }
@@ -1931,6 +2016,10 @@ impl AnimatedScene {
     }
 
     pub fn cast_e(&mut self, collision: &WorldCollision, height: &HeightGrid) -> bool {
+        if self.kit.is_some() {
+            let target = self.kit_aim;
+            return self.cast_kit(2, target);
+        }
         if self.champion_id == "ranger" {
             return self.cast_footwork(collision, height);
         }
@@ -1970,6 +2059,9 @@ impl AnimatedScene {
         target_index: Option<usize>,
         height: &HeightGrid,
     ) -> bool {
+        if self.kit.is_some() {
+            return self.cast_kit(3, target);
+        }
         match self.champion_id.as_str() {
             "monkey" => self.cast_trial(target_index, height),
             "ranger" => self.cast_deadshot(target),
@@ -2733,6 +2825,11 @@ impl AnimatedScene {
             unit.attack_cooldown = (unit.attack_cooldown - dt).max(0.0);
             unit.attack_windup_timer = (unit.attack_windup_timer - dt).max(0.0);
             unit.stun_timer = (unit.stun_timer - dt).max(0.0);
+            if unit.cc.tick(dt) && unit.health > 0.0 {
+                // A kit summon's time is up.
+                unit.health = 0.0;
+                unit.death_anim = DEATH_SINK_TIME;
+            }
             if unit.attack_speed_timer > 0.0 {
                 unit.attack_speed_timer -= dt;
                 if unit.attack_speed_timer <= 0.0 {
@@ -2793,6 +2890,7 @@ impl AnimatedScene {
 
         let start_positions: Vec<Vec3> = self.units.iter().map(|unit| unit.pos).collect();
         self.update_player(dt, height, collision);
+        self.update_kit(dt, height, collision);
         self.update_delivery(dt, height);
 
         let unit_count = self.units.len();
@@ -2803,6 +2901,9 @@ impl AnimatedScene {
             }
             if self.units[i].spawn_delay > 0.0 {
                 self.units[i].spawn_delay = (self.units[i].spawn_delay - dt).max(0.0);
+                continue;
+            }
+            if self.kit_afflicted(i, dt, height) {
                 continue;
             }
             if self.units[i].stun_timer > 0.0 {
@@ -2847,10 +2948,14 @@ impl AnimatedScene {
 
     fn update_player(&mut self, dt: f32, height: &HeightGrid, collision: &WorldCollision) {
         let pi = self.player_index;
-        let speed_mult = self.team_speed_mult(0);
+        let speed_mult = self.team_speed_mult(0) * self.kit_move_mult();
         let steer = self.steer_wish.take();
         if self.units[pi].stun_timer > 0.0 {
             self.units[pi].moving = false;
+            return;
+        }
+        if self.kit_rt.controls_player() && self.units[pi].health > 0.0 {
+            // A dash, channel or rooted buff owns the champion's movement.
             return;
         }
         if self.units[pi].health <= 0.0 {
@@ -2998,6 +3103,7 @@ impl AnimatedScene {
     }
 
     fn update_minion(&mut self, index: usize, dt: f32, height: &HeightGrid) {
+        let aura = self.kit_minion_aura(index);
         let team = self.units[index].team;
         let speed_mult = self.team_speed_mult(team);
         let pos = self.units[index].pos;
@@ -3016,7 +3122,7 @@ impl AnimatedScene {
                 }
                 if unit.attack_cooldown <= 0.0 {
                     unit.attack_cooldown = unit.attack_interval;
-                    let damage = unit.attack_damage;
+                    let damage = unit.attack_damage * aura;
                     if unit.kind == UnitKind::RangedMinion {
                         let dir = (target_pos - unit.pos).normalize_or_zero();
                         self.projectiles.push(Projectile {
@@ -3041,6 +3147,15 @@ impl AnimatedScene {
             } else {
                 self.units[index].attack_target = Some(target);
                 self.move_unit_toward(index, target_pos, dt, height, speed_mult);
+            }
+        } else if self.units[index].cc.summoned {
+            // Kit summons stay at the champion's heel between fights.
+            self.units[index].attack_target = None;
+            let heel = self.units[self.player_index].pos;
+            if self.units[index].pos.distance(heel) > 320.0 {
+                self.move_unit_toward(index, heel, dt, height, 1.2);
+            } else {
+                self.units[index].moving = false;
             }
         } else {
             self.units[index].attack_target = None;
@@ -3353,6 +3468,15 @@ impl AnimatedScene {
     }
 
     fn find_target(&self, index: usize, team: u8, range: f32) -> Option<usize> {
+        let me = &self.units[index];
+        if me.cc.taunt_timer > 0.0
+            && self
+                .units
+                .get(me.cc.taunt_by)
+                .is_some_and(|unit| unit.health > 0.0 && unit.team != team)
+        {
+            return Some(me.cc.taunt_by);
+        }
         let pos = self.units[index].pos;
         let mut best: Option<(usize, f32)> = None;
         for (i, unit) in self.units.iter().enumerate() {
@@ -3398,7 +3522,7 @@ impl AnimatedScene {
             return;
         }
         let dir = delta / distance;
-        let step = (unit.speed * speed_mult * dt).min(distance);
+        let step = (unit.speed * speed_mult * unit.cc.move_mult() * dt).min(distance);
         unit.pos += dir * step;
         unit.pos.y = height.height_at(unit.pos.x, unit.pos.z);
         turn_toward(unit, dir.x.atan2(dir.z), dt);
@@ -3428,7 +3552,7 @@ impl AnimatedScene {
             return;
         }
         let dir = delta / distance;
-        let step = (unit.speed * speed_mult * dt).min(distance);
+        let step = (unit.speed * speed_mult * unit.cc.move_mult() * dt).min(distance);
         unit.pos += dir * step;
         unit.pos.y = height.height_at(unit.pos.x, unit.pos.z);
         unit.yaw = dir.x.atan2(dir.z);
@@ -3475,7 +3599,15 @@ impl AnimatedScene {
         {
             return;
         }
-        let mut team_mult = self.team_damage_mult(attacker_team);
+        let incoming = if index == self.player_index {
+            self.kit_incoming_mult()
+        } else {
+            1.0
+        };
+        if incoming <= 0.0 {
+            return;
+        }
+        let mut team_mult = self.team_damage_mult(attacker_team) * incoming;
         if self.duel.as_ref().is_some_and(|duel| {
             duel.target == index || duel.target == aggressor.unwrap_or(usize::MAX)
         }) {
@@ -3513,6 +3645,7 @@ impl AnimatedScene {
         if index == self.player_index && amount > 0.0 {
             let label = self.damage_label(attacker_team, aggressor);
             self.record_damage(&label, amount);
+            self.kit_after_player_hit(amount, aggressor);
         }
         let hero_aggressor = match aggressor {
             Some(aggressor) => self.units[aggressor].kind == UnitKind::Player,
@@ -3663,6 +3796,7 @@ impl AnimatedScene {
         if xp <= 0.0 {
             return;
         }
+        let xp = xp * self.kit_xp_mult();
         let pi = self.player_index;
         let player = &mut self.units[pi];
         player.gold = player.gold.saturating_add(gold);
@@ -4014,6 +4148,11 @@ impl AnimatedScene {
                     poisoned.venom_damage = poisoned.venom_damage.max(projectile.venom);
                     poisoned.venom_team = projectile.team;
                 }
+                let damage = if index == self.player_index {
+                    damage * self.kit_projectile_taken()
+                } else {
+                    damage
+                };
                 self.damage_unit_by(index, damage, projectile.team, projectile.attacker);
                 let (hit_color, hit_radius) = match projectile.style {
                     ProjectileStyle::Dart => ([120, 255, 150], 120.0),
@@ -4207,6 +4346,7 @@ impl AnimatedScene {
                 ambient_kind: None,
                 ambient_seed: 0,
                 lock_range: 0.0,
+                cc: Default::default(),
             };
             self.units.push(unit);
         }
@@ -4944,9 +5084,48 @@ fn load_unit(
         Some(seq) => Some(assets.clip(seq)?),
         None => None,
     };
+    Ok(build_unit(
+        model,
+        idle,
+        walk,
+        pos,
+        scale,
+        kind,
+        team,
+        health,
+        attack_range,
+        attack_damage,
+        attack_interval,
+        speed,
+        hit_radius,
+        bar_height,
+        lane,
+    ))
+}
+
+/// Build a unit from already loaded model and clips. Kit summons use this at
+/// cast time, when the cache is no longer at hand.
+#[allow(clippy::too_many_arguments)]
+fn build_unit(
+    model: Arc<Model>,
+    idle: Arc<AnimationClip>,
+    walk: Option<Arc<AnimationClip>>,
+    pos: Vec3,
+    scale: f32,
+    kind: UnitKind,
+    team: u8,
+    health: f32,
+    attack_range: f32,
+    attack_damage: f32,
+    attack_interval: f32,
+    speed: f32,
+    hit_radius: f32,
+    bar_height: f32,
+    lane: Vec<Vec3>,
+) -> AnimatedUnit {
     let walk_loop_ms = walk.as_ref().map_or(0.0, |clip| clip.loop_ms());
     let walk_stride = speed * walk_loop_ms / 1000.0;
-    Ok(AnimatedUnit {
+    AnimatedUnit {
         model,
         idle,
         walk,
@@ -5028,7 +5207,8 @@ fn load_unit(
         ambient_kind: None,
         ambient_seed: 0,
         lock_range: 0.0,
-    })
+        cc: Default::default(),
+    }
 }
 
 /// Deterministic loose wedge for a minion wave. Melee minions take the front

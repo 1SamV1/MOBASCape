@@ -30,6 +30,10 @@ pub struct ChampionConfig {
     /// Cache sprite IDs for the Q, W, E and R icons in the live ability bar.
     #[serde(default)]
     pub ability_icons: Vec<u32>,
+    /// Data-driven passive and abilities. Champions without one keep their
+    /// hand-written kit in `animated.rs`.
+    #[serde(default)]
+    pub kit: Option<crate::kit::Kit>,
     /// One-line flavour text shown on the hero-select card.
     #[serde(default)]
     pub tagline: String,
@@ -72,10 +76,15 @@ pub struct ChampionConfig {
     /// ranged damage.
     #[serde(default)]
     pub ranged: f32,
+    #[serde(default)]
     pub q_damage: f32,
+    #[serde(default)]
     pub r_damage: f32,
+    #[serde(default)]
     pub e_heal: f32,
+    #[serde(default)]
     pub e_shield: f32,
+    #[serde(default)]
     pub w_distance: f32,
     /// How heavy the champion is to move, 0 (feather) to 100 (colossus).
     /// Drives turn, acceleration and stopping time unless they are set by hand.
@@ -198,6 +207,34 @@ impl ChampionConfig {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn every_champion_file_parses_and_kits_are_complete() {
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data/champions");
+        let mut kits = 0;
+        for entry in std::fs::read_dir(&dir).expect("champion dir") {
+            let path = entry.expect("entry").path();
+            if path.extension().and_then(|e| e.to_str()) != Some("json") {
+                continue;
+            }
+            let text = std::fs::read_to_string(&path).expect("read");
+            let config: ChampionConfig = serde_json::from_str(&text)
+                .unwrap_or_else(|err| panic!("{}: {err}", path.display()));
+            assert_eq!(config.abilities.len(), 4, "{}", path.display());
+            assert_eq!(config.ability_icons.len(), 4, "{}", path.display());
+            if let Some(kit) = &config.kit {
+                kits += 1;
+                for ability in &kit.abilities {
+                    assert!(!ability.actions.is_empty(), "{}", path.display());
+                    assert!(ability.cooldown > 0.0 && ability.cost >= 0.0);
+                }
+            }
+        }
+        assert!(
+            kits >= 12,
+            "expected the twelve kit champions, found {kits}"
+        );
+    }
 
     #[test]
     fn blowpipe_ranger_kit_is_data_driven() {

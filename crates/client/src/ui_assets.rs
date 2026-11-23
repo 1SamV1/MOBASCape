@@ -11,7 +11,9 @@ const ATLAS_SIZE: u32 = 2048;
 const ITEM_SIZE: u32 = 128;
 /// Reserved shelf below the item/UI rows and above the font/minimap slots.
 const PORTRAIT_ROW_Y: u32 = 428;
-const PORTRAIT_SIZE: u32 = 256;
+/// Roster cards are at most 118px wide, so 128px portraits stay sharp and
+/// let two rows hold every champion above the minimap slot.
+const PORTRAIT_SIZE: u32 = 128;
 const PORTRAIT_GAP: u32 = 4;
 
 /// A small shelf-packed atlas of OSRS item icons and UI sprites.
@@ -234,12 +236,15 @@ impl UiAtlas {
             return;
         }
         let index = self.hero_uv.len() as u32;
-        let x = 2 + index * (PORTRAIT_SIZE + PORTRAIT_GAP);
-        if x + PORTRAIT_SIZE > ATLAS_SIZE {
+        let per_row = (ATLAS_SIZE - 2) / (PORTRAIT_SIZE + PORTRAIT_GAP);
+        let x = 2 + (index % per_row) * (PORTRAIT_SIZE + PORTRAIT_GAP);
+        let y = PORTRAIT_ROW_Y + (index / per_row) * (PORTRAIT_SIZE + PORTRAIT_GAP);
+        // Two rows end above the minimap slot at y = 760.
+        if y + PORTRAIT_SIZE > 756 {
             tracing::warn!("hero portrait {key} does not fit in the UI atlas");
             return;
         }
-        let uv = self.copy(&fitted, x, PORTRAIT_ROW_Y);
+        let uv = self.copy(&fitted, x, y);
         self.hero_uv.insert(key.to_string(), uv);
     }
 

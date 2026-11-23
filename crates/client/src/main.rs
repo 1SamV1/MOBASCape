@@ -8,6 +8,7 @@ mod hero_select;
 mod hud;
 mod item_icons;
 mod items;
+mod kit;
 mod minimap;
 mod model_textures;
 mod motion;
@@ -125,6 +126,10 @@ struct Cli {
     /// Demo: cast W/E/R and print the resulting player stats.
     #[arg(long)]
     demo_kit: bool,
+    /// Demo: stand by a jungle camp and cast Q, W, E and R from the
+    /// champion's kit, logging what each did.
+    #[arg(long)]
+    demo_abilities: bool,
     /// Demo: grant gold, open the shop, and buy one of every item.
     #[arg(long)]
     demo_shop: bool,
@@ -492,6 +497,9 @@ fn main() -> Result<()> {
         demo_kit: cli.demo_kit,
         demo_kit_timer: 0.0,
         demo_kit_stage: 0,
+        demo_abilities: cli.demo_abilities,
+        demo_abilities_timer: 0.0,
+        demo_abilities_stage: 0,
         shop,
         event_log: vec![
             "FOUNTAIN HEALS".to_string(),
@@ -627,6 +635,9 @@ struct App {
     demo_kit: bool,
     demo_kit_timer: f32,
     demo_kit_stage: u8,
+    demo_abilities: bool,
+    demo_abilities_timer: f32,
+    demo_abilities_stage: u8,
     shop: ItemShop,
     event_log: Vec<String>,
     last_level: u32,
@@ -1686,6 +1697,52 @@ impl App {
                     self.demo_watchtower = false;
                 }
             }
+            if self.demo_abilities {
+                self.demo_abilities_timer += dt;
+                let t = self.demo_abilities_timer;
+                if self.demo_abilities_stage == 0 && t >= 0.5 {
+                    if let Some(camp) = animated.nearest_camp(animated.player_pos())
+                        && let Some(pos) = animated.unit_pos(camp)
+                    {
+                        let offset = Vec3::new(-420.0, 0.0, 0.0);
+                        let spot = pos + offset;
+                        animated.teleport_player(Vec3::new(
+                            spot.x,
+                            height.height_at(spot.x, spot.z),
+                            spot.z,
+                        ));
+                        tracing::info!("demo abilities: beside camp {camp}");
+                    }
+                    animated.debug_grant_gold(0);
+                    self.demo_abilities_stage = 1;
+                }
+                let slot_times = [1.5f32, 2.8, 4.1, 5.4];
+                for (slot, &at) in slot_times.iter().enumerate() {
+                    if self.demo_abilities_stage == 1 + slot as u8 && t >= at {
+                        // Aim at the camp beside the hero; `nearest_enemy`
+                        // would pick a team-1 unit anywhere on the map.
+                        let aim = animated
+                            .nearest_camp(animated.player_pos())
+                            .and_then(|index| animated.unit_pos(index))
+                            .unwrap_or(animated.player_pos() + Vec3::new(400.0, 0.0, 0.0));
+                        animated.debug_refill_mana();
+                        animated.kit_aim = aim;
+                        let ok = match slot {
+                            0 => animated.cast_q(aim),
+                            1 => animated.cast_w(aim, collision, height),
+                            2 => animated.cast_e(collision, height),
+                            _ => animated.cast_r(aim, None, height),
+                        };
+                        tracing::info!("demo abilities: slot {slot} cast={ok}");
+                        self.demo_abilities_stage += 1;
+                    }
+                }
+                if self.demo_abilities_stage == 5 && t >= 7.0 {
+                    tracing::info!("demo abilities: {}", animated.debug_kit_report());
+                    self.demo_abilities = false;
+                }
+            }
+
             if self.demo_kit {
                 self.demo_kit_timer += dt;
                 if self.demo_kit_stage == 0 && self.demo_kit_timer >= 1.0 {
@@ -2875,13 +2932,18 @@ impl App {
     }
 
     fn cast_e(&mut self) {
-        let (Some(height), Some(collision), Some(animated)) = (
+        let (Some(renderer), Some(height), Some(collision), Some(animated)) = (
+            self.renderer.as_ref(),
             self.height.as_ref(),
             self.collision.as_ref(),
             self.animated.as_mut(),
         ) else {
             return;
         };
+        let fallback = animated.player_pos();
+        animated.kit_aim = renderer
+            .pick_ground(self.mouse_pos.0, self.mouse_pos.1, height)
+            .unwrap_or(fallback);
         let cast = animated.cast_e(collision, height);
         println!("E cast={cast}");
     }

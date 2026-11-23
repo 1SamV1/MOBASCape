@@ -165,10 +165,16 @@ pub fn roster_panels(width: f32, height: f32) -> ((f32, f32, f32, f32), (f32, f3
     ((14.0, area_y, w, h), (width - 14.0 - w, area_y, w, h))
 }
 
+/// Rows of roster cards the layout reserves room for (8 per row).
+const GRID_ROWS: f32 = 2.0;
+
 /// Detail panel under the roster grid.
 pub fn detail_rect(width: f32, height: f32) -> (f32, f32, f32, f32) {
-    let (area_x, _, area_w) = grid_area(width, height);
-    let top = (height * 0.163).max(94.0) + 176.0;
+    let (area_x, area_y, area_w) = grid_area(width, height);
+    let card_h = card_rects(width, height, 1)
+        .first()
+        .map_or(152.0, |rect| rect.3);
+    let top = area_y + GRID_ROWS * (card_h + 8.0) + 6.0;
     let h = (height - top - 64.0).clamp(190.0, 320.0);
     (area_x, top, area_w, h)
 }
@@ -286,6 +292,7 @@ mod tests {
             class: String::new(),
             abilities: Vec::new(),
             ability_icons: Vec::new(),
+            kit: None,
             tagline: String::new(),
             model: 0,
             attachments: Vec::new(),
