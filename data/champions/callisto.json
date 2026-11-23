@@ -7,12 +7,14 @@
   "attachments": [],
   "idle": 4919,
   "walk": 4923,
+  "attack_anim": 4925,
+  "attack_hit": 0.5,
   "scale": 1.4,
   "health": 660,
   "mana": 220,
   "damage": 16,
   "armor": 36.0,
-  "attack_range": 330,
+  "attack_range": 280,
   "attack_interval": 1.25,
   "speed": 400,
   "ranged_auto": false,
@@ -129,6 +131,7 @@
         "actions": [
           {
             "type": "projectile",
+            "visual": "shockwave",
             "speed": 1200,
             "range": 1100,
             "damage": 140,

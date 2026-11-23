@@ -9,12 +9,14 @@
   ],
   "idle": 4484,
   "walk": 4488,
+  "attack_anim": 4491,
+  "attack_hit": 0.45,
   "scale": 0.92,
   "health": 700,
   "mana": 240,
   "damage": 15,
   "armor": 38.0,
-  "attack_range": 330,
+  "attack_range": 280,
   "attack_interval": 1.2,
   "speed": 390,
   "ranged_auto": false,
@@ -122,6 +124,7 @@
         "actions": [
           {
             "type": "projectile",
+            "visual": "soul",
             "speed": 1100,
             "range": 1000,
             "damage": 38,

@@ -9,6 +9,9 @@
   ],
   "idle": 7166,
   "walk": 7167,
+  "attack_anim": 6978,
+  "attack_hit": 0.5,
+  "projectile": "crystal",
   "scale": 0.8,
   "health": 420,
   "mana": 240,
@@ -68,6 +71,7 @@
         "actions": [
           {
             "type": "projectile",
+            "visual": "crystal",
             "speed": 1300,
             "range": 1000,
             "damage": 32,

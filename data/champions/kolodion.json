@@ -16,6 +16,9 @@
   ],
   "idle": 808,
   "walk": 819,
+  "attack_anim": 811,
+  "attack_hit": 0.55,
+  "projectile": "fire_blast",
   "scale": 1.5,
   "health": 440,
   "mana": 300,
@@ -125,6 +128,7 @@
         "actions": [
           {
             "type": "projectile",
+            "visual": "trident",
             "speed": 1700,
             "range": 950,
             "damage": 62,

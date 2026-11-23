@@ -17,6 +17,9 @@
   ],
   "idle": 813,
   "walk": 1146,
+  "attack_anim": 1162,
+  "attack_hit": 0.5,
+  "projectile": "water_wave",
   "scale": 1.5,
   "health": 460,
   "mana": 300,
@@ -73,6 +76,7 @@
         "actions": [
           {
             "type": "projectile",
+            "visual": "telegrab",
             "speed": 1400,
             "range": 1000,
             "damage": 35,

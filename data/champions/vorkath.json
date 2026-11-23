@@ -9,6 +9,9 @@
   ],
   "idle": 7948,
   "walk": 7947,
+  "attack_anim": 7952,
+  "attack_hit": 0.5,
+  "projectile": "dragonfire",
   "scale": 0.55,
   "health": 480,
   "mana": 260,
@@ -112,6 +115,7 @@
         "actions": [
           {
             "type": "projectile",
+            "visual": "venomfire",
             "speed": 700,
             "range": 900,
             "damage": 30,
@@ -150,6 +154,7 @@
             "interval": 0.25,
             "action": {
               "type": "projectile",
+              "visual": "dragonfire",
               "speed": 1500,
               "range": 1150,
               "damage": 34,

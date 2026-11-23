@@ -9,12 +9,14 @@
   ],
   "idle": 5318,
   "walk": 5317,
+  "attack_anim": 5319,
+  "attack_hit": 0.5,
   "scale": 0.95,
   "health": 520,
   "mana": 210,
   "damage": 15,
   "armor": 24.0,
-  "attack_range": 320,
+  "attack_range": 270,
   "attack_interval": 1.05,
   "speed": 440,
   "ranged_auto": false,
@@ -71,6 +73,7 @@
         "actions": [
           {
             "type": "projectile",
+            "visual": "wind_blast",
             "speed": 1250,
             "range": 950,
             "damage": 40,
