@@ -850,6 +850,31 @@ impl AnimatedScene {
         });
     }
 
+    /// Put `obj` (with its wield parts) in the player's hand, or empty it
+    /// with `None`. A hero that cannot wield ignores this. During a
+    /// transform the armed body waits in the saved model, so reverting
+    /// shows the new weapon.
+    pub fn equip_weapon(&mut self, obj: Option<u32>, parts: &[rift_cache::Model]) {
+        if !self.player_can_wield {
+            return;
+        }
+        self.player_weapon = obj;
+        let model = Arc::new(crate::wield::armed_body(&self.player_body, parts));
+        match self.kit_rt.transform.as_mut() {
+            Some(transform) => transform.model = model,
+            None => {
+                let pi = self.player_index;
+                self.units[pi].model = model;
+            }
+        }
+        tracing::info!("wield: player holds {obj:?}");
+    }
+
+    /// Cache item id of the weapon in the player's hand.
+    pub fn player_weapon(&self) -> Option<u32> {
+        self.player_weapon
+    }
+
     fn kit_revert_transform(&mut self) {
         let Some(state) = self.kit_rt.transform.take() else {
             return;

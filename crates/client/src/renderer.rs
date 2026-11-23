@@ -361,7 +361,7 @@ pub struct Renderer {
     screenshots_written: u32,
     hud_pipeline: wgpu::RenderPipeline,
     hud_bind_group: wgpu::BindGroup,
-    _ui_texture: wgpu::Texture,
+    ui_texture: wgpu::Texture,
     _ui_sampler: wgpu::Sampler,
     _terrain_texture: wgpu::Texture,
     _terrain_sampler: wgpu::Sampler,
@@ -848,7 +848,9 @@ impl Renderer {
                 sample_count: 1,
                 dimension: wgpu::TextureDimension::D2,
                 format: wgpu::TextureFormat::Rgba8UnormSrgb,
-                usage: wgpu::TextureUsages::TEXTURE_BINDING,
+                // COPY_DST lets the hero spotlight stream frames into its
+                // reserved atlas slot.
+                usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
                 view_formats: &[],
             },
             wgpu::util::TextureDataOrder::LayerMajor,
@@ -1462,7 +1464,7 @@ impl Renderer {
             screenshots_written: 0,
             hud_pipeline,
             hud_bind_group,
-            _ui_texture: ui_texture,
+            ui_texture,
             _ui_sampler: ui_sampler,
             _terrain_texture: terrain_texture,
             _terrain_sampler: terrain_sampler,
@@ -1954,6 +1956,37 @@ impl Renderer {
             return None;
         }
         Some((origin, dir))
+    }
+
+    /// Overwrite a rectangle of the HUD atlas (RGBA8, `w * h * 4` bytes):
+    /// used for the animated hero spotlight. Out-of-bounds writes are ignored.
+    pub fn write_hud_atlas(&self, x: u32, y: u32, w: u32, h: u32, rgba: &[u8]) {
+        let size = self.ui_texture.size();
+        if w == 0 || h == 0 || x + w > size.width || y + h > size.height {
+            return;
+        }
+        if rgba.len() < (w * h * 4) as usize {
+            return;
+        }
+        self.queue.write_texture(
+            wgpu::TexelCopyTextureInfo {
+                texture: &self.ui_texture,
+                mip_level: 0,
+                origin: wgpu::Origin3d { x, y, z: 0 },
+                aspect: wgpu::TextureAspect::All,
+            },
+            rgba,
+            wgpu::TexelCopyBufferLayout {
+                offset: 0,
+                bytes_per_row: Some(w * 4),
+                rows_per_image: Some(h),
+            },
+            wgpu::Extent3d {
+                width: w,
+                height: h,
+                depth_or_array_layers: 1,
+            },
+        );
     }
 
     /// Give the interface pass its atlas. Called once, when the theme is

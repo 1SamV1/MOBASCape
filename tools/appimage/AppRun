@@ -14,7 +14,7 @@
 #   MOBASCAPE_REPO=/path      use this checkout
 #   MOBASCAPE_NO_PULL=1       never touch git
 #   MOBASCAPE_NO_BUILD=1      never run cargo; use the newest binary there is
-# With no arguments the client starts with --ui-live (hero select first);
+# With no arguments the client starts with --ui-live (main menu, then hero select);
 # any arguments replace that and pass straight through.
 
 set -u

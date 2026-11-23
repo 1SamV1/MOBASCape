@@ -12,19 +12,22 @@ mod hud;
 mod item_icons;
 mod items;
 mod kit;
+mod menu;
 mod minimap;
 mod model_textures;
 mod motion;
 mod portraits;
 mod renderer;
 mod scene;
+mod spotlight;
 mod terrain_textures;
 mod theme_file;
 mod ui_assets;
 mod ui_live;
 mod ui_pass;
+mod wield;
 
-use std::collections::{HashSet, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -95,6 +98,11 @@ struct Cli {
     /// Start directly in the match with the default champion.
     #[arg(long)]
     skip_hero_select: bool,
+    /// Dev: skip the main menu and open hero select in this mode (`bot`,
+    /// `public` or `private`), for example for screenshots. With
+    /// `--champion` that hero starts highlighted.
+    #[arg(long)]
+    start_select: Option<String>,
     /// Demo: walk to this tile coordinate after one second (x y).
     #[arg(long, num_args = 2, value_names = ["X", "Y"])]
     demo_target: Option<Vec<f32>>,
@@ -319,7 +327,16 @@ fn main() -> Result<()> {
         champions[selected_champion].walk_arm = value.clamp(0.0, 1.0);
     }
     let champion = champions[selected_champion].clone();
-    let hero_select_open = cli.champion.is_none() && !cli.skip_hero_select && !has_demo_flags(&cli);
+    // The front end (main menu, then hero select) runs unless a champion or a
+    // dev demo was asked for. `--ui-live` only picks the in-match interface.
+    let hero_select_open = (cli.champion.is_none() || cli.start_select.is_some())
+        && !cli.skip_hero_select
+        && !has_dev_demo_flags(&cli);
+    let start_select = cli.start_select.as_deref().map(|mode| match mode {
+        "public" => menu::MatchMode::Public,
+        "private" => menu::MatchMode::Private,
+        _ => menu::MatchMode::Bot,
+    });
     let shop = ItemShop::load()?;
     let phase = Instant::now();
     let scene = scene::build(&cache, cli.region_x, cli.region_y, cli.radius, &cli.map)?;
@@ -469,6 +486,13 @@ fn main() -> Result<()> {
                 })
         })
         .collect();
+    let live_theme_inputs = cli.ui_live.then(|| LiveThemeInputs {
+        path: cli.ui_theme.clone(),
+        item_icons: item_icons.clone(),
+        minimap: minimap_image.clone(),
+        sprites: ability_icon_sprites.clone(),
+        portrait_for: live_portrait.as_ref().map(|_| champion.id.clone()),
+    });
     let ui_theme = if cli.ui_test || cli.ui_theme_sheet || cli.ui_layout || cli.ui_live {
         let theme = theme_file::load_with_items_minimap_and_portrait(
             &cache,
@@ -517,7 +541,19 @@ fn main() -> Result<()> {
         animated: Some(animated),
         height: Some(height),
         collision: Some(collision),
-        hero_select: HeroSelect::new(champions, selected_champion, hero_select_open),
+        hero_select: {
+            let mut select = HeroSelect::new(champions, selected_champion, false);
+            if let (true, Some(mode)) = (hero_select_open, start_select) {
+                select.begin(mode);
+            }
+            select
+        },
+        menu: menu::MainMenu::new(hero_select_open && start_select.is_none()),
+        spotlight: spotlight::Spotlight::default(),
+        ui_sounds: champion::load_default_sounds(),
+        last_tick_second: None,
+        live_theme_inputs,
+        weapon_models: HashMap::new(),
         lobby_open: false,
         lobby_deadline: None,
         window: None,
@@ -649,6 +685,17 @@ fn main() -> Result<()> {
     Ok(())
 }
 
+/// The inputs of the `--ui-live` theme, kept to rebuild it with another
+/// hero's team portrait.
+struct LiveThemeInputs {
+    path: PathBuf,
+    item_icons: Vec<(String, u32)>,
+    minimap: image::RgbaImage,
+    sprites: Vec<(String, u32)>,
+    /// The champion whose portrait the current theme carries.
+    portrait_for: Option<String>,
+}
+
 struct App {
     /// Sound effect output (silent without a device or with `--mute`).
     audio: audio::Audio,
@@ -658,6 +705,19 @@ struct App {
     height: Option<HeightGrid>,
     collision: Option<WorldCollision>,
     hero_select: HeroSelect,
+    /// The main menu the game boots into.
+    menu: menu::MainMenu,
+    /// The animated hero in the middle of hero select.
+    spotlight: spotlight::Spotlight,
+    /// Shared interface sounds (`data/sounds.json`).
+    ui_sounds: champion::SoundTable,
+    /// Last whole second the pick timer ticked on (for the warning beeps).
+    last_tick_second: Option<u32>,
+    /// What the `--ui-live` theme was built from, so it can be rebuilt with
+    /// the picked hero's portrait.
+    live_theme_inputs: Option<LiveThemeInputs>,
+    /// Wield models already loaded, by cache item id.
+    weapon_models: HashMap<u32, Vec<rift_cache::Model>>,
     /// The 5v5 lobby shown between the hero pick and the match.
     lobby_open: bool,
     /// Wall-clock deadline for the lobby auto-start, so the countdown keeps
@@ -894,6 +954,9 @@ impl ApplicationHandler for App {
         if self.demo_anim {
             renderer.camera.pitch = 0.52;
         }
+        if self.menu.open {
+            window.set_title("MobaScape");
+        }
         if self.hero_select.open {
             window.set_title("Rift - Choose Your Hero");
         }
@@ -964,6 +1027,14 @@ impl ApplicationHandler for App {
                     .as_ref()
                     .map(|r| (r.size.0 as f32, r.size.1 as f32))
                     .unwrap_or((1280.0, 720.0));
+                if self.menu.open {
+                    if state == ElementState::Pressed
+                        && let Some(index) = menu::button_at(w, h, self.mouse_pos)
+                    {
+                        self.menu_activate(menu::BUTTONS[index], event_loop);
+                    }
+                    return;
+                }
                 if self.lobby_open {
                     if state == ElementState::Pressed
                         && hero_select::lobby_button_at(w, h, self.mouse_pos)
@@ -974,14 +1045,15 @@ impl ApplicationHandler for App {
                 }
                 if self.hero_select.open {
                     if state == ElementState::Pressed {
-                        if let Some(filter) = hero_select::filter_at(w, h, self.mouse_pos) {
-                            self.hero_select.set_filter(filter);
-                        } else if let Some(slot) = hero_select::card_at(
+                        let card = hero_select::card_at(
                             w,
                             h,
                             self.mouse_pos,
-                            self.hero_select.visible.len(),
-                        ) {
+                            &self.hero_select.visible_classes(),
+                        );
+                        if let Some(filter) = hero_select::filter_at(w, h, self.mouse_pos) {
+                            self.hero_select.set_filter(filter);
+                        } else if let Some(slot) = card {
                             self.hero_select.select_slot(slot);
                         } else if hero_select::confirm_at(w, h, self.mouse_pos) {
                             self.open_lobby();
@@ -1077,6 +1149,25 @@ impl ApplicationHandler for App {
                     return;
                 };
 
+                if self.menu.open {
+                    if event.state == ElementState::Pressed {
+                        self.menu.hover = None;
+                        match code {
+                            KeyCode::Escape => event_loop.exit(),
+                            KeyCode::ArrowUp | KeyCode::KeyW => self.menu.move_focus(-1),
+                            KeyCode::ArrowDown | KeyCode::KeyS => self.menu.move_focus(1),
+                            KeyCode::Digit1 => self.menu_activate(menu::BUTTONS[0], event_loop),
+                            KeyCode::Digit2 => self.menu_activate(menu::BUTTONS[1], event_loop),
+                            KeyCode::Digit3 => self.menu_activate(menu::BUTTONS[2], event_loop),
+                            KeyCode::Enter | KeyCode::NumpadEnter | KeyCode::Space => {
+                                let action = self.menu.focused();
+                                self.menu_activate(action, event_loop);
+                            }
+                            _ => {}
+                        }
+                    }
+                    return;
+                }
                 if self.lobby_open {
                     if event.state == ElementState::Pressed {
                         match code {
@@ -1092,7 +1183,7 @@ impl ApplicationHandler for App {
                 if self.hero_select.open {
                     if event.state == ElementState::Pressed {
                         match code {
-                            KeyCode::Escape => event_loop.exit(),
+                            KeyCode::Escape => self.back_to_menu(),
                             KeyCode::ArrowLeft | KeyCode::KeyA => self.hero_select.cycle(-1),
                             KeyCode::ArrowRight | KeyCode::KeyD => self.hero_select.cycle(1),
                             KeyCode::Digit1 => self.hero_select.select_slot(0),
@@ -1432,6 +1523,12 @@ impl App {
             }
         }
 
+        if self.menu.open {
+            if self.renderer.is_some() {
+                self.tick_menu(dt);
+            }
+            return;
+        }
         if self.hero_select.open {
             if self.renderer.is_some() {
                 self.tick_hero_select(dt);
@@ -1445,6 +1542,7 @@ impl App {
             return;
         }
 
+        self.sync_weapon();
         if self.demo_shop {
             self.demo_shop_timer += dt;
             if self.demo_shop_stage == 0 && self.demo_shop_timer >= 0.5 {
@@ -2586,6 +2684,48 @@ impl App {
         self.update_camera(dt);
     }
 
+    /// Keep the hero's hand in step with the inventory: the first weapon
+    /// owned, else the champion's cosmetic weapon. Cheap when nothing changed.
+    fn sync_weapon(&mut self) {
+        let Some(animated) = self.animated.as_ref() else {
+            return;
+        };
+        if !animated.player_can_wield {
+            return;
+        }
+        let default = self
+            .hero_select
+            .selected_champion()
+            .and_then(|champion| champion.weapon.as_deref())
+            .and_then(|id| self.shop.items.iter().find(|item| item.id == id))
+            .and_then(|item| item.obj);
+        let wanted = wield::chosen_weapon(&self.shop.owned, &self.shop.items, default);
+        if wanted == animated.player_weapon() {
+            return;
+        }
+        let parts = match wanted {
+            Some(obj) => self.weapon_parts(obj),
+            None => Vec::new(),
+        };
+        // An item without a wield model leaves the hand empty rather than
+        // retrying every frame.
+        if let Some(animated) = self.animated.as_mut() {
+            animated.equip_weapon(wanted, &parts);
+        }
+    }
+
+    fn weapon_parts(&mut self, obj: u32) -> Vec<rift_cache::Model> {
+        if let Some(parts) = self.weapon_models.get(&obj) {
+            return parts.clone();
+        }
+        let parts = wield::load_weapon(&self.cache, obj).unwrap_or_else(|err| {
+            tracing::warn!("wield: {err:#}");
+            Vec::new()
+        });
+        self.weapon_models.insert(obj, parts.clone());
+        parts
+    }
+
     /// Render the paused world behind the champion picker.
     fn tick_hero_select(&mut self, dt: f32) {
         self.hero_select.time += dt;
@@ -2595,7 +2735,18 @@ impl App {
             .map(|r| (r.size.0 as f32, r.size.1 as f32))
             .unwrap_or((1280.0, 720.0));
         self.hero_select.hover =
-            hero_select::card_at(w, h, self.mouse_pos, self.hero_select.visible.len());
+            hero_select::card_at(w, h, self.mouse_pos, &self.hero_select.visible_classes());
+        if self.hero_select.tick_countdown(dt) {
+            tracing::info!("hero select: time is up");
+            self.open_lobby();
+            return;
+        }
+        let second = self.hero_select.seconds_left();
+        if second <= 5 && self.last_tick_second != Some(second) {
+            self.play_ui_sound("skill_point");
+        }
+        self.last_tick_second = Some(second);
+        self.update_spotlight(dt);
 
         if let (Some(renderer), Some(animated), Some(height), Some(collision)) = (
             self.renderer.as_mut(),
@@ -2634,6 +2785,184 @@ impl App {
             .build_hero_select(w, h, &self.hero_select, self.mouse_pos);
         if let Some(renderer) = self.renderer.as_mut() {
             renderer.set_hud_mesh(&self.hud.vertices, &self.hud.indices);
+        }
+    }
+
+    /// The main menu: the arena plays itself behind a slow orbiting camera.
+    fn tick_menu(&mut self, dt: f32) {
+        self.menu.time += dt;
+        let (w, h) = self
+            .renderer
+            .as_ref()
+            .map(|r| (r.size.0 as f32, r.size.1 as f32))
+            .unwrap_or((1280.0, 720.0));
+        self.menu.hover = menu::button_at(w, h, self.mouse_pos);
+        if let Some(index) = self.menu.hover {
+            self.menu.focus = index;
+        }
+        if let (Some(renderer), Some(animated), Some(height), Some(collision)) = (
+            self.renderer.as_mut(),
+            self.animated.as_mut(),
+            self.height.as_ref(),
+            self.collision.as_ref(),
+        ) {
+            // Attract mode: waves march and towers fire behind the menu.
+            animated.update(dt.min(0.05), height, collision);
+            animated.sound_cues.clear();
+            let (lo, hi) = animated.minimap_bounds;
+            let centre = (lo + hi) * 0.5;
+            renderer.camera.target = Vec3::new(
+                centre.x,
+                height.height_at(centre.x, centre.y) + 160.0,
+                centre.y,
+            );
+            renderer.camera.yaw = 0.6 + self.menu.time * 0.03;
+            renderer.camera.pitch = 0.80;
+            renderer.camera.distance = 7400.0;
+            renderer.update_camera();
+            let eye = renderer.camera.eye();
+            let forward = (eye - renderer.camera.target).normalize_or_zero();
+            let right = forward.cross(Vec3::Y).normalize_or_zero();
+            let up = right.cross(forward).normalize_or_zero();
+            animated.refresh_visibility(dt.min(0.05), collision);
+            animated.prepare_render(
+                height,
+                renderer.camera.target,
+                camera_cull_radius(renderer.size, &renderer.camera),
+                right,
+                up,
+                forward,
+            );
+            renderer.set_dynamic_mesh(&animated.vertices, &animated.indices);
+            renderer.set_fx_mesh(&animated.fx.vertices, &animated.fx.indices);
+            renderer.set_shadow_mesh(&animated.shadow_vertices, &animated.shadow_indices);
+            renderer.set_caster_mesh(&animated.caster_vertices, &animated.caster_indices);
+            renderer.set_lights(&animated.lights());
+            renderer.set_time(self.app_time);
+            renderer.set_vision(renderer.camera.target, 40_000.0);
+            animated.visibility_dirty = false;
+        }
+        let version = concat!("V", env!("CARGO_PKG_VERSION"));
+        self.hud.build_main_menu(w, h, &self.menu, version);
+        if let Some(renderer) = self.renderer.as_mut() {
+            renderer.set_hud_mesh(&self.hud.vertices, &self.hud.indices);
+        }
+    }
+
+    /// Run a main-menu button.
+    fn menu_activate(&mut self, action: menu::MenuAction, event_loop: &ActiveEventLoop) {
+        match action {
+            menu::MenuAction::Quit => event_loop.exit(),
+            menu::MenuAction::Play(mode) => {
+                tracing::info!("menu: {}", mode.label());
+                self.play_ui_sound("skill_point");
+                self.menu.open = false;
+                self.hero_select.begin(mode);
+                self.last_tick_second = None;
+                // The attract-mode match is thrown away at lock in; keep the
+                // world still behind the picker.
+                if let Some(window) = self.window.as_ref() {
+                    window.set_title(&format!("MobaScape - {} - Choose Your Hero", mode.label()));
+                }
+            }
+        }
+    }
+
+    /// Leave hero select for the main menu (Esc).
+    fn back_to_menu(&mut self) {
+        self.hero_select.open = false;
+        self.menu.open = true;
+        if let Some(window) = self.window.as_ref() {
+            window.set_title("MobaScape");
+        }
+    }
+
+    /// Play a shared interface sound at the listener.
+    fn play_ui_sound(&mut self, name: &str) {
+        let Some(spec) = self.ui_sounds.get(name).copied() else {
+            return;
+        };
+        let listener = audio::Listener {
+            pos: Vec3::ZERO,
+            right: Vec3::X,
+        };
+        let cue = audio::SoundCue {
+            id: spec.id,
+            pos: Vec3::ZERO,
+            volume: spec.volume,
+            speed: spec.speed,
+        };
+        self.audio.play_cues(&self.cache, &listener, [cue]);
+    }
+
+    /// Keep the spotlight on the highlighted hero and stream its frames into
+    /// the HUD atlas.
+    fn update_spotlight(&mut self, dt: f32) {
+        let Some(champion) = self.hero_select.selected_champion().cloned() else {
+            return;
+        };
+        if self.spotlight.showing() != Some(champion.id.as_str()) {
+            let weapon = champion
+                .weapon
+                .as_deref()
+                .and_then(|id| self.shop.items.iter().find(|item| item.id == id))
+                .and_then(|item| item.obj);
+            let parts = weapon.map(|obj| self.weapon_parts(obj)).unwrap_or_default();
+            let started = Instant::now();
+            if let Err(err) = self.spotlight.show(&self.cache, &champion, &parts) {
+                tracing::warn!("spotlight {}: {err:#}", champion.id);
+            }
+            tracing::debug!(
+                "spotlight: {} loaded in {:.1} ms",
+                champion.id,
+                started.elapsed().as_secs_f32() * 1000.0
+            );
+        }
+        if let Some(pixels) = self.spotlight.update(dt)
+            && let Some(renderer) = self.renderer.as_ref()
+        {
+            let (x, y, w, h) = ui_assets::SPOTLIGHT_RECT;
+            renderer.write_hud_atlas(x, y, w, h, pixels);
+        }
+    }
+
+    /// Rebuild the `--ui-live` theme with the picked hero's portrait.
+    fn refresh_live_portrait(&mut self, champion: &champion::ChampionConfig) {
+        let Some(inputs) = self.live_theme_inputs.as_mut() else {
+            return;
+        };
+        if inputs.portrait_for.as_deref() == Some(champion.id.as_str()) {
+            return;
+        }
+        let portrait = match portraits::bake_portrait(
+            &self.cache,
+            champion.model,
+            &champion.attachments,
+            champion.idle,
+        ) {
+            Ok(image) => image,
+            Err(err) => {
+                tracing::warn!("team portrait {}: {err:#}", champion.id);
+                return;
+            }
+        };
+        match theme_file::load_with_items_minimap_and_portrait(
+            &self.cache,
+            &inputs.path,
+            &inputs.item_icons,
+            Some(&inputs.minimap),
+            Some(&portrait),
+            &inputs.sprites,
+        ) {
+            Ok(theme) => {
+                inputs.portrait_for = Some(champion.id.clone());
+                if let Some(renderer) = self.renderer.as_mut() {
+                    renderer.set_ui_atlas(&theme.atlas);
+                }
+                self.ui_theme = Some(theme);
+                tracing::info!("team portrait: {} baked for the live frames", champion.id);
+            }
+            Err(err) => tracing::warn!("live theme rebuild: {err:#}"),
         }
     }
 
@@ -2711,6 +3040,7 @@ impl App {
         let Some(champion) = self.hero_select.champions.get(index).cloned() else {
             return;
         };
+        self.refresh_live_portrait(&champion);
         let Some(scene) = self.scene.as_ref() else {
             return;
         };
@@ -3398,13 +3728,14 @@ fn draw_ui_overlay(
     placed_out
 }
 
-/// Dev demos and explicit spawn requests boot straight into the match instead
-/// of stopping at the champion picker.
-fn has_demo_flags(cli: &Cli) -> bool {
+/// Dev demos, dev screens and explicit spawn requests boot straight into the
+/// match instead of stopping at the main menu. `--ui-live` is not one: it
+/// only picks the in-match interface, and the AppImage passes it on every
+/// launch.
+fn has_dev_demo_flags(cli: &Cli) -> bool {
     cli.ui_test
         || cli.ui_theme_sheet
         || cli.ui_layout
-        || cli.ui_live
         || cli.demo_target.is_some()
         || cli.spawn.is_some()
         || cli.shots.is_some()

@@ -16,6 +16,9 @@ const PORTRAIT_ROW_Y: u32 = 428;
 /// let two rows hold every champion above the minimap slot.
 const PORTRAIT_SIZE: u32 = 128;
 const PORTRAIT_GAP: u32 = 4;
+/// Reserved slot the hero-select spotlight streams its animated render into
+/// (right of the minimap, above the cache fonts at y = 1300).
+pub const SPOTLIGHT_RECT: (u32, u32, u32, u32) = (1024, 760, 384, 512);
 
 /// Cache fonts baked into the atlas for overhead names and hitsplat numbers.
 /// The ids are the font archives from index 13; their glyph sheets are the
@@ -395,6 +398,19 @@ impl UiAtlas {
 
     pub fn ui_uv(&self, name: &str) -> Option<[f32; 4]> {
         self.ui_uv.get(name).copied()
+    }
+
+    /// UVs of the spotlight slot (see [`SPOTLIGHT_RECT`]).
+    pub fn spotlight_uv(&self) -> [f32; 4] {
+        let (x, y, w, h) = SPOTLIGHT_RECT;
+        let aw = self.width as f32;
+        let ah = self.height as f32;
+        [
+            x as f32 / aw,
+            y as f32 / ah,
+            (x + w) as f32 / aw,
+            (y + h) as f32 / ah,
+        ]
     }
 
     pub fn hero_uv(&self, id: &str) -> Option<[f32; 4]> {

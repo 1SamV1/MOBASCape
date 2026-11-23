@@ -776,6 +776,14 @@ pub struct AnimatedScene {
     sounds: std::collections::BTreeMap<String, crate::champion::SoundSpec>,
     /// Shared combat and interface sounds (`data/sounds.json`).
     default_sounds: crate::champion::SoundTable,
+    /// The player champion's unarmed body parts, kept so a weapon can be
+    /// merged on and swapped later.
+    player_body: Vec<Model>,
+    /// True when the champion animates on the player skeleton and can hold
+    /// item wield models.
+    pub player_can_wield: bool,
+    /// Cache item id of the weapon in the player's hand.
+    player_weapon: Option<u32>,
     /// The player's basic-attack release sound, by combat class.
     player_release_sound: &'static str,
     pub sound_cues: Vec<crate::audio::SoundCue>,
@@ -827,7 +835,9 @@ pub struct AnimatedScene {
     pub last_mesh_units: usize,
     /// Base palette RGB per model, so face colours are not re-converted from
     /// HSL on every frame.
-    face_rgb_cache: HashMap<usize, Vec<[u8; 3]>>,
+    /// Keyed by model address and face count: a re-armed body can reuse a
+    /// freed model's address, and must not inherit its colours.
+    face_rgb_cache: HashMap<(usize, usize), Vec<[u8; 3]>>,
     pub visibility_dirty: bool,
     pub brush: Vec<(f32, f32, f32, f32)>,
     /// Biome pockets the map is built from, used for the HUD label.
@@ -963,10 +973,11 @@ impl AnimatedScene {
             380.0,
             Vec::new(),
         )?);
+        let player_body = assets.merged_parts(champion.model, &champion.attachments)?;
+        let player_can_wield = crate::wield::can_wield(&units[player_index].idle);
         {
             if !champion.attachments.is_empty() {
-                let parts = assets.merged_parts(champion.model, &champion.attachments)?;
-                units[player_index].model = Arc::new(Model::merge(&parts));
+                units[player_index].model = Arc::new(Model::merge(&player_body));
             }
             let player = &mut units[player_index];
             player.mana = champion.mana;
@@ -1269,6 +1280,9 @@ impl AnimatedScene {
             awowogei,
             sounds: champion.sounds.clone(),
             default_sounds: crate::champion::load_default_sounds(),
+            player_body,
+            player_can_wield,
+            player_weapon: None,
             player_release_sound: if champion.class == "MAGIC" {
                 "magic_release"
             } else {
@@ -6663,7 +6677,7 @@ fn append_unit_model(
     let dominant_texture = model_dominant_texture(model);
     // Key by the model instance, not the cache id: a recoloured camp/champion
     // can share the id while carrying a different palette.
-    let model_key = model as *const Model as usize;
+    let model_key = (model as *const Model as usize, model.faces.len());
     scene.face_rgb_cache.entry(model_key).or_insert_with(|| {
         model
             .face_colors

@@ -29,6 +29,11 @@ pub struct ItemDefinition {
     pub contrast: i16,
     /// `(find, replace)` palette pairs.
     pub recolors: Vec<(u16, u16)>,
+    /// Models merged onto a male player body when the item is worn or
+    /// wielded (opcodes 23, 24, 78), and the Y offset applied to them.
+    /// Zero means none.
+    pub male_models: [u32; 3],
+    pub male_offset: u8,
     pub value: i32,
     pub weight: i16,
     pub category: u16,
@@ -114,12 +119,25 @@ impl ItemDefinition {
                     def.members = true;
                     true
                 }
-                23 | 25 => {
+                23 => {
+                    def.male_models[0] = b.read_u16()? as u32;
+                    def.male_offset = b.read_u8()?;
+                    true
+                }
+                24 => {
+                    def.male_models[1] = b.read_u16()? as u32;
+                    true
+                }
+                78 => {
+                    def.male_models[2] = b.read_u16()? as u32;
+                    true
+                }
+                25 => {
                     b.read_u16()?;
                     b.read_u8()?;
                     true
                 }
-                24 | 26 => {
+                26 => {
                     b.read_u16()?;
                     true
                 }
@@ -170,7 +188,7 @@ impl ItemDefinition {
                     def.weight = b.read_i16()?;
                     true
                 }
-                78 | 79 | 90..=93 | 95 | 97 | 98 | 99 | 139 | 140 | 148 | 149 => {
+                79 | 90..=93 | 95 | 97 | 98 | 99 | 139 | 140 | 148 | 149 => {
                     b.read_u16()?;
                     true
                 }
@@ -270,6 +288,22 @@ mod tests {
         );
         assert_eq!((def.offset_x, def.offset_y), (-3, 16));
         assert_eq!(def.recolors, [(5, 9)]);
+        assert!(def.complete);
+    }
+
+    #[test]
+    fn male_wield_models_and_offset_are_read() {
+        // maleModel0 2694 with offset 6, maleModel1 300, maleModel2 301,
+        // then a female model the decoder skips.
+        let def = ItemDefinition::parse(
+            9,
+            &sample(&[
+                23, 0x0a, 0x86, 6, 24, 0x01, 0x2c, 78, 0x01, 0x2d, 25, 0, 1, 2,
+            ]),
+        )
+        .unwrap();
+        assert_eq!(def.male_models, [2694, 300, 301]);
+        assert_eq!(def.male_offset, 6);
         assert!(def.complete);
     }
 

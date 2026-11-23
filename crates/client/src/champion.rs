@@ -90,6 +90,10 @@ pub struct ChampionConfig {
     /// hand-written kit in `animated.rs`.
     #[serde(default)]
     pub kit: Option<crate::kit::Kit>,
+    /// Cosmetic weapon (an item id from `data/items/items.json`) a humanoid
+    /// hero holds while no weapon is in the inventory. It grants no stats.
+    #[serde(default)]
+    pub weapon: Option<String>,
     /// Named cache sound effects the kit plays (`"q_throw"`, ...). Ids are
     /// cache index-4 sounds; audition them with `rift-tools sound ID --out`.
     #[serde(default)]

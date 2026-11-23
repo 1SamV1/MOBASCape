@@ -59,6 +59,12 @@ enum Command {
     },
     /// Print an item definition and its inventory-icon fields.
     Item { id: u32 },
+    /// List the items whose male wield/wear models include any of these
+    /// model ids (which NPC body parts are really held weapons).
+    Wielders {
+        #[arg(value_delimiter = ',')]
+        models: Vec<u32>,
+    },
     /// Print an object definition.
     Object { id: u32 },
     /// Search object definitions by name substring.
@@ -214,6 +220,7 @@ fn main() -> Result<()> {
         Command::Npc { id } => npc(&cache, id)?,
         Command::FindNpc { query, limit } => find_npc(&cache, &query, limit)?,
         Command::Item { id } => item(&cache, id)?,
+        Command::Wielders { models } => wielders(&cache, &models)?,
         Command::Object { id } => object(&cache, id)?,
         Command::FindObject { query, limit } => find_object(&cache, &query, limit)?,
         Command::Sequence { id } => sequence(&cache, id)?,
@@ -690,6 +697,23 @@ fn find_npc(cache: &Cache, query: &str, limit: usize) -> Result<()> {
     Ok(())
 }
 
+fn wielders(cache: &Cache, models: &[u32]) -> Result<()> {
+    let mut found = 0;
+    for (id, data) in cache.archive_files_with_ids(2, 10)? {
+        let Ok(def) = ItemDefinition::parse(id, &data) else {
+            continue;
+        };
+        for model in def.male_models.iter().filter(|&&m| m != 0) {
+            if models.contains(model) {
+                println!("model {model}: item {id} {:?}", def.name);
+                found += 1;
+            }
+        }
+    }
+    println!("{found} match(es)");
+    Ok(())
+}
+
 fn item(cache: &Cache, id: u32) -> Result<()> {
     let data = cache.config(10, id)?;
     let def = ItemDefinition::parse(id, &data)?;
@@ -715,6 +739,10 @@ fn item(cache: &Cache, id: u32) -> Result<()> {
         def.stackable,
         def.members,
         def.recolors
+    );
+    println!(
+        "  wield: male models={:?} offset={}",
+        def.male_models, def.male_offset
     );
     Ok(())
 }
