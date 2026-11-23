@@ -15,6 +15,9 @@ struct SceneGlobals {
     tuning: vec4<f32>,
     vision: vec4<f32>,
     vision_grid: vec4<f32>,
+    light_params: vec4<f32>,
+    fog_hidden: vec4<f32>,
+    grass_params: vec4<f32>,
     lights: array<vec4<f32>, 48>,
     light_count: vec4<u32>,
 };

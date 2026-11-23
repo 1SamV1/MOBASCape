@@ -1,6 +1,21 @@
 # Status
 
-Last updated: team fog of war in the world and lighting retune, 2026-11-23.
+Last updated: data-driven lighting and the minimap view trapezoid, 2026-11-23.
+
+## 2026-11-23 — Lighting in data, minimap view trapezoid
+
+- **`data/lighting.json`** now holds the world look: terrain and unit
+  ambient, sun strength, shadow floor, the tint and saturation of unseen
+  ground, and grass saturation, brightness and mottle
+  (`crates/client/src/lighting.rs`, three new uniform blocks). **F5**
+  reloads it together with the scene shader, so the look can be tuned in a
+  running client. Unknown keys and out-of-range values are refused with an
+  error and the old values stay. Verified by rendering with an extreme copy
+  (frame brightness fell from 75 to 59) and with the shipped file (same
+  look as before).
+- **Minimap view trapezoid** (ROADMAPPLAN phase 2.4): the four screen
+  corners are cast onto the ground (`screen_footprint`) and drawn as the
+  camera's true footprint, wide at the far edge, clipped at the map edge.
 
 ## 2026-11-23 — Team fog of war and a darker, deeper light
 

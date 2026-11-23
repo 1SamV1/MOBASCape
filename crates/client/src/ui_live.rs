@@ -56,6 +56,7 @@ pub fn minimap(
     animated: &AnimatedScene,
     camera: (f32, f32, f32, f32),
     window: (u32, u32),
+    footprint: Option<[Vec3; 4]>,
 ) -> MinimapState {
     let (min, max) = animated.minimap_bounds;
     let point = |p: Vec3| map_point(p, min, max);
@@ -151,6 +152,7 @@ pub fn minimap(
         heroes,
         vision: Some(vision_mask(animated, min, max)),
         camera,
+        view: footprint.map(|corners| corners.map(|p| map_point_free(p, min, max))),
     }
 }
 
@@ -174,6 +176,22 @@ fn vision_mask(animated: &AnimatedScene, min: Vec2, max: Vec2) -> VisionMask {
         }
     }
     VisionMask { cols, rows, seen }
+}
+
+/// Like `map_point` but without clamping, for shapes that may run off the
+/// picture (the drawing is clipped to the map instead).
+fn map_point_free(p: Vec3, min: Vec2, max: Vec2) -> MapPoint {
+    let span = |value: f32, low: f32, high: f32, size: f32| {
+        if high > low {
+            ((value - low) / (high - low) * size).round() as i32
+        } else {
+            (size * 0.5) as i32
+        }
+    };
+    MapPoint {
+        x: span(p.x, min.x, max.x, MAP.0),
+        y: span(p.z, min.y, max.y, MAP.1),
+    }
 }
 
 fn map_point(p: Vec3, min: Vec2, max: Vec2) -> MapPoint {

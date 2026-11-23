@@ -12,6 +12,7 @@ mod hud;
 mod item_icons;
 mod items;
 mod kit;
+mod lighting;
 mod menu;
 mod minimap;
 mod model_textures;
@@ -973,6 +974,7 @@ impl ApplicationHandler for App {
         if self.hot_shaders {
             renderer.enable_shader_hot_reload();
         }
+        renderer.set_lighting(&lighting::Lighting::load_default());
         renderer.update_camera();
         tracing::info!(
             "camera target {:?}, distance {:.0}; click the ground to move",
@@ -1402,10 +1404,21 @@ impl App {
                 }
             }
             KeyCode::F5 => {
-                if let Some(renderer) = self.renderer.as_mut()
-                    && let Err(err) = renderer.reload_scene_shader()
-                {
-                    tracing::error!("shader reload failed, keeping the old shader:\n{err:#}");
+                if let Some(renderer) = self.renderer.as_mut() {
+                    if let Err(err) = renderer.reload_scene_shader() {
+                        tracing::error!("shader reload failed, keeping the old shader:\n{err:#}");
+                    }
+                    // The light tuning reloads with the shader, so one key
+                    // applies both while iterating on the look.
+                    match lighting::Lighting::load(lighting::LIGHTING_PATH) {
+                        Ok(tuning) => {
+                            renderer.set_lighting(&tuning);
+                            tracing::info!("lighting: reloaded {}", lighting::LIGHTING_PATH);
+                        }
+                        Err(err) => tracing::error!(
+                            "lighting reload failed, keeping the old values: {err:#}"
+                        ),
+                    }
                 }
             }
             KeyCode::F7 => {
@@ -3632,6 +3645,29 @@ impl App {
     }
 }
 
+/// Where the screen's four corners meet the ground plane under the camera
+/// focus (top left, top right, bottom right, bottom left). Corners looking
+/// at or above the horizon are cut off at a far distance.
+fn screen_footprint(renderer: &Renderer) -> Option<[Vec3; 4]> {
+    let (w, h) = (renderer.size.0 as f64, renderer.size.1 as f64);
+    let ground = renderer.camera.target.y;
+    let corner = |x: f64, y: f64| -> Option<Vec3> {
+        let (origin, dir) = renderer.screen_ray(x, y)?;
+        let far = 60_000.0;
+        if dir.y > -1e-3 {
+            return Some(origin + dir * far);
+        }
+        let t = ((ground - origin.y) / dir.y).min(far);
+        Some(origin + dir * t)
+    };
+    Some([
+        corner(0.0, 0.0)?,
+        corner(w, 0.0)?,
+        corner(w, h)?,
+        corner(0.0, h)?,
+    ])
+}
+
 /// Build the stage 3 interface for this window and hand it to the renderer's
 /// interface pass, when its theme was asked for.
 #[allow(clippy::too_many_arguments)]
@@ -3677,7 +3713,9 @@ fn draw_ui_overlay(
                 state.target = crate::ui_live::target(animated, selected);
             }
             if let (Some(animated), Some(scene)) = (animated, scene) {
-                state.minimap = crate::ui_live::minimap(scene, animated, camera, renderer.size);
+                let footprint = screen_footprint(renderer);
+                state.minimap =
+                    crate::ui_live::minimap(scene, animated, camera, renderer.size, footprint);
                 state.objectives = crate::ui_live::objectives(scene, animated);
             }
             if let Some(shop) = shop {

@@ -192,6 +192,7 @@ fn base() -> HudState {
             heroes: Vec::new(),
             vision: None,
             camera: (96, 92, 58, 48),
+            view: None,
         },
         objectives: ObjectivesState {
             lanes: vec![

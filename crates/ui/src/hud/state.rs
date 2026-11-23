@@ -441,4 +441,8 @@ pub struct MinimapState {
     pub vision: Option<VisionMask>,
     /// Left, top, width and height in the map picture.
     pub camera: (i32, i32, i32, i32),
+    /// The screen's footprint on the ground (top left, top right, bottom
+    /// right, bottom left), unclamped so it can run off the picture. When
+    /// set it is drawn instead of the `camera` rectangle.
+    pub view: Option<[MapPoint; 4]>,
 }

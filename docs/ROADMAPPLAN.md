@@ -169,8 +169,11 @@ All objects from the cache, placed through the map format
 ## Progress
 
 - 2026-11-23: phase 1.1 (team fog of war in the world shader), 1.2
-  (lighting retune, constants in the shader for now; the `lighting.json`
-  reload is still open) and the grass part of 1.3 are done.
+  (lighting retune) and the grass part of 1.3 are done.
+- 2026-11-23: 1.2 finished: `data/lighting.json` with F5 reload. Phase 2.4
+  (camera trapezoid) done. Open in phase 1: lane and jungle floor colours
+  from cache floor definitions. Post-grade saturation is still a shader
+  constant (the post pass has no uniform buffer).
 
 ## Started with this plan
 

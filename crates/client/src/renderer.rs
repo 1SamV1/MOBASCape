@@ -97,6 +97,12 @@ struct SceneGlobals {
     /// Team vision texture mapping: x, z of the grid's world origin, 1 /
     /// texture width in world units, and w = 1 when the grid is in use.
     vision_grid: [f32; 4],
+    /// `data/lighting.json`: terrain ambient, unit ambient, sun, shadow floor.
+    light_params: [f32; 4],
+    /// Unseen ground: tint rgb, kept saturation.
+    fog_hidden: [f32; 4],
+    /// Grass: saturation, brightness, mottle.
+    grass_params: [f32; 4],
     lights: [GpuLight; 16],
     light_count: [u32; 4],
 }
@@ -134,6 +140,9 @@ impl SceneGlobals {
             tuning: [1.0, 4.0, 0.0, 0.0],
             vision: [0.0, 0.0, 0.0, 1500.0],
             vision_grid: [0.0; 4],
+            light_params: crate::lighting::Lighting::default().uniforms()[0],
+            fog_hidden: crate::lighting::Lighting::default().uniforms()[1],
+            grass_params: crate::lighting::Lighting::default().uniforms()[2],
             lights: [GpuLight::default(); 16],
             light_count: [0; 4],
         }
@@ -1925,6 +1934,15 @@ impl Renderer {
             1.0 / (VISION_TEXTURE as f32 * 128.0),
             1.0,
         ];
+        self.upload_globals();
+    }
+
+    /// Apply light and fog-of-war tuning (`data/lighting.json`).
+    pub fn set_lighting(&mut self, lighting: &crate::lighting::Lighting) {
+        let [light, hidden, grass] = lighting.uniforms();
+        self.scene_globals.light_params = light;
+        self.scene_globals.fog_hidden = hidden;
+        self.scene_globals.grass_params = grass;
         self.upload_globals();
     }
 

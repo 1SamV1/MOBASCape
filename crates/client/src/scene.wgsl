@@ -21,6 +21,9 @@ struct SceneGlobals {
     tuning: vec4<f32>,
     vision: vec4<f32>,
     vision_grid: vec4<f32>,
+    light_params: vec4<f32>,
+    fog_hidden: vec4<f32>,
+    grass_params: vec4<f32>,
     lights: array<Light, 16>,
     light_count: vec4<u32>,
 };
@@ -153,12 +156,12 @@ fn lighting(input: VsOut) -> vec3<f32> {
     // retains its albedo instead of collapsing to a black polygon.
     // Phase 1 retune: a stronger key light and deeper shadows over a lower
     // ambient, so trees and walls ground themselves like the reference.
-    let sun = scene.sun_color.rgb * 0.90 * mix(0.36, 1.0, shadow);
+    let sun = scene.sun_color.rgb * scene.light_params.z * mix(scene.light_params.w, 1.0, shadow);
     // Camera facing fill keeps the fronts of models readable even when the
     // sun is behind them, which a top down MOBA camera hits constantly.
     let unit_fill = select(0.24, 0.40, input.material == 3u);
     let fill = max(dot(N, V), 0.0) * unit_fill;
-    let ambient = select(1.30, 1.48, input.material == 3u);
+    let ambient = select(scene.light_params.x, scene.light_params.y, input.material == 3u);
     var lit = albedo(input) * (hemi * ambient + sun * ndotl + fill) * input.ao * 1.02;
 
     lit += input.color.rgb * dynamic_lighting(input);
@@ -410,9 +413,10 @@ fn albedo(input: VsOut) -> vec3<f32> {
         let lush = vec3<f32>(0.50, 0.84, 0.50);
         let dry = vec3<f32>(0.70, 0.82, 0.50);
         let field_tint = mix(lush, dry, smoothstep(0.45, 0.85, macro_n));
-        let grass = mix(vec3<f32>(grass_luma), grass_raw, 1.12)
+        // Saturation, base brightness and mottle come from data/lighting.json.
+        let grass = mix(vec3<f32>(grass_luma), grass_raw, scene.grass_params.x)
             * field_tint
-            * (0.58 + 0.30 * mottle);
+            * (scene.grass_params.y + scene.grass_params.z * mottle);
         // The dark biome grass sprites are nearly black in linear light and
         // read as flat fog/water in low jungle. Lift the linear values while
         // preserving the sprite's texture and hue.
@@ -584,7 +588,7 @@ fn fs(input: VsOut) -> @location(0) vec4<f32> {
         seen = 1.0 - smoothstep(scene.vision.w * 0.72, scene.vision.w * 1.45, los_distance);
     }
     let hidden_grey = vec3<f32>(dot(lit, vec3<f32>(0.299, 0.587, 0.114)));
-    let hidden = mix(hidden_grey, lit, 0.45) * vec3<f32>(0.40, 0.42, 0.47);
+    let hidden = mix(hidden_grey, lit, scene.fog_hidden.w) * scene.fog_hidden.rgb;
     lit = mix(hidden, lit, seen);
     let fog = fog_factor(input);
     let sun_amount = max(

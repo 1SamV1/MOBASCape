@@ -73,7 +73,8 @@ running until it was killed).
 
 - `--hot-shaders` watches `crates/client/src/scene.wgsl` and recompiles it
   on save (it checks every 15 frames).
-- **F5** reloads it on demand, with or without the flag.
+- **F5** reloads it on demand, with or without the flag, and reloads
+  `data/lighting.json` (ambient, sun, shadow floor, fog-of-war tint, grass).
 - The WGSL is parsed and validated with naga first. A broken edit logs the
   naga diagnostic, with line and column, and keeps the old pipelines, so the
   client never panics. The reload rebuilds the scene and water pipelines in
@@ -87,7 +88,7 @@ running until it was killed).
 |---|---|
 | F1 | Log the hotkey list |
 | F2 / Shift+F2 | Next / previous debug view: lit, albedo, normal, lighting, fog, lights, shadow, ao |
-| F5 | Reload `scene.wgsl` |
+| F5 | Reload `scene.wgsl` and `data/lighting.json` |
 | F7 | Log the hero tile and camera as a ready-to-paste `--shots` line |
 | F9 | Screenshot to `.cache/screenshots/shot-<ms>.png` |
 | F10 | Pause or resume the simulation (rendering continues) |

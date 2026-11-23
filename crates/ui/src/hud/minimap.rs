@@ -161,10 +161,18 @@ pub fn draw(theme: &Theme, list: &mut DrawList, area: Rect, state: &MinimapState
         disc(list, x, y, 3 * s, colour);
     }
 
-    // The camera's box, a thin pale rectangle.
-    let (cx, cy, cw, ch) = state.camera;
-    let camera = Rect::new(map.x + cx * s, map.y + cy * s, cw * s, ch * s);
-    list.outline(camera, s.max(1), [0.85, 0.9, 1.0, 0.55]);
+    // What the screen shows: its true ground footprint (a trapezoid under
+    // the tilted camera) when the client gives one, else a rectangle.
+    let view_colour = [0.92, 0.94, 1.0, 0.75];
+    if let Some(corners) = state.view {
+        let mut ring = corners.to_vec();
+        ring.push(corners[0]);
+        line(list, &ring, 1, view_colour);
+    } else {
+        let (cx, cy, cw, ch) = state.camera;
+        let camera = Rect::new(map.x + cx * s, map.y + cy * s, cw * s, ch * s);
+        list.outline(camera, s.max(1), view_colour);
+    }
 
     // The small button in the top right of the map.
     let button = Rect::new(map.right() - 20 * s, map.y + 4 * s, 16 * s, 16 * s);
@@ -222,6 +230,7 @@ mod hit_tests {
             heroes: Vec::new(),
             vision: None,
             camera: (0, 0, 10, 10),
+            view: None,
         }
     }
 
@@ -250,6 +259,20 @@ mod hit_tests {
             seen: vec![true; 6],
         });
         assert_eq!(quads(&state), lit, "fully seen draws no veil");
+    }
+
+    #[test]
+    fn the_view_trapezoid_replaces_the_camera_box() {
+        let boxed = quads(&empty_state());
+        let mut state = empty_state();
+        state.view = Some([
+            MapPoint { x: 80, y: 60 },
+            MapPoint { x: 180, y: 60 },
+            MapPoint { x: 150, y: 120 },
+            MapPoint { x: 110, y: 120 },
+        ]);
+        // Four stepped edges: many more one-pixel quads than the box's four.
+        assert!(quads(&state) > boxed + 100);
     }
 
     #[test]
