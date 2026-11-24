@@ -147,118 +147,136 @@ def logo(y, word):
 
 
 # ============================================================================
-def shaded_logo(y, word):
-    """Logo shaded left-to-right with the four block densities, the
-    classic ░▒▓█ ramp, so each letter fades in from the dark."""
+def bone_logo(y, word):
+    """X-ray logo: every filled cell of the block font becomes a bone joined
+    to its neighbours (box-drawing lines), with ● at the knuckles where three
+    or more bones meet. The letters' skeleton, nothing else."""
     width = len(word) * 10 - 1
     x0 = (W - width) // 2
     clear(x0 - 3, y - 1, x0 + width + 3, y + LOGO_ROWS)
-    ramp = "░▒▓█"
+    cells = set()
     for i, letter in enumerate(word):
         for r in range(LOGO_ROWS):
             for c, px in enumerate(LOGO[letter][r]):
-                if px == " ":
-                    continue
-                ch = px if px in "▀▄" else ramp[min(3, c * 4 // 9 + 1)]
-                put(x0 + i * 10 + c, y + r, ch, LOGO_GRAD[r])
+                if px != " ":
+                    cells.add((x0 + i * 10 + c, y + r))
+    lines = {
+        (0, 0, 0, 0): "∙", (1, 0, 0, 0): "╵", (0, 1, 0, 0): "╷", (0, 0, 1, 0): "╴", (0, 0, 0, 1): "╶",
+        (1, 1, 0, 0): "│", (0, 0, 1, 1): "─", (1, 0, 1, 0): "┘", (1, 0, 0, 1): "└",
+        (0, 1, 1, 0): "┐", (0, 1, 0, 1): "┌", (1, 1, 1, 0): "┤", (1, 1, 0, 1): "├",
+        (1, 0, 1, 1): "┴", (0, 1, 1, 1): "┬", (1, 1, 1, 1): "┼",
+    }
+    for (x, yy) in sorted(cells):
+        key = ((x, yy - 1) in cells, (x, yy + 1) in cells, (x - 1, yy) in cells, (x + 1, yy) in cells)
+        n = sum(key)
+        ch = "●" if n >= 3 and (x + yy) % 3 == 0 else lines[key]
+        col = WHITE if ch == "●" else LOGO_GRAD[yy - y]
+        put(x, yy, ch, col)
 
 
-shaded_logo(3, "MOBASCAPE")
+bone_logo(3, "MOBASCAPE")
 fade_bar(1, 2, W - 3)
-center(10, "  ░▒▓  t H E   d R A F T  ::  1 0   h E R O E S   //   0   d U P L I C A T E S  ▓▒░  ", AMBER)
-center(11, "  " + elite("phase.4 // choose wisely, they are watching") + "  ", WHITE)
+center(10, "  ░▒▓  t H E   x - R A Y  ::  3 6   p A R T S   b O U N D   //   0   l E F T   b E H I N D  ▓▒░  ", AMBER)
+center(11, "  " + elite("there is no spoon. there was a frozen arm.") + "  ", WHITE)
 fade_bar(12, 2, W - 3)
 
 # --- release info -------------------------------------------------------------
 header(14, elite("release info"))
 clear(4, 15, W - 5, 18)
 info = [
-    ("rELEASE dATE", "2026-11-24", "cOMMIT", "96cef36  ->  sam/main"),
-    ("tYPE", "hERO sELECT: tEAM cOLUMNS", "tESTS", "400 PASS // 0 FAIL   (+4)"),
-    ("pICKS", "9 BOTS // DONE BY 22 s", "lOBBY", "shows the real lineups now"),
-    ("rULE", "NEVER STEAL YOUR HIGHLIGHT", "sTILL", "bots don't play their pick yet"),
+    ("rELEASE dATE", "2026-11-24", "cOMMIT", "14f17b4 + 51807e7 -> sam/main"),
+    ("tYPE", "sKELETON bINDING + lIMB iD", "tESTS", "405 PASS // 0 FAIL   (+5)"),
+    ("bEFORE", "PARTS FROZEN IN REST POSE", "dRIFT", "0.015 - 0.758 of hero height"),
+    ("aFTER", "EVERY PART <= 0.03 (A TEST)", "bONUS", "evergreens lost the bark ring"),
 ]
 for i, (k1, v1, k2, v2) in enumerate(info):
     y = 15 + i
     text(8, y, f"{k1:.<16}", DIM)
-    text(25, y, v1, AMBER if k1 == "rULE" else BRIGHT)
+    text(25, y, v1, RED if k1 == "bEFORE" else AMBER if k1 == "aFTER" else BRIGHT)
     text(76, y, f"{k2:.<12}", DIM)
-    text(89, y, v2, RED if k2 == "sTILL" else HEAD)
+    text(89, y, v2, HEAD)
 
-# --- left: the draft timeline --------------------------------------------------
-box(4, 20, 74, 44, elite("draft.log // 30 seconds"))
-text(8, 22, "  t(s)  0    5    10   15   20   25   30", DIM)
-text(8, 23, "        ├────┼────┼────┼────┼────┼────┤", DIM)
-picks = [
-    ("RED  1", 2.5, "Kalphite Queen", RED),
-    ("BLUE 2", 4.5, "Venenatis", CYAN),
-    ("RED  2", 7.0, "Vorkath", RED),
-    ("BLUE 3", 9.5, "Blowpipe Ranger", CYAN),
-    ("RED  3", 12.0, "Ancient Wyvern", RED),
-    ("BLUE 4", 14.5, "Big Frog", CYAN),
-    ("RED  4", 17.0, "Kree'arra Jr.", RED),
-    ("BLUE 5", 19.5, "JalRek-Jad", CYAN),
-    ("RED  5", 22.0, "General Graardor", RED),
+# --- left: drift table ----------------------------------------------------------
+box(4, 20, 74, 44, elite("drift.log // frozen -> bound"))
+text(8, 22, "hERO              pART       fROZEN    bOUND   hOW", DIM)
+text(8, 23, "─" * 62, FAINT)
+rows = [
+    ("Kree'arra Jr.", "28021", 0.758, 0.000, "NATIVE"),
+    ("Venenatis", "28295", 0.464, 0.002, "RIGID"),
+    ("K'ril Tsutsaroth", "27681", 0.148, 0.009, "NATIVE"),
+    ("Vorkath", "41468", 0.129, 0.003, "NATIVE"),
+    ("King Awowogei", "4823", 0.129, 0.027, "NATIVE"),
+    ("Kolodion", "hands 176", 0.119, 0.002, "NATIVE"),
+    ("Kalphite Queen", "24598", 0.096, 0.004, "NATIVE"),
+    ("Cerberus", "41449", 0.085, 0.001, "NATIVE"),
+    ("Zilyana", "27968", 0.082, 0.004, "NATIVE"),
+    ("General Graardor", "27665", 0.078, 0.003, "NATIVE"),
+    ("Wise Old Man", "staff 3711", 0.024, 0.001, "RIGID"),
 ]
-for i, (who, t, hero, col) in enumerate(picks):
-    y = 24 + i * 2
-    text(8, y, who, col)
-    x = 16 + int(t)
-    for k in range(16, x):
-        put(k, y, "·", FAINT)
-    put(x, y, "◆", col)
-    text(x + 2, y, hero, WHITE)
-text(8, 42, "YOU    ", AMBER)
-text(15, 42, "─" * 31 + "► Kolodion (locked)", AMBER)
+for i, (hero, part, before, after, how) in enumerate(rows):
+    y = 24 + i
+    text(8, y, f"{hero:<18}", WHITE)
+    text(26, y, f"{part:<11}", MID)
+    bar = min(10, max(1, round(before * 13)))
+    text(37, y, f"{before:.3f}", RED)
+    text(47, y, f"{after:.3f}", BRIGHT)
+    text(55, y, how, AMBER if how == "RIGID" else CYAN)
+    for k in range(bar):
+        put(63 + k, y, "▓", (120 + 13 * k, 40, 30))
+text(8, 36, "─" * 62, FAINT)
+text(8, 37, "36 attachment parts:  28 NATIVE  //  6 FOLLOW  //  2 RIGID", HEAD)
+text(8, 39, "nATIVE  keep OSRS labels (what the real client does)", CYAN)
+text(8, 40, "fOLLOW  each vertex rides the nearest bound limb in its region", MID)
+text(8, 41, "rIGID   one label, one solid object: staffs, shells. never pairs", AMBER)
+text(8, 42, "sCORE   drift + mesh stretch. followers never move a pivot", DIM)
 
-# --- right: the stage ---------------------------------------------------------
-box(76, 20, W - 5, 44, elite("stage.scr // the spotlight"))
-stage = [
-    " YOUR TEAM              ▲ 17 ▲              ENEMY ",
-    " ┌──────┐            ░░░░░░░░░░░            ┌──────┐",
-    " │ YOU  │           ░░░▒▒▒▒▒▒▒░░░           │ BOT1 │",
-    " │ ~*~  │          ░░▒▒▓▓▓▓▓▓▓▒▒░░          │ KQ   │",
-    " ├──────┤          ░▒▒▓▓  o  ▓▓▒▒░          ├──────┤",
-    " │ BOT1 │         ░▒▓▓▓  /|\\  ▓▓▓▒░         │ BOT2 │",
-    " │ VEN  │         ░▒▓▓▓  / \\  ▓▓▓▒░         │ VRK  │",
-    " ├──────┤        ░▒▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▒░        ├──────┤",
-    " │ BOT2 │       ░▒▒▓▓█ KOLODION █▓▓▒▒░      │ BOT3 │",
-    " │ ...  │        ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀        │ ...  │",
-    " └──────┘          [  LOCK IN  ]            └──────┘",
+# --- right: the x-ray ---------------------------------------------------------
+box(76, 20, W - 5, 44, elite("xray.scr // limb identification"))
+figure = [
+    "                 .-\"\"\"-.                     ",
+    "                ( ●   ● )       ◄── HEAD     ",
+    "                 \\  ═  /        down < 0.22  ",
+    "         ┌────────┴───┴────────┐             ",
+    " ARM L ─►│  ●═══╗  TORSO  ╔═══●  │◄─ ARM R   ",
+    "  side   │      ║  ┼┼┼┼┼  ║      │   > 0.38  ",
+    " < -0.38 ●      ║  ┼┼┼┼┼  ║      ●           ",
+    "         ║      ╚═══╦═╦═══╝      ║           ",
+    "      [HAND]        ║ ║        [STAFF]═══════",
+    "                 ┌──╨─╨──┐     RIGID: one bone",
+    "                 │ ROBE  │◄── FOLLOW hips,   ",
+    "                 │ ░▒▓▒░ │    never the arm  ",
+    "                 └─┬───┬─┘                   ",
+    "         LEG L ───►●   ●◄─── LEG R           ",
+    "        down>0.62  ║   ║                     ",
+    "                  ═╩═ ═╩═   BOOTS: a pair,   ",
+    "                            can't go rigid   ",
 ]
-for i, line in enumerate(stage):
+for i, line in enumerate(figure):
     for j, ch in enumerate(line):
         if ch == " ":
             continue
-        if ch in "░▒▓█▀":
-            col = (230, 200, 120) if ch in "▓█" else (150, 130, 80) if ch == "▒" else (90, 80, 50)
-        elif ch in "┌┐└┘─│├┤":
-            col = DIM
-        elif j < 10:
-            col = CYAN
-        elif j > 40:
-            col = RED
-        else:
+        if ch == "●":
             col = WHITE
+        elif ch in "═║╔╗╚╝╦╩╨┼":
+            col = (225, 225, 200)
+        elif ch in "░▒▓":
+            col = (40, 160, 70)
+        elif ch.isupper() or ch in "◄►":
+            col = AMBER
+        elif ch in "┌┐└┘─│┬┴":
+            col = DIM
+        else:
+            col = MID
         put(79 + j, 22 + i, ch, col)
-roster = [
-    ("[Big Frog]", MID), ("[Callisto]", MID), ("[PICKED]", RED), ("[PICKED]", RED),
-    ("[Venenatis]", MID), ("[PICKED]", RED), ("[Kolodion]", AMBER), ("[Wise Old M]", MID),
-]
-x = 80
-for i, (name, col) in enumerate(roster):
-    text(80 + (i % 4) * 15, 35 + i // 4, name, col)
-text(80, 38, "PICKED  = dimmed, stamped, unclickable", MID)
-text(80, 39, "arrows  = step right over it", MID)
-text(80, 40, "bots    = take the type their team lacks", MID)
-text(80, 41, "lock in = the rest pick instantly", MID)
-text(80, 42, "result  = melee + ranged + magic, both sides", (120, 255, 140))
+text(80, 40, "label centroid vs rest-pose box (cache Y grows DOWN)", MID)
+text(80, 41, "span > 0.70 = ROOT  //  |back| > 0.55 = TAIL", MID)
+text(80, 42, "a vertex follows only its own limb, or the core", (120, 255, 140))
 
-# --- design call --------------------------------------------------------------
+# --- sysop's note --------------------------------------------------------------
 header(46, elite("sysop's note // left on your desk"))
 clear(4, 47, W - 5, 49)
-center(47, "mULTI-pART lATE rECIPES nEED a dESIGN cALL: nO oSRS cRAFT tAKES tWO oF oUR iTEMS.  wE'LL wAIT fOR tHE oPERATOR.", HEAD)
-center(48, "hero_select::PICK_SCHEDULE   //   HeroSelect { blue, red, seed }   //   is_picked()   //   lineups()   //   fill_picks()", DIM)
+center(47, "kOLODION'S bASE mODEL iS jUST hIS sLEEVES.  sO tHE sKELETON gROWS aS pARTS bIND:  hANDS, fEET, cHEST, tHEN tHE rOBE.", HEAD)
+center(48, "skeleton::assemble()   //   identify_limbs()   //   Model::follow_groups   //   rift-tools skeleton all --sheet", DIM)
 
 # --- roadmap -------------------------------------------------------------------
 header(51, elite("roadmap // the oracle says"))
@@ -279,10 +297,10 @@ text(8, 55, ">> next in P4: lane picker (Top/Jungle/Mid/Carry/Support), battle s
 
 fade_bar(57, 2, W - 3)
 clear(10, 58, W - 11, 61)
-center(58, "gREETZ: eVERY 'mID oR fEED' * tHE 30-sECOND tIMER * tHE bOT wHO lOCKED iN kALPHITE qUEEN aT 2.5 s", MID)
+center(58, "gREETZ: gRAARDOR'S fISTS (rEUNITED) * kREE'ARRA'S bIRD (nO lONGER 0.758 aWAY) * tHE rOBE tHAT wANTED tO bE aN aRM", MID)
 center(59, "nOT AFFILIATED WITH JAGEX. cACHE ASSETS STAY OUT OF GIT. aLWAYS.", DIM)
-center(60, "  w h a t   i f   i   t o l d   y o u   t h e   e n e m y   d r a f t   i s   a   h a s h   o f   t h e   c l o c k ?  ", HEAD)
-center(61, "-=[ mObAsCaPe // 2026 // nODE 7: tHE dRAFT // 57.6k // sYSoP: rIFT // 10 hEROES, 0 dUPES ]=-", AMBER)
+center(60, "  f r e e   y o u r   m i n d .   t h e n   f r e e   y o u r   h a n d s   f r o m   t h e   r e s t   p o s e .  ", HEAD)
+center(61, "-=[ mObAsCaPe // 2026 // nODE 8: tHE x-rAY // 57.6k // sYSoP: rIFT // 36 pARTS, 1 sKELETON ]=-", AMBER)
 
 # --- outputs ------------------------------------------------------------------
 with open(out + ".txt", "w") as f:
