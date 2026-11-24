@@ -2624,6 +2624,12 @@ impl App {
                     renderer.camera.pitch,
                     &heroes,
                 );
+            } else {
+                // Nothing legacy is drawn in a live match: drop whatever the
+                // menu, hero select or lobby left in the mesh, or the lobby's
+                // team cards stay on screen over the arena.
+                self.hud.vertices.clear();
+                self.hud.indices.clear();
             }
             renderer.set_hud_mesh(&self.hud.vertices, &self.hud.indices);
             phase_hud = hud_start.elapsed().as_secs_f32() * 1000.0;
