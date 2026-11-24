@@ -1,6 +1,21 @@
 # Status
 
-Last updated: shop upgrades (builds from / into), 2026-11-24.
+Last updated: shop search box, 2026-11-24.
+
+## 2026-11-24 — Shop search
+
+- Click the search box to type; every word must appear in the item's
+  name, id or category, or name a stat it gives (`damage`, `health`,
+  `mana`, `speed`, `ability`): "staff fire", "mana", "boots".
+  `items::matches_query`; filters on top of the category rows.
+- While typing, keys go to the box only (no casts, no B, no digits);
+  Backspace deletes, Enter or any click ends typing, Esc clears it.
+  Closing the shop forgets the search. Selection stays when it still
+  matches, otherwise moves to the first match; the grid scrolls to the top.
+- Gold frame and caret while focused; "No items match the search." when
+  empty. Verified with `--demo-shop` ("sword" shows 8 items).
+- Also fixed (2026-11-24): the lobby's team cards stayed over the arena in
+  `--ui-live` matches (the legacy HUD mesh was never cleared).
 
 ## 2026-11-24 — Upgrade recipes
 

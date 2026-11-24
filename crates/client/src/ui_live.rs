@@ -553,7 +553,12 @@ pub fn shop(shop: &ItemShop) -> ShopState {
             .map(|label| (*label).to_string())
             .collect(),
         category: shop.category.min(CATEGORY_LABELS.len() - 1),
-        search: "Search items".to_string(),
+        search: if shop.query.is_empty() && !shop.typing {
+            "Search items".to_string()
+        } else {
+            shop.query.clone()
+        },
+        searching: shop.typing,
         items,
         selected,
         scroll: shop.scroll,
@@ -1170,6 +1175,8 @@ mod tests {
             selected: Some(0),
             category: 1,
             scroll: 0,
+            query: String::new(),
+            typing: false,
         };
         let state = shop(&catalog);
         assert!(state.open);
@@ -1205,6 +1212,8 @@ mod tests {
             selected: None,
             category: 0,
             scroll: 0,
+            query: String::new(),
+            typing: false,
         };
         let slots = inventory(&catalog);
         assert_eq!(slots.len(), 6);
@@ -1265,6 +1274,8 @@ mod tests {
             selected: Some(0),
             category: 0,
             scroll: 0,
+            query: String::new(),
+            typing: false,
         };
         let tooltip = tooltip(&catalog, (400, 250)).expect("a tooltip");
         assert_eq!(tooltip.title, "Test ring");

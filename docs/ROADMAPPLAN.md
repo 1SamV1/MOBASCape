@@ -182,7 +182,9 @@ All objects from the cache, placed through the map format
   Open in phase 3: recipes / Builds into data, recommended page, search.
 - 2026-11-24: phase 3 upgrade recipes done (`builds_from`, OSRS ladders,
   difference pricing, Undo restores parts). Open in phase 3: recommended
-  page, search box, multi-part recipes for late items (data only now). Bot portraits need bots to carry a
+  page, search box, multi-part recipes for late items (data only now).
+- 2026-11-24: phase 3 search box done. Open in phase 3: recommended page,
+  multi-part late recipes. Bot portraits need bots to carry a
   champion id.
 
 ## Started with this plan

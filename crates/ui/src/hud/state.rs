@@ -162,6 +162,9 @@ pub struct ShopState {
     /// The selected category's index into `categories`.
     pub category: usize,
     pub search: String,
+    /// True while the search box has the keyboard (draws a caret and
+    /// shows `search` as typed text, not a placeholder).
+    pub searching: bool,
     pub items: Vec<ShopItem>,
     pub selected: usize,
     /// How far the item list is scrolled, in interface pixels.

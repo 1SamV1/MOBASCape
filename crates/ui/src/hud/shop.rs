@@ -83,6 +83,8 @@ pub enum ShopHit {
     Close,
     Category(usize),
     Row(usize),
+    /// The search box: start typing.
+    Search,
     Buy,
     /// Sell the selected item (only when it is in the bag).
     Sell,
@@ -130,6 +132,9 @@ pub fn hit(area: Rect, scale: i32, state: &ShopState, mouse: (i32, i32)) -> Opti
         if point(row.x, row.y, row.w, row.h) {
             return Some(ShopHit::Category(index));
         }
+    }
+    if point(area.x + 178 * s, area.y + 48 * s, 360 * s, 26 * s) {
+        return Some(ShopHit::Search);
     }
     let view = Rect::new(
         area.x + VIEW.0 * s,
@@ -255,12 +260,37 @@ pub fn draw(theme: &Theme, list: &mut DrawList, shop: &ShopState, gold: u32) {
     // The search line.
     let search = Rect::new(area.x + 178 * s, area.y + 48 * s, 360 * s, 26 * s);
     dark(theme, list, search);
+    if shop.searching {
+        // A thin gold frame while the box has the keyboard.
+        let edge = [gold_colour[0], gold_colour[1], gold_colour[2], 0.8];
+        list.rect(Rect::new(search.x, search.y, search.w, s), edge);
+        list.rect(Rect::new(search.x, search.bottom() - s, search.w, s), edge);
+        list.rect(Rect::new(search.x, search.y, s, search.h), edge);
+        list.rect(Rect::new(search.right() - s, search.y, s, search.h), edge);
+    }
     if let Some(font) = small {
+        let typed = shop.searching || shop.search != "Search items";
+        let shown = if shop.searching {
+            format!("{}|", shop.search)
+        } else {
+            shop.search.clone()
+        };
         list.text(
             font,
-            &shop.search,
+            &shown,
             search.x + 8 * s,
             search.y + 18 * s,
+            if typed { text } else { quiet },
+        );
+    }
+    if shop.items.is_empty()
+        && let Some(font) = small
+    {
+        list.text(
+            font,
+            "No items match the search.",
+            area.x + VIEW.0 * s + 8 * s,
+            area.y + VIEW.1 * s + 20 * s,
             quiet,
         );
     }

@@ -1205,6 +1205,32 @@ impl ApplicationHandler for App {
                     return;
                 }
 
+                // The shop's search box takes the keyboard while it is
+                // focused, so typed letters never cast or open things.
+                if self.shop.open && self.shop.typing {
+                    if event.state == ElementState::Pressed {
+                        match code {
+                            KeyCode::Escape => {
+                                self.shop.set_query("");
+                                self.shop.typing = false;
+                            }
+                            KeyCode::Enter | KeyCode::NumpadEnter => self.shop.typing = false,
+                            KeyCode::Backspace => self.shop.backspace(),
+                            _ => {
+                                if let Some(text) = event.text.as_ref() {
+                                    for ch in text.chars() {
+                                        self.shop.type_char(ch);
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        // A key held before typing began must not stick.
+                        self.held.remove(&code);
+                    }
+                    return;
+                }
+
                 if event.state == ElementState::Pressed {
                     self.held.insert(code);
                     if code == KeyCode::Escape {
@@ -1638,6 +1664,13 @@ impl App {
                     self.shop.upgrade(steel).price
                 );
                 self.shop.selected = Some(steel);
+                // Search for swords: the steel sword stays selected.
+                self.shop.typing = true;
+                self.shop.set_query("sword");
+                tracing::info!(
+                    "demo shop: search \"sword\" shows {} items",
+                    self.shop.filtered_items().len()
+                );
                 self.demo_shop_stage = 8;
             }
             if self.demo_shop_stage == 8 && self.demo_shop_timer >= 4.5 {
@@ -3443,6 +3476,8 @@ impl App {
         let mouse = (self.mouse_pos.0 as i32, self.mouse_pos.1 as i32);
 
         if self.shop.open {
+            // Any click ends typing; a click on the box starts it again.
+            self.shop.typing = false;
             let area = rift_ui::hud::shop::rect(
                 rift_ui::draw::Rect::new(0, 0, window.0 as i32, window.1 as i32),
                 scale,
@@ -3475,6 +3510,7 @@ impl App {
                             self.purchase_item(item);
                         }
                     }
+                    rift_ui::hud::shop::ShopHit::Search => self.shop.typing = true,
                     rift_ui::hud::shop::ShopHit::Sell => {
                         if let Some(item) = self.shop.selected {
                             self.sell_item(item);

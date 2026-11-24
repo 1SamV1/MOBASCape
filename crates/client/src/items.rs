@@ -92,6 +92,10 @@ pub struct ItemShop {
     pub category: usize,
     /// The live overlay's item-list scroll, in interface pixels.
     pub scroll: i32,
+    /// The search box text; empty shows everything.
+    pub query: String,
+    /// True while keys go to the search box instead of the game.
+    pub typing: bool,
 }
 
 pub const CATEGORY_LABELS: [&str; 7] = [
@@ -118,6 +122,8 @@ impl ItemShop {
             selected: Some(0),
             category: 0,
             scroll: 0,
+            query: String::new(),
+            typing: false,
         })
     }
 
@@ -129,6 +135,8 @@ impl ItemShop {
         self.selected = Some(0);
         self.category = 0;
         self.scroll = 0;
+        self.query.clear();
+        self.typing = false;
     }
 
     pub fn is_owned(&self, index: usize) -> bool {
@@ -208,11 +216,40 @@ impl ItemShop {
         into
     }
 
-    /// End the visit's Undo history once the window is closed.
+    /// End the visit once the window is closed: Undo history and the
+    /// search are forgotten.
     pub fn sync_visit(&mut self) {
         if !self.open {
             self.undo.clear();
+            self.query.clear();
+            self.typing = false;
         }
+    }
+
+    /// Change the search text. Keeps the selection when it still matches,
+    /// else moves it to the first match, and scrolls back to the top.
+    pub fn set_query(&mut self, query: &str) {
+        self.query = query.chars().take(MAX_QUERY).collect();
+        self.scroll = 0;
+        let shown = self.filtered_items();
+        if !self.selected.is_some_and(|index| shown.contains(&index)) {
+            self.selected = shown.first().copied();
+        }
+    }
+
+    /// One typed character (letters, digits, space, apostrophe, hyphen).
+    pub fn type_char(&mut self, ch: char) {
+        if ch.is_alphanumeric() || matches!(ch, ' ' | '\'' | '-') {
+            let mut query = self.query.clone();
+            query.push(ch);
+            self.set_query(&query);
+        }
+    }
+
+    pub fn backspace(&mut self) {
+        let mut query = self.query.clone();
+        query.pop();
+        self.set_query(&query);
     }
 
     /// Forget the newest Undo entry for `index` (after selling it, Undo
@@ -239,6 +276,7 @@ impl ItemShop {
         self.items
             .iter()
             .enumerate()
+            .filter(|(_, item)| matches_query(item, &self.query))
             .filter(|(_, item)| match self.category {
                 1 => item.category == "melee",
                 2 => item.category == "ranged",
@@ -251,6 +289,36 @@ impl ItemShop {
             .map(|(index, _)| index)
             .collect()
     }
+}
+
+/// Longest search text the box accepts.
+pub const MAX_QUERY: usize = 24;
+
+/// True when every word of `query` is found in the item's name, id or
+/// category, or names a stat it gives ("damage", "health", "mana", "speed",
+/// "ability"). Case does not matter; an empty query matches everything.
+pub fn matches_query(item: &ItemConfig, query: &str) -> bool {
+    let name = item.name.to_lowercase();
+    let id = item.id.replace('_', " ");
+    let mut stats = String::new();
+    for (word, value) in [
+        ("damage", item.damage),
+        ("health", item.health),
+        ("mana", item.mana),
+        ("speed", item.speed),
+        ("ability power", item.ability),
+    ] {
+        if value != 0.0 {
+            stats.push_str(word);
+            stats.push(' ');
+        }
+    }
+    query.to_lowercase().split_whitespace().all(|word| {
+        name.contains(word)
+            || id.contains(word)
+            || item.category.contains(word)
+            || stats.contains(word)
+    })
 }
 
 /// Every `builds_from` id must name another item that costs less, so an
@@ -396,6 +464,8 @@ mod tests {
             selected: None,
             category: 0,
             scroll: 0,
+            query: String::new(),
+            typing: false,
         };
         assert_eq!(
             shop.upgrade(1),
@@ -423,6 +493,54 @@ mod tests {
         );
         assert_eq!(shop.builds_into(0), vec![1, 2]);
         assert!(validate_recipes(&shop.items).is_ok());
+    }
+
+    #[test]
+    fn search_words_match_names_categories_and_stats() {
+        let mut staff = item("staff_of_fire", 850, &[]);
+        staff.name = "Staff of fire".to_string();
+        staff.category = "magic".to_string();
+        staff.ability = 10.0;
+        assert!(matches_query(&staff, ""));
+        assert!(matches_query(&staff, "FIRE"));
+        assert!(matches_query(&staff, "staff magic"));
+        assert!(matches_query(&staff, "ability"));
+        assert!(!matches_query(&staff, "health"), "it gives no health");
+        assert!(
+            !matches_query(&staff, "fire sword"),
+            "every word must match"
+        );
+    }
+
+    #[test]
+    fn typing_filters_and_keeps_a_matching_selection() {
+        let mut shop = ItemShop {
+            items: vec![item("bronze_sword", 300, &[]), item("oak_bow", 500, &[])],
+            owned: [None; 6],
+            undo: Vec::new(),
+            open: true,
+            selected: Some(1),
+            category: 0,
+            scroll: 120,
+            query: String::new(),
+            typing: true,
+        };
+        for ch in "sw!".chars() {
+            shop.type_char(ch);
+        }
+        assert_eq!(shop.query, "sw", "symbols are ignored");
+        assert_eq!(shop.filtered_items(), vec![0]);
+        assert_eq!(shop.selected, Some(0), "selection moved to a match");
+        assert_eq!(shop.scroll, 0);
+        shop.backspace();
+        shop.backspace();
+        assert_eq!(shop.filtered_items(), vec![0, 1]);
+        assert_eq!(shop.selected, Some(0), "still matches, so it stays");
+        shop.set_query(&"x".repeat(40));
+        assert_eq!(shop.query.len(), MAX_QUERY);
+        shop.open = false;
+        shop.sync_visit();
+        assert!(shop.query.is_empty() && !shop.typing);
     }
 
     #[test]
@@ -478,6 +596,8 @@ mod tests {
             selected: None,
             category: 0,
             scroll: 0,
+            query: String::new(),
+            typing: false,
         };
         shop.forget_purchase(3);
         assert_eq!(
@@ -550,6 +670,8 @@ mod tests {
             selected: Some(0),
             category: 0,
             scroll: 0,
+            query: String::new(),
+            typing: false,
         }
     }
 

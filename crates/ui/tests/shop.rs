@@ -186,6 +186,10 @@ fn clicks_hit_categories_rows_buy_and_close() {
         shop::hit(area, 1, &state.shop, (1280, 697)),
         Some(ShopHit::Sell)
     );
+    assert_eq!(
+        shop::hit(area, 1, &state.shop, (area.x + 200, area.y + 60)),
+        Some(ShopHit::Search)
+    );
     let undo = (area.right() - 200 + 30, area.y + 503 + 12);
     assert_eq!(shop::hit(area, 1, &state.shop, undo), None);
     state.shop.undo = Some("Bronze sword".to_string());

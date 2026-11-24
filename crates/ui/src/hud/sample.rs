@@ -439,6 +439,7 @@ fn base() -> HudState {
             categories: vec!["Items".to_string()],
             category: 0,
             search: "Search items".to_string(),
+            searching: false,
             delivery: None,
             sell_price: None,
             owned: 0,
