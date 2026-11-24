@@ -1,6 +1,37 @@
 # Status
 
-Last updated: skeleton binding, 2026-11-24.
+Last updated: bot heroes, open nexus, 2026-11-24.
+
+## 2026-11-24 — Bot heroes play the draft; the nexus is open
+
+- The other nine draft picks now play the match (`animated::bots`, ADR-054).
+  Blue bots: top, bottom, bottom, jungle (mid is yours); red: top, mid,
+  bottom, bottom, jungle. Each bot lanes, jungles its own side, takes its
+  side's region boss with a teammate from level 5, ganks in pairs (never
+  into a base), and walks home under 30% health or when it can buy its
+  next recommended item. Bots level and earn gold like the player; basic
+  attacks only so far. `--bots` fills both teams at boot for testing.
+- Region bosses: `inner_bot_west` (blue side) and `top_east` (red side) (`"boss": true` in the
+  map). Camps now aggro on, and turn on, any hero, not only the player.
+- The nexus is always attackable (it was shielded until an inhibitor fell).
+- Two lane bugs found on the way, both older than the bots:
+  - The wave cap (36 per team) counted dead minions, and units are never
+    removed, so every lane stopped spawning for good about two minutes
+    in. It counts the living now, and new minions reuse long-dead slots.
+  - The scene keeps towers 5 tiles off the lane centre, and minions
+    measured aggro to a tower's centre, so waves walked past live towers
+    into the inhibitors. Minions now see structures from their edge plus
+    400. In a 7.5-minute sim, towers wear down and fall in lane order;
+    inhibitors and both nexuses stayed full.
+- Shared experience: heroes within 1400 of an enemy kill they did not
+  land get 60% of its experience (no gold), player and bots alike.
+- Hitsplats are half size: the 24x23 cache splat at 1x with the bold
+  cache font at 1x (was 2x splat, 3x font).
+- Bananarang chips enemy towers, inhibitors and the nexus with its pure
+  share (40%) of each hit, without the stun.
+- Minimap and enemy roster show the bots by name; allies blue, seen
+  enemies red.
+
 
 ## 2026-11-24 — Skeleton binding: no more floating limbs
 

@@ -414,7 +414,7 @@ pub fn target(animated: &AnimatedScene, selected: Option<usize>) -> Option<Targe
 
 fn kind_name(kind: UnitKind) -> &'static str {
     match kind {
-        UnitKind::Player | UnitKind::EnemyChampion => "Hero",
+        UnitKind::Player | UnitKind::BotChampion => "Hero",
         UnitKind::MeleeMinion | UnitKind::RangedMinion => "Minion",
         UnitKind::Tower | UnitKind::Inhibitor | UnitKind::Nexus | UnitKind::Watchtower => {
             "Structure"
@@ -1304,7 +1304,7 @@ mod tests {
 
     #[test]
     fn unit_kinds_name_the_target_panel_tag() {
-        assert_eq!(kind_name(UnitKind::EnemyChampion), "Hero");
+        assert_eq!(kind_name(UnitKind::BotChampion), "Hero");
         assert_eq!(kind_name(UnitKind::MeleeMinion), "Minion");
         assert_eq!(kind_name(UnitKind::Tower), "Structure");
         assert_eq!(kind_name(UnitKind::Camp), "Camp");

@@ -574,6 +574,9 @@ struct CampJson {
     aggro: f32,
     #[serde(default)]
     leash: f32,
+    /// A region boss (bots take it as a team for the buff).
+    #[serde(default)]
+    boss: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -593,6 +596,7 @@ pub struct CampSpawn {
     pub speed: f32,
     pub aggro: f32,
     pub leash: f32,
+    pub boss: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -937,6 +941,7 @@ impl MapLayout {
                 speed: camp.speed,
                 aggro: camp.aggro,
                 leash: camp.leash,
+                boss: camp.boss,
             })
             .collect();
 

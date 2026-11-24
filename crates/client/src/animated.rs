@@ -7,6 +7,7 @@ use glam::{Mat3, Vec3};
 use rift_cache::{AnimationClip, AnimationScratch, Cache, Model, model::hsl_to_rgb};
 
 pub mod awowogei;
+pub mod bots;
 mod kit_runtime;
 pub mod ranks;
 
@@ -32,6 +33,12 @@ const WINDUP_LEASH: f32 = 90.0;
 const ACTION_BLEND_IN: f32 = 0.06;
 const ACTION_BLEND_OUT: f32 = 0.12;
 const MINION_AGGRO: f32 = 520.0;
+/// Radius and share of experience for heroes near a kill they did not land.
+const SHARE_RADIUS: f32 = 1400.0;
+const SHARE_XP: f32 = 0.6;
+/// Extra aggro reach minions have toward enemy structures, matching the
+/// 5-tile clearance the scene keeps between towers and the lane centre.
+const STRUCTURE_REACH: f32 = 400.0;
 const MAX_MINIONS_PER_TEAM: usize = 36;
 const DEATH_SINK_TIME: f32 = 0.45;
 /// OSRS models are authored facing -Z, while a unit's `yaw` points +Z along
@@ -54,7 +61,7 @@ pub enum UnitKind {
     Camp,
     Watchtower,
     /// Enemy champion controlled by the demo AI.
-    EnemyChampion,
+    BotChampion,
     /// Chest near the team spawn that holds remotely purchased items.
     StorageChest,
     /// Flying Armadylean courier that delivers stored purchases.
@@ -65,7 +72,7 @@ pub enum UnitKind {
 fn short_unit_name(kind: UnitKind) -> &'static str {
     match kind {
         UnitKind::Player => "YOUR CHAMPION",
-        UnitKind::EnemyChampion => "A RIVAL CHAMPION",
+        UnitKind::BotChampion => "A RIVAL CHAMPION",
         UnitKind::MeleeMinion | UnitKind::RangedMinion => "A MINION",
         UnitKind::Tower => "A TOWER",
         UnitKind::Inhibitor => "AN INHIBITOR",
@@ -89,7 +96,7 @@ impl UnitKind {
     }
 
     pub fn is_champion(self) -> bool {
-        matches!(self, Self::Player | Self::EnemyChampion)
+        matches!(self, Self::Player | Self::BotChampion)
     }
 }
 
@@ -165,6 +172,8 @@ pub struct AnimatedUnit {
     pub lane_index: usize,
     pub respawn_time: f32,
     pub camp_buff: Option<CampBuff>,
+    /// A region boss camp (bots take it as a team for the buff).
+    pub camp_boss: bool,
     pub mana: f32,
     pub max_mana: f32,
     pub level: u32,
@@ -851,6 +860,12 @@ pub struct AnimatedScene {
     delivered_queue: Vec<usize>,
     pub vision_origin: (i32, i32),
     pub team_buffs: [Option<TeamBuff>; 2],
+    /// Bot heroes' minds (one per bot champion unit).
+    pub bots: Vec<bots::BotBrain>,
+    /// When each team next ganks or takes its region boss.
+    pub team_plans: [bots::TeamPlan; 2],
+    /// Seconds to the next bot status line in the log.
+    pub bot_status_timer: f32,
     pub champion_name: String,
     /// File stem from `data/champions`; gates champion-specific kit pieces.
     champion_id: String,
@@ -1124,6 +1139,7 @@ impl AnimatedScene {
             )?;
             unit.respawn_time = camp.respawn;
             unit.camp_buff = Some(camp.buff);
+            unit.camp_boss = camp.boss;
             if camp.range > 300.0 {
                 unit.look = fx::look_by_name("earth_blast");
             }
@@ -1340,6 +1356,9 @@ impl AnimatedScene {
             delivered_queue: Vec::new(),
             vision_origin: (vision_origin_x, vision_origin_y),
             team_buffs: [None, None],
+            bots: Vec::new(),
+            team_plans: [bots::TeamPlan::default(); 2],
+            bot_status_timer: 30.0,
             champion_name: champion.name.clone(),
             champion_id: champion.id.clone(),
             kit: champion.kit.clone(),
@@ -1613,7 +1632,7 @@ impl AnimatedScene {
                     UnitKind::Camp
                         | UnitKind::MeleeMinion
                         | UnitKind::RangedMinion
-                        | UnitKind::EnemyChampion
+                        | UnitKind::BotChampion
                 )
             })
             .collect();
@@ -1858,7 +1877,10 @@ impl AnimatedScene {
     }
 
     pub fn minion_count(&self) -> usize {
-        self.units.iter().filter(|u| u.kind.is_minion()).count()
+        self.units
+            .iter()
+            .filter(|u| u.kind.is_minion() && u.health > 0.0)
+            .count()
     }
 
     pub fn inhibitor_count(&self, team: u8) -> (usize, usize) {
@@ -1875,10 +1897,13 @@ impl AnimatedScene {
         (alive, all)
     }
 
+    /// Whether `team`'s nexus can be attacked. It always can: minions that
+    /// reach the end of a lane, heroes and abilities all hit it (the user's
+    /// call; an inhibitor shield left lanes stalled in front of it).
+    /// Inhibitors still matter: a fallen one spawns super minions.
     pub fn nexus_vulnerable(&self, team: u8) -> bool {
-        self.units
-            .iter()
-            .any(|u| u.kind == UnitKind::Inhibitor && u.team == team && u.health <= 0.0)
+        let _ = team;
+        true
     }
 
     pub fn tower_healths(&self, team: u8) -> Vec<(f32, f32)> {
@@ -1921,9 +1946,6 @@ impl AnimatedScene {
         let target = &self.units[index];
         let targetable = target.team == 1 || (target.team == 2 && target.kind == UnitKind::Camp);
         if !targetable || target.health <= 0.0 || !target.visible {
-            return false;
-        }
-        if target.kind == UnitKind::Nexus && !self.nexus_vulnerable(target.team) {
             return false;
         }
         let target_pos = target.pos;
@@ -2996,9 +3018,6 @@ impl AnimatedScene {
             {
                 continue;
             }
-            if unit.kind == UnitKind::Nexus && !self.nexus_vulnerable(unit.team) {
-                continue;
-            }
             let center = unit.pos + Vec3::Y * (unit.bar_height * 0.45);
             let radius = unit.hit_radius;
             let oc = center - origin;
@@ -3061,12 +3080,22 @@ impl AnimatedScene {
         best.map(|(i, _)| i)
     }
 
-    /// Spawn a sparring enemy champion, used by `--demo-duel` until bots own
-    /// the enemy team slot.
+    /// Spawn a sparring enemy champion, used by `--demo-duel`.
     pub fn spawn_enemy_champion(
         &mut self,
         cache: &Cache,
         champion: &ChampionConfig,
+        pos: Vec3,
+    ) -> Result<usize> {
+        self.spawn_champion_unit(cache, champion, 1, pos)
+    }
+
+    /// Spawn a bot-controlled champion for `team` at `pos`.
+    pub fn spawn_champion_unit(
+        &mut self,
+        cache: &Cache,
+        champion: &ChampionConfig,
+        team: u8,
         pos: Vec3,
     ) -> Result<usize> {
         let mut assets = UnitAssets::new(cache);
@@ -3077,8 +3106,8 @@ impl AnimatedScene {
             Some(champion.walk),
             pos,
             champion.scale,
-            UnitKind::EnemyChampion,
-            1,
+            UnitKind::BotChampion,
+            team,
             champion.health,
             champion.attack_range,
             champion.damage,
@@ -3173,7 +3202,7 @@ impl AnimatedScene {
             && let Some(unit) = self.units.get(index)
         {
             return match unit.kind {
-                UnitKind::Player | UnitKind::EnemyChampion => "Rival champion",
+                UnitKind::Player | UnitKind::BotChampion => "Rival champion",
                 UnitKind::Tower => "Tower",
                 UnitKind::Camp => "Camp",
                 UnitKind::Watchtower => "Watchtower",
@@ -3244,12 +3273,15 @@ impl AnimatedScene {
                     "RED WATCHTOWER".to_string()
                 }
             }
-            UnitKind::EnemyChampion => "RIVAL CHAMPION".to_string(),
+            UnitKind::BotChampion => self
+                .bot_of(index)
+                .map(|bot| bot.name.to_uppercase())
+                .unwrap_or_else(|| "RIVAL CHAMPION".to_string()),
             UnitKind::StorageChest => "ITEM STORAGE".to_string(),
             UnitKind::DeliveryGuard => "ARMADYLEAN GUARD".to_string(),
         };
         let level = match unit.kind {
-            UnitKind::Player | UnitKind::EnemyChampion => unit.level,
+            UnitKind::Player | UnitKind::BotChampion => unit.level,
             UnitKind::Camp => 2,
             _ => 1,
         };
@@ -3257,7 +3289,7 @@ impl AnimatedScene {
             UnitKind::Player => "YOUR CHAMPION. CLICK TO TARGET, HOLD TO STEER.",
             UnitKind::Camp => "CLEAR IT FOR GOLD, XP AND A TEAM BUFF.",
             UnitKind::Tower => "STANDS IN THE LANE. FALLS BEFORE THE NEXUS.",
-            UnitKind::Inhibitor => "THE NEXUS SHIELD FALLS WHILE IT LIVES.",
+            UnitKind::Inhibitor => "WHILE IT IS DOWN, ITS LANE SPAWNS SUPER MINIONS.",
             UnitKind::Nexus => "DESTROY IT TO END THE MATCH.",
             UnitKind::MeleeMinion | UnitKind::RangedMinion => {
                 "LANE MINION. KILL IT FOR GOLD AND EXPERIENCE."
@@ -3267,7 +3299,8 @@ impl AnimatedScene {
             UnitKind::Watchtower => {
                 "FIRES A SLOW BOLT AT THE FIRST ENEMY IN RANGE AND KEEPS FIRING UNTIL IT LEAVES."
             }
-            UnitKind::EnemyChampion => "AN ENEMY CHAMPION.",
+            UnitKind::BotChampion if unit.team == 0 => "AN ALLIED BOT HERO.",
+            UnitKind::BotChampion => "AN ENEMY CHAMPION.",
             UnitKind::StorageChest => "REMOTE PURCHASES WAIT HERE. CALL THE GUARD TO DELIVER THEM.",
             UnitKind::DeliveryGuard => {
                 "FLIES YOUR STORED ITEMS OUT TO YOU, THEN RETURNS TO THE CHEST."
@@ -3529,10 +3562,7 @@ impl AnimatedScene {
             if unit.health <= 0.0
                 && matches!(
                     unit.kind,
-                    UnitKind::Dummy
-                        | UnitKind::Camp
-                        | UnitKind::Inhibitor
-                        | UnitKind::EnemyChampion
+                    UnitKind::Dummy | UnitKind::Camp | UnitKind::Inhibitor | UnitKind::BotChampion
                 )
                 && unit.dead_timer > 0.0
             {
@@ -3544,7 +3574,7 @@ impl AnimatedScene {
                     unit.attack_target = None;
                     unit.path.clear();
                     unit.path_index = 0;
-                    if matches!(unit.kind, UnitKind::Camp | UnitKind::EnemyChampion) {
+                    if matches!(unit.kind, UnitKind::Camp | UnitKind::BotChampion) {
                         unit.pos = unit.home;
                         unit.camp_aggro = false;
                         unit.target = None;
@@ -3555,6 +3585,7 @@ impl AnimatedScene {
         }
 
         let start_positions: Vec<Vec3> = self.units.iter().map(|unit| unit.pos).collect();
+        self.update_bot_brains(dt);
         self.update_player(dt, height, collision);
         self.update_kit(dt, height, collision);
         self.update_delivery(dt, height);
@@ -3586,8 +3617,12 @@ impl AnimatedScene {
                 self.update_ambient(i, dt, height);
             } else if kind == UnitKind::Watchtower {
                 self.update_watchtower(i);
-            } else if kind == UnitKind::EnemyChampion {
-                self.update_enemy_champion(i, dt, height, collision);
+            } else if kind == UnitKind::BotChampion {
+                if self.bots.iter().any(|bot| bot.unit == i) {
+                    self.update_bot(i, dt, height, collision);
+                } else {
+                    self.update_enemy_champion(i, dt, height, collision);
+                }
             }
         }
 
@@ -3957,9 +3992,9 @@ impl AnimatedScene {
             let target = self.units[index]
                 .attack_target
                 .filter(|&ti| {
-                    self.units
-                        .get(ti)
-                        .is_some_and(|u| u.kind == UnitKind::Player && u.health > 0.0)
+                    self.units.get(ti).is_some_and(|u| {
+                        matches!(u.kind, UnitKind::Player | UnitKind::BotChampion) && u.health > 0.0
+                    })
                 })
                 .or_else(|| self.find_camp_target(index));
             let Some(ti) = target else {
@@ -4045,7 +4080,10 @@ impl AnimatedScene {
         let camp = &self.units[index];
         let mut best: Option<(usize, f32)> = None;
         for (i, unit) in self.units.iter().enumerate() {
-            if unit.kind != UnitKind::Player || unit.health <= 0.0 {
+            if !matches!(unit.kind, UnitKind::Player | UnitKind::BotChampion)
+                || unit.health <= 0.0
+                || (i == self.player_index && self.player_untargetable())
+            {
                 continue;
             }
             let d = camp.pos.distance_squared(unit.pos);
@@ -4175,6 +4213,7 @@ impl AnimatedScene {
             return Some(me.cc.taunt_by);
         }
         let pos = self.units[index].pos;
+        let minion = me.kind.is_minion();
         let mut best: Option<(usize, f32)> = None;
         for (i, unit) in self.units.iter().enumerate() {
             if i == index
@@ -4186,11 +4225,17 @@ impl AnimatedScene {
             {
                 continue;
             }
-            if unit.kind == UnitKind::Nexus && !self.nexus_vulnerable(unit.team) {
-                continue;
-            }
-            let d = pos.distance_squared(unit.pos);
-            if d <= range * range && best.is_none_or(|(_, bd)| d < bd) {
+            // Big structures are seen from their edge, and by minions from
+            // further still: the scene keeps every tower 5 tiles off the lane
+            // centre, so waves on the far side of the formation used to walk
+            // past a live tower while it shot them, then hit the inhibitor.
+            let edge = if unit.kind.is_structure() {
+                unit.hit_radius + if minion { STRUCTURE_REACH } else { 0.0 }
+            } else {
+                0.0
+            };
+            let d = (pos.distance(unit.pos) - edge).max(0.0);
+            if d <= range && best.is_none_or(|(_, bd)| d < bd) {
                 best = Some((i, d));
             }
         }
@@ -4367,11 +4412,6 @@ impl AnimatedScene {
         ) {
             return;
         }
-        if self.units[index].kind == UnitKind::Nexus
-            && !self.nexus_vulnerable(self.units[index].team)
-        {
-            return;
-        }
         let incoming = if index == self.player_index {
             if self.player_untargetable() {
                 0.0
@@ -4447,19 +4487,40 @@ impl AnimatedScene {
             self.ping = Some((self.units[index].pos, 6.0));
         }
         if !killed {
-            if target_kind == UnitKind::Camp && attacker_team < 2 && hero_aggressor {
-                let pi = self.player_index;
-                if self.units[pi].health > 0.0 {
+            // A camp turns on the hero who hit it (the player or a bot).
+            let striker = aggressor.filter(|&a| {
+                matches!(self.units[a].kind, UnitKind::Player | UnitKind::BotChampion)
+                    && self.units[a].health > 0.0
+            });
+            if target_kind == UnitKind::Camp && attacker_team < 2 {
+                if let Some(striker) = striker {
                     self.units[index].camp_aggro = true;
-                    self.units[index].attack_target = Some(pi);
+                    self.units[index].attack_target = Some(striker);
                     self.units[index].target = None;
                 }
             }
             return;
         }
+        if target_kind.is_champion() || target_kind.is_structure() {
+            let name = |i: usize| {
+                self.bot_of(i)
+                    .map(|bot| bot.name.clone())
+                    .unwrap_or_else(|| format!("{:?}", self.units[i].kind))
+            };
+            tracing::info!(
+                "death: {} (team {}) by {} (team {attacker_team})",
+                name(index),
+                self.units[index].team,
+                aggressor.map_or_else(|| "the rift".to_string(), name)
+            );
+        }
         if attacker_team == 0 && hero_aggressor {
             self.grant_reward(target_kind);
         }
+        if let Some(bot) = aggressor.filter(|&a| self.units[a].kind == UnitKind::BotChampion) {
+            self.bot_reward(bot, target_kind);
+        }
+        self.share_xp(index, target_kind, attacker_team, aggressor);
         if target_kind != UnitKind::Camp {
             let victim = short_unit_name(target_kind);
             let killer = aggressor
@@ -4486,7 +4547,7 @@ impl AnimatedScene {
             if matches!(target_kind, UnitKind::MeleeMinion | UnitKind::RangedMinion) {
                 self.player_cs += 1;
             }
-            if matches!(target_kind, UnitKind::Player | UnitKind::EnemyChampion) {
+            if matches!(target_kind, UnitKind::Player | UnitKind::BotChampion) {
                 self.player_kills += 1;
             }
         }
@@ -4524,9 +4585,9 @@ impl AnimatedScene {
             UnitKind::Dummy => {
                 self.units[index].dead_timer = 4.0;
             }
-            UnitKind::EnemyChampion => {
+            UnitKind::BotChampion => {
                 let unit = &mut self.units[index];
-                unit.dead_timer = 8.0;
+                unit.dead_timer = 6.0 + unit.level as f32 * 1.5;
                 unit.attack_target = None;
                 unit.path.clear();
                 unit.path_index = 0;
@@ -4592,22 +4653,49 @@ impl AnimatedScene {
     }
 
     fn grant_reward(&mut self, kind: UnitKind) {
-        let (xp, gold) = match kind {
-            UnitKind::MeleeMinion | UnitKind::RangedMinion => (20.0, 10),
-            UnitKind::Tower => (100.0, 100),
-            UnitKind::Inhibitor => (150.0, 150),
-            UnitKind::Camp => (80.0, 50),
-            UnitKind::Dummy => (50.0, 20),
-            _ => (0.0, 0),
-        };
+        let (xp, gold) = reward_for(kind);
         if xp <= 0.0 {
             return;
         }
+        let pi = self.player_index;
+        self.units[pi].gold = self.units[pi].gold.saturating_add(gold);
+        self.grant_xp(xp);
+    }
+
+    /// Nearby heroes learn from a kill they did not land: every living hero
+    /// of the killing side within `SHARE_RADIUS` of the victim, other than
+    /// the killer, gets `SHARE_XP` of its experience (no gold). Same rule for
+    /// the player and the bots, so laners level without last-hitting.
+    fn share_xp(&mut self, victim: usize, kind: UnitKind, team: u8, killer: Option<usize>) {
+        let (xp, _) = reward_for(kind);
+        if xp <= 0.0 || team > 1 {
+            return;
+        }
+        let at = self.units[victim].pos;
+        let heroes: Vec<usize> = (0..self.units.len())
+            .filter(|&i| {
+                let u = &self.units[i];
+                Some(i) != killer
+                    && i != victim
+                    && u.team == team
+                    && u.health > 0.0
+                    && matches!(u.kind, UnitKind::Player | UnitKind::BotChampion)
+                    && planar_delta(u.pos, at).length() <= SHARE_RADIUS
+            })
+            .collect();
+        for i in heroes {
+            if i == self.player_index {
+                self.grant_xp(xp * SHARE_XP);
+            } else {
+                self.bot_xp(i, xp * SHARE_XP);
+            }
+        }
+    }
+
+    fn grant_xp(&mut self, xp: f32) {
         let xp = xp * self.kit_xp_mult();
         let pi = self.player_index;
-        let player = &mut self.units[pi];
-        player.gold = player.gold.saturating_add(gold);
-        player.xp += xp;
+        self.units[pi].xp += xp;
         loop {
             let player = &mut self.units[pi];
             if player.level >= MAX_LEVEL || player.xp < xp_for_level(player.level) {
@@ -4652,7 +4740,7 @@ impl AnimatedScene {
             .filter(|u| u.team == 0 && u.health > 0.0)
             .map(|u| {
                 let radius: f32 = match u.kind {
-                    UnitKind::Player => 1500.0,
+                    UnitKind::Player | UnitKind::BotChampion => 1500.0,
                     UnitKind::MeleeMinion | UnitKind::RangedMinion => 900.0,
                     UnitKind::Tower | UnitKind::Inhibitor | UnitKind::Nexus => 1100.0,
                     _ => 800.0,
@@ -5035,7 +5123,15 @@ impl AnimatedScene {
         if self.match_over.is_some() {
             return;
         }
-        if self.units.iter().filter(|u| u.is_minion_of(team)).count() >= MAX_MINIONS_PER_TEAM {
+        // Living minions only: units are never removed, and counting the
+        // dead stopped every lane's waves for good about two minutes in.
+        if self
+            .units
+            .iter()
+            .filter(|u| u.is_minion_of(team) && u.health > 0.0)
+            .count()
+            >= MAX_MINIONS_PER_TEAM
+        {
             return;
         }
         let Some(lane_waypoints) = self.lanes.get(lane_index).cloned() else {
@@ -5173,6 +5269,7 @@ impl AnimatedScene {
                 lane_index: 1.min(unit_lane.len()),
                 respawn_time: 0.0,
                 camp_buff: None,
+                camp_boss: false,
                 mana: 0.0,
                 max_mana: 0.0,
                 level: 1,
@@ -5212,8 +5309,33 @@ impl AnimatedScene {
                 },
                 body_radius: if super_minion { 55.0 } else { 40.0 },
             };
-            self.units.push(unit);
+            self.place_minion(unit);
         }
+    }
+
+    /// Put a new minion in the slot of a long-dead one when there is one, so
+    /// the unit list stops growing with every wave; otherwise append it.
+    /// Indices of other units stay stable; stale targets on the slot are
+    /// cleared first.
+    fn place_minion(&mut self, unit: AnimatedUnit) {
+        let slot = self.units.iter().position(|u| {
+            u.kind.is_minion() && u.health <= 0.0 && u.death_anim <= 0.0 && u.dead_timer <= 0.0
+        });
+        let Some(slot) = slot else {
+            self.units.push(unit);
+            return;
+        };
+        for other in &mut self.units {
+            if other.attack_target == Some(slot) {
+                other.attack_target = None;
+            }
+            if other.strike.is_some_and(|strike| strike.target == slot) {
+                other.strike = None;
+            }
+        }
+        self.projectiles
+            .retain(|p| p.target != Some(slot) && p.attacker != Some(slot));
+        self.units[slot] = unit;
     }
 
     fn rebuild_shadows(&mut self, height: &HeightGrid, camera_target: Vec3, cull_radius: f32) {
@@ -5759,7 +5881,7 @@ impl AnimatedScene {
                 let (width, height) = match unit.kind {
                     UnitKind::Nexus => (190.0 * (unit.scale / 2.8).clamp(0.7, 1.5), 14.0),
                     UnitKind::Tower => (150.0 * (unit.scale / 2.8).clamp(0.7, 1.5), 14.0),
-                    UnitKind::Player | UnitKind::EnemyChampion => (160.0, 16.0),
+                    UnitKind::Player | UnitKind::BotChampion => (160.0, 16.0),
                     UnitKind::Camp => (145.0 * (unit.scale / 1.4).clamp(0.9, 1.3), 20.0),
                     _ => (55.0, 12.0),
                 };
@@ -6192,6 +6314,19 @@ fn xp_for_level(level: u32) -> f32 {
     100.0 + (level.saturating_sub(1) as f32) * 80.0
 }
 
+/// Experience and gold for the last hit on a `kind` (player and bots).
+fn reward_for(kind: UnitKind) -> (f32, u32) {
+    match kind {
+        UnitKind::MeleeMinion | UnitKind::RangedMinion => (20.0, 10),
+        UnitKind::Tower => (100.0, 100),
+        UnitKind::Inhibitor => (150.0, 150),
+        UnitKind::Camp => (80.0, 50),
+        UnitKind::Dummy => (50.0, 20),
+        UnitKind::Player | UnitKind::BotChampion => (200.0, 300),
+        _ => (0.0, 0),
+    }
+}
+
 fn find_nexus(units: &[AnimatedUnit], team: u8) -> Option<Vec3> {
     units
         .iter()
@@ -6449,6 +6584,7 @@ fn build_unit(
         lane_index: 0,
         respawn_time: 0.0,
         camp_buff: None,
+        camp_boss: false,
         mana: 0.0,
         max_mana: 0.0,
         level: 1,
@@ -6489,7 +6625,7 @@ fn build_unit(
 /// Footprint radius for edge-to-edge attack range.
 fn default_body_radius(kind: UnitKind, hit_radius: f32) -> f32 {
     match kind {
-        UnitKind::Player | UnitKind::EnemyChampion => 65.0,
+        UnitKind::Player | UnitKind::BotChampion => 65.0,
         UnitKind::MeleeMinion | UnitKind::RangedMinion => 40.0,
         UnitKind::Tower => 150.0,
         UnitKind::Inhibitor => 140.0,

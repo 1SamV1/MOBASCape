@@ -243,7 +243,6 @@ impl AnimatedScene {
             && unit.spawn_delay <= 0.0
             && (unit.team == 1 || (unit.team == 2 && unit.kind == UnitKind::Camp))
             && !matches!(unit.kind, UnitKind::DeliveryGuard | UnitKind::StorageChest)
-            && (unit.kind != UnitKind::Nexus || self.nexus_vulnerable(unit.team))
     }
 
     fn kit_enemies_in(&self, center: Vec3, radius: f32, facing: Vec3, arc: f32) -> Vec<usize> {

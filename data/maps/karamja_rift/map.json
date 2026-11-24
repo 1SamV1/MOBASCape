@@ -531,6 +531,7 @@
     },
     {
       "id": "top_east",
+      "boss": true,
       "tile": [
         2900.0,
         2960.0
@@ -631,6 +632,7 @@
     },
     {
       "id": "inner_bot_west",
+      "boss": true,
       "tile": [
         2800.0,
         3130.0

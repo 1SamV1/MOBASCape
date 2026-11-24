@@ -808,3 +808,30 @@ joints or score clearly worse. Every hero, NPC summon, the gorilla form,
 the armed body, the hero-select spotlight and the portraits use it. A
 cache-gated test holds every shipped hero part within 3% of its height of
 the body. `rift-tools skeleton --sheet` draws the before/after poses.
+
+## ADR-054 — The nexus is always attackable; the draft plays as bots
+
+**Status:** accepted (user request, 2026-11-24).
+
+The nexus used to be shielded until one of its team's inhibitors fell.
+Minions and heroes reached it and could not hit it, so the user asked for
+it to be attackable. `nexus_vulnerable` now always answers true, and every
+targeting path (clicks, picking, minion and bot targets, kits, damage)
+treats the nexus like any structure. Inhibitors keep their job: a fallen
+inhibitor makes its lane spawn super minions.
+
+The nine heroes the draft picked now play the match (`animated::bots`).
+Blue's four bots take top, bottom, bottom and jungle (mid is left to the
+player); red's five take top, mid, bottom, bottom and jungle. Each bot
+switches between laning (push its lane, last-hit, trade with weaker heroes,
+hit structures only behind its minions), jungling on its own side of the
+river, region bosses (from level 5, the jungler and one laner take the
+boss camp on their side for the team buff), two-hero ganks on the weakest
+enemy hero outside its base, and retreating to heal and buy the next item
+of its class's recommended build. Bots earn the player's gold and
+experience and level on the player's table. They fight with basic attacks
+only for now.
+
+The strongest camp on each side of the river is flagged `"boss": true` in
+the map (`inner_bot_west` on blue's side, `top_east` on red's). Camps now aggro on and retaliate
+against any hero, not only the player.

@@ -214,6 +214,27 @@ impl ItemShop {
         None
     }
 
+    /// The items a bot of this champion buys, cheapest tier first: its
+    /// recommended list (champion id, then role words, then class).
+    pub fn build_for(&self, id: &str, role: &str, class: &str) -> Vec<ItemConfig> {
+        let keys = std::iter::once(id.to_uppercase())
+            .chain(role.split_whitespace().map(str::to_uppercase))
+            .chain(std::iter::once(class.to_uppercase()));
+        for key in keys {
+            if let Some(ids) = self.recommendations.get(&key) {
+                let mut build: Vec<ItemConfig> = ids
+                    .iter()
+                    .filter_map(|wanted| self.items.iter().find(|item| &item.id == wanted))
+                    .cloned()
+                    .collect();
+                build.sort_by_key(|item| (item.tier(), item.cost));
+                build.dedup_by(|a, b| a.id == b.id);
+                return build;
+            }
+        }
+        Vec::new()
+    }
+
     pub fn is_owned(&self, index: usize) -> bool {
         self.owned.iter().flatten().any(|&i| i == index)
     }

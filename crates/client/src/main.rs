@@ -120,6 +120,10 @@ struct Cli {
     /// Demo: spawn a sparring enemy champion beside the hero.
     #[arg(long)]
     demo_duel: bool,
+    /// Fill both teams with bot heroes at boot (four allies, five enemies),
+    /// as a match from the lobby does.
+    #[arg(long)]
+    bots: bool,
     /// Demo: King Awowogei's kit against a rival champion: Bananarang,
     /// a peel thrown under the rival, Greegree, then Vine Swing.
     #[arg(long)]
@@ -376,6 +380,20 @@ fn main() -> Result<()> {
         let point = Vec3::new(x, height.height_at(x, z), z);
         animated.teleport_player(point);
         tracing::info!("animation demo: spawned hero at tile 2748,3010");
+    }
+    if cli.bots {
+        let me = champions
+            .iter()
+            .position(|c| c.id == champion.id)
+            .unwrap_or(0);
+        let others: Vec<usize> = (0..champions.len()).filter(|&i| i != me).collect();
+        let pick = |n: usize| others[n % others.len().max(1)];
+        let blue: Vec<usize> = std::iter::once(me).chain((0..4).map(pick)).collect();
+        let red: Vec<usize> = (4..9).map(pick).collect();
+        let lineup = bot_lineup(&champions, &blue, &red);
+        let builds = bot_builds(&shop, &lineup);
+        let count = animated.spawn_bots(&cache, &lineup, &builds, &height);
+        tracing::info!("bots: {count} bot heroes in the match");
     }
     if cli.demo_duel || cli.demo_awowogei {
         let spawn = animated.player_pos() + Vec3::new(3.0 * 128.0, 0.0, 0.0);
@@ -2385,9 +2403,18 @@ impl App {
             let heroes: Vec<HeroMarker> = animated
                 .units
                 .iter()
-                .filter(|unit| unit.kind == UnitKind::Player && unit.team == 0)
-                .map(|unit| HeroMarker {
-                    name: animated.champion_name().to_string(),
+                .enumerate()
+                // You, your bot allies, and enemy heroes your team can see.
+                .filter(|(_, unit)| unit.is_champion && (unit.team == 0 || unit.visible))
+                .map(|(index, unit)| HeroMarker {
+                    name: if unit.kind == UnitKind::Player {
+                        animated.champion_name().to_string()
+                    } else {
+                        animated
+                            .bot_of(index)
+                            .map(|bot| bot.name.clone())
+                            .unwrap_or_default()
+                    },
                     team: unit.team,
                     pos: (unit.pos.x, unit.pos.z),
                     alive: unit.health > 0.0,
@@ -2396,6 +2423,7 @@ impl App {
                     mana: unit.mana,
                     max_mana: unit.max_mana,
                     level: unit.level,
+                    you: unit.kind == UnitKind::Player,
                 })
                 .collect();
             let hover = {
@@ -2422,12 +2450,16 @@ impl App {
             let roster = animated
                 .units
                 .iter()
-                .filter(|unit| unit.is_champion)
-                .map(|unit| HeroMarker {
+                .enumerate()
+                .filter(|(_, unit)| unit.is_champion)
+                .map(|(index, unit)| HeroMarker {
                     name: if unit.kind == UnitKind::Player {
                         animated.champion_name().to_string()
                     } else {
-                        "RIVAL CHAMPION".to_string()
+                        animated
+                            .bot_of(index)
+                            .map(|bot| bot.name.clone())
+                            .unwrap_or_else(|| "RIVAL CHAMPION".to_string())
                     },
                     team: unit.team,
                     pos: (unit.pos.x, unit.pos.z),
@@ -2437,6 +2469,7 @@ impl App {
                     mana: unit.mana,
                     max_mana: unit.max_mana,
                     level: unit.level,
+                    you: unit.kind == UnitKind::Player,
                 })
                 .collect();
             // Project the world's floating numbers into screen space so the
@@ -2487,7 +2520,7 @@ impl App {
                 let plate = matches!(
                     unit.kind,
                     UnitKind::Player
-                        | UnitKind::EnemyChampion
+                        | UnitKind::BotChampion
                         | UnitKind::Tower
                         | UnitKind::Inhibitor
                         | UnitKind::Nexus
@@ -2516,13 +2549,13 @@ impl App {
                 let Some((name, level, _)) = animated.unit_info(index) else {
                     continue;
                 };
-                let hero = matches!(unit.kind, UnitKind::Player | UnitKind::EnemyChampion);
+                let hero = matches!(unit.kind, UnitKind::Player | UnitKind::BotChampion);
                 let structure = matches!(
                     unit.kind,
                     UnitKind::Tower | UnitKind::Inhibitor | UnitKind::Nexus | UnitKind::Watchtower
                 );
                 let camp = unit.kind == UnitKind::Camp;
-                let pk = unit.kind == UnitKind::EnemyChampion;
+                let pk = unit.kind == UnitKind::BotChampion && unit.team == 1;
                 unit_frames.push(crate::hud::UnitFrame {
                     x: (ndc_x * 0.5 + 0.5) * hud_w,
                     y: (1.0 - (ndc_y * 0.5 + 0.5)) * hud_h,
@@ -3204,13 +3237,19 @@ impl App {
         let Some(scene) = self.scene.as_ref() else {
             return;
         };
-        let animated = match AnimatedScene::new(&self.cache, scene, &champion) {
+        let mut animated = match AnimatedScene::new(&self.cache, scene, &champion) {
             Ok(animated) => animated,
             Err(err) => {
                 tracing::error!("failed to start match as {}: {err:#}", champion.name);
                 return;
             }
         };
+        // The draft's other nine picks play as bots.
+        let (blue, red) = self.hero_select.lineups();
+        let lineup = bot_lineup(&self.hero_select.champions, &blue, &red);
+        let builds = bot_builds(&self.shop, &lineup);
+        let count = animated.spawn_bots(&self.cache, &lineup, &builds, &scene.height);
+        tracing::info!("bots: {count} bot heroes in the match");
 
         self.audio.preload(&self.cache, animated.sound_ids());
         self.animated = Some(animated);
@@ -4105,6 +4144,36 @@ fn print_camera(renderer: &Renderer) {
         renderer.camera.pitch,
         renderer.camera.distance
     );
+}
+
+/// The draft as bots: blue's picks after the player's own, then red's, each
+/// with its lane or jungle role.
+fn bot_lineup(
+    champions: &[ChampionConfig],
+    blue: &[usize],
+    red: &[usize],
+) -> Vec<(ChampionConfig, u8, animated::bots::BotRole)> {
+    let mut out = Vec::new();
+    for (team, picks) in [(0u8, blue.get(1..).unwrap_or(&[])), (1u8, red)] {
+        let roles = animated::bots::roles_for(team, picks.len());
+        for (&pick, role) in picks.iter().zip(roles) {
+            if let Some(champion) = champions.get(pick) {
+                out.push((champion.clone(), team, role));
+            }
+        }
+    }
+    out
+}
+
+/// Each bot's item build, from the shop's recommended lists.
+fn bot_builds(
+    shop: &ItemShop,
+    lineup: &[(ChampionConfig, u8, animated::bots::BotRole)],
+) -> Vec<Vec<items::ItemConfig>> {
+    lineup
+        .iter()
+        .map(|(c, _, _)| shop.build_for(&c.id, &c.role, &c.class))
+        .collect()
 }
 
 #[cfg(test)]

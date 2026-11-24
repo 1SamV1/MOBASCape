@@ -4,7 +4,8 @@
 //!   It curves out on the king's right, slows into a hang at full range,
 //!   then steers home on his left and is caught in his hand wherever he has
 //!   moved. Every enemy is hit once going out and once (for half damage)
-//!   coming back.
+//!   coming back. Enemy towers, inhibitors and the nexus take only the
+//!   pure share (40%) of each hit, and are never stunned.
 //! - **W Vine Swing**: a long vine drops from the canopy, the king runs and
 //!   jumps onto it and swings along a curved arc that rises over hills and
 //!   sets him down softly. Untargetable from the cast until 0.5 s after he
@@ -701,6 +702,13 @@ impl AnimatedScene {
             )
     }
 
+    /// An enemy tower, inhibitor or nexus the Bananarang can chip with its
+    /// pure damage.
+    fn is_banana_structure(&self, index: usize) -> bool {
+        let unit = &self.units[index];
+        unit.health > 0.0 && unit.team == 1 && unit.kind.is_structure()
+    }
+
     /// Advance every piece of the kit.
     pub(super) fn update_awowogei(
         &mut self,
@@ -781,7 +789,8 @@ impl AnimatedScene {
                     BananaLeg::Out => banana.hit_out.contains(&index),
                     BananaLeg::Home => banana.hit_home.contains(&index),
                 };
-                if already || !self.is_awowogei_enemy(index) {
+                let structure = self.is_banana_structure(index);
+                if already || !(structure || self.is_awowogei_enemy(index)) {
                     continue;
                 }
                 let unit = &self.units[index];
@@ -799,6 +808,21 @@ impl AnimatedScene {
                     Q_RETURN_DAMAGE
                 };
                 let amount = banana.damage * leg_mult * if crit { 1.5 } else { 1.0 };
+                if structure {
+                    // Buildings shrug off the blunt part; only the pure
+                    // share (40%) chips them, and stone cannot be stunned.
+                    self.damage_unit_mixed_kind(
+                        index,
+                        0.0,
+                        amount * 0.4,
+                        0,
+                        Some(self.player_index),
+                        HitsplatKind::Damage,
+                    );
+                    self.emit_burst(flat, [255, 220, 60], 6, 220.0, 12.0, 0.4);
+                    self.play_sound("q_hit", flat);
+                    continue;
+                }
                 self.damage_unit_mixed_kind(
                     index,
                     amount * 0.6,

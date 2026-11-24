@@ -10,11 +10,11 @@ use crate::draw::{DrawList, Rect};
 use crate::hud::state::{HitmarkKind, HitmarkState};
 use crate::theme::Theme;
 
-/// Cache splats are 24x23. Two times keeps the pixels crisp and the numbers
-/// readable at the camera distance.
-const SPLAT_TIMES: u32 = 2;
+/// Cache splats are 24x23, drawn at their native size like the OSRS client
+/// (two times was too big over a busy fight).
+const SPLAT_TIMES: u32 = 1;
 /// Room for one splat plus a small gap, in window pixels.
-const STACK_STEP: i32 = 46 + 4;
+const STACK_STEP: i32 = 23 + 2;
 const LAYER: i32 = 2;
 
 impl HitmarkKind {
@@ -81,14 +81,9 @@ pub fn draw(theme: &Theme, list: &mut DrawList, hits: &[HitmarkState]) {
         let Some(font) = font else {
             continue;
         };
-        let digits = hit.text.chars().filter(|c| c.is_ascii_digit()).count();
-        let times = if digits <= 2 {
-            3
-        } else if digits <= 4 {
-            2
-        } else {
-            1
-        };
+        // The bold cache font at its own size, as in the OSRS client; long
+        // numbers simply run past the splat there too.
+        let times = 1;
         let width = font.width(&hit.text) * times;
         let baseline = cy + 5 * times;
         let shadow = (times / 2).max(1);

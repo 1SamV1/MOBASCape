@@ -39,8 +39,8 @@ const FONT_SCALE: f32 = 1.0 / TEXT_SCALE;
 
 /// Cache hitmarks are 24x23. They are drawn at 2x so the pixel art stays
 /// crisp and the splat reads at the default camera distance.
-const HITMARK_SCALE: f32 = 2.0;
-const HITMARK_GAP: f32 = 4.0;
+const HITMARK_SCALE: f32 = 1.0;
+const HITMARK_GAP: f32 = 2.0;
 
 /// Information about the unit under the cursor, shown as a Dota style
 /// tooltip next to the mouse.
@@ -272,6 +272,8 @@ pub struct HeroMarker {
     pub mana: f32,
     pub max_mana: f32,
     pub level: u32,
+    /// The local player's own hero.
+    pub you: bool,
 }
 
 pub struct Hud {
@@ -673,10 +675,18 @@ impl Hud {
         };
 
         // Team heroes: a white ringed marker so you can see who is where.
-        for hero in heroes {
-            if hero.team != 0 || !hero.alive {
-                continue;
-            }
+        // Other heroes first (allies blue, seen enemies red), you on top.
+        for hero in heroes.iter().filter(|hero| hero.alive && !hero.you) {
+            let (hx, hy) = to_map(glam::Vec3::new(hero.pos.0, 0.0, hero.pos.1));
+            let fill = if hero.team == 0 {
+                [80, 160, 255]
+            } else {
+                [235, 70, 60]
+            };
+            self.quad(width, height, hx - 4.0, hy - 4.0, 8.0, 8.0, [10, 10, 12]);
+            self.quad(width, height, hx - 3.0, hy - 3.0, 6.0, 6.0, fill);
+        }
+        for hero in heroes.iter().filter(|hero| hero.alive && hero.you) {
             let (hx, hy) = to_map(glam::Vec3::new(hero.pos.0, 0.0, hero.pos.1));
             self.quad(width, height, hx - 5.0, hy - 5.0, 10.0, 10.0, [10, 10, 12]);
             self.quad(width, height, hx - 4.0, hy - 4.0, 8.0, 8.0, [250, 250, 250]);
@@ -789,7 +799,7 @@ impl Hud {
                     self.quad(width, height, ux - 2.0, uy - 2.0, 4.0, 4.0, [250, 240, 180]);
                 }
                 UnitKind::Ambient => {}
-                UnitKind::EnemyChampion => {
+                UnitKind::BotChampion => {
                     self.quad(width, height, ux - 3.0, uy - 3.0, 6.0, 6.0, [235, 90, 80]);
                 }
             }
@@ -1533,13 +1543,7 @@ impl Hud {
             // the full 3x treatment; longer numbers shrink so they stay
             // legible instead of running past the sprite.
             let digits = hit.text.chars().filter(|c| c.is_ascii_digit()).count();
-            let text_scale = if digits <= 2 {
-                3.0
-            } else if digits <= 4 {
-                2.0
-            } else {
-                1.0
-            };
+            let text_scale = if digits <= 2 { 1.5 } else { 1.0 };
             let text_width = self.text_width_named("b12", &hit.text, text_scale);
             let text_x = (cx - text_width * 0.5).round();
             let text_y = (cy - self.font_digit_center_named("b12") * text_scale).round();
