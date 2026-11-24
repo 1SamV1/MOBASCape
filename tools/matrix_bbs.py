@@ -147,124 +147,114 @@ def logo(y, word):
 
 
 # ============================================================================
-def glitch_logo(y, word):
-    """Logo with horizontal tearing: some rows slip sideways, with RGB
-    ghosts, like a scrambled signal on a 2400-baud line."""
+def stencil_logo(y, word):
+    """Stencil logo: letters cut by a horizontal gap at mid-height and
+    framed top and bottom with ▄▀ rails, like a BBS sysop's door banner."""
     width = len(word) * 10 - 1
     x0 = (W - width) // 2
-    clear(x0 - 6, y - 1, x0 + width + 6, y + LOGO_ROWS)
-    slip = [0, 2, 0, -3, 1, 0]
-    for r in range(LOGO_ROWS):
-        for i, letter in enumerate(word):
+    clear(x0 - 4, y - 2, x0 + width + 4, y + LOGO_ROWS + 2)
+    for x in range(x0 - 3, x0 + width + 3):
+        put(x, y - 1, "▄", DIM if x % 2 else MID)
+        put(x, y + LOGO_ROWS + 1, "▀", DIM if x % 2 else MID)
+    for i, letter in enumerate(word):
+        for r in range(LOGO_ROWS):
             for c, px in enumerate(LOGO[letter][r]):
                 if px == " ":
                     continue
-                x = x0 + i * 10 + c + slip[r]
-                if slip[r]:
-                    put(x - slip[r], y + r, "░", (255, 60, 60) if slip[r] > 0 else (60, 160, 255))
-                put(x, y + r, px, LOGO_GRAD[r])
-    for k, (r, x) in enumerate([(1, x0 - 5), (3, x0 + width + 3), (4, x0 - 4)]):
-        text(x, y + r, "▌▐"[k % 2] * 2, RED if k % 2 else CYAN)
+                row = r if r < 3 else r + 1
+                put(x0 + i * 10 + c, y + row, px, LOGO_GRAD[min(r, len(LOGO_GRAD) - 1)])
+    for x in range(x0 - 3, x0 + width + 3, 4):
+        put(x, y + 3, "·", FAINT)
 
 
 fade_bar(1, 2, W - 3)
-glitch_logo(3, "MOBASCAPE")
-center(10, '  ░▒▓  g R E P   t H E   e X C H A N G E   ::   s E A R C H   "sword"  ▓▒░  ', AMBER)
-center(11, "  " + elite("phase.3 // seek and ye shall find") + "  ", WHITE)
-fade_bar(12, 2, W - 3)
+stencil_logo(3, "MOBASCAPE")
+center(12, "  ░▒▓  t H E   o R A C L E   r E C O M M E N D S  ::  1 3   i T E M S   f O R   y O U  ▓▒░  ", AMBER)
+center(13, "  " + elite("phase.3 // know thy build") + "  ", WHITE)
+fade_bar(14, 2, W - 3)
 
 # --- release info -------------------------------------------------------------
-header(14, elite("release info"))
-clear(4, 15, W - 5, 18)
+header(16, elite("release info"))
+clear(4, 17, W - 5, 19)
 info = [
-    ("rELEASE dATE", "2026-11-24", "cOMMIT", "d7bdcf1  ->  sam/main"),
-    ("tYPE", "sHOP sEARCH + bUGFIX", "tESTS", "394 PASS // 0 FAIL   (+2)"),
-    ("mATCH", "ALL WORDS, ANY FIELD", "cLIPPY", "-D warnings :: CLEAN"),
-    ("fIXED", "LOBBY CARDS LINGERING", "kEYS", "box eats them: no stray Q casts"),
+    ("rELEASE dATE", "2026-11-24", "cOMMIT", "815f2f6  ->  sam/main"),
+    ("tYPE", "rECOMMENDED tAB + fIX", "tESTS", "396 PASS // 0 FAIL   (+2)"),
+    ("lISTS", "MELEE RANGED MAGIC TANK", "fIXED", "detail != buy target. now one."),
 ]
 for i, (k1, v1, k2, v2) in enumerate(info):
-    y = 15 + i
+    y = 17 + i
     text(8, y, f"{k1:.<16}", DIM)
-    text(25, y, v1, AMBER if k1 == "mATCH" else (RED if k1 == "fIXED" else BRIGHT))
+    text(25, y, v1, AMBER if k1 == "lISTS" else BRIGHT)
     text(76, y, f"{k2:.<12}", DIM)
-    text(89, y, v2, HEAD)
+    text(89, y, v2, RED if k2 == "fIXED" else HEAD)
 
-# --- left: the terminal session ------------------------------------------------
-box(4, 20, 72, 44, elite("tty1 // the exchange"))
-session = [
-    ("rift@exchange:~$ ", "search staff fire", WHITE),
-    ("", "  > Staff of fire ............ 850   [magic]", CYAN),
-    ("", "  > Mystic fire staff ....... 1400   [magic]", CYAN),
-    ("", "", MID),
-    ("rift@exchange:~$ ", "search mana", WHITE),
-    ("", "  > every item that GIVES mana. stats are words too.", MID),
-    ("", "", MID),
-    ("rift@exchange:~$ ", "search fire sword", WHITE),
-    ("", "  No items match the search.", (200, 90, 90)),
-    ("", "  (every word must hit. no sword is on fire. yet.)", DIM),
-    ("", "", MID),
-    ("rift@exchange:~$ ", "search sword", WHITE),
-    ("", "  > 8 items // starter 1 // early 3 // core 3 // late 1", (120, 255, 140)),
-    ("", "  > selection kept: Steel sword (still matches)", MID),
-    ("", "", MID),
-    ("rift@exchange:~$ ", "q", WHITE),
-    ("", "  > typed. not cast. the box holds the keyboard.", AMBER),
-    ("", "", MID),
-    ("rift@exchange:~$ ", "<ESC>", WHITE),
-    ("", "  > cleared. back to the fight.", MID),
+# --- left: BBS door menu -------------------------------------------------------
+box(4, 21, 66, 44, elite("door.exe // the oracle"))
+text(8, 23, "╔══════════════════════════════════════════════════╗", DIM)
+text(8, 24, "║", DIM); text(10, 24, "THE ORACLE's ITEM DOOR  v1.0       node 6 of 6", HEAD); text(59, 24, "║", DIM)
+text(8, 25, "╠══════════════════════════════════════════════════╣", DIM)
+menu = [
+    ("[1]", "consult by HERO ID", "jad, kril, kree ..."),
+    ("[2]", "consult by ROLE WORD", "TANK"),
+    ("[3]", "consult by CLASS", "MELEE / RANGED / MAGIC"),
+    ("[4]", "no list? open on", "ALL"),
 ]
-for i, (prompt, cmd, col) in enumerate(session):
-    y = 22 + i
-    if prompt:
-        text(8, y, prompt, (120, 255, 140))
-        text(8 + len(prompt), y, cmd, col)
-    else:
-        text(8, y, cmd, col)
-put(8 + len("rift@exchange:~$ "), 42, "█", BRIGHT)
-text(8, 42, "rift@exchange:~$ ", (120, 255, 140))
+for i, (k, what, eg) in enumerate(menu):
+    y = 26 + i * 2
+    text(8, y, "║", DIM); text(59, y, "║", DIM)
+    text(10, y, k, AMBER)
+    text(14, y, what, WHITE)
+    text(36, y, eg, CYAN)
+    text(8, y + 1, "║", DIM); text(59, y + 1, "║", DIM)
+text(8, 34, "╚══════════════════════════════════════════════════╝", DIM)
+text(8, 36, "Your choice? _", (120, 255, 140))
+put(21, 36, "█", BRIGHT)
+text(8, 38, "> kolodion :: BATTLE MAGE :: MAGIC", MID)
+text(8, 39, "  id? no.  BATTLE? no.  MAGE? no.  MAGIC? YES.", MID)
+text(8, 40, "  13 items. starter -> late. shop opens here.", (120, 255, 140))
+text(8, 42, "first match wins. _comments ignored. typos fail.", DIM)
 
-# --- right: the matcher diagram -------------------------------------------------
-box(74, 20, W - 5, 44, elite("matcher.c // the sieve"))
-diagram = [
-    '      query: "staff fire"',
-    "            │",
-    "      ┌─────┴─────┐  split on whitespace, lowercase",
-    "      ▼           ▼",
-    '   "staff"      "fire"',
-    "      │           │",
-    "      ▼           ▼",
-    " ╔═══════════════════════════════════════╗",
-    " ║ name      Staff of fire        ✓  ✓   ║",
-    " ║ id        staff of fire        ✓  ✓   ║",
-    " ║ category  magic                       ║",
-    " ║ stats     ability power               ║",
-    " ╚═══════════════════════════════════════╝",
-    "              │  ALL words hit?",
-    "              ▼",
-    "        [ SHOWN IN THE GRID ]",
+# --- right: the list as a file listing -----------------------------------------
+box(68, 21, W - 5, 44, elite("recommended.json // magic"))
+text(71, 23, "FILENAME            TIER     SIZE(gp)  DESC", HEAD)
+text(71, 24, "─" * 70, DIM)
+listing = [
+    ("STAFF_AIR.ITM", "starter", "300", "where every mage begins"),
+    ("BOOTS_LTH.ITM", "starter", "200", "leather. humble. fast."),
+    ("BOOTS_MYS.ITM", "early", "900", "mystic boots"),
+    ("STAFF_FIR.ITM", "early", "850", "builds into mystic fire"),
+    ("ROBE_MYS.ITM ", "core", "1400", "mystic robe top"),
+    ("STAFF_MFS.ITM", "core", "1400", "the upgrade lands"),
+    ("RING_SEER.ITM", "core", "2000", "seers ring"),
+    ("NECK_OCLT.ITM", "core", "2800", "occult necklace"),
+    ("ROBE_AHR.ITM ", "late", "3200", "ahrim's robetop"),
+    ("TRIDENT.ITM  ", "late", "3800", "trident of the seas"),
+    ("BOOTS_ETR.ITM", "late", "4200", "eternal boots"),
+    ("ROBE_ANC.ITM ", "late", "4800", "ancestral robe top"),
+    ("RING_MAGS.ITM", "late", "5000", "magus ring. endgame."),
 ]
-for i, line in enumerate(diagram):
-    for j, ch in enumerate(line):
-        col = BRIGHT if ch in "│┌┐┴▼─" else (DIM if ch in "╔╗╚╝═║" else ((120, 255, 140) if ch == "✓" else MID))
-        if ch != " ":
-            put(78 + j, 22 + i, ch, col)
-text(120, 30, "", MID)
-text(78, 39, "click box   -> gold frame + caret", HEAD)
-text(78, 40, "any click   -> stop typing", MID)
-text(78, 41, "close shop  -> search forgotten", MID)
-text(78, 42, "held keys   -> released, no runaway camera", DIM)
+tier_col = {"starter": (120, 255, 140), "early": CYAN, "core": AMBER, "late": RED}
+for i, (name, tier, size, desc) in enumerate(listing):
+    y = 25 + i
+    text(71, y, name, WHITE)
+    text(91, y, tier, tier_col[tier])
+    text(100, y, f"{size:>6}", HEAD)
+    text(111, y, desc, DIM)
+text(71, 39, "─" * 70, DIM)
+text(71, 40, "13 file(s)   30,850 gp total   bytes free: your gold", MID)
+text(71, 42, "[D]ownload = Buy    [S]ell = 70%    [U]ndo = 100%", AMBER)
 
-# --- the bugfix ---------------------------------------------------------------
-header(46, elite("patch notes // the ghost in the lobby"))
+# --- patch notes ---------------------------------------------------------------
+header(46, elite("patch notes // two minds, one item"))
 clear(4, 47, W - 5, 49)
-center(47, "tHE 5v5 tEAM cARDS hAUNTED tHE aRENA: tHE oLD hUD mESH wAS uPLOADED eVERY fRAME bUT nEVER cLEARED.  eXORCISED.", HEAD)
-center(48, "items::matches_query()   //   ShopHit::Search   //   ItemShop { query, typing }   //   hud.vertices.clear()", DIM)
+center(47, "tHE dETAIL pANE sHOWED sTAFF oF aIR wHILE bUY pOINTED aT a bRONZE sWORD tHE tAB hID.  ItemShop::shown() nOW rULES tHEM aLL.", HEAD)
+center(48, "data/items/recommended.json   //   recommend_for(id, role, class)   //   CATEGORY_LABELS[0] = RECOMMENDED", DIM)
 
 # --- roadmap -------------------------------------------------------------------
 header(51, elite("roadmap // the oracle says"))
 clear(4, 52, W - 5, 56)
 phases = [
-    ("P1 LIGHT", 9), ("P2 MINIMAP", 5), ("P3 SHOP", 7), ("P4 SELECT", 1),
+    ("P1 LIGHT", 9), ("P2 MINIMAP", 5), ("P3 SHOP", 8), ("P4 SELECT", 1),
     ("P5 ARENA", 0), ("P6 HUD", 0), ("P7 POST", 0),
 ]
 for i, (name, done) in enumerate(phases):
@@ -275,14 +265,14 @@ for i, (name, done) in enumerate(phases):
     for j in range(10):
         put(x + 12 + j, y, "▓" if j < done else "░", BRIGHT if j < done else FAINT)
     text(x + 22, y, f"] {done * 10:>3}%", HEAD if done else FAINT)
-text(8, 55, ">> next in P3: recommended page, multi-part late recipes", MID)
+text(8, 55, ">> next: multi-part late recipes, then P4 hero select (lanes, team columns, battle spells)", MID)
 
 fade_bar(57, 2, W - 3)
 clear(10, 58, W - 11, 61)
-center(58, "gREETZ: gREP * tHE sEARCH bOX oN eVERY bBS fILE aREA * aNYONE wHO eVER tYPED /msg iNTO tHE wRONG wINDOW", MID)
+center(58, "gREETZ: tHE oRACLE * tHE dOOR gAME sYSOPS * lORD * tRADEWARS * eVERY 'wHAT dO i bUY' iN aLL cHAT", MID)
 center(59, "nOT AFFILIATED WITH JAGEX. cACHE ASSETS STAY OUT OF GIT. aLWAYS.", DIM)
-center(60, "  t h e   m a t r i x   h a s   y o u .   t y p e   ' s w o r d '   t o   c o n t i n u e .  ", HEAD)
-center(61, "-=[ mObAsCaPe // 2026 // nODE 5: tHE iNDEX // 57.6k // sYSoP: rIFT // 8 mATCHES fOUND ]=-", AMBER)
+center(60, "  y o u ' r e   n o t   t h e   o n e .   b u t   y o u r   b u i l d   c o u l d   b e .  ", HEAD)
+center(61, "-=[ mObAsCaPe // 2026 // nODE 6: tHE oRACLE // 57.6k // sYSoP: rIFT // cOOKIE iNCLUDED ]=-", AMBER)
 
 # --- outputs ------------------------------------------------------------------
 with open(out + ".txt", "w") as f:
