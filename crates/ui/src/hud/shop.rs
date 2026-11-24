@@ -28,38 +28,168 @@ const VIEW: (i32, i32, i32, i32) = (178, 82, 360, 398);
 /// Section labels, by [`ShopItem::tier`].
 pub const TIERS: [&str; 4] = ["Starter", "Early", "Core", "Late"];
 
-/// Where each item sits in the grid, unscaled and before scrolling, from
-/// the view's top left: `(item index, cell)`, plus the section headers
-/// `(label, y)` and the content height. Items are grouped by tier and
-/// cheapest first inside a tier, the shop's reading order.
-#[allow(clippy::type_complexity)]
-pub fn grid(items: &[ShopItem]) -> (Vec<(usize, Rect)>, Vec<(&'static str, i32)>, i32) {
-    let mut order: Vec<usize> = (0..items.len()).collect();
-    order.sort_by_key(|&i| (items[i].tier.min(3), items[i].price, i));
-    let mut cells = Vec::with_capacity(items.len());
-    let mut headers = Vec::new();
+/// Width of a `+` or `>` mark between recipe cells.
+const MARK_W: i32 = 14;
+/// Stride between grid columns.
+const STRIDE: i32 = CELL.0 + 6;
+
+/// The grid as laid out: item cells, section headers, the `+` and `>`
+/// marks of recipe rows, and the content height. All unscaled, from the
+/// view's top left, before scrolling.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Grid {
+    pub cells: Vec<(usize, Rect)>,
+    pub headers: Vec<(&'static str, i32)>,
+    /// A mark character and the rectangle it is centred in.
+    pub marks: Vec<(char, Rect)>,
+    pub height: i32,
+}
+
+/// Lay out the grid. Plain items are packed by tier, cheapest first.
+/// Upgrade ladders (each step built from the one before) follow as one
+/// `a > b > c` row each, wrapping when long; items made of two or more
+/// parts get an `a + b > c` row. Parts are only linked when they are in
+/// the same list (`ShopItem::recipe`).
+pub fn layout(items: &[ShopItem]) -> Grid {
+    let n = items.len();
+    let key = |i: usize| (items[i].tier.min(3), items[i].price, i);
+    let recipe = |i: usize| -> Vec<usize> {
+        items[i]
+            .recipe
+            .iter()
+            .copied()
+            .filter(|&p| p < n && p != i)
+            .collect()
+    };
+    // Single-part upgrades, by the part they grow from.
+    let mut next: Vec<Vec<usize>> = vec![Vec::new(); n];
+    for i in 0..n {
+        if let [part] = recipe(i)[..] {
+            next[part].push(i);
+        }
+    }
+    for list in &mut next {
+        list.sort_by_key(|&i| key(i));
+    }
+    let mut roots: Vec<usize> = (0..n)
+        .filter(|&i| !next[i].is_empty() && recipe(i).len() != 1)
+        .collect();
+    roots.sort_by_key(|&i| key(i));
+    let mut in_ladder = vec![false; n];
+    let mut ladders = Vec::new();
+    for root in roots {
+        let mut chain = vec![root];
+        let mut current = root;
+        while let Some(&step) = next[current]
+            .iter()
+            .find(|&&k| !in_ladder[k] && !chain.contains(&k))
+        {
+            chain.push(step);
+            current = step;
+        }
+        if chain.len() >= 2 {
+            for &k in &chain {
+                in_ladder[k] = true;
+            }
+            ladders.push(chain);
+        }
+    }
+    let mut multi: Vec<usize> = (0..n).filter(|&i| recipe(i).len() >= 2).collect();
+    multi.sort_by_key(|&i| key(i));
+    let mut plain: Vec<usize> = (0..n)
+        .filter(|&i| !in_ladder[i] && recipe(i).len() < 2)
+        .collect();
+    plain.sort_by_key(|&i| key(i));
+
+    let mut grid = Grid {
+        cells: Vec::with_capacity(n),
+        headers: Vec::new(),
+        marks: Vec::new(),
+        height: 0,
+    };
     let mut y = 6;
     let mut i = 0;
-    while i < order.len() {
-        let tier = items[order[i]].tier.min(3);
-        let run = order[i..]
+    while i < plain.len() {
+        let tier = items[plain[i]].tier.min(3);
+        let run = plain[i..]
             .iter()
             .take_while(|&&k| items[k].tier.min(3) == tier)
             .count();
-        headers.push((TIERS[tier as usize], y));
+        grid.headers.push((TIERS[tier as usize], y));
         y += TIER_HEADER;
-        for (k, &index) in order[i..i + run].iter().enumerate() {
+        for (k, &index) in plain[i..i + run].iter().enumerate() {
             let column = k as i32 % COLUMNS;
             let row = k as i32 / COLUMNS;
-            cells.push((
+            grid.cells.push((
                 index,
-                Rect::new(10 + column * (CELL.0 + 6), y + row * CELL.1, CELL.0, CELL.1),
+                Rect::new(10 + column * STRIDE, y + row * CELL.1, CELL.0, CELL.1),
             ));
         }
         y += (run as i32 + COLUMNS - 1) / COLUMNS * CELL.1 + 6;
         i += run;
     }
-    (cells, headers, y)
+    let right = VIEW.2 - 10;
+    let mark = |grid: &mut Grid, c: char, x: i32, y: i32| {
+        grid.marks.push((c, Rect::new(x, y + 2, MARK_W, 38)));
+    };
+    if !ladders.is_empty() {
+        grid.headers.push(("Upgrades", y));
+        y += TIER_HEADER;
+        for chain in &ladders {
+            let mut x = 10;
+            for (k, &index) in chain.iter().enumerate() {
+                if k > 0 {
+                    if x + MARK_W + CELL.0 > right {
+                        y += CELL.1;
+                        x = 10;
+                    }
+                    mark(&mut grid, '>', x, y);
+                    x += MARK_W;
+                }
+                grid.cells.push((index, Rect::new(x, y, CELL.0, CELL.1)));
+                x += CELL.0;
+            }
+            y += CELL.1 + 4;
+        }
+        y += 2;
+    }
+    if !multi.is_empty() {
+        grid.headers.push(("Recipes", y));
+        y += TIER_HEADER;
+        for &index in &multi {
+            let mut x = 10;
+            for (k, part) in recipe(index).into_iter().enumerate() {
+                if k > 0 {
+                    mark(&mut grid, '+', x, y);
+                    x += MARK_W;
+                }
+                if x + CELL.0 > right {
+                    y += CELL.1;
+                    x = 10;
+                }
+                grid.cells.push((part, Rect::new(x, y, CELL.0, CELL.1)));
+                x += CELL.0;
+            }
+            if x + MARK_W + CELL.0 > right {
+                y += CELL.1;
+                x = 10;
+            }
+            mark(&mut grid, '>', x, y);
+            x += MARK_W;
+            grid.cells.push((index, Rect::new(x, y, CELL.0, CELL.1)));
+            y += CELL.1 + 4;
+        }
+        y += 2;
+    }
+    grid.height = y;
+    grid
+}
+
+/// The grid's cells, headers and height (see [`layout`]).
+#[allow(clippy::type_complexity)]
+pub fn grid(items: &[ShopItem]) -> (Vec<(usize, Rect)>, Vec<(&'static str, i32)>, i32) {
+    let grid = layout(items);
+    (grid.cells, grid.headers, grid.height)
 }
 
 /// How far the grid can scroll, in interface pixels.
@@ -91,6 +221,8 @@ pub enum ShopHit {
     /// Take back this visit's newest purchase.
     Undo,
     Deliver,
+    /// A bag slot on the foot line (its inventory slot): show that item.
+    Bag(usize),
 }
 
 /// Buy and Sell share the detail pane's bottom row.
@@ -103,6 +235,22 @@ fn trade_rects(area: Rect, scale: i32) -> (Rect, Rect) {
         Rect::new(detail.x + 12 * s, y, w, 30 * s),
         Rect::new(detail.x + 18 * s + w, y, w, 30 * s),
     )
+}
+
+/// The foot line's recessed panel: your items and the gold.
+fn foot_rect(area: Rect, scale: i32) -> Rect {
+    let s = scale.max(1);
+    Rect::new(area.x + 14 * s, area.y + 488 * s, area.w - 28 * s, 80 * s)
+}
+
+/// The bag slots on the foot line, in bag order: an icon slot with the
+/// sell price under it.
+pub fn bag_rects(area: Rect, scale: i32, count: usize) -> Vec<Rect> {
+    let s = scale.max(1);
+    let foot = foot_rect(area, s);
+    (0..count.min(6) as i32)
+        .map(|k| Rect::new(foot.x + (150 + k * 46) * s, foot.y + 8 * s, 40 * s, 62 * s))
+        .collect()
 }
 
 /// The Undo button on the foot line, left of the gold.
@@ -162,6 +310,11 @@ pub fn hit(area: Rect, scale: i32, state: &ShopState, mouse: (i32, i32)) -> Opti
     if state.undo.is_some() && point(undo.x, undo.y, undo.w, undo.h) {
         return Some(ShopHit::Undo);
     }
+    for (bag, rect) in state.bag.iter().zip(bag_rects(area, s, state.bag.len())) {
+        if point(rect.x, rect.y, rect.w, rect.h) {
+            return Some(ShopHit::Bag(bag.slot));
+        }
+    }
     if state.delivery.is_some() {
         let delivery = delivery_rect(area, s);
         if point(delivery.x, delivery.y, delivery.w, delivery.h) {
@@ -192,7 +345,11 @@ pub fn draw(theme: &Theme, list: &mut DrawList, shop: &ShopState, gold: u32) {
     list.rect(screen, theme.colour("dim"));
     list.set_layer(LAYER);
     list.push_clip(area);
-    match theme.panel("panel.stone") {
+    // The OSRS window: stone inside the riveted border.
+    match theme
+        .panel("panel.frame")
+        .or_else(|| theme.panel("panel.stone"))
+    {
         Some(panel) => list.panel(panel, area),
         None => list.rect(area, [0.05, 0.05, 0.07, 0.95]),
     }
@@ -205,14 +362,15 @@ pub fn draw(theme: &Theme, list: &mut DrawList, shop: &ShopState, gold: u32) {
     let small = theme.font("font.small");
     let body = theme.font("font.body").or(small);
     let bold = theme.font("font.bold").or(body);
-    let heading = theme.font("font.title").or(bold);
 
-    // Title bar and the close placeholder.
-    if let Some(font) = heading {
+    // Title centred in the top border band, as the Grand Exchange does.
+    if let Some(font) = bold {
+        let label = "Grand Exchange";
+        let width = font.width(label) * s;
         list.text(
             font,
-            "Grand Exchange",
-            area.x + 16 * s,
+            label,
+            area.x + (area.w - width) / 2,
             area.y + 30 * s,
             title,
         );
@@ -230,7 +388,7 @@ pub fn draw(theme: &Theme, list: &mut DrawList, shop: &ShopState, gold: u32) {
         );
     }
 
-    // Categories down the left, under their heading.
+    // Categories down the left: orange rows, the chosen one lit.
     let left = Rect::new(area.x + 14 * s, area.y + 48 * s, 150 * s, 432 * s);
     dark(theme, list, left);
     if let Some(font) = small {
@@ -243,16 +401,17 @@ pub fn draw(theme: &Theme, list: &mut DrawList, shop: &ShopState, gold: u32) {
             left.w - 12 * s,
             24 * s,
         );
-        if index == shop.category {
-            list.rect(row, [0.26, 0.21, 0.10, 0.90]);
+        let chosen = index == shop.category;
+        if chosen {
+            list.rect(row, [1.0, 1.0, 1.0, 0.10]);
         }
         if let Some(font) = body {
             list.text(
                 font,
-                label,
+                &sentence(label),
                 left.x + 12 * s,
                 row.y + 18 * s,
-                if index == shop.category { title } else { text },
+                if chosen { gold_colour } else { title },
             );
         }
     }
@@ -263,17 +422,16 @@ pub fn draw(theme: &Theme, list: &mut DrawList, shop: &ShopState, gold: u32) {
     if shop.searching {
         // A thin gold frame while the box has the keyboard.
         let edge = [gold_colour[0], gold_colour[1], gold_colour[2], 0.8];
-        list.rect(Rect::new(search.x, search.y, search.w, s), edge);
-        list.rect(Rect::new(search.x, search.bottom() - s, search.w, s), edge);
-        list.rect(Rect::new(search.x, search.y, s, search.h), edge);
-        list.rect(Rect::new(search.right() - s, search.y, s, search.h), edge);
+        list.outline(search, s.max(1), edge);
     }
     if let Some(font) = small {
         let typed = shop.searching || shop.search != "Search items";
         let shown = if shop.searching {
             format!("{}|", shop.search)
-        } else {
+        } else if typed {
             shop.search.clone()
+        } else {
+            "Search items...".to_string()
         };
         list.text(
             font,
@@ -283,19 +441,9 @@ pub fn draw(theme: &Theme, list: &mut DrawList, shop: &ShopState, gold: u32) {
             if typed { text } else { quiet },
         );
     }
-    if shop.items.is_empty()
-        && let Some(font) = small
-    {
-        list.text(
-            font,
-            "No items match the search.",
-            area.x + VIEW.0 * s + 8 * s,
-            area.y + VIEW.1 * s + 20 * s,
-            quiet,
-        );
-    }
 
-    // The item grid, in tier sections, clipped and scrolled.
+    // The item grid: tier sections, upgrade ladders and recipes, clipped
+    // and scrolled.
     let view = Rect::new(
         area.x + VIEW.0 * s,
         area.y + VIEW.1 * s,
@@ -303,10 +451,21 @@ pub fn draw(theme: &Theme, list: &mut DrawList, shop: &ShopState, gold: u32) {
         VIEW.3 * s,
     );
     dark(theme, list, view);
-    let (cells, headers, content) = grid(&shop.items);
-    let scroll = Scroll::new(view, content * s, shop.scroll * s);
+    if shop.items.is_empty()
+        && let Some(font) = small
+    {
+        list.text(
+            font,
+            "No items match the search.",
+            view.x + 12 * s,
+            view.y + 24 * s,
+            quiet,
+        );
+    }
+    let grid = layout(&shop.items);
+    let scroll = Scroll::new(view, grid.height * s, shop.scroll * s);
     list.push_clip(view);
-    for (label, y) in headers {
+    for (label, y) in &grid.headers {
         let y = scroll.place(y * s);
         if let Some(font) = bold {
             list.text(font, label, view.x + 10 * s, y + 15 * s, title);
@@ -316,13 +475,27 @@ pub fn draw(theme: &Theme, list: &mut DrawList, shop: &ShopState, gold: u32) {
                     view.x + 18 * s + width,
                     y + 10 * s,
                     view.w - 30 * s - width,
-                    1,
+                    s.max(1),
                 ),
                 [0.62, 0.50, 0.28, 0.55],
             );
         }
     }
-    for (n, cell) in cells {
+    for (mark, at) in &grid.marks {
+        let y = scroll.place(at.y * s);
+        if let Some(font) = bold {
+            let label = mark.to_string();
+            let width = font.width(&label) * s;
+            list.text(
+                font,
+                &label,
+                view.x + at.x * s + (at.w * s - width) / 2,
+                y + (at.h * s + font.ascent * s) / 2,
+                if *mark == '>' { title } else { quiet },
+            );
+        }
+    }
+    for &(n, cell) in &grid.cells {
         let Some(item) = shop.items.get(n) else {
             continue;
         };
@@ -332,52 +505,14 @@ pub fn draw(theme: &Theme, list: &mut DrawList, shop: &ShopState, gold: u32) {
             continue;
         }
         let frame = Rect::new(x + 4 * s, y + 2 * s, (cell.w - 8) * s, 38 * s);
+        item_slot(theme, list, frame, item.icon.as_deref(), item, s);
         if n == shop.selected {
-            list.rect(
-                Rect::new(x, y, cell.w * s, cell.h * s),
-                [0.30, 0.24, 0.10, 0.85],
-            );
-        }
-        slot(theme, list, frame);
-        if n == shop.selected {
-            list.outline(frame, s.max(1), [0.95, 0.80, 0.40, 1.0]);
-        }
-        let icon = item
-            .icon
-            .as_deref()
-            .filter(|role| theme.has_sprite(role))
-            .map(|role| theme.sprite(role));
-        if let Some(icon) = icon {
-            let (w, h) = list.size_of(icon);
-            list.sprite(
-                icon,
-                frame.x + (frame.w - w) / 2,
-                frame.y + (frame.h - h) / 2,
-            );
-        } else {
-            list.rect(
-                Rect::new(
-                    frame.x + 4 * s,
-                    frame.y + 4 * s,
-                    frame.w - 8 * s,
-                    frame.h - 8 * s,
-                ),
-                swatch(item),
-            );
-            if let Some(font) = bold {
-                let initial = item.name.chars().next().unwrap_or('?').to_string();
-                let width = font.width(&initial) * s;
-                list.text(
-                    font,
-                    &initial,
-                    frame.x + (frame.w - width) / 2,
-                    frame.y + (frame.h + font.ascent * s) / 2,
-                    ink(item.colour),
-                );
-            }
+            list.outline(frame, s.max(1), [1.0, 1.0, 0.0, 1.0]);
+        } else if item.owned {
+            list.outline(frame, s.max(1), [0.10, 0.85, 0.10, 1.0]);
         }
         // The price under the icon: green for an upgrade, gold when
-        // affordable, greyed when not.
+        // affordable, red when not.
         if let Some(font) = small {
             let price = item.price.to_string();
             let width = font.width(&price) * s;
@@ -387,7 +522,7 @@ pub fn draw(theme: &Theme, list: &mut DrawList, shop: &ShopState, gold: u32) {
                 x + (cell.w * s - width) / 2,
                 y + 54 * s,
                 if item.price > gold {
-                    quiet
+                    [0.85, 0.20, 0.15, 1.0]
                 } else if item.price < item.full_price {
                     good
                 } else {
@@ -398,58 +533,82 @@ pub fn draw(theme: &Theme, list: &mut DrawList, shop: &ShopState, gold: u32) {
     }
     list.pop_clip();
 
-    // The chosen item's detail.
+    // The chosen item's detail: icon, name and price; stats; what it is
+    // made from and what it builds into, with icons; then the trade row.
     let detail = Rect::new(area.x + 550 * s, area.y + 48 * s, 218 * s, 432 * s);
     dark(theme, list, detail);
+    list.push_clip(detail);
     if let Some(item) = shop.items.get(shop.selected) {
+        let icon_slot = Rect::new(detail.x + 10 * s, detail.y + 10 * s, 36 * s, 34 * s);
+        item_slot(theme, list, icon_slot, item.icon.as_deref(), item, s);
         if let Some(font) = bold {
             list.text(
                 font,
                 &item.name,
-                detail.x + 12 * s,
+                detail.x + 52 * s,
                 detail.y + 24 * s,
-                gold_colour,
+                title,
             );
         }
         if let Some(font) = small {
             let price = if item.price < item.full_price {
-                format!("Upgrade {} gold  (full {})", item.price, item.full_price)
+                format!("{} coins (full {})", item.price, item.full_price)
             } else {
-                format!("{} gold", item.price)
+                format!("{} coins", item.price)
             };
             list.text(
                 font,
                 &price,
-                detail.x + 12 * s,
-                detail.y + 42 * s,
+                detail.x + 52 * s,
+                detail.y + 40 * s,
                 gold_colour,
             );
         }
+        let mut y = detail.y + 66 * s;
         if let Some(font) = small {
-            let mut y = detail.y + 70 * s;
             for stat in &item.stats {
                 list.text(font, stat, detail.x + 12 * s, y, good);
-                y += 16 * s;
+                y += 15 * s;
             }
-            if !item.builds_from.is_empty() {
-                y += 8 * s;
-                list.text(font, "Builds from", detail.x + 12 * s, y, title);
-                y += 16 * s;
-                for part in &item.builds_from {
-                    list.text(font, part, detail.x + 12 * s, y, text);
-                    y += 16 * s;
+        }
+        let trade_top = detail.bottom() - 82 * s;
+        for (heading, links) in [("Builds from", &item.from), ("Builds into", &item.into)] {
+            if links.is_empty() {
+                continue;
+            }
+            y += 6 * s;
+            if let Some(font) = small {
+                list.text(font, heading, detail.x + 12 * s, y, gold_colour);
+            }
+            y += 6 * s;
+            for link in links.iter() {
+                if y + 26 * s > trade_top {
+                    break;
                 }
-            }
-            if let Some(builds) = &item.builds_into {
-                y += 8 * s;
-                list.text(font, "Builds into", detail.x + 12 * s, y, title);
-                list.text(font, builds, detail.x + 12 * s, y + 16 * s, text);
+                let at = Rect::new(detail.x + 12 * s, y, 26 * s, 24 * s);
+                if let Some(role) = link.icon.as_deref().filter(|role| theme.has_sprite(role)) {
+                    list.sprite_fit(theme.sprite(role), at);
+                }
+                if let Some(font) = small {
+                    list.text(font, &link.name, at.right() + 6 * s, y + 16 * s, text);
+                    if link.owned {
+                        let width = font.width("owned") * s;
+                        list.text(
+                            font,
+                            "owned",
+                            detail.right() - 10 * s - width,
+                            y + 16 * s,
+                            good,
+                        );
+                    }
+                }
+                y += 26 * s;
             }
         }
         // Ownership and the sell-back price, above the buttons.
         if let Some(font) = small {
             let line = match shop.sell_price {
-                Some(price) => format!("In your bag: {}   Sells for {price}", shop.owned),
+                Some(price) => format!("In your bag: {}  Sells for {price}", shop.owned),
                 None => "Not in your bag".to_string(),
             };
             list.text(
@@ -467,7 +626,7 @@ pub fn draw(theme: &Theme, list: &mut DrawList, shop: &ShopState, gold: u32) {
             buy,
             "Buy",
             bold,
-            if item.price <= gold { text } else { quiet },
+            if item.price <= gold { title } else { quiet },
         );
         button(
             theme,
@@ -476,7 +635,7 @@ pub fn draw(theme: &Theme, list: &mut DrawList, shop: &ShopState, gold: u32) {
             "Sell",
             bold,
             if shop.sell_price.is_some() {
-                text
+                title
             } else {
                 quiet
             },
@@ -490,34 +649,57 @@ pub fn draw(theme: &Theme, list: &mut DrawList, shop: &ShopState, gold: u32) {
             quiet,
         );
     }
+    list.pop_clip();
     if let Some(label) = &shop.delivery {
         let delivery = delivery_rect(area, s);
-        match theme.panel("button.stone") {
-            Some(panel) => list.panel(panel, delivery),
-            None => list.rect(delivery, [0.12, 0.10, 0.08, 0.95]),
-        }
-        if let Some(font) = bold {
-            let width = font.width(label) * s;
-            list.text(
-                font,
-                label,
-                delivery.x + (delivery.w - width) / 2,
-                delivery.y + (delivery.h + font.ascent * s) / 2,
-                text,
-            );
-        }
+        button(theme, list, delivery, label, bold, text);
     }
 
-    // The foot line: what you own, a hint, and the gold.
-    list.rect(
-        Rect::new(area.x + 14 * s, area.y + 492 * s, area.w - 28 * s, 1),
-        [0.40, 0.35, 0.25, 0.60],
-    );
+    // The foot line: your items (click one to sell it back), Undo and the
+    // gold.
+    let foot = foot_rect(area, s);
+    dark(theme, list, foot);
     if let Some(font) = bold {
-        list.text(font, "Your items", area.x + 16 * s, area.y + 522 * s, title);
+        list.text(font, "Your items", foot.x + 12 * s, foot.y + 24 * s, title);
     }
     if let Some(font) = small {
-        list.text(font, &shop.hint, area.x + 96 * s, area.y + 522 * s, quiet);
+        let hint = if shop.bag.is_empty() {
+            "Nothing yet."
+        } else {
+            "Click one to sell it."
+        };
+        list.text(font, hint, foot.x + 12 * s, foot.y + 42 * s, quiet);
+        list.text(font, &shop.hint, foot.x + 12 * s, foot.y + 70 * s, quiet);
+    }
+    for (bag, rect) in shop.bag.iter().zip(bag_rects(area, s, shop.bag.len())) {
+        let frame = Rect::new(rect.x, rect.y, rect.w, 38 * s);
+        match bag.icon.as_deref().filter(|role| theme.has_sprite(role)) {
+            Some(role) => {
+                slot(theme, list, frame);
+                let icon = theme.sprite(role);
+                let (w, h) = list.size_of(icon);
+                list.sprite(
+                    icon,
+                    frame.x + (frame.w - w) / 2,
+                    frame.y + (frame.h - h) / 2,
+                );
+            }
+            None => slot(theme, list, frame),
+        }
+        if bag.selected {
+            list.outline(frame, s.max(1), [1.0, 1.0, 0.0, 1.0]);
+        }
+        if let Some(font) = small {
+            let price = bag.sell.to_string();
+            let width = font.width(&price) * s;
+            list.text(
+                font,
+                &price,
+                rect.x + (rect.w - width) / 2,
+                rect.y + 52 * s,
+                good,
+            );
+        }
     }
     let undo = undo_rect(area, s);
     button(
@@ -526,16 +708,16 @@ pub fn draw(theme: &Theme, list: &mut DrawList, shop: &ShopState, gold: u32) {
         undo,
         "Undo",
         bold,
-        if shop.undo.is_some() { text } else { quiet },
+        if shop.undo.is_some() { title } else { quiet },
     );
-    let count = gold.to_string();
+    let count = format!("{gold} coins");
     let count_x = if let Some(font) = bold {
         let width = font.width(&count) * s;
-        let x = area.right() - 16 * s - width;
+        let x = area.right() - 24 * s - width;
         list.text(font, &count, x, area.y + 522 * s, gold_colour);
         x
     } else {
-        area.right() - 16 * s
+        area.right() - 24 * s
     };
     if theme.has_sprite("icon.gold") {
         let icon = theme.sprite("icon.gold");
@@ -551,6 +733,61 @@ pub fn draw(theme: &Theme, list: &mut DrawList, shop: &ShopState, gold: u32) {
     list.set_layer(previous);
 }
 
+/// "BOOTS" -> "Boots" for the category rows.
+fn sentence(label: &str) -> String {
+    let lower = label.to_lowercase();
+    let mut chars = lower.chars();
+    match chars.next() {
+        Some(first) => first.to_uppercase().chain(chars).collect(),
+        None => String::new(),
+    }
+}
+
+/// An item slot with the item's icon, or its colour swatch and initial.
+fn item_slot(
+    theme: &Theme,
+    list: &mut DrawList,
+    frame: Rect,
+    icon: Option<&str>,
+    item: &ShopItem,
+    s: i32,
+) {
+    slot(theme, list, frame);
+    match icon.filter(|role| theme.has_sprite(role)) {
+        Some(role) => {
+            let icon = theme.sprite(role);
+            let (w, h) = list.size_of(icon);
+            list.sprite(
+                icon,
+                frame.x + (frame.w - w) / 2,
+                frame.y + (frame.h - h) / 2,
+            );
+        }
+        None => {
+            list.rect(
+                Rect::new(
+                    frame.x + 4 * s,
+                    frame.y + 4 * s,
+                    frame.w - 8 * s,
+                    frame.h - 8 * s,
+                ),
+                swatch(item),
+            );
+            if let Some(font) = theme.font("font.bold").or(theme.font("font.body")) {
+                let initial = item.name.chars().next().unwrap_or('?').to_string();
+                let width = font.width(&initial) * s;
+                list.text(
+                    font,
+                    &initial,
+                    frame.x + (frame.w - width) / 2,
+                    frame.y + (frame.h + font.ascent * s) / 2,
+                    ink(item.colour),
+                );
+            }
+        }
+    }
+}
+
 /// A stone button with a centred label.
 fn button(
     theme: &Theme,
@@ -561,7 +798,10 @@ fn button(
     colour: Colour,
 ) {
     let s = list.scale();
-    match theme.panel("button.stone") {
+    match theme
+        .panel("button.osrs")
+        .or_else(|| theme.panel("button.stone"))
+    {
         Some(panel) => list.panel(panel, area),
         None => list.rect(area, [0.12, 0.10, 0.08, 0.95]),
     }
@@ -578,7 +818,10 @@ fn button(
 }
 
 fn dark(theme: &Theme, list: &mut DrawList, area: Rect) {
-    match theme.panel("panel.dark") {
+    match theme
+        .panel("panel.inset")
+        .or_else(|| theme.panel("panel.dark"))
+    {
         Some(panel) => list.panel(panel, area),
         None => list.rect(area, [0.02, 0.02, 0.03, 0.90]),
     }

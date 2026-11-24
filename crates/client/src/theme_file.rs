@@ -54,6 +54,24 @@ enum PanelRef {
         /// "#rrggbb" or "#rrggbbaa".
         solid: String,
     },
+    /// A window joined from the cache's background tile, edge and corner
+    /// sprites (see `stone.rs`), repeated with 32px insets.
+    Frame { frame: FrameRef },
+}
+
+#[derive(Deserialize)]
+struct FrameRef {
+    tile: u32,
+    #[serde(default = "full_shade")]
+    shade: f32,
+    /// Top, left, bottom, right.
+    edges: [u32; 4],
+    /// Top-left, top-right, bottom-left, bottom-right.
+    corners: [u32; 4],
+}
+
+fn full_shade() -> f32 {
+    1.0
 }
 
 #[derive(Deserialize)]
@@ -119,6 +137,22 @@ pub fn load_with_items_minimap_and_portrait(
             PanelRef::Solid { solid } => {
                 let colour = parse_colour(solid).with_context(|| format!("panel role {role}"))?;
                 builder.solid_panel(role, colour);
+            }
+            PanelRef::Frame { frame } => {
+                let spec = crate::stone::FrameSpec {
+                    tile: frame.tile,
+                    shade: frame.shade,
+                    edges: frame.edges,
+                    corners: frame.corners,
+                };
+                let joined = crate::stone::compose(cache, &spec)
+                    .with_context(|| format!("panel role {role}"))?;
+                let (w, h) = joined.dimensions();
+                let pixels = joined.pixels().map(|p| p.0).collect();
+                let inset = crate::stone::CORNER;
+                builder
+                    .panel(role, Image::new(w as usize, h as usize, pixels), [inset; 4])
+                    .map_err(|why| anyhow!(why))?;
             }
         }
     }

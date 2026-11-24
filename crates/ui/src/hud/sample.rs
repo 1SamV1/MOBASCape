@@ -444,6 +444,7 @@ fn base() -> HudState {
             sell_price: None,
             owned: 0,
             undo: None,
+            bag: Vec::new(),
             items: vec![
                 shop_item("Bronze sword", 300, [180, 120, 60], &["+10 damage"]),
                 shop_item("Iron platebody", 400, [160, 160, 170], &["+150 health"]),
@@ -620,5 +621,9 @@ fn shop_item(name: &str, price: u32, colour: [u8; 3], stats: &[&str]) -> ShopIte
             1201..=3000 => 2,
             _ => 3,
         },
+        recipe: Vec::new(),
+        owned: false,
+        from: Vec::new(),
+        into: Vec::new(),
     }
 }

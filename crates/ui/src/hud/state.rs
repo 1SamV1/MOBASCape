@@ -150,6 +150,37 @@ pub struct ShopItem {
     /// Shop section: 0 starter, 1 early, 2 core, 3 late (see
     /// `hud::shop::TIERS`).
     pub tier: u8,
+    /// The parts this item is made from that are in the same list, as
+    /// indices into [`ShopState::items`]. The grid draws them as a recipe
+    /// row (`a > b > c` for upgrade ladders, `a + b > c` otherwise).
+    pub recipe: Vec<usize>,
+    /// True when one is in the bag (a green slot edge, as in OSRS).
+    pub owned: bool,
+    /// The parts, with icons, for the detail pane.
+    pub from: Vec<ItemLink>,
+    /// What it upgrades into, with icons, for the detail pane.
+    pub into: Vec<ItemLink>,
+}
+
+/// Another item named in a recipe.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ItemLink {
+    pub name: String,
+    pub icon: Option<String>,
+    pub owned: bool,
+}
+
+/// One bag slot on the shop's foot line, which can be sold back.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BagItem {
+    /// The inventory slot (0-5) it sits in.
+    pub slot: usize,
+    pub name: String,
+    pub icon: Option<String>,
+    /// What selling it pays.
+    pub sell: u32,
+    /// True when it is the item the detail pane shows.
+    pub selected: bool,
 }
 
 /// The shop overlay. Stage 3 holds one category and our six items; stage 4
@@ -178,6 +209,8 @@ pub struct ShopState {
     pub owned: u32,
     /// The item Undo would take back (this visit's newest purchase).
     pub undo: Option<String>,
+    /// The bag, for selling back from the foot line.
+    pub bag: Vec<BagItem>,
 }
 
 /// One source of damage on the death panel.

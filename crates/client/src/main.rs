@@ -3597,6 +3597,19 @@ impl App {
                         }
                     }
                     rift_ui::hud::shop::ShopHit::Close => self.shop.open = false,
+                    rift_ui::hud::shop::ShopHit::Bag(slot) => {
+                        if let Some(item) = self.shop.owned.get(slot).copied().flatten() {
+                            // Show it, switching to All when the current
+                            // category or search hides it, so Sell is one
+                            // click away.
+                            if !self.shop.filtered_items().contains(&item) {
+                                self.shop.category = 1;
+                                self.shop.query.clear();
+                                self.shop.scroll = 0;
+                            }
+                            self.shop.selected = Some(item);
+                        }
+                    }
                 }
                 return true;
             }

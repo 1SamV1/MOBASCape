@@ -10,11 +10,11 @@ use crate::items::{CATEGORY_LABELS, ItemConfig, ItemShop};
 use crate::scene::{CampBuff, SceneData};
 use glam::{Vec2, Vec3};
 use rift_ui::hud::state::{
-    AbilityNumbers, AbilityState, AbilityTooltipState, AbilityUpgrade, AllyState, CampState,
-    ChatKind, ChatLine, DamageSource, DeathState, HeroMark, HitmarkKind, HitmarkState,
-    InventoryItem, KillFeedEntry, LaneState, MapPoint, MinimapState, NexusState, ObjectivesState,
-    PlateKind, ScoreState, ShopItem, ShopState, StructureMark, TargetStat, TargetState,
-    TooltipState, UnitPlate, VisionMask,
+    AbilityNumbers, AbilityState, AbilityTooltipState, AbilityUpgrade, AllyState, BagItem,
+    CampState, ChatKind, ChatLine, DamageSource, DeathState, HeroMark, HitmarkKind, HitmarkState,
+    InventoryItem, ItemLink, KillFeedEntry, LaneState, MapPoint, MinimapState, NexusState,
+    ObjectivesState, PlateKind, ScoreState, ShopItem, ShopState, StructureMark, TargetStat,
+    TargetState, TooltipState, UnitPlate, VisionMask,
 };
 
 pub fn score(player: &PlayerHud) -> ScoreState {
@@ -521,24 +521,36 @@ pub fn death_from(respawn: Option<f32>, announcement: Option<&str>) -> Option<De
 
 pub fn shop(shop: &ItemShop) -> ShopState {
     let filtered = shop.filtered_items();
+    let link = |i: usize| ItemLink {
+        name: shop.items[i].name.clone(),
+        icon: shop.items[i]
+            .obj
+            .map(|_| format!("icon.item.{}", shop.items[i].id)),
+        owned: shop.is_owned(i),
+    };
     let items = filtered
         .iter()
         .map(|&index| {
             // Prices and recipe names depend on the bag.
             let mut entry = shop_item(&shop.items[index]);
             entry.price = shop.upgrade(index).price;
-            entry.builds_from = shop.items[index]
+            let parts: Vec<usize> = shop.items[index]
                 .builds_from
                 .iter()
-                .filter_map(|id| shop.items.iter().find(|item| &item.id == id))
-                .map(|item| item.name.clone())
+                .filter_map(|id| shop.items.iter().position(|item| &item.id == id))
                 .collect();
-            let into: Vec<&str> = shop
-                .builds_into(index)
-                .into_iter()
-                .map(|i| shop.items[i].name.as_str())
+            entry.builds_from = parts.iter().map(|&i| shop.items[i].name.clone()).collect();
+            entry.from = parts.iter().map(|&i| link(i)).collect();
+            // Recipe rows link parts that are in this same list.
+            entry.recipe = parts
+                .iter()
+                .filter_map(|part| filtered.iter().position(|i| i == part))
                 .collect();
-            entry.builds_into = (!into.is_empty()).then(|| into.join(", "));
+            let into = shop.builds_into(index);
+            let names: Vec<&str> = into.iter().map(|&i| shop.items[i].name.as_str()).collect();
+            entry.builds_into = (!names.is_empty()).then(|| names.join(", "));
+            entry.into = into.into_iter().map(link).collect();
+            entry.owned = shop.is_owned(index);
             entry
         })
         .collect();
@@ -562,7 +574,7 @@ pub fn shop(shop: &ItemShop) -> ShopState {
         items,
         selected,
         scroll: shop.scroll,
-        hint: "Owned parts make upgrades cheaper. Undo refunds in full.".to_string(),
+        hint: "Owned parts make upgrades cheaper.".to_string(),
         delivery: None,
         sell_price: shown
             .filter(|&index| shop.is_owned(index))
@@ -576,6 +588,22 @@ pub fn shop(shop: &ItemShop) -> ShopState {
             .last()
             .and_then(|purchase| shop.items.get(purchase.index))
             .map(|item| item.name.clone()),
+        bag: shop
+            .owned
+            .iter()
+            .enumerate()
+            .filter_map(|(slot, index)| {
+                let index = (*index)?;
+                let item = shop.items.get(index)?;
+                Some(BagItem {
+                    slot,
+                    name: item.name.clone(),
+                    icon: item.obj.map(|_| format!("icon.item.{}", item.id)),
+                    sell: crate::items::sell_price(item.cost),
+                    selected: shown == Some(index),
+                })
+            })
+            .collect(),
     }
 }
 
@@ -619,6 +647,10 @@ pub fn shop_item(item: &ItemConfig) -> ShopItem {
         builds_from: Vec::new(),
         full_price: item.cost,
         tier: item.tier(),
+        recipe: Vec::new(),
+        owned: false,
+        from: Vec::new(),
+        into: Vec::new(),
     }
 }
 

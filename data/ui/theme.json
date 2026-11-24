@@ -34,6 +34,10 @@
   "panels": {
     "panel": { "sprite": 170, "insets": [6, 6, 6, 6] },
     "panel.stone": { "sprite": 1031, "insets": [12, 12, 12, 12] },
+    "panel.frame": { "frame": { "tile": 297, "edges": [954, 955, 956, 957], "corners": [958, 959, 960, 961] } },
+    "panel.inset": { "frame": { "tile": 297, "shade": 0.62, "edges": [962, 967, 962, 967], "corners": [972, 973, 974, 975] } },
+    "button.osrs": { "sprite": 293, "insets": [8, 8, 8, 8] },
+    "button.osrs.red": { "sprite": 294, "insets": [8, 8, 8, 8] },
     "panel.dark": { "solid": "#000000d9" },
     "panel.parchment": { "sprite": 1017, "insets": [12, 12, 12, 12] },
     "panel.slot": { "sprite": 1077, "insets": [6, 6, 6, 6] },

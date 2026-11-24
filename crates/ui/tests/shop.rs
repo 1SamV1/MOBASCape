@@ -238,3 +238,66 @@ fn scrolling_stops_at_the_end_of_the_grid() {
     state.shop.items.clear();
     assert_eq!(shop::max_scroll(&state.shop), 0);
 }
+
+#[test]
+fn upgrade_ladders_and_recipes_get_their_own_rows() {
+    let mut state = sample::state();
+    let items = &mut state.shop.items;
+    // 0 > 1 > 2 is a ladder; 3 + 4 > 5 is a two-part recipe.
+    items.truncate(6);
+    items[1].recipe = vec![0];
+    items[2].recipe = vec![1];
+    items[5].recipe = vec![3, 4];
+    let grid = shop::layout(items);
+    let labels: Vec<&str> = grid.headers.iter().map(|(label, _)| *label).collect();
+    assert!(labels.contains(&"Upgrades") && labels.contains(&"Recipes"));
+    let row_of = |index: usize| {
+        grid.cells
+            .iter()
+            .filter(|(i, _)| *i == index)
+            .map(|(_, cell)| cell.y)
+            .collect::<Vec<_>>()
+    };
+    // The ladder sits on one row, left to right.
+    let ladder: Vec<_> = [0, 1, 2]
+        .iter()
+        .map(|&i| {
+            grid.cells
+                .iter()
+                .find(|(k, _)| *k == i)
+                .map(|(_, cell)| *cell)
+                .unwrap()
+        })
+        .collect();
+    assert!(
+        ladder
+            .windows(2)
+            .all(|pair| pair[0].y == pair[1].y && pair[0].x < pair[1].x)
+    );
+    // The recipe's parts are drawn again beside the result, with marks.
+    assert_eq!(row_of(5).len(), 1);
+    assert!(grid.marks.iter().any(|(mark, _)| *mark == '+'));
+    assert!(grid.marks.iter().filter(|(mark, _)| *mark == '>').count() >= 3);
+    // Every cell stays inside the view's width.
+    for (_, cell) in &grid.cells {
+        assert!(cell.x >= 0 && cell.right() <= 360, "{cell:?}");
+    }
+}
+
+#[test]
+fn a_click_on_a_bag_slot_names_its_inventory_slot() {
+    let mut state = sample::state();
+    state.shop.bag = vec![rift_ui::hud::state::BagItem {
+        slot: 3,
+        name: "Bronze sword".to_string(),
+        icon: None,
+        sell: 210,
+        selected: false,
+    }];
+    let area = shop::rect(Rect::new(0, 0, 1920, 1080), 1);
+    let slot = shop::bag_rects(area, 1, 1)[0];
+    assert_eq!(
+        shop::hit(area, 1, &state.shop, (slot.x + 5, slot.y + 5)),
+        Some(ShopHit::Bag(3))
+    );
+}
