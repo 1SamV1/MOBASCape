@@ -18,6 +18,9 @@ Last updated: skeleton binding, 2026-11-24.
   bound, every part stays under 0.03, and that limit is a test.
 - `rift-tools skeleton <hero|all> [--sheet out.png]` shows bindings, the
   limb map and old-vs-new poses. `--demo-anim` now honours `--champion`.
+- Footsteps (sounds on a unit's walk loop, e.g. Graardor's stomp 3834
+  twice a stride) play at their own `footstep` volume (0.2, was the 0.6
+  frame-sound volume) with per-step pitch ±8% and volume 75–100%.
 - Evergreens lost the dark band under their top tier: the bark override
   for broadleaf trunks no longer repaints faces the cache textures itself.
 

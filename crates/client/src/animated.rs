@@ -3620,9 +3620,19 @@ impl AnimatedScene {
         let Some(spec) = self.default_sounds.get("frame_sound").copied() else {
             return;
         };
+        // Sounds on the walk/idle loop are footsteps: they repeat every
+        // stride, so they play quieter than one-off swings and roars.
+        let step_spec =
+            self.default_sounds
+                .get("footstep")
+                .copied()
+                .unwrap_or(crate::champion::SoundSpec {
+                    volume: spec.volume * 0.33,
+                    ..spec
+                });
         let listener = self.units[self.player_index].pos;
         let mut queued = Vec::new();
-        for (unit, before) in self.units.iter().zip(start) {
+        for (index, (unit, before)) in self.units.iter().zip(start).enumerate() {
             if !unit.visible || unit.spawn_delay > 0.0 || unit.health <= 0.0 {
                 continue;
             }
@@ -3631,9 +3641,30 @@ impl AnimatedScene {
             } else {
                 &unit.idle
             };
-            let mut sounds = base
+            let steps = base
                 .sequence
                 .sounds_between(before.base_ms, unit.anim_time_ms, true);
+            for (k, sound) in steps.into_iter().enumerate() {
+                let range = if sound.range == 0 {
+                    crate::audio::HEARING_RANGE
+                } else {
+                    sound.range as f32 * 128.0
+                };
+                if planar_delta(listener, unit.pos).length() <= range {
+                    // Each step a little different in pitch and weight, so
+                    // the same stomp does not drum identically every stride.
+                    let (pitch, weight) = step_variation(index, unit.anim_time_ms, k);
+                    queued.push((
+                        crate::champion::SoundSpec {
+                            id: sound.id as u32,
+                            volume: step_spec.volume * weight,
+                            speed: step_spec.speed * pitch,
+                        },
+                        unit.pos,
+                    ));
+                }
+            }
+            let mut sounds = Vec::new();
             if let Some(action) = &unit.action {
                 let from = match before.action {
                     Some((clip, time)) if std::ptr::eq(clip, Arc::as_ptr(&action.clip)) => time,
@@ -6249,6 +6280,20 @@ impl<'a> UnitAssets<'a> {
     }
 }
 
+/// Pitch (0.92–1.08) and volume (0.75–1.0) for one footstep of unit
+/// `index`, from a hash of the unit and its animation time.
+fn step_variation(index: usize, anim_ms: f32, k: usize) -> (f32, f32) {
+    let mut h = (index as u32).wrapping_mul(0x9E37_79B1)
+        ^ (anim_ms as u32).wrapping_mul(0x85EB_CA77)
+        ^ (k as u32).wrapping_mul(0xC2B2_AE3D);
+    h ^= h >> 15;
+    h = h.wrapping_mul(0x2C1B_3C6D);
+    h ^= h >> 12;
+    let a = (h & 0xFFFF) as f32 / 65535.0;
+    let b = (h >> 16) as f32 / 65535.0;
+    (0.92 + 0.16 * a, 0.75 + 0.25 * b)
+}
+
 /// The clips a unit plays most (idle, walk and attack when it has them),
 /// used to score how its parts bind to the skeleton.
 pub(crate) fn unit_clips(unit: &AnimatedUnit) -> Vec<Arc<AnimationClip>> {
@@ -7186,6 +7231,18 @@ mod tests {
         let mut clip = AnimationClip::default();
         clip.sequence.frame_lengths = lengths.to_vec();
         clip
+    }
+
+    #[test]
+    fn footsteps_vary_within_a_narrow_band() {
+        let mut pitches = std::collections::BTreeSet::new();
+        for step in 0..64 {
+            let (pitch, weight) = step_variation(3, step as f32 * 640.0, 0);
+            assert!((0.92..=1.08).contains(&pitch), "pitch {pitch}");
+            assert!((0.75..=1.0).contains(&weight), "weight {weight}");
+            pitches.insert((pitch * 100.0) as i32);
+        }
+        assert!(pitches.len() > 8, "steps should not all sound the same");
     }
 
     #[test]

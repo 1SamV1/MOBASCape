@@ -307,6 +307,7 @@ mod tests {
             "shop_sell",
             "skill_point",
             "frame_sound",
+            "footstep",
             "structure_fall",
         ] {
             let spec = table.get(name).unwrap_or_else(|| panic!("missing {name}"));

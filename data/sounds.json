@@ -10,6 +10,7 @@
   "shop_sell": { "id": 3928, "volume": 0.7 },
   "skill_point": { "id": 2266, "volume": 0.6 },
   "frame_sound": { "id": 0, "volume": 0.6 },
+  "footstep": { "id": 0, "volume": 0.2 },
   "kit_projectile": { "id": 1930, "volume": 0.45, "speed": 1.5 },
   "kit_area": { "id": 3791, "volume": 0.5, "speed": 0.7 },
   "kit_zone": { "id": 2596, "volume": 0.6 },
