@@ -1,6 +1,24 @@
 # Status
 
-Last updated: tiered shop grid and minimap portrait, 2026-11-23.
+Last updated: shop selling and Undo, 2026-11-24.
+
+## 2026-11-24 — Sell at 70%, Undo at 100%
+
+- **Rates** (user-approved): selling refunds 70% of cost, rounded down
+  (`items::SELL_REFUND_PERCENT`, `sell_price`); it was 50% in the old HUD.
+  Undo refunds 100%.
+- **Undo** takes back this shop visit's purchases newest first: an item in
+  the bag loses its stats and is removed; an item still waiting in the
+  delivery chest leaves the delivery list (`AnimatedScene::cancel_stored`).
+  An item the guard has since handed over becomes a bag purchase for Undo.
+  Selling an item drops its Undo entry so it cannot be refunded twice.
+  Closing the shop ends the visit (`ItemShop::sync_visit`).
+- **Live shop**: Buy and Sell share the detail pane's bottom row (Sell only
+  answers when the item is in the bag); "In your bag: N   Sells for X"
+  above them; an Undo button on the foot line.
+- **Verified** with `--demo-shop` (now grants 8000 gold and finishes with a
+  sell and an undo in one frame): "sell refunded 1680g (70% of 2400), undo
+  refunded 1700g (of 1700)".
 
 ## 2026-11-23 — Shop icon grid in tiers; the player's face on the minimap
 

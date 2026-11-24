@@ -177,7 +177,9 @@ All objects from the cache, placed through the map format
 - 2026-11-23: phase 3.2 layout started: tiered icon grid with prices under
   icons. Phase 2.2: player portrait in the minimap ring. Open in phase 3:
   recipes and Builds into data, selling and Undo (refund rate is a design
-  call), recommended page, search. Bot portraits need bots to carry a
+  call), recommended page, search.
+- 2026-11-24: phase 3 selling (70%) and Undo (100%, this visit) done.
+  Open in phase 3: recipes / Builds into data, recommended page, search. Bot portraits need bots to carry a
   champion id.
 
 ## Started with this plan

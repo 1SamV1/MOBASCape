@@ -174,10 +174,22 @@ fn clicks_hit_categories_rows_buy_and_close() {
         Some(ShopHit::Row(index))
     );
     state.shop.scroll = 0;
+    // Buy and Sell share the bottom row; Sell only answers when the item
+    // is in the bag, and Undo only when there is a purchase to undo.
     assert_eq!(
-        shop::hit(area, 1, &state.shop, (1228, 697)),
+        shop::hit(area, 1, &state.shop, (1170, 697)),
         Some(ShopHit::Buy)
     );
+    assert_eq!(shop::hit(area, 1, &state.shop, (1280, 697)), None);
+    state.shop.sell_price = Some(210);
+    assert_eq!(
+        shop::hit(area, 1, &state.shop, (1280, 697)),
+        Some(ShopHit::Sell)
+    );
+    let undo = (area.right() - 200 + 30, area.y + 503 + 12);
+    assert_eq!(shop::hit(area, 1, &state.shop, undo), None);
+    state.shop.undo = Some("Bronze sword".to_string());
+    assert_eq!(shop::hit(area, 1, &state.shop, undo), Some(ShopHit::Undo));
     state.shop.delivery = Some("DELIVER (2)".to_string());
     assert_eq!(
         shop::hit(area, 1, &state.shop, (1200, 660)),

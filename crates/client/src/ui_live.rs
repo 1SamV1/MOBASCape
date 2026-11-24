@@ -538,8 +538,22 @@ pub fn shop(shop: &ItemShop) -> ShopState {
         items,
         selected,
         scroll: shop.scroll,
-        hint: "Click an item, then Buy.".to_string(),
+        hint: "Click an item, then Buy. Undo refunds in full.".to_string(),
         delivery: None,
+        sell_price: shop
+            .selected
+            .filter(|&index| shop.is_owned(index))
+            .and_then(|index| shop.items.get(index))
+            .map(|item| crate::items::sell_price(item.cost)),
+        owned: shop
+            .selected
+            .map(|index| shop.owned_count(index) as u32)
+            .unwrap_or(0),
+        undo: shop
+            .undo
+            .last()
+            .and_then(|purchase| shop.items.get(purchase.index))
+            .map(|item| item.name.clone()),
     }
 }
 
@@ -1129,6 +1143,7 @@ mod tests {
         let catalog = ItemShop {
             items: vec![item],
             owned: [None; 6],
+            undo: Vec::new(),
             open: true,
             selected: Some(0),
             category: 1,
@@ -1162,6 +1177,7 @@ mod tests {
         let catalog = ItemShop {
             items: vec![item("Sword", [1, 2, 3]), item("Shield", [4, 5, 6])],
             owned: [Some(1), None, Some(0), Some(99), None, None],
+            undo: Vec::new(),
             open: false,
             selected: None,
             category: 0,
@@ -1220,6 +1236,7 @@ mod tests {
         let catalog = ItemShop {
             items: vec![item],
             owned: [None; 6],
+            undo: Vec::new(),
             open: true,
             selected: Some(0),
             category: 0,

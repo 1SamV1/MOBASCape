@@ -1525,13 +1525,20 @@ impl AnimatedScene {
         }
     }
 
+    /// Sell an item from the bag for [`crate::items::sell_price`].
     pub fn sell_item(&mut self, item: &ItemConfig) -> Result<(), &'static str> {
+        self.refund_item(item, crate::items::sell_price(item.cost))
+    }
+
+    /// Take an item out of the bag: its stats come off and `gold` is paid.
+    /// Selling pays the sell price; Undo pays the full cost.
+    pub fn refund_item(&mut self, item: &ItemConfig, gold: u32) -> Result<(), &'static str> {
         let pi = self.player_index;
         let player = &mut self.units[pi];
         if player.health <= 0.0 {
             return Err("dead");
         }
-        player.gold = player.gold.saturating_add(item.cost / 2);
+        player.gold = player.gold.saturating_add(gold);
         player.attack_damage = (player.attack_damage - item.damage).max(1.0);
         if item.health > 0.0 {
             player.max_health = (player.max_health - item.health).max(100.0);
@@ -1690,6 +1697,25 @@ impl AnimatedScene {
         }
         player.speed += item.speed;
         player.ability_power += item.ability;
+    }
+
+    /// Undo a purchase still waiting in the chest: it leaves the delivery
+    /// list and the full cost comes back. False when it is no longer there
+    /// (already handed over).
+    pub fn cancel_stored(&mut self, shop_index: usize) -> bool {
+        let Some(pos) = self
+            .delivery_pending
+            .iter()
+            .rposition(|(index, _)| *index == shop_index)
+        else {
+            return false;
+        };
+        let (_, item) = self.delivery_pending.remove(pos);
+        let pi = self.player_index;
+        self.units[pi].gold = self.units[pi].gold.saturating_add(item.cost);
+        let pos = self.units[pi].pos;
+        self.play_sound("shop_sell", pos);
+        true
     }
 
     /// Send the guard to fetch the stored items.

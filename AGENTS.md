@@ -267,8 +267,11 @@ Cache location: `.cache/osrs-235/cache` by default. Pass `--cache` and
 - Six data-driven items in `data/items/items.json`, six inventory slots, gold
   spending, hover tooltips, and a fountain-range shop (`B`, then `1`–`6`).
   Passive gold is 8/s and the fountain heals 6% max HP/MP per second within
-  900 units. Purchases are client-side in this prototype; no selling,
-  combining, or passives yet.
+  900 units. Purchases are client-side in this prototype. Selling refunds
+  70% (`items::sell_price`); Undo takes back the current shop visit's
+  purchases, newest first, for 100% (in the bag or still in the delivery
+  chest), and the history ends when the shop closes. No combining or
+  passives yet.
 - Fog/brush is **client-side** in this prototype. A 192×192 visibility grid is
   computed from allied units/structures, enemy/neutral units outside vision are
   hidden, and brush rectangles hide units unless the player is close. The

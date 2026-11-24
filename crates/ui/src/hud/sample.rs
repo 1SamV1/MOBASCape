@@ -440,6 +440,9 @@ fn base() -> HudState {
             category: 0,
             search: "Search items".to_string(),
             delivery: None,
+            sell_price: None,
+            owned: 0,
+            undo: None,
             items: vec![
                 shop_item("Bronze sword", 300, [180, 120, 60], &["+10 damage"]),
                 shop_item("Iron platebody", 400, [160, 160, 170], &["+150 health"]),

@@ -1560,11 +1560,11 @@ impl App {
             self.demo_shop_timer += dt;
             if self.demo_shop_stage == 0 && self.demo_shop_timer >= 0.5 {
                 if let Some(animated) = self.animated.as_mut() {
-                    animated.debug_grant_gold(4000);
+                    animated.debug_grant_gold(8000);
                 }
                 self.shop.open = true;
                 self.shop.scroll = 0;
-                tracing::info!("demo shop: granted 4000 gold, shop open");
+                tracing::info!("demo shop: granted 8000 gold, shop open");
                 self.demo_shop_stage = 1;
             }
             if (1..=6).contains(&self.demo_shop_stage) {
@@ -1591,7 +1591,29 @@ impl App {
                 let (x, y, rw, rh) = shop_card_rect(w, h, slot);
                 self.mouse_pos = ((x + rw * 0.5) as f64, (y + rh * 0.5) as f64);
             }
-            if self.demo_shop_stage == 7 && self.demo_shop_timer >= 4.5 {
+            if self.demo_shop_stage == 7 && self.demo_shop_timer >= 3.5 {
+                // Sell the sixth item, then Undo the fifth, in one frame so
+                // passive gold cannot blur the refunds in the log.
+                let gold = |app: &Self| app.animated.as_ref().map(|a| a.player_stats().gold);
+                let before = gold(self);
+                self.sell_item(5);
+                let sold = gold(self);
+                self.undo_purchase();
+                let undone = gold(self);
+                if let (Some(a), Some(b), Some(c)) = (before, sold, undone) {
+                    tracing::info!(
+                        "demo shop: sell refunded {}g ({}% of {}), undo refunded {}g (of {}), {} undo entries left",
+                        b - a,
+                        items::SELL_REFUND_PERCENT,
+                        self.shop.items.get(5).map(|i| i.cost).unwrap_or(0),
+                        c - b,
+                        self.shop.items.get(4).map(|i| i.cost).unwrap_or(0),
+                        self.shop.undo.len()
+                    );
+                }
+                self.demo_shop_stage = 8;
+            }
+            if self.demo_shop_stage == 8 && self.demo_shop_timer >= 4.5 {
                 if let Some(animated) = self.animated.as_ref() {
                     let s = animated.player_stats();
                     tracing::info!(
@@ -1805,7 +1827,7 @@ impl App {
                 if self.demo_delivery_stage == 0 && self.demo_delivery_timer >= 1.0 {
                     let away = animated.player_pos() + Vec3::new(26.0 * 128.0, 0.0, 0.0);
                     animated.teleport_player(away);
-                    animated.debug_grant_gold(4000);
+                    animated.debug_grant_gold(8000);
                     let first = self.shop.items[0].clone();
                     let second = self.shop.items[1].clone();
                     let _ = animated.buy_item(0, &first);
@@ -2272,8 +2294,18 @@ impl App {
                 let alive = healths.iter().filter(|(hp, _)| *hp > 0.0).count();
                 (alive, healths.len())
             };
+            self.shop.sync_visit();
             for index in animated.take_delivered() {
                 self.shop.add_owned(index);
+                // Undo now takes it back out of the bag, not the chest.
+                if let Some(purchase) = self
+                    .shop
+                    .undo
+                    .iter_mut()
+                    .find(|p| p.index == index && p.stored)
+                {
+                    purchase.stored = false;
+                }
                 if let Some(item) = self.shop.items.get(index) {
                     log_event(&mut self.event_log, format!("DELIVERED {}", item.name));
                     tracing::info!("delivery: handed over {}", item.name);
@@ -3197,6 +3229,10 @@ impl App {
         match animated.buy_item(index, &item) {
             Ok(BuyOutcome::Delivered) => {
                 self.shop.add_owned(index);
+                self.shop.undo.push(items::Purchase {
+                    index,
+                    stored: false,
+                });
                 tracing::info!(
                     "shop: bought {} ({}) for {}g ({} slots used)",
                     item.name,
@@ -3207,6 +3243,10 @@ impl App {
                 log_event(&mut self.event_log, format!("BOUGHT {}", item.name));
             }
             Ok(BuyOutcome::Stored) => {
+                self.shop.undo.push(items::Purchase {
+                    index,
+                    stored: true,
+                });
                 tracing::info!("shop: {} stored in the chest for delivery", item.name);
                 log_event(&mut self.event_log, format!("STORED {}", item.name));
             }
@@ -3227,15 +3267,48 @@ impl App {
         match animated.sell_item(&item) {
             Ok(()) => {
                 self.shop.remove_owned(index);
+                self.shop.forget_purchase(index);
                 tracing::info!(
                     "shop: sold {} for {}g ({} slots used)",
                     item.name,
-                    item.cost / 2,
+                    items::sell_price(item.cost),
                     self.shop.item_count()
                 );
                 log_event(&mut self.event_log, format!("SOLD {}", item.name));
             }
             Err(err) => tracing::info!("shop: sell {} failed: {err}", item.name),
+        }
+    }
+
+    /// Take back this visit's newest purchase for its full price.
+    fn undo_purchase(&mut self) {
+        let Some(purchase) = self.shop.undo.pop() else {
+            return;
+        };
+        let Some(item) = self.shop.items.get(purchase.index).cloned() else {
+            return;
+        };
+        let Some(animated) = self.animated.as_mut() else {
+            return;
+        };
+        let undone = if purchase.stored {
+            animated.cancel_stored(purchase.index)
+        } else if self.shop.is_owned(purchase.index) {
+            match animated.refund_item(&item, item.cost) {
+                Ok(()) => self.shop.remove_owned(purchase.index),
+                Err(err) => {
+                    tracing::info!("shop: undo {} failed: {err}", item.name);
+                    false
+                }
+            }
+        } else {
+            false
+        };
+        if undone {
+            tracing::info!("shop: undid {} (+{}g)", item.name, item.cost);
+            log_event(&mut self.event_log, format!("UNDID {}", item.name));
+        } else {
+            tracing::info!("shop: nothing to undo for {}", item.name);
         }
     }
 
@@ -3334,6 +3407,12 @@ impl App {
                             self.purchase_item(item);
                         }
                     }
+                    rift_ui::hud::shop::ShopHit::Sell => {
+                        if let Some(item) = self.shop.selected {
+                            self.sell_item(item);
+                        }
+                    }
+                    rift_ui::hud::shop::ShopHit::Undo => self.undo_purchase(),
                     rift_ui::hud::shop::ShopHit::Deliver => {
                         if let Some(animated) = self.animated.as_mut()
                             && animated.call_delivery()

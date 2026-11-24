@@ -84,7 +84,29 @@ pub enum ShopHit {
     Category(usize),
     Row(usize),
     Buy,
+    /// Sell the selected item (only when it is in the bag).
+    Sell,
+    /// Take back this visit's newest purchase.
+    Undo,
     Deliver,
+}
+
+/// Buy and Sell share the detail pane's bottom row.
+fn trade_rects(area: Rect, scale: i32) -> (Rect, Rect) {
+    let s = scale.max(1);
+    let detail = Rect::new(area.x + 550 * s, area.y + 48 * s, 218 * s, 432 * s);
+    let y = detail.bottom() - 48 * s;
+    let w = (detail.w - 30 * s) / 2;
+    (
+        Rect::new(detail.x + 12 * s, y, w, 30 * s),
+        Rect::new(detail.x + 18 * s + w, y, w, 30 * s),
+    )
+}
+
+/// The Undo button on the foot line, left of the gold.
+fn undo_rect(area: Rect, scale: i32) -> Rect {
+    let s = scale.max(1);
+    Rect::new(area.right() - 200 * s, area.y + 503 * s, 72 * s, 26 * s)
 }
 
 /// Hit-test the live shop. `area` is [`rect`]'s result and `scale` is the
@@ -124,15 +146,16 @@ pub fn hit(area: Rect, scale: i32, state: &ShopState, mouse: (i32, i32)) -> Opti
             }
         }
     }
-    let detail = Rect::new(area.x + 550 * s, area.y + 48 * s, 218 * s, 432 * s);
-    let buy = Rect::new(
-        detail.x + 12 * s,
-        detail.bottom() - 48 * s,
-        detail.w - 24 * s,
-        30 * s,
-    );
+    let (buy, sell) = trade_rects(area, s);
     if point(buy.x, buy.y, buy.w, buy.h) {
         return Some(ShopHit::Buy);
+    }
+    if state.sell_price.is_some() && point(sell.x, sell.y, sell.w, sell.h) {
+        return Some(ShopHit::Sell);
+    }
+    let undo = undo_rect(area, s);
+    if state.undo.is_some() && point(undo.x, undo.y, undo.w, undo.h) {
+        return Some(ShopHit::Undo);
     }
     if state.delivery.is_some() {
         let delivery = delivery_rect(area, s);
@@ -377,26 +400,41 @@ pub fn draw(theme: &Theme, list: &mut DrawList, shop: &ShopState, gold: u32) {
                 list.text(font, builds, detail.x + 12 * s, y + 16 * s, text);
             }
         }
-        let buy = Rect::new(
-            detail.x + 12 * s,
-            detail.bottom() - 48 * s,
-            detail.w - 24 * s,
-            30 * s,
-        );
-        match theme.panel("button.stone") {
-            Some(panel) => list.panel(panel, buy),
-            None => list.rect(buy, [0.12, 0.10, 0.08, 0.95]),
-        }
-        if let Some(font) = bold {
-            let width = font.width("Buy") * s;
+        // Ownership and the sell-back price, above the buttons.
+        if let Some(font) = small {
+            let line = match shop.sell_price {
+                Some(price) => format!("In your bag: {}   Sells for {price}", shop.owned),
+                None => "Not in your bag".to_string(),
+            };
             list.text(
                 font,
-                "Buy",
-                buy.x + (buy.w - width) / 2,
-                buy.y + (buy.h + font.ascent * s) / 2,
-                text,
+                &line,
+                detail.x + 12 * s,
+                detail.bottom() - 58 * s,
+                quiet,
             );
         }
+        let (buy, sell) = trade_rects(area, s);
+        button(
+            theme,
+            list,
+            buy,
+            "Buy",
+            bold,
+            if item.price <= gold { text } else { quiet },
+        );
+        button(
+            theme,
+            list,
+            sell,
+            "Sell",
+            bold,
+            if shop.sell_price.is_some() {
+                text
+            } else {
+                quiet
+            },
+        );
     } else if let Some(font) = body {
         list.text(
             font,
@@ -435,6 +473,15 @@ pub fn draw(theme: &Theme, list: &mut DrawList, shop: &ShopState, gold: u32) {
     if let Some(font) = small {
         list.text(font, &shop.hint, area.x + 96 * s, area.y + 522 * s, quiet);
     }
+    let undo = undo_rect(area, s);
+    button(
+        theme,
+        list,
+        undo,
+        "Undo",
+        bold,
+        if shop.undo.is_some() { text } else { quiet },
+    );
     let count = gold.to_string();
     let count_x = if let Some(font) = bold {
         let width = font.width(&count) * s;
@@ -456,6 +503,32 @@ pub fn draw(theme: &Theme, list: &mut DrawList, shop: &ShopState, gold: u32) {
 
     list.pop_clip();
     list.set_layer(previous);
+}
+
+/// A stone button with a centred label.
+fn button(
+    theme: &Theme,
+    list: &mut DrawList,
+    area: Rect,
+    label: &str,
+    font: Option<&crate::font::Font>,
+    colour: Colour,
+) {
+    let s = list.scale();
+    match theme.panel("button.stone") {
+        Some(panel) => list.panel(panel, area),
+        None => list.rect(area, [0.12, 0.10, 0.08, 0.95]),
+    }
+    if let Some(font) = font {
+        let width = font.width(label) * s;
+        list.text(
+            font,
+            label,
+            area.x + (area.w - width) / 2,
+            area.y + (area.h + font.ascent * s) / 2,
+            colour,
+        );
+    }
 }
 
 fn dark(theme: &Theme, list: &mut DrawList, area: Rect) {

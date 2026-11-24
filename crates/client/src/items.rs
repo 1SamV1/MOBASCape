@@ -47,9 +47,29 @@ fn default_category() -> String {
     "misc".to_string()
 }
 
+/// Selling refunds this share of an item's cost (whole gold, rounded down).
+pub const SELL_REFUND_PERCENT: u32 = 70;
+
+/// What selling an item of this cost gives back.
+pub fn sell_price(cost: u32) -> u32 {
+    cost * SELL_REFUND_PERCENT / 100
+}
+
+/// One purchase made on the current shop visit, which Undo can take back
+/// for its full price.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Purchase {
+    pub index: usize,
+    /// True when the item went to the chest to wait for delivery instead of
+    /// into the bag.
+    pub stored: bool,
+}
+
 pub struct ItemShop {
     pub items: Vec<ItemConfig>,
     pub owned: [Option<usize>; 6],
+    /// This visit's purchases, newest last. Cleared when the shop closes.
+    pub undo: Vec<Purchase>,
     pub open: bool,
     pub selected: Option<usize>,
     pub category: usize,
@@ -74,6 +94,7 @@ impl ItemShop {
         Ok(Self {
             items: serde_json::from_str(&data)?,
             owned: [None; 6],
+            undo: Vec::new(),
             open: false,
             selected: Some(0),
             category: 0,
@@ -84,6 +105,7 @@ impl ItemShop {
     /// Clear the loadout and close the window for a fresh match.
     pub fn reset(&mut self) {
         self.owned = [None; 6];
+        self.undo.clear();
         self.open = false;
         self.selected = Some(0);
         self.category = 0;
@@ -119,6 +141,25 @@ impl ItemShop {
             true
         } else {
             false
+        }
+    }
+
+    /// End the visit's Undo history once the window is closed.
+    pub fn sync_visit(&mut self) {
+        if !self.open {
+            self.undo.clear();
+        }
+    }
+
+    /// Forget the newest Undo entry for `index` (after selling it, Undo
+    /// must not refund it a second time).
+    pub fn forget_purchase(&mut self, index: usize) {
+        if let Some(pos) = self
+            .undo
+            .iter()
+            .rposition(|p| p.index == index && !p.stored)
+        {
+            self.undo.remove(pos);
         }
     }
 
@@ -244,6 +285,65 @@ pub fn shop_button_at(width: f32, height: f32, cursor: (f64, f64)) -> bool {
 mod tests {
 
     #[test]
+    fn selling_refunds_seventy_percent_rounded_down() {
+        assert_eq!(sell_price(300), 210);
+        assert_eq!(sell_price(1450), 1015);
+        assert_eq!(sell_price(1), 0);
+    }
+
+    #[test]
+    fn undo_history_lasts_one_visit_and_skips_sold_items() {
+        let mut shop = ItemShop {
+            items: Vec::new(),
+            owned: [None; 6],
+            undo: vec![
+                Purchase {
+                    index: 3,
+                    stored: false,
+                },
+                Purchase {
+                    index: 5,
+                    stored: true,
+                },
+                Purchase {
+                    index: 3,
+                    stored: false,
+                },
+            ],
+            open: true,
+            selected: None,
+            category: 0,
+            scroll: 0,
+        };
+        shop.forget_purchase(3);
+        assert_eq!(
+            shop.undo,
+            vec![
+                Purchase {
+                    index: 3,
+                    stored: false
+                },
+                Purchase {
+                    index: 5,
+                    stored: true
+                }
+            ],
+            "selling drops the newest bag purchase of that item"
+        );
+        shop.forget_purchase(5);
+        assert_eq!(
+            shop.undo.len(),
+            2,
+            "stored items are not in the bag to sell"
+        );
+        shop.sync_visit();
+        assert_eq!(shop.undo.len(), 2, "still open");
+        shop.open = false;
+        shop.sync_visit();
+        assert!(shop.undo.is_empty(), "closing ends the visit");
+    }
+
+    #[test]
     fn shop_tiers_follow_cost_unless_the_file_names_one() {
         let item = |cost: u32, tier: Option<u8>| -> ItemConfig {
             let mut value = serde_json::json!({
@@ -277,6 +377,7 @@ mod tests {
         ItemShop {
             items: serde_json::from_str(json).expect("item fixture"),
             owned: [None; 6],
+            undo: Vec::new(),
             open: false,
             selected: Some(0),
             category: 0,

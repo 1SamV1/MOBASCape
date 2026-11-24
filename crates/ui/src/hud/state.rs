@@ -165,6 +165,12 @@ pub struct ShopState {
     pub hint: String,
     /// The delivery control's label, when purchases are waiting or in flight.
     pub delivery: Option<String>,
+    /// What selling the selected item pays, when one is in the bag.
+    pub sell_price: Option<u32>,
+    /// How many of the selected item are in the bag.
+    pub owned: u32,
+    /// The item Undo would take back (this visit's newest purchase).
+    pub undo: Option<String>,
 }
 
 /// One source of damage on the death panel.
