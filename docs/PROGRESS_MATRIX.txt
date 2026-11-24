@@ -1,62 +1,62 @@
    Z        4  ^8 :? : ~TQ  9T    -k7 ~ X  @           AA +     .     7  -D -  A    $B         |  97 7 :             6           X     $       ~ :.
   ░▒▓▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▓▒░
-       8    k  B  |# X !3 ▄▄▄                                                                                            ▄▄▄   &.F     ?       | C=
-    *  -       =  @@ 6 E@ █   █▓▄   ▄▓▒  ▄▓▓▓▓▓▄  █▓▓▓▓▓▓▄   ▄▓▓▓▓▓▄   ▄▓▓▓▓▓▓▄  ▄▓▓▓▓▓▓▄  ▄▓▓▓▓▓▄  █▓▓▓▓▓▓▄  █▓▓▓▓▓▓▓▒    █   Tk?     !       = 7F
-    :  Z       =  +1 < 7B █   █▓▓▄ ▄▓▓▒░█▒░░░░░█▒ █▒░░░░░█▒ █▒░░░░░█▒ █▒░░░░░░░░█▒░░░░░░░░█▒░░░░░█▒ █▒░░░░░█▒ █▒░░░░░░░░   █ 7 !J^     &       3  T
-    #  F       9  k> ~ F< █   █▒░▀▓▀░█▒░█▒░    █▒░█▓▓▓▓▓▓▀░░█▓▓▓▓▓▓▓▒░ ▀▓▓▓▓▓▄  █▒░       █▓▓▓▓▓▓▓▒░█▓▓▓▓▓▓▀░░█▓▓▓▓▓▒      █ 3 :7#>    -       E  5
-    8  |       6  5T + C7 █   █▒░ ░░░█▒░█▒░    █▒░█▒░░░░░█▒ █▒░░░░░█▒░  ░░░░░█▒ █▒░       █▒░░░░░█▒░█▒░░░░░░░ █▒░░░░░░     █ : 8F$#    C       7  =
-    Q  A       X  6E . J| █   █▒░    █▒░█▒░    █▒░█▒░    █▒░█▒░    █▒░       █▒░█▒░       █▒░    █▒░█▒░       █▒░          █ + <|88            7
-    ?  F       4  <7 J ~$ █   █▒░    █▒░ ▀▓▓▓▓▓▀░░█▓▓▓▓▓▓▀░░█▒░    █▒░▀▓▓▓▓▓▓▀░░ ▀▓▓▓▓▓▓▀ █▒░    █▒░█▒░       █▓▓▓▓▓▓▓▒    █ 8  XT<
-    > -1       $  5D &%|| ▀▀▀  ░░     ░░  ░░░░░░░  ░░░░░░░░  ░░     ░░ ░░░░░░░░   ░░░░░░░░ ░░     ░░ ░░        ░░░░░░░░░ ▀▀▀ F  k~2
-    0 J  A     3   . !=0|                                                                                                    =  ?E*         8
-    < 8  ?     *  Q@ ~!==Z2  %  ?  A    + !T       ░▒▓█  r i F T   c R e W   p R e S e N T s  █▓▒░        | J     J      .   3  $%2         Z
-    7 J  0     2  0^ 65^B.B  k  .  6    J ^T      9      PHaSe.1 CLoSeD :: THe LiGHT iS DaTa    =  9      2 C     1      B   2  J:=  D      8
+       8    k  B  |# X !3D                                                                                                     &.F     ?       | C=
+    *  -       =  @@ 6 E@9   ██▄   ▄██  ▄█████▄  ███████▄   ▄█████▄   ▄██████▄  ▄██████▄  ▄█████▄  ███████▄  █████████         Tk?     !       = 7F
+    :  Z       =  +1 < 7B7   ███▄ ▄███▓██▓▓▓▓▓██ ██▓▓▓▓▓██ ██▓▓▓▓▓██ ██▓▓▓▓▓▓▓▓██▓▓▓▓▓▓▓▓██▓▓▓▓▓██ ██▓▓▓▓▓██ ██▓▓▓▓▓▓▓▓      7 !J^     &       3  T
+    #  F       9  k> ~ F<J   ██▓▀█▀▓██▓██▓▒▒▒▒██▓███████▀▓▓█████████▓ ▀█████▄▒▒██▓▒▒▒▒▒▒▒█████████▓███████▀▓▓███████▒▒▒▒     3 :7#>    -       E  5
+    8  |       6  5T + C70   ██▓▒▓▓▓██▓██▓▒░░░██▓██▓▓▓▓▓██▒██▓▓▓▓▓██▓▒ ▓▓▓▓▓██░██▓▒░░░░░░██▓▓▓▓▓██▓██▓▓▓▓▓▓▓▒██▓▓▓▓▓▓░░░░    : 8F$#    C       7  =
+    Q  A       X  6E . J|A   ██▓▒░▒▒██▓██▓▒░  ██▓██▓▒▒▒▒██▓██▓▒▒▒▒██▓▒░ ▒▒▒▒██▓██▓▒░     ██▓▒▒▒▒██▓██▓▒▒▒▒▒▒▒██▓▒▒▒▒▒▒       + <|88            7
+    ?  F       4  <7 J ~$.   ██▓▒░ ░██▓▒▀█████▀▓▓███████▀▓▓██▓▒░░░██▓▀██████▀▓▓▒▀██████▀ ██▓▒░░░██▓██▓▒░░░░░░█████████░      8  XT<
+    > -1       $  5D &%||^    ▓▓▒░   ▓▓▒░▓▓▓▓▓▓▓▒▒▓▓▓▓▓▓▓▓▒▒▓▓▒░   ▓▓▒▓▓▓▓▓▓▓▓▒▒░▓▓▓▓▓▓▓▓ ▓▓▒░   ▓▓▒▓▓▒░      ▓▓▓▓▓▓▓▓▓      F  k~2
+    0 J  A     3   . !=0|4     ▒▒░    ▒▒░ ▒▒▒▒▒▒▒░░▒▒▒▒▒▒▒▒░░▒▒░    ▒▒░▒▒▒▒▒▒▒▒░░ ▒▒▒▒▒▒▒▒ ▒▒░    ▒▒░▒▒░       ▒▒▒▒▒▒▒▒▒     =  ?E*         8
+    < 8  ?     *  Q@ ~!==Z      ░░     ░░  ░░░░░░░  ░░░░░░░░  ░░     ░░ ░░░░░░░░   ░░░░░░░░ ░░     ░░ ░░        ░░░░░░░░░    3  $%2         Z
+    7 J  0     2  0^ 65^B.                    ·:·  t H E   g R A N D   e X C H A N G E   o P E N s  ·:·                      2  J:=  D      8
+    J =  @     ~  >@ !JJCQk  E  Q  T      T7      #      PHaSe.3 iNiTiaTeD :: FoLLoW THe GoLD   +  +      Z 4     C      #   :  AT4  7      *      *
   ░▒▓▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▓▒░
-    7 Q  TC       %F .7<D?+  T  7  A      X:      6     F 7       61  #  k Z%   3 5 T~          7  =      ? <     5F     C   8  574  A      - =    2
-    ■─────────────────────────────────────────────────────────  -=[ ReLeaSe iNFo ]=-  ───────────────────────────────────────────────────────────■ F
-        rELEASE dATE.... 2026-11-23                                         cOMMIT...... e28cf54  ->  sam/main                                     Q
-        tYPE............ rENDERER / dATA / mINIMAP                          tESTS....... 383 PASS // 0 FAIL   (+5)                                 J5
-        rELOAD kEY...... F5 :: shader + lighting.json                       cLIPPY...... -D warnings :: CLEAN                                      $E
-        rULE............ ONLY OSRS CACHE ASSETS                             sIZE........ 9 knobs / 3 uniforms / 0 rebuilds                         #.
-    A >  <B       D  +71    2   ?   J     C       .E    5  ^      9Q       |-   - : @~          6  >        T      0         |  . ^  J      F Q    3&
-    ▄▀▀▐ DaTa/LiGHTiNG.JSoN // HeXVieW ▌▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▄ ▄▀▀▐ FRuSTuM.CoM // MiNiMaP VieW ▌▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▄ B1
-    █                                                                       █0█                                                                  █ <Q
-    █  OFFS  KEY                  VALUE    WAS    RANGE                     █4█                    (@)  camera eye                               █ +&
-    █  0000  terrain_ambient      1.30     1.64   [▓▓▓▓▓░░░░░░░░░] 0..4     █T█                  / :  :\                    █████████████████    █ ~T
-    █  0018  unit_ambient         1.48     1.74   [▓▓▓▓▓░░░░░░░░░] 0..4     █9█                /   :  :   \                 █░░░░░░░░░░░░░░░█    █  ?
-    █  0030  sun_strength         0.90     0.72   [▓▓▓░░░░░░░░░░░] 0..4     █9█             /     :    :    \               █░░░░░░░░░░░░■░░█    █  $
-    █  0048  shadow_floor         0.36     0.52   [▓▓▓▓▓░░░░░░░░░] 0..1     █Q█           /      :     :       \            █░░░░░░░░░░░░░░░█    █  T
-    █  0060  hidden_tint          [.40 .42 .47]                             █|█        /         :      :        \          █░░░░░░░░░░░░░░░█    █ 1%
-    █  0078  hidden_saturation    0.45     --     [▓▓▓▓▓▓░░░░░░░░] 0..1     █B█  TL  /          :       :           \ TR    █░░░░░░░░░░░░░░░█    █ #D
-    █  0090  grass_saturation     1.12     1.30   [▓▓▓▓▓░░░░░░░░░] 0..3     █*█   ═════════════════════════════════════     █░▀▀▀▀▀▀▀▀░░░░░░█    █ !-
-    █  00A8  grass_brightness     0.58     0.66   [▓▓▓▓░░░░░░░░░░] 0..2     █|█     \░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░/       █░\░░░░░░/░░░░░░█    █ <+
-    █  00C0  grass_mottle         0.30     0.30   [▓▓░░░░░░░░░░░░] 0..2     █+█       \░░░░░░░░░░░░░░░░░░░░░░░░░░░/         █░░\░@░░/░░░░░░░█    █ |X
-    █                                                                       █^█         \░░░░░screen░░░░░░░░░░░░/           █░░░▄▄▄▄░░░░░░░░█    █ D-
-    █  > F5  -> naga validates shader, serde validates json                 █>█           \░░░░░░░░░░░░░░░░░░░/             █████████████████    █ ~F
-    █  > bad key? 'sun_strenght' -> REFUSED, old values stay                █-█             ═════════════════                                    █ 4k
-    █  > test: extreme file dropped frame luma 75 -> 59                     █k█            BL               BR              minimap.view         █ 4
-    █  > test: shipped file == built-in defaults (bit exact)                █7█ corner rays hit y = focus; horizon rays capped at 60k            █ 6
-    █                                                                       █:█ drawn unclamped, clipped by the map frame                        █ @
-  ? █▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄█:█▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄█ J
-  >       .7 k  F      J  ^ B  T %  B&    ! 2    T  8  9 ->   7           ^  3k  0:    D ^  $ F  97  0 :   6  8       9 ZF   % 7          -    T<: :
-  B ■──────────────────────────────────────────────────  -=[ RoaDMaP // THe oRaCLe SaYS ]=-  ────────────────────────────────────────────────────■ -
-  3     PHASE 1   MAP LIGHT + COLOUR    [▓▓▓▓▓▓▓▓▓░]  90%  fog, light, grass, lighting.json DONE // floor ids open                                 B
-  .     PHASE 2   MINIMAP               [▓▓▓▓░░░░░░]  40%  veil, rings, trapezoid DONE // portraits, sharp bake                                    J
-  9     PHASE 3   SHOP                  [░░░░░░░░░░]   0%  tiers, icon grid, recipes A+B>C, sell, undo                                             C
-  3     PHASE 4   HERO SELECT           [▓░░░░░░░░░]  10%  lanes, team columns, battle spells, stone panels                                        2
-  k     PHASE 5   ARENA SET DRESSING    [░░░░░░░░░░]   0%  cache cliffs, plank bridges, god castles                                                C
-        PHASE 6   HUD POLISH            [░░░░░░░░░░]   0%  objectives timers, ally rows, slim bar                                                  D
-        PHASE 7   POST-MATCH            [░░░░░░░░░░]   0%  victory board, K/D/A, items, damage                                                     4
-                                                                                                                                                   E
-           J *   7     J  DD  %J - 4 $ $    2            D@      !   B  . Z  ^C  $     + J  58@  &         %  87      6 E    | Q      +   +     %  B
-    ■───────────────────────────────────────────────────────  -=[ GReeTZ + MeMBeRZ ]=-  ─────────────────────────────────────────────────────────■ 1
-                      cODE: lighting.rs  *  gFX: scene.wgsl  *  mAP: minimap.rs  *  dATA: lighting.json  *  sFX: the osrs synth                   3k
-                               gREETZ: tHE OSRS CACHE  *  sERDE  *  NAGA  *  wgpu  *  tHE BOT LANERS WHO NEVER COMPLAIN                           BB
-                                           nOT AFFILIATED WITH JAGEX. cACHE ASSETS STAY OUT OF GIT. aLWAYS.                                       @
-                                                                                                                                                  7
-         >  0              #   -1. | E >           F X   7 E         8  + B   J  9   0 +    >@@  1            3.  B   >      ? #      ^7        : 1
+    % *  ^>       @7 0.$E>   ?  A  !      J=      ~     5 Q       %<  5    A~   F 9 1D          X  -      2 Z     X>     E   6  ? X  .      ~ B    F
+    ■─────────────────────────────────────────────────────────  -=[ ReLeaSe iNFo ]=-  ───────────────────────────────────────────────────────────■ Q
+        rELEASE dATE.... 2026-11-23                                         cOMMIT...... cb46ddb  ->  sam/main                                     J5
+        tYPE............ sHOP uI / mINIMAP                                  tESTS....... 387 PASS // 0 FAIL   (+4)                                 $E
+        gAMEPLAY........ UNCHANGED :: layout only                           cLIPPY...... -D warnings :: CLEAN                                      #.
+        rULE............ ONLY OSRS CACHE ASSETS                             iCONS....... cache item models, baked                                  3&
+    2 8  ?-       A  4k!    Q   >   #     Z       ^%    C  |      D5       A5   + Q 4T          7  +        0      <         ^  Q ~  7      ~ 1    B1
+    ▄▀▀▐ Ge.eXe // TieReD GRiD ▌▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▄ ▄▀▀▐ RaDaR.SYS // You aRe HeRe ▌▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▄ <Q
+    █                                                                                 █ █                                                        █ +&
+    █  STARTER ───────────────────────────────────────────  Bronze sword              █ █                                                        █ ~T
+    █   ┌───┐   ┌───┐   ┌───┐   ┌───┐   ┌───┐   ┌───┐       300 gold                  █ █           █████████          portrait.map              █  ?
+    █   │[#]│   │ / │   │ D │   │ |*│   │ Y │   │[#]│                                 █ █       ████▓▓▓▓▓▓▓▓▓████      16px disc, cut from       █  $
+    █   └───┘   └───┘   └───┘   └───┘   └───┘   └───┘       +10 damage                █ █     ███▓▓░░░░░░░░░░░▓▓███    the baked image: head     █  T
+    █    200     300     300     300     300     350                                  █ █    ██▓▓░░░  /^^^\  ░░░▓▓██   + shoulders, corners      █ 1%
+    █                                                       tier ..... STARTER        █ █   ██▓▓░░░░ / ,-. \ ░░░░▓▓██  alpha'd clear.            █ #D
+    █  EARLY ─────────────────────────────────────────────  by cost .. <= 500         █ █   ██▓░░░░░ | o o | ░░░░░▓██                            █ !-
+    █   ┌───┐   ┌───┐   ┌───┐   ┌───┐   ┌───┐   ┌───┐                                 █ █   ██▓░░░░░ |  ^  | ░░░░░▓██  ring r=10, gold =         █ <+
+    █   │ / │   │[#]│   │ o │   │ |*│   │ D │   │ / │                                 █ █   ██▓░░░░░/|_____|\░░░░░▓██  the player.               █ |X
+    █   └───┘   └───┘   └───┘   └───┘   └───┘   └───┘       ▐ BUY ▌                   █ █   ██▓▓░░░░|=GREEN=|░░░░▓▓██                            █ D-
+    █    550     550     600     650     800     850                                  █ █    ██▓▓░░░░░░░░░░░░░░░▓▓██   clamped 11px in:          █ ~F
+    █                                                                                 █ █     ███▓▓░░░░░░░░░░░▓▓███    the fountain no           █ 4k
+    █  CORE ──────────────────────────────────────────────  gold: 1116                █ █       ████▓▓▓▓▓▓▓▓▓████      longer halves you.        █ 4
+    █   ┌───┐   ┌───┐   ┌───┐   ┌───┐   ┌───┐   ┌───┐       white = can't             █ █           █████████                                    █ 6
+    █   │ |*│   │(+)│   │[#]│   │ D │   │ L │   │ / │       afford yet                █ █                                                        █ @
+  ? █   └───┘   └───┘   └───┘   └───┘   └───┘   └───┘                                 █8█  bots: plain team rings until they carry a hero id     █ J
+  > █  > click a cell, then buy. wheel stops at the end of the grid.                  █D█                                                        █ :
+  B █                                                                                 █Q█                                                        █ -
+  3 █▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄█!█▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄█ B
+  .        D J  9      J  Tk  A| .  <F >  2 =    ~  =  > +6   +  9        <  $Z  +?    0 B  k Q  F:  % X   <  E@?     7 Bk   @ ~          Z    2B! J
+  9 ■───────────────────────────────────────────────────────  -=[ TTY1 // iNCoMiNG ]=-  ─────────────────────────────────────────────────────────■ C
+  3     > wake up, neo...                                                     knock, knock.                                                        2
+  k     > the shop has you.                                                   SELL / UNDO / RECIPES :: awaiting operator                           C
+        > follow the gold coins: 200 . 300 . 550 . 1200 . 3000 ...            (the refund rate is your call)                                       D
+                                                                                                                                                   4
+           < D   C     D  !3  k+ :   . 0    $            E3      +   C  Z J  =C  8@    X F  $J!  J@    7   +  ^6      ^ Z    ^ +      !   .     =  E
+    ■──────────────────────────────────────────────────  -=[ RoaDMaP // THe oRaCLe SaYS ]=-  ────────────────────────────────────────────────────■ B
+        P1 LIGHT   [▓▓▓▓▓▓▓▓▓░]  90%       P2 MINIMAP [▓▓▓▓▓░░░░░]  50%       P3 SHOP    [▓▓░░░░░░░░]  20%       P4 SELECT  [▓░░░░░░░░░]  10%      1
+                                                                                                                                                  3k
+        P5 ARENA   [░░░░░░░░░░]   0%       P6 HUD     [░░░░░░░░░░]   0%       P7 POST    [░░░░░░░░░░]   0%                                        BB
+                                                                                                                                                  @
+         .  +    B         :   =7. B Q :           D 8   9 X         &  2 Q  AF  7     =    1JF  .            5F  <   $      0 4      20        . 7
   ░▒▓▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▓▒░
-  3      B  &                w h a t   i s   t h e   m a t r i x ?   a   j s o n   f i l e   a n d   a n   F 5   k e y .                        E @  &
-  D      %  :                                          t h e r e   i s   n o   r e b u i l d .                                                  -    E
-  7      %  =                  -=[ mObAsCaPe // 2026 // nODE 1: tHE cONsTrUcT // 14.4k-56k // sYSoP: rIFT // 24hRs ]=-                          .    >
+  ^      .                     gREETZ: tHE OSRS CACHE * sERDE * NAGA * wgpu * aLL WHO SPEND 300 GOLD ON A BRONZE SWORD                          | Z
+  3      B                                 nOT AFFILIATED WITH JAGEX. cACHE ASSETS STAY OUT OF GIT. aLWAYS.                                     E @  &
+  D      %                      t h e r e   i s   n o   s p o o n .   t h e r e   i s   a   b r o n z e   s w o r d .                           -    E
+  7      %                    -=[ mObAsCaPe // 2026 // nODE 3: gRAND eXCHANGE // 33.6k // sYSoP: rIFT // r/s: 70% ?? ]=-                        .    >
   A      0  ~              C   5     @     0       6 |   $ k         D        9^     # #    J                 :?  7          J        ~0        T    &

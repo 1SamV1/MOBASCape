@@ -147,182 +147,155 @@ def logo(y, word):
 
 
 # ============================================================================
-def bevel_logo(y, word):
-    """The block logo with a bevel: lit left edge, ▓ body, ▒ right edge."""
+def extruded_logo(y, word, depth=3):
+    """ACiD/iCE style extrusion: dim ░▒▓ layers stepping back down-right,
+    the lit face on top with a vertical gradient."""
     width = len(word) * 10 - 1
-    x0 = (W - width) // 2
-    clear(x0 - 5, y - 1, x0 + width + 5, y + LOGO_ROWS + 1)
-    for i, ch in enumerate(word):
-        rows = LOGO[ch]
+    x0 = (W - width) // 2 - depth // 2
+    clear(x0 - 3, y - 1, x0 + width + depth + 3, y + LOGO_ROWS + depth)
+    layers = [("░", FAINT), ("▒", DIM), ("▓", MID)]
+    for d in range(depth, 0, -1):
+        ch, col = layers[min(depth - d, 2)]
+        for i, letter in enumerate(word):
+            for r in range(LOGO_ROWS):
+                for c, px in enumerate(LOGO[letter][r]):
+                    if px != " ":
+                        put(x0 + i * 10 + c + d, y + r + d, ch, col)
+    for i, letter in enumerate(word):
         for r in range(LOGO_ROWS):
-            for c, px in enumerate(rows[r]):
-                if px == " ":
-                    continue
-                x = x0 + i * 10 + c
-                left = c == 0 or rows[r][c - 1] == " "
-                right = c + 1 >= len(rows[r]) or rows[r][c + 1] == " "
-                if px != "█":
-                    put(x, y + r, px, LOGO_GRAD[r])
-                elif left:
-                    put(x, y + r, "█", WHITE if r < 2 else HEAD)
-                elif right:
-                    put(x, y + r, "▒", MID)
-                else:
-                    put(x, y + r, "▓", LOGO_GRAD[r])
-                if grid[y + r + 1][x + 1][0] == " ":
-                    put(x + 1, y + r + 1, "░", FAINT)
-    # Corner brackets, the old group-logo way.
-    for dx, dy, ch in [(-4, -1, "▄▄▄"), (width + 2, -1, "▄▄▄"), (-4, LOGO_ROWS, "▀▀▀"), (width + 2, LOGO_ROWS, "▀▀▀")]:
-        text(x0 + dx, y + dy, ch, BRIGHT)
-    for r in range(LOGO_ROWS):
-        put(x0 - 4, y + r, "█", DIM)
-        put(x0 + width + 4, y + r, "█", DIM)
+            for c, px in enumerate(LOGO[letter][r]):
+                if px != " ":
+                    put(x0 + i * 10 + c, y + r, px, LOGO_GRAD[r])
+    return x0, width
 
 
 fade_bar(1, 2, W - 3)
-bevel_logo(3, "MOBASCAPE")
-center(11, "  ░▒▓█  r i F T   c R e W   p R e S e N T s  █▓▒░  ", AMBER)
-center(12, "  " + elite("phase.1 closed :: the light is data") + "  ", WHITE)
-fade_bar(13, 2, W - 3)
+extruded_logo(3, "MOBASCAPE")
+center(12, "  ·:·  t H E   g R A N D   e X C H A N G E   o P E N s  ·:·  ", AMBER)
+center(13, "  " + elite("phase.3 initiated :: follow the gold") + "  ", WHITE)
+fade_bar(14, 2, W - 3)
 
 # --- release info -------------------------------------------------------------
-header(15, elite("release info"))
-clear(4, 16, W - 5, 19)
+header(16, elite("release info"))
+clear(4, 17, W - 5, 20)
 info = [
-    ("rELEASE dATE", "2026-11-23", "cOMMIT", "e28cf54  ->  sam/main"),
-    ("tYPE", "rENDERER / dATA / mINIMAP", "tESTS", "383 PASS // 0 FAIL   (+5)"),
-    ("rELOAD kEY", "F5 :: shader + lighting.json", "cLIPPY", "-D warnings :: CLEAN"),
-    ("rULE", "ONLY OSRS CACHE ASSETS", "sIZE", "9 knobs / 3 uniforms / 0 rebuilds"),
+    ("rELEASE dATE", "2026-11-23", "cOMMIT", "cb46ddb  ->  sam/main"),
+    ("tYPE", "sHOP uI / mINIMAP", "tESTS", "387 PASS // 0 FAIL   (+4)"),
+    ("gAMEPLAY", "UNCHANGED :: layout only", "cLIPPY", "-D warnings :: CLEAN"),
+    ("rULE", "ONLY OSRS CACHE ASSETS", "iCONS", "cache item models, baked"),
 ]
 for i, (k1, v1, k2, v2) in enumerate(info):
-    y = 16 + i
+    y = 17 + i
     text(8, y, f"{k1:.<16}", DIM)
-    text(25, y, v1, AMBER if k1 == "rULE" else BRIGHT)
+    text(25, y, v1, AMBER if k1 in ("rULE", "gAMEPLAY") else BRIGHT)
     text(76, y, f"{k2:.<12}", DIM)
     text(89, y, v2, HEAD)
 
-# --- left: hex dump of the new data file ---------------------------------------
-box(4, 21, 76, 39, elite("data/lighting.json // hexview"))
-knobs = [
-    ("terrain_ambient", 1.30, 4.0, "1.64"),
-    ("unit_ambient", 1.48, 4.0, "1.74"),
-    ("sun_strength", 0.90, 4.0, "0.72"),
-    ("shadow_floor", 0.36, 1.0, "0.52"),
-    ("hidden_tint", "[.40 .42 .47]", None, "--"),
-    ("hidden_saturation", 0.45, 1.0, "--"),
-    ("grass_saturation", 1.12, 3.0, "1.30"),
-    ("grass_brightness", 0.58, 2.0, "0.66"),
-    ("grass_mottle", 0.30, 2.0, "0.30"),
-]
-text(7, 23, "OFFS  KEY                  VALUE    WAS    RANGE", DIM)
-for i, (key, value, high, was) in enumerate(knobs):
-    y = 24 + i
-    text(7, y, f"{i * 0x18:04X}", FAINT if i % 2 else DIM)
-    text(13, y, key, CYAN)
-    shown = value if isinstance(value, str) else f"{value:.2f}"
-    text(34, y, shown if len(shown) < 9 else "", WHITE)
-    if len(shown) >= 9:
-        text(34, y, shown, WHITE)
-        continue
-    text(43, y, was, DIM if was == "--" else RED)
-    filled = int(round(value / high * 14))
-    text(50, y, "[", DIM)
-    for j in range(14):
-        put(51 + j, y, "▓" if j < filled else "░", BRIGHT if j < filled else FAINT)
-    text(65, y, "]", DIM)
-    text(67, y, f"0..{high:g}", FAINT)
-text(7, 34, "> F5  -> naga validates shader, serde validates json", AMBER)
-text(7, 35, "> bad key? 'sun_strenght' -> REFUSED, old values stay", AMBER)
-text(7, 36, "> test: extreme file dropped frame luma 75 -> 59", BRIGHT)
-text(7, 37, "> test: shipped file == built-in defaults (bit exact)", BRIGHT)
+# --- left: the shop grid, drawn as an NFO ------------------------------------
+box(4, 22, 86, 42, elite("ge.exe // tiered grid"))
+ICONS = {"sword": " /", "bow": " D", "staff": " |*", "ring": " o", "boots": " L", "body": "[#]", "amulet": " Y", "shield": "(+)"}
 
-# --- right: the camera footprint -----------------------------------------------
-box(78, 21, W - 5, 39, elite("frustum.com // minimap view"))
-eye_x, eye_y = 100, 23
-text(eye_x - 1, eye_y, "(@)", WHITE)
-text(eye_x + 4, eye_y, "camera eye", DIM)
-# Four rays fanning to the ground trapezoid.
-far_l, far_r, near_l, near_r = 82, 118, 92, 108
-ground_far, ground_near = 30, 35
-for step in range(1, ground_far - eye_y):
-    t = step / (ground_far - eye_y)
-    put(int(round(eye_x + (far_l - eye_x) * t)), eye_y + step, "/", MID)
-    put(int(round(eye_x + 1 + (far_r - eye_x - 1) * t)), eye_y + step, "\\", MID)
-for step in range(1, ground_near - eye_y):
-    t = step / (ground_near - eye_y)
-    put(int(round(eye_x + (near_l - eye_x) * t)), eye_y + step, ":", DIM)
-    put(int(round(eye_x + 1 + (near_r - eye_x - 1) * t)), eye_y + step, ":", DIM)
-for x in range(far_l, far_r + 1):
-    put(x, ground_far, "═", BRIGHT)
-for x in range(near_l, near_r + 1):
-    put(x, ground_near, "═", BRIGHT)
-for y in range(ground_far + 1, ground_near):
-    t = (y - ground_far) / (ground_near - ground_far)
-    put(int(round(far_l + (near_l - far_l) * t)), y, "\\", BRIGHT)
-    put(int(round(far_r + (near_r - far_r) * t)), y, "/", BRIGHT)
-    for x in range(int(round(far_l + (near_l - far_l) * t)) + 1, int(round(far_r + (near_r - far_r) * t))):
-        put(x, y, "░", DIM)
-text(far_l - 1, ground_far - 1, "TL", HEAD)
-text(far_r, ground_far - 1, "TR", HEAD)
-text(near_l - 1, ground_near + 1, "BL", HEAD)
-text(near_r, ground_near + 1, "BR", HEAD)
-text(94, 33, "screen", WHITE)
-text(80, 37, "corner rays hit y = focus; horizon rays capped at 60k", DIM)
-text(80, 38, "drawn unclamped, clipped by the map frame", DIM)
-# A tiny minimap with the trapezoid in it.
-mx, my = 124, 24
-for py in range(11):
-    for px in range(17):
-        edge = py in (0, 10) or px in (0, 16)
-        put(mx + px, my + py, "█" if edge else "░", DIM if edge else FAINT)
-for px in range(2, 10):
-    put(mx + px, my + 6, "▀", BRIGHT)
-for px in range(4, 8):
-    put(mx + px, my + 9, "▄", BRIGHT)
-put(mx + 2, my + 7, "\\", BRIGHT)
-put(mx + 3, my + 8, "\\", BRIGHT)
-put(mx + 9, my + 7, "/", BRIGHT)
-put(mx + 8, my + 8, "/", BRIGHT)
-put(mx + 5, my + 8, "@", AMBER)
-put(mx + 13, my + 2, "■", RED)
-text(mx, my + 12, "minimap.view", CYAN)
+
+def item_cell(x, y, icon, price, selected=False, affordable=True):
+    frame = HEAD if selected else DIM
+    text(x, y, "┌───┐", frame)
+    text(x, y + 1, "│", frame)
+    text(x + 1, y + 1, f"{ICONS[icon]:^3}"[:3], CYAN if affordable else FAINT)
+    text(x + 4, y + 1, "│", frame)
+    text(x, y + 2, "└───┘", frame)
+    text(x + (5 - len(str(price))) // 2, y + 3, str(price), AMBER if affordable else DIM)
+
+
+sections = [
+    ("STARTER", ["body", "sword", "bow", "staff", "amulet", "body"], [200, 300, 300, 300, 300, 350]),
+    ("EARLY", ["sword", "body", "ring", "staff", "bow", "sword"], [550, 550, 600, 650, 800, 850]),
+    ("CORE", ["staff", "shield", "body", "bow", "boots", "sword"], [1450, 1600, 1800, 2100, 2400, 2400]),
+]
+gold = 1116
+y = 24
+for label, icons, prices in sections:
+    text(7, y, label, HEAD)
+    for x in range(8 + len(label), 58):
+        put(x, y, "─", DIM)
+    y += 1
+    for k, (icon, price) in enumerate(zip(icons, prices)):
+        item_cell(8 + k * 8, y, icon, price, selected=(label == "STARTER" and k == 1), affordable=price <= gold)
+    y += 5
+# Detail pane beside the grid.
+dx = 60
+text(dx, 24, "Bronze sword", AMBER)
+text(dx, 25, "300 gold", DIM)
+text(dx, 27, "+10 damage", BRIGHT)
+text(dx, 29, "tier ..... STARTER", DIM)
+text(dx, 30, "by cost .. <= 500", DIM)
+text(dx, 33, "▐ BUY ▌", WHITE)
+text(dx, 36, "gold:", DIM)
+text(dx + 6, 36, f"{gold}", AMBER)
+text(dx, 37, "white = can't", DIM)
+text(dx, 38, "afford yet", DIM)
+text(7, 40, "> click a cell, then buy. wheel stops at the end of the grid.", MID)
+
+# --- right: the portrait ring --------------------------------------------------
+box(88, 22, W - 5, 42, elite("radar.sys // you are here"))
+cx, cy = 104, 31
+for row in range(-6, 7):
+    for col in range(-13, 14):
+        d = (col / 2.0) ** 2 + row ** 2
+        if 30 <= d <= 42:
+            put(cx + col, cy + row, "█", AMBER)
+        elif 24 <= d < 30:
+            put(cx + col, cy + row, "▓", (160, 130, 40))
+        elif d < 24:
+            put(cx + col, cy + row, "░", FAINT)
+face = ["  /^^^\\  ", " / ,-. \\ ", " | o o | ", " |  ^  | ", "/|_____|\\", "|=GREEN=|"]
+for i, line in enumerate(face):
+    text(cx - 4, cy - 3 + i, line, (200, 170, 60) if i < 4 else MID)
+text(119, 25, "portrait.map", CYAN)
+text(119, 26, "16px disc, cut from", DIM)
+text(119, 27, "the baked image: head", DIM)
+text(119, 28, "+ shoulders, corners", DIM)
+text(119, 29, "alpha'd clear.", DIM)
+text(119, 31, "ring r=10, gold =", DIM)
+text(119, 32, "the player.", DIM)
+text(119, 34, "clamped 11px in:", HEAD)
+text(119, 35, "the fountain no", DIM)
+text(119, 36, "longer halves you.", DIM)
+text(91, 39, "bots: plain team rings until they carry a hero id", MID)
+
+# --- terminal -----------------------------------------------------------------
+header(44, elite("tty1 // incoming"))
+clear(4, 45, W - 5, 48)
+text(8, 45, "> wake up, neo...", BRIGHT)
+text(8, 46, "> the shop has you.", BRIGHT)
+text(8, 47, "> follow the gold coins: 200 . 300 . 550 . 1200 . 3000 ...", MID)
+text(78, 45, "knock, knock.", DIM)
+text(78, 46, "SELL / UNDO / RECIPES :: awaiting operator", AMBER)
+text(78, 47, "(the refund rate is your call)", DIM)
 
 # --- roadmap -------------------------------------------------------------------
-header(41, elite("roadmap // the oracle says"))
-clear(4, 42, W - 5, 49)
+header(50, elite("roadmap // the oracle says"))
+clear(4, 51, W - 5, 54)
 phases = [
-    ("PHASE 1", "MAP LIGHT + COLOUR", 9, "fog, light, grass, lighting.json DONE // floor ids open"),
-    ("PHASE 2", "MINIMAP", 4, "veil, rings, trapezoid DONE // portraits, sharp bake"),
-    ("PHASE 3", "SHOP", 0, "tiers, icon grid, recipes A+B>C, sell, undo"),
-    ("PHASE 4", "HERO SELECT", 1, "lanes, team columns, battle spells, stone panels"),
-    ("PHASE 5", "ARENA SET DRESSING", 0, "cache cliffs, plank bridges, god castles"),
-    ("PHASE 6", "HUD POLISH", 0, "objectives timers, ally rows, slim bar"),
-    ("PHASE 7", "POST-MATCH", 0, "victory board, K/D/A, items, damage"),
+    ("P1 LIGHT", 9), ("P2 MINIMAP", 5), ("P3 SHOP", 2), ("P4 SELECT", 1),
+    ("P5 ARENA", 0), ("P6 HUD", 0), ("P7 POST", 0),
 ]
-for i, (p, name, done, note) in enumerate(phases):
-    y = 42 + i
-    text(8, y, p, WHITE)
-    text(18, y, name, CYAN)
-    text(40, y, "[", DIM)
+for i, (name, done) in enumerate(phases):
+    col = i % 4
+    row = i // 4
+    x = 8 + col * 35
+    y = 51 + row * 2
+    text(x, y, f"{name:<11}", CYAN)
+    text(x + 11, y, "[", DIM)
     for j in range(10):
-        lit_cell = j < done
-        put(41 + j, y, "▓" if lit_cell else "░", BRIGHT if lit_cell else FAINT)
-    text(51, y, "]", DIM)
-    text(53, y, f"{done * 10:>3}%", HEAD if done else FAINT)
-    text(59, y, note, BRIGHT if "DONE" in note else MID)
+        put(x + 12 + j, y, "▓" if j < done else "░", BRIGHT if j < done else FAINT)
+    text(x + 22, y, f"] {done * 10:>3}%", HEAD if done else FAINT)
 
-# --- greets + footer -----------------------------------------------------------
-header(51, elite("greetz + memberz"))
-clear(4, 52, W - 5, 55)
-center(52, "cODE: lighting.rs  *  gFX: scene.wgsl  *  mAP: minimap.rs  *  dATA: lighting.json  *  sFX: the osrs synth", MID)
-center(53, "gREETZ: tHE OSRS CACHE  *  sERDE  *  NAGA  *  wgpu  *  tHE BOT LANERS WHO NEVER COMPLAIN", MID)
-center(54, "nOT AFFILIATED WITH JAGEX. cACHE ASSETS STAY OUT OF GIT. aLWAYS.", DIM)
-
-fade_bar(57, 2, W - 3)
-clear(14, 58, W - 15, 60)
-center(58, "  w h a t   i s   t h e   m a t r i x ?   a   j s o n   f i l e   a n d   a n   F 5   k e y .  ", DIM)
-center(59, "  t h e r e   i s   n o   r e b u i l d .  ", HEAD)
-center(60, "-=[ mObAsCaPe // 2026 // nODE 1: tHE cONsTrUcT // 14.4k-56k // sYSoP: rIFT // 24hRs ]=-", AMBER)
+fade_bar(56, 2, W - 3)
+clear(10, 57, W - 11, 60)
+center(57, "gREETZ: tHE OSRS CACHE * sERDE * NAGA * wgpu * aLL WHO SPEND 300 GOLD ON A BRONZE SWORD", MID)
+center(58, "nOT AFFILIATED WITH JAGEX. cACHE ASSETS STAY OUT OF GIT. aLWAYS.", DIM)
+center(59, "  t h e r e   i s   n o   s p o o n .   t h e r e   i s   a   b r o n z e   s w o r d .  ", HEAD)
+center(60, "-=[ mObAsCaPe // 2026 // nODE 3: gRAND eXCHANGE // 33.6k // sYSoP: rIFT // r/s: 70% ?? ]=-", AMBER)
 
 # --- outputs ------------------------------------------------------------------
 with open(out + ".txt", "w") as f:
