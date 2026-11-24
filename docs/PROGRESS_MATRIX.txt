@@ -1,62 +1,62 @@
    Z        4  ^8 :? : ~TQ  9T    -k7 ~ X  @           AA +     .     7  -D -  A    $B         |  97 7 :             6           X     $       ~ :.
   ░▒▓▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▓▒░
-       8    k  B  |# X !3D                                                                                                     &.F     ?       | C=
-    *  -       =  @@ 6 E@9+   ┌┬┐   ┌┬┐  ┌─────┐  ┌●─────┐   ┌─────┐   ┌──────╴  ┌──────╴  ┌─────┐  ┌┬─────┐  ┌●──────╴        Tk?     !       = 7F
-    :  Z       =  +1 < 7B78   ├┼●┐ ┌┴┼● ┌●     ●┐ ●┤     ├╴ ┌┤     ├┐ ╶●        ┌┤        ┌┤     ├┐ ├●     ●╴ ●┤             7 !J^     &       3  T
-    #  F       9  k> ~ F<JE   ├● └─┘ ●┤ ●┤     ├┤ ├┼─────┤  ├●─────●┤  └─────┐  ├┤        ├●─────●┤ ●┼─────┘  ├┼────╴        3 :7#>    -       E  5
-    8  |       6  5T + C70?   ●┤     ├┤ ├┤     ├● ├●     ●┐ ●┤     ├┤        ├┐ ├●        ●┤     ├┤ ├┤        ├●             : 8F$#    C       7  =
-    Q  A       X  6E . J|A&   ├┤     ├● └●     ●┘ ●┤     ├┘ ├┤     ├●        ●┘ └┤        ├┤     ├● ├●        ●┤             + <|88            7
-    ?  F       4  <7 J ~$.=   └┘     └┘  └─────┘  └┴─────┘  └┘     └┘ ╶──────┘   └──────╴ └┘     └┘ └┘        └┴──────╴      8  XT<
-    > -1       $  5D &%||^:                                                                                                  F  k~2
-    0 J  A     3   . !=0|4  ░▒▓  t H E   x - R A Y  ::  3 6   p A R T S   b O U N D   //   0   l E F T   b E H I N D  ▓▒░    =  ?E*         8
-    < 8  ?     *  Q@ ~!==Z2  %  ?  A    + !T      |   THeRe iS No SPooN. THeRe WaS a FRoZeN aRM.   B      | J     J      .   3  $%2         Z
+       8    k  B  |# X !3                                                                                                      &.F     ?       | C=
+    *  -       =  @@ 6 E@     ██▄   ▄██  ▄█████▄  ███████▄   ▄█████▄   ▄██████▄  ▄██████▄  ▄█████▄  ███████▄  █████████        Tk?     !       = 7F
+    :  Z       =  +1 < 7B     ░░▓▓▓▄░▄▓▓▓░▓▓   ░░▓▓░▓▓   ░░▓▓░▓▓   ░░▓▓░▓▓      ░░▓▓      ░░▓▓   ░░▓▓░▓▓   ░░▓▓░▓▓           7 !J^     &       3  T
+    #  F       9  k> ~ F<     ██ ▀█▀ ██ ██     ██ ███████▀  █████████  ▀█████▄  ██        █████████ ███████▀  ███████        3 :7#>    -       E  5
+    8  |       6  5T + C7     ▓▓     ▓▓ ▓▓     ▓▓ ▓▓     ▓▓ ▓▓     ▓▓        ▓▓ ▓▓        ▓▓     ▓▓ ▓▓        ▓▓             : 8F$#    C       7  =
+    Q  A       X  6E . J|  ██ ░░  ██ ██ ░░  ██ ██ ░░  ██ ██ ░░  ██ ░░     ██ ██ ░░     ██ ░░  ██ ██ ░░     ██ ░░             + <|88            7
+    ?  F       4  <7 J ~$     ▓▓     ▓▓  ▀▓▓▓▓▓▀  ▓▓▓▓▓▓▓▀  ▓▓     ▓▓ ▀▓▓▓▓▓▓▀   ▀▓▓▓▓▓▓▀ ▓▓     ▓▓ ▓▓        ▓▓▓▓▓▓▓▓▓      8  XT<
+    > -1       $  5D &%||                                                                                                    F  k~2
+    0 J  A     3   . !  ░▒▓  t H E   b O T N E T  ::  9   h E R O E S   j A C K E D   i N   //   1   n E X U S   o P E N  ▓▒░   ?E*         8
+    < 8  ?     *  Q@ ~!==Z2  %  ?  A    + !  THeY LaNe. THeY JuNGLe. THeY GaNK iN PaiRS. THeY BuY BooTS.  | J     J      .   3  $%2         Z
   ░▒▓▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▓▒░
     J =  @     ~  >@ !JJCQk  E  Q  T      T7      #     & :       $C  5  4 23   ! B @+          +  +      Z 4     C      #   :  AT4  7      *      *
     ■─────────────────────────────────────────────────────────  -=[ ReLeaSe iNFo ]=-  ───────────────────────────────────────────────────────────■ 2
-        rELEASE dATE.... 2026-11-24                                         cOMMIT...... 14f17b4 + 51807e7 -> sam/main                             F
-        tYPE............ sKELETON bINDING + lIMB iD                         tESTS....... 405 PASS // 0 FAIL   (+5)                                 Q
-        bEFORE.......... PARTS FROZEN IN REST POSE                          dRIFT....... 0.015 - 0.758 of hero height                              J5
-        aFTER........... EVERY PART <= 0.03 (A TEST)                        bONUS....... evergreens lost the bark ring                             $E
-    * @  <J       4  +66    5   :   A     ?       <-    C  ~      ?$       Q+   4 E #&          -  !        E     +1         >  5 :  6      8 :    #.
-    ▄▀▀▐ DRiFT.LoG // FRoZeN -> BouND ▌▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▄|▄▀▀▐ XRaY.SCR // LiMB iDeNTiFiCaTioN ▌▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▄ 3&
-    █                                                                     █A█                                                                    █ B1
-    █   hERO              pART       fROZEN    bOUND   hOW                █4█                   .-"""-.                                          █ <Q
-    █   ──────────────────────────────────────────────────────────────    █1█                  ( ●   ● )       ◄── HEAD                          █ +&
-    █   Kree'arra Jr.     28021      0.758     0.000   NATIVE  ▓▓▓▓▓▓▓▓▓▓ █5█                   \  ═  /        down < 0.22                       █ ~T
-    █   Venenatis         28295      0.464     0.002   RIGID   ▓▓▓▓▓▓     █.█           ┌────────┴───┴────────┐                                  █  ?
-    █   K'ril Tsutsaroth  27681      0.148     0.009   NATIVE  ▓▓         █&█   ARM L ─►│  ●═══╗  TORSO  ╔═══●  │◄─ ARM R                        █  $
-    █   Vorkath           41468      0.129     0.003   NATIVE  ▓▓         █5█    side   │      ║  ┼┼┼┼┼  ║      │   > 0.38                       █  T
-    █   King Awowogei     4823       0.129     0.027   NATIVE  ▓▓         █5█   < -0.38 ●      ║  ┼┼┼┼┼  ║      ●                                █ 1%
-    █   Kolodion          hands 176  0.119     0.002   NATIVE  ▓▓         █D█           ║      ╚═══╦═╦═══╝      ║                                █ #D
-    █   Kalphite Queen    24598      0.096     0.004   NATIVE  ▓          █T█        [HAND]        ║ ║        [STAFF]═══════                     █ !-
-    █   Cerberus          41449      0.085     0.001   NATIVE  ▓          █>█                   ┌──╨─╨──┐     RIGID: one bone                    █ <+
-    █   Zilyana           27968      0.082     0.004   NATIVE  ▓          █4█                   │ ROBE  │◄── FOLLOW hips,                        █ |X
-    █   General Graardor  27665      0.078     0.003   NATIVE  ▓          █^█                   │ ░▒▓▒░ │    never the arm                       █ D-
-    █   Wise Old Man      staff 3711 0.024     0.001   RIGID   ▓          █Z█                   └─┬───┬─┘                                        █ ~F
-    █                                                                     █ █           LEG L ───►●   ●◄─── LEG R                                █ 4k
-    █   ──────────────────────────────────────────────────────────────    █ █          down>0.62  ║   ║                                          █ 4
-    █   36 attachment parts:  28 NATIVE  //  6 FOLLOW  //  2 RIGID        █ █                    ═╩═ ═╩═   BOOTS: a pair,                        █ 6
-    █                                                                     █ █                              can't go rigid                        █ @
-  ? █   nATIVE  keep OSRS labels (what the real client does)              █ █                                                                    █ J
-  > █   fOLLOW  each vertex rides the nearest bound limb in its region    █ █   label centroid vs rest-pose box (cache Y grows DOWN)             █ :
-  B █   rIGID   one label, one solid object: staffs, shells. never pairs  █ █   span > 0.70 = ROOT  //  |back| > 0.55 = TAIL                     █ -
-  3 █   sCORE   drift + mesh stretch. followers never move a pivot        █ █   a vertex follows only its own limb, or the core                  █ B
+        rELEASE dATE.... 2026-11-24                                         cOMMIT...... 52da251  ->  sam/main                                     F
+        tYPE............ bOT hEROES + oPEN nEXUS                            tESTS....... 407 pass // clippy clean                                  Q
+        hITSPLATS....... 48x46 -> 24x23 (cache 1x)                          bANANA...... 40% pure chips towers                                     J5
+        lANE bUGS....... WAVES DIED OUT AT 2:00                             fIX......... cap counts the living                                     $E
+        ................ WAVES WALKED PAST TOWERS                           fIX......... edge + 400 reach                                          #.
+    A >  <B       D  +71    2   ?   J     C       .E    5  ^      9Q       |-   - : @~          6  >        T      0         |  . ^  J      F Q    3&
+    ▄▀▀▐ BRaiN.C // oNe THiNK PeR SeCoND ▌▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▄A▄▀▀▐ eXPLoiT.TXT // THe ToWeR NoBoDY SaW ▌▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▄ B1
+    █                                                                     █4█                                                                    █ <Q
+    █              ┌────────────┐   90 s    ┌────────────┐                █1█     ░░ TOWER ░░          minion aggro 520 from CENTRE              █ +&
+    █     spawn ──►│    LANE    │──────────►│   JUNGLE   │                █5█    ░▒▒▓▓██▓▓▒▒░                                                    █ ~T
+    █              │ last-hit   │◄──────────│ own side   │                █.█    ░▒▓  ◆◆  ▓▒░ ◄── 230 radius                                     █  ?
+    █              │ no tower   │  1 camp   │ of river   │                █&█    ░▒▒▓▓██▓▓▒▒░                                                    █  $
+    █              │ dives solo │           └─────┬──────┘                █5█     ░░░░░░░░░░                                                     █  T
+    █              └──┬───┬─────┘                 │ lv 5+                 █5█          │ 5 tiles off the lane + formation spread                 █ 1%
+    █       every 80 s│   │ gold >= item+400      ▼                       █D█          ▼                                                         █ #D
+    █          ┌──────▼┐  │            ┌─────────────────┐                █T█    ─ ─ ─ m m m ─ ─ ─ ─ ─ ─ ─ ─►  INHIBITOR  ► NEXUS                █ !-
+    █          │ GANK  │  │            │  REGION  BOSS   │                █>█          the wave walks by, the tower shoots it,                   █ <+
+    █          │ x  2  │  │            │ jungler+laner   │                █4█          nobody answers. ~900 > 520.                               █ |X
+    █          │weakest│  │            │ -> TEAM BUFF    │                █^█                                                                    █ D-
+    █          └───────┘  ▼            └─────────────────┘                █Z█    PATCH:  distance - hit_radius - 400                             █ ~F
+    █              ┌──────────────┐                                       █ █            900 - 230 - 400 = 270 < 520  ► ENGAGE                   █ 4k
+    █    hp < 30% ►│   RETREAT    │► heal 6%/s, buy next                  █ █   sim, before: red nexus 1500 -> 1230,                             █ 4
+    █              └──────────────┘  recommended item                     █ █                inhibitor dead, towers ~full                        █ 6
+    █   bLUE  you(mid)  top  bot  bot  jungle                             █ █   7:30 sim, after: a blue tower down, red                          █ @
+  ? █   rED   top  mid  bot  bot  jungle                                  █ █                at 204 / 368, inhibs 3/3                            █ J
+  > █                                                                     █ █                                                                    █ :
+  B █   BOSSES  inner_bot_west (blue, 190 hp)  //  top_east (red, 150 hp) █ █   the nexus shield is gone (your call).                            █ -
+  3 █   ganks never enter a base. camps now fight back at bots.           █ █   inhibitors still spawn super minions.                            █ B
   . █                                                                     █ █                                                                    █ J
   9 █▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄█ █▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄█ C
   3        % |  0%     B  9:  -% T  X& ^  : :    %  7  4 0=      &      3 #   9  4$    E -  ? +  25  % 1   C  111     ? :    Q 7      k   T     8  2
   k ■───────────────────────────────────────────────  -=[ SYSoP'S NoTe // LeFT oN YouR DeSK ]=-  ────────────────────────────────────────────────■ C
-                 kOLODION'S bASE mODEL iS jUST hIS sLEEVES.  sO tHE sKELETON gROWS aS pARTS bIND:  hANDS, fEET, cHEST, tHEN tHE rOBE.              D
-                   skeleton::assemble()   //   identify_limbs()   //   Model::follow_groups   //   rift-tools skeleton all --sheet                 4
+                                bOTS fIGHT wITH bASIC aTTACKS oNLY fOR nOW.  aBILITIES fOR bOTS aRE tHE nEXT bIG jOB.                              D
+                                animated::bots  //  BotBrain  //  BotMode::{Lane,Jungle,Boss,Gank,Retreat}  //  --bots                             4
                                                                                                                                                    E
            J *   7     J  DD  %J - 4 $ $    2            D@      !   B  . Z  ^C  $     + J  58@  &         %  87      6 E    | Q      +   +     %  B
     ■──────────────────────────────────────────────────  -=[ RoaDMaP // THe oRaCLe SaYS ]=-  ────────────────────────────────────────────────────■ 1
-        P1 LIGHT   [▓▓▓▓▓▓▓▓▓░]  90%       P2 MINIMAP [▓▓▓▓▓░░░░░]  50%       P3 SHOP    [▓▓▓▓▓▓▓▓░░]  80%       P4 SELECT  [▓▓▓░░░░░░░]  30%     3k
+        P1 LIGHT   [▓▓▓▓▓▓▓▓▓░]  90%       P2 MINIMAP [▓▓▓▓▓░░░░░]  50%       P3 SHOP    [▓▓▓▓▓▓▓▓░░]  80%       P4 SELECT  [▓▓▓▓▓░░░░░]  50%     3k
                                                                                                                                                   BB
-        P5 ARENA   [░░░░░░░░░░]   0%       P6 HUD     [░░░░░░░░░░]   0%       P7 POST    [░░░░░░░░░░]   0%                                        @
-        >> next in P4: lane picker (Top/Jungle/Mid/Carry/Support), battle spells, bots that play their pick                                       7
+        P5 ARENA   [▓░░░░░░░░░]  10%       P6 HUD     [░░░░░░░░░░]   0%       P7 POST    [░░░░░░░░░░]   0%                                        @
+        >> next: bot abilities, lane picker (Top/Jungle/Mid/Carry/Support), battle spells                                                         7
                                                                                                                                                   1
   ░▒▓▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▓▒░
-  3      B        gREETZ: gRAARDOR'S fISTS (rEUNITED) * kREE'ARRA'S bIRD (nO lONGER 0.758 aWAY) * tHE rOBE tHAT wANTED tO bE aN aRM             E @  &
+  3      B          gREETZ: tHE 37tH mINION (fIRST iN 2 mINUTES) * kREE'ARRA jR. (lV 6, bOSS sLAYER) * eVERY bOT tHAT bOUGHT bOOTS              E @  &
   D      %                                 nOT AFFILIATED WITH JAGEX. cACHE ASSETS STAY OUT OF GIT. aLWAYS.                                     -    E
-  7      %         f r e e   y o u r   m i n d .   t h e n   f r e e   y o u r   h a n d s   f r o m   t h e   r e s t   p o s e .              .    >
-  A      0                  -=[ mObAsCaPe // 2026 // nODE 8: tHE x-rAY // 57.6k // sYSoP: rIFT // 36 pARTS, 1 sKELETON ]=-                      T    &
+  7      %                       t h e r e   i s   n o   s p o o n .   t h e r e   i s   o n l y   t h e   w a v e .                            .    >
+  A      0                 -=[ mObAsCaPe // 2026 // nODE 9: tHE bOTNET // 57.6k // sYSoP: rIFT // 9 bOTS, 1 oPEN nEXUS ]=-                      T    &
