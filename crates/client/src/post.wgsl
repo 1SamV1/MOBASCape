@@ -88,19 +88,23 @@ fn grade(uv: vec2<f32>, base: vec3<f32>, dimensions: vec2<f32>) -> vec3<f32> {
     // The clip is graded like a foggy late-afternoon painting: low saturation,
     // warm highlights, cool lifted shadows and a heavy edge falloff. The old
     // pass only tinted a few channels and left the highlighter greens intact.
+    // Neutral white balance: a warm multiply here turned every green olive
+    // (2026-11-24 study: reference grass 100-115 degrees, ours 73).
     color *= 0.98;
-    color *= vec3<f32>(1.03, 1.0, 0.99);
 
-    // Desaturate the whole frame. Terrain is the main offender; grading it
-    // here keeps props and effects consistent with it.
+    // Saturation for the whole frame, so props and effects stay
+    // consistent with the terrain.
+    // 2026-11-24: the reference sits near 0.6 saturation on grass; with
+    // the old channel-clipping contrast gone the frame needs a lift, not a
+    // cut.
     let l0 = luma(color);
-    color = mix(vec3<f32>(l0), color, 0.86);
+    color = max(mix(vec3<f32>(l0), color, 1.12), vec3<f32>(0.0));
 
     // Split tone: shadow blue-grey, highlight warm cream.
     let l1 = luma(color);
     let split = mix(
-        vec3<f32>(0.92, 0.97, 1.03),
-        vec3<f32>(1.06, 1.02, 0.92),
+        vec3<f32>(0.94, 0.98, 1.03),
+        vec3<f32>(1.03, 1.01, 0.97),
         smoothstep(0.10, 0.62, l1)
     );
     color *= split;
@@ -109,8 +113,17 @@ fn grade(uv: vec2<f32>, base: vec3<f32>, dimensions: vec2<f32>) -> vec3<f32> {
     // olive cast of the reference instead of crushing to pure black.
     color += vec3<f32>(0.018, 0.017, 0.011) * (1.0 - smoothstep(0.0, 0.34, l1));
 
-    // Filmic contrast around a low pivot deepens the forest floor.
-    color = clamp((color - 0.42) * 1.06 + 0.42, vec3<f32>(0.0), vec3<f32>(1.0));
+    // Contrast deepens the forest floor and lifts the lit lanes.
+    // The reference spreads values wide (10th to 90th percentile 0.10 to
+    // 0.45 in value); ours sat at 0.19 to 0.37 before this.
+    // Applied to luma only, so the stretch keeps each colour's hue and
+    // chroma ratios instead of clipping a channel (which pushed every
+    // green to full saturation).
+    // The stretch runs on the square root of luma (close to display
+    // values; the frame here is linear), pivoting at mid grass.
+    let lc = max(luma(color), 1e-4);
+    let perceived = clamp((sqrt(lc) - 0.30) * 1.30 + 0.30, 0.0, 1.0);
+    color = clamp(color * (perceived * perceived / lc), vec3<f32>(0.0), vec3<f32>(1.0));
 
     // Heavy painterly vignette: the corners fade into the same fog colour as
     // the horizon, pulling the eye to the centre of the fight.

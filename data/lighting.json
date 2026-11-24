@@ -1,11 +1,11 @@
 {
-  "terrain_ambient": 1.30,
-  "unit_ambient": 1.48,
-  "sun_strength": 0.90,
-  "shadow_floor": 0.36,
-  "hidden_tint": [0.40, 0.42, 0.47],
-  "hidden_saturation": 0.45,
-  "grass_saturation": 1.12,
+  "terrain_ambient": 1.12,
+  "unit_ambient": 1.4,
+  "sun_strength": 1.02,
+  "shadow_floor": 0.26,
+  "hidden_tint": [0.28, 0.30, 0.34],
+  "hidden_saturation": 0.60,
+  "grass_saturation": 1.24,
   "grass_brightness": 0.58,
-  "grass_mottle": 0.30
+  "grass_mottle": 0.3
 }

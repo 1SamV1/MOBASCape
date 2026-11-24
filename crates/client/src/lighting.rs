@@ -36,16 +36,19 @@ pub struct Lighting {
 }
 
 impl Default for Lighting {
-    /// The phase 1 retune of 2026-11-23 (see docs/ROADMAPPLAN.md).
+    /// The second reference retune of 2026-11-24 (see docs/ROADMAPPLAN.md):
+    /// darker ambient, a stronger key light and deeper shadows for the
+    /// reference's contrast, greener grass, a darker but still coloured fog
+    /// of war.
     fn default() -> Self {
         Self {
-            terrain_ambient: 1.30,
-            unit_ambient: 1.48,
-            sun_strength: 0.90,
-            shadow_floor: 0.36,
-            hidden_tint: [0.40, 0.42, 0.47],
-            hidden_saturation: 0.45,
-            grass_saturation: 1.12,
+            terrain_ambient: 1.12,
+            unit_ambient: 1.40,
+            sun_strength: 1.02,
+            shadow_floor: 0.26,
+            hidden_tint: [0.28, 0.30, 0.34],
+            hidden_saturation: 0.60,
+            grass_saturation: 1.24,
             grass_brightness: 0.58,
             grass_mottle: 0.30,
         }
@@ -151,9 +154,26 @@ mod tests {
 
     #[test]
     fn uniforms_pack_in_shader_order() {
-        let u = Lighting::default().uniforms();
-        assert_eq!(u[0], [1.30, 1.48, 0.90, 0.36]);
-        assert_eq!(u[1][3], 0.45);
-        assert_eq!(u[2][0], 1.12);
+        // Distinct values, so a swapped field shows (the tuning itself is
+        // checked against the shipped file above).
+        let lighting = Lighting {
+            terrain_ambient: 1.0,
+            unit_ambient: 2.0,
+            sun_strength: 3.0,
+            shadow_floor: 0.4,
+            hidden_tint: [0.5, 0.6, 0.7],
+            hidden_saturation: 0.8,
+            grass_saturation: 9.0,
+            grass_brightness: 10.0,
+            grass_mottle: 11.0,
+        };
+        assert_eq!(
+            lighting.uniforms(),
+            [
+                [1.0, 2.0, 3.0, 0.4],
+                [0.5, 0.6, 0.7, 0.8],
+                [9.0, 10.0, 11.0, 0.0]
+            ]
+        );
     }
 }

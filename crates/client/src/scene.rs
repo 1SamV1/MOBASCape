@@ -408,15 +408,17 @@ impl Default for Atmosphere {
         Self {
             // Late-afternoon sun, low enough to throw long shadows across the
             // lanes and to keep the ground out of the washed-out noon range.
+            // Only faintly warm: a yellow key turned the grass olive
+            // (2026-11-24 study, docs/ROADMAPPLAN.md).
             sun_dir: [-0.42, 0.62, 0.38],
-            sun_color: [0.92, 0.82, 0.63],
+            sun_color: [0.96, 0.93, 0.82],
             // Overcast sky bounce: neutral warm grey rather than the saturated
             // blue of the early build, which was turning every shadow cyan.
             ambient_sky: [0.50, 0.53, 0.51],
-            ambient_ground: [0.26, 0.24, 0.19],
-            // Warm grey-green haze. The reference clip never resolves the
-            // ground at distance, it dissolves into a pale olive mist.
-            fog_color: [0.40, 0.42, 0.35],
+            ambient_ground: [0.21, 0.25, 0.19],
+            // Grey-green haze. The reference never resolves the ground at
+            // distance; it dissolves into a cool green mist.
+            fog_color: [0.33, 0.41, 0.38],
             fog_density: 0.000022,
             fog_height: 340.0,
             sky_top: [0.27, 0.35, 0.40],

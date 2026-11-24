@@ -410,8 +410,10 @@ fn albedo(input: VsOut) -> vec3<f32> {
         let grass_luma = dot(grass_raw, vec3<f32>(0.299, 0.587, 0.114));
         // Retuned 2026-11-23 against the reference study (ROADMAPPLAN.md
         // phase 1): the old dry tint pushed fields to highlighter lime.
-        let lush = vec3<f32>(0.50, 0.84, 0.50);
-        let dry = vec3<f32>(0.70, 0.82, 0.50);
+        // Retuned 2026-11-24 (second study): the reference's grass sits at
+        // a hue of 100-115 degrees; the dry tint pulled ours to 73.
+        let lush = vec3<f32>(0.32, 0.88, 0.34);
+        let dry = vec3<f32>(0.44, 0.86, 0.34);
         let field_tint = mix(lush, dry, smoothstep(0.45, 0.85, macro_n));
         // Saturation, base brightness and mottle come from data/lighting.json.
         let grass = mix(vec3<f32>(grass_luma), grass_raw, scene.grass_params.x)
