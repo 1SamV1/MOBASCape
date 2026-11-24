@@ -324,51 +324,131 @@ impl HeroSelect {
 }
 
 /// Outer margin of the select screen.
-const MARGIN: f32 = 14.0;
-/// Height of a roster section header ("MELEE", ...).
-const HEADER_H: f32 = 20.0;
+const MARGIN: f32 = 12.0;
+/// Gap between the screen's stone windows.
+const GAP: f32 = 8.0;
+/// Height of the title bar window.
+const TITLE_H: f32 = 72.0;
+/// Height of the filter tab bar over the roster.
+const TABS_H: f32 = 58.0;
+/// Height of the bottom bar with Lock in.
+const BOTTOM_H: f32 = 92.0;
+/// Inner padding of a stone window (the border is 7px).
+const PAD: f32 = 14.0;
 /// Gap between roster cards.
 const CARD_GAP: f32 = 6.0;
-/// Roster columns.
-const COLUMNS: usize = 4;
+/// Widest a roster card grows.
+const CARD_MAX: f32 = 96.0;
+/// The roster window takes this share of the centre column's free height;
+/// the parchment detail takes the rest.
+const ROSTER_SHARE: f32 = 0.38;
 
-/// Top of the three columns (below the title and the timer).
-fn body_top(height: f32) -> f32 {
-    (height * 0.15).max(96.0)
+type Rect = (f32, f32, f32, f32);
+
+/// Top of the body windows, under the title bar.
+fn body_top() -> f32 {
+    MARGIN + TITLE_H + GAP
 }
 
-/// Left column: type tabs and the grouped roster.
-pub fn roster_column(width: f32, height: f32) -> (f32, f32, f32, f32) {
-    let w = (width * 0.29).clamp(300.0, 470.0);
-    let top = body_top(height);
-    (MARGIN, top, w, height - top - MARGIN)
+/// Width of each team column.
+fn side_width(width: f32) -> f32 {
+    (width * 0.19).clamp(200.0, 360.0)
 }
 
-/// Right column: the selected hero's stats and abilities.
-pub fn detail_rect(width: f32, height: f32) -> (f32, f32, f32, f32) {
-    let w = (width * 0.29).clamp(300.0, 470.0);
-    let top = body_top(height);
-    (width - MARGIN - w, top, w, height - top - MARGIN)
+/// The title bar across the top: mode, title and timer, Leave.
+pub fn title_rect(width: f32, _height: f32) -> Rect {
+    (MARGIN, MARGIN, width - MARGIN * 2.0, TITLE_H)
 }
 
-/// Centre stage where the spotlight hero stands.
-pub fn spotlight_rect(width: f32, height: f32) -> (f32, f32, f32, f32) {
-    let (lx, _, lw, _) = roster_column(width, height);
-    let (rx, top, _, _) = detail_rect(width, height);
-    let x = lx + lw + 16.0;
-    let w = (rx - 16.0 - x).max(120.0);
-    let h = (height - top - MARGIN - 128.0).max(160.0);
-    (x, top, w, h)
+/// The Leave button at the title bar's right end.
+pub fn leave_rect(width: f32, height: f32) -> Rect {
+    let (x, y, w, h) = title_rect(width, height);
+    let bw = 108.0;
+    let bh = 34.0;
+    (x + w - PAD - bw, y + (h - bh) * 0.5, bw, bh)
 }
 
-/// Filter tab rectangles, across the top of the roster column.
-pub fn filter_rects(width: f32, height: f32) -> Vec<(f32, f32, f32, f32)> {
-    let (x0, y, w, _) = roster_column(width, height);
-    let inner = w - 16.0;
-    let gap = 6.0;
-    let tab = (inner - gap * (FILTERS.len() as f32 - 1.0)) / FILTERS.len() as f32;
+pub fn leave_at(width: f32, height: f32, cursor: (f64, f64)) -> bool {
+    point_in_rect(leave_rect(width, height), cursor)
+}
+
+/// A team's column window: blue down the left, red down the right.
+pub fn team_column(width: f32, height: f32, team: Team) -> Rect {
+    let w = side_width(width);
+    let top = body_top();
+    let x = match team {
+        Team::Blue => MARGIN,
+        Team::Red => width - MARGIN - w,
+    };
+    (x, top, w, height - top - MARGIN)
+}
+
+/// The centre column between the team windows.
+fn centre(width: f32, height: f32) -> Rect {
+    let side = side_width(width);
+    let x = MARGIN + side + GAP;
+    let top = body_top();
+    (
+        (x),
+        top,
+        (width - 2.0 * x).max(200.0),
+        height - top - MARGIN,
+    )
+}
+
+/// The filter tab bar over the roster.
+pub fn tabs_rect(width: f32, height: f32) -> Rect {
+    let (x, y, w, _) = centre(width, height);
+    (x, y, w, TABS_H)
+}
+
+/// The roster window (kept as `roster_column` for its callers).
+pub fn roster_column(width: f32, height: f32) -> Rect {
+    let (x, y, w, h) = centre(width, height);
+    let free = h - TABS_H - BOTTOM_H - GAP * 3.0;
+    (x, y + TABS_H + GAP, w, (free * ROSTER_SHARE).max(120.0))
+}
+
+/// The parchment with the highlighted hero's art, stats and abilities.
+pub fn detail_rect(width: f32, height: f32) -> Rect {
+    let (x, y, w, h) = roster_column(width, height);
+    let (_, by, _, _) = bottom_rect(width, height);
+    let top = y + h + GAP;
+    (x, top, w, (by - GAP - top).max(120.0))
+}
+
+/// The bottom bar: hero stats and the Lock in button.
+pub fn bottom_rect(width: f32, height: f32) -> Rect {
+    let (x, y, w, h) = centre(width, height);
+    (x, y + h - BOTTOM_H, w, BOTTOM_H)
+}
+
+/// The animated hero's recess on the parchment's left (3:4, like the
+/// spotlight render), leaving room under it for the name and tags.
+pub fn spotlight_rect(width: f32, height: f32) -> Rect {
+    let (x, y, _, h) = detail_rect(width, height);
+    let ph = (h - 96.0).max(80.0);
+    let pw = ph * 0.75;
+    (x + 22.0, y + 18.0, pw, ph)
+}
+
+/// Filter tab rectangles, after the "Show:" label in the tab bar.
+pub fn filter_rects(width: f32, height: f32) -> Vec<Rect> {
+    let (x0, y, w, h) = tabs_rect(width, height);
+    let label = 96.0;
+    let inner = w - PAD * 2.0 - label;
+    let gap = 8.0;
+    let tab = ((inner - gap * (FILTERS.len() as f32 - 1.0)) / FILTERS.len() as f32).min(190.0);
+    let th = h - 20.0;
     (0..FILTERS.len())
-        .map(|index| (x0 + 8.0 + index as f32 * (tab + gap), y + 8.0, tab, 28.0))
+        .map(|index| {
+            (
+                x0 + PAD + label + index as f32 * (tab + gap),
+                y + 10.0,
+                tab,
+                th,
+            )
+        })
         .collect()
 }
 
@@ -378,67 +458,44 @@ pub fn filter_at(width: f32, height: f32, cursor: (f64, f64)) -> Option<usize> {
         .position(|&rect| point_in_rect(rect, cursor))
 }
 
-/// The grouped roster: a card rectangle per visible slot, and a header
-/// (type label, y) above each run of one type.
+/// The roster: a card rectangle per visible slot, in one grid (the class
+/// order already groups them). The header list is kept for callers and is
+/// empty: the tabs filter by class instead.
 #[allow(clippy::type_complexity)]
-pub fn roster_layout(
-    width: f32,
-    height: f32,
-    classes: &[&str],
-) -> (Vec<(f32, f32, f32, f32)>, Vec<(String, f32)>) {
-    let (cx, cy, cw, ch) = roster_column(width, height);
-    let x0 = cx + 8.0;
-    let top = cy + 44.0;
-    let inner_w = cw - 16.0;
-    // Count rows and headers to size the cards so everything fits.
-    let mut rows = 0usize;
-    let mut headers = 0usize;
-    let mut i = 0;
-    while i < classes.len() {
-        let run = classes[i..]
-            .iter()
-            .take_while(|c| c.eq_ignore_ascii_case(classes[i]))
-            .count();
-        headers += 1;
-        rows += run.div_ceil(COLUMNS);
-        i += run;
+pub fn roster_layout(width: f32, height: f32, classes: &[&str]) -> (Vec<Rect>, Vec<(String, f32)>) {
+    let (rx, ry, rw, rh) = roster_column(width, height);
+    let inner_w = rw - PAD * 2.0;
+    let inner_h = rh - PAD * 2.0;
+    let count = classes.len().max(1);
+    // The column count that gives the largest cards that still fit every
+    // row in the window; the name takes 18px under each portrait.
+    let mut best = (4usize, 0.0f32);
+    for columns in 4..=16usize {
+        let rows = count.div_ceil(columns);
+        let by_w = (inner_w - CARD_GAP * (columns as f32 - 1.0)) / columns as f32;
+        let by_h = (inner_h - CARD_GAP * (rows as f32 - 1.0)) / rows as f32 - 18.0;
+        let size = by_w.min(by_h).min(CARD_MAX);
+        if size > best.1 + 0.5 {
+            best = (columns, size);
+        }
     }
-    let by_width = (inner_w - CARD_GAP * (COLUMNS as f32 - 1.0)) / COLUMNS as f32;
-    let avail_h = (cy + ch - 8.0 - top - headers as f32 * HEADER_H).max(60.0);
-    let by_height = if rows == 0 {
-        by_width
-    } else {
-        (avail_h - CARD_GAP * rows as f32) / rows as f32 / 1.22
-    };
-    let card_w = by_width.min(by_height).clamp(40.0, 118.0);
-    let card_h = card_w * 1.22;
-
-    let mut cards = Vec::with_capacity(classes.len());
-    let mut labels = Vec::new();
-    let mut y = top;
-    let mut i = 0;
-    while i < classes.len() {
-        let class = classes[i];
-        let run = classes[i..]
-            .iter()
-            .take_while(|c| c.eq_ignore_ascii_case(class))
-            .count();
-        labels.push((class.to_ascii_uppercase(), y));
-        y += HEADER_H;
-        for k in 0..run {
-            let column = k % COLUMNS;
-            let row = k / COLUMNS;
-            cards.push((
+    let (columns, card_w) = (best.0, best.1.max(36.0));
+    let card_h = card_w + 18.0;
+    let used = columns as f32 * card_w + CARD_GAP * (columns as f32 - 1.0);
+    let x0 = rx + PAD + ((inner_w - used) * 0.5).max(0.0);
+    let cards = (0..classes.len())
+        .map(|k| {
+            let column = k % columns;
+            let row = k / columns;
+            (
                 x0 + column as f32 * (card_w + CARD_GAP),
-                y + row as f32 * (card_h + CARD_GAP),
+                ry + PAD + row as f32 * (card_h + CARD_GAP),
                 card_w,
                 card_h,
-            ));
-        }
-        y += run.div_ceil(COLUMNS) as f32 * (card_h + CARD_GAP);
-        i += run;
-    }
-    (cards, labels)
+            )
+        })
+        .collect();
+    (cards, Vec::new())
 }
 
 /// Which visible slot the cursor is over.
@@ -449,46 +506,39 @@ pub fn card_at(width: f32, height: f32, cursor: (f64, f64), classes: &[&str]) ->
         .position(|&rect| point_in_rect(rect, cursor))
 }
 
-/// The countdown dial at the top centre.
-pub fn timer_rect(width: f32, height: f32) -> (f32, f32, f32, f32) {
-    let size = 54.0;
-    let y = (body_top(height) - size - 6.0).max(height * 0.028 + 44.0);
-    ((width - size) * 0.5, y, size, size)
+/// The timer under the title, centred in the title bar.
+pub fn timer_rect(width: f32, height: f32) -> Rect {
+    let (x, y, w, h) = title_rect(width, height);
+    (x + w * 0.5 - 40.0, y + h * 0.5, 80.0, h * 0.5 - 6.0)
 }
 
-/// Gold "lock in" button under the spotlight.
-pub fn confirm_rect(width: f32, height: f32) -> (f32, f32, f32, f32) {
-    let (sx, sy, sw, sh) = spotlight_rect(width, height);
-    let w = 220.0f32.min(sw * 0.8);
-    let h = 42.0;
-    (sx + (sw - w) * 0.5, sy + sh + 74.0, w, h)
+/// The red "Lock in" button at the bottom bar's right end.
+pub fn confirm_rect(width: f32, height: f32) -> Rect {
+    let (x, y, w, h) = bottom_rect(width, height);
+    let bw = 240.0f32.min(w * 0.3);
+    (x + w - PAD - bw, y + PAD, bw, h - PAD * 2.0)
 }
 
 pub fn confirm_at(width: f32, height: f32, cursor: (f64, f64)) -> bool {
     point_in_rect(confirm_rect(width, height), cursor)
 }
 
-fn point_in_rect(rect: (f32, f32, f32, f32), cursor: (f64, f64)) -> bool {
+fn point_in_rect(rect: Rect, cursor: (f64, f64)) -> bool {
     let (x, y, w, h) = rect;
     let mx = cursor.0 as f32;
     let my = cursor.1 as f32;
     mx >= x && mx <= x + w && my >= y && my <= y + h
 }
 
-/// Team column rows inside the spotlight: five down the left edge (your
-/// team) and five down the right (enemies), sized to fit the stage height.
-pub fn team_slot_rects(width: f32, height: f32, team: Team) -> Vec<(f32, f32, f32, f32)> {
-    let (sx, sy, sw, sh) = spotlight_rect(width, height);
+/// The five player rows of a team column, under its header.
+pub fn team_slot_rects(width: f32, height: f32, team: Team) -> Vec<Rect> {
+    let (x, y, w, h) = team_column(width, height, team);
+    let header = 44.0;
     let gap = 6.0;
-    let top = sy + 22.0;
-    let w = (sw * 0.15).clamp(44.0, 68.0);
-    let h = (w + 14.0).min((sh - 22.0 - gap * 4.0) / 5.0);
-    let x = match team {
-        Team::Blue => sx + 4.0,
-        Team::Red => sx + sw - 4.0 - w,
-    };
+    let top = y + header;
+    let row_h = ((h - header - PAD - gap * 4.0) / 5.0).max(40.0);
     (0..5)
-        .map(|i| (x, top + i as f32 * (h + gap), w, h))
+        .map(|i| (x + 10.0, top + i as f32 * (row_h + gap), w - 20.0, row_h))
         .collect()
 }
 
@@ -658,10 +708,12 @@ mod tests {
         assert_eq!(select.visible, vec![1, 3, 2, 0]);
         let (cards, headers) = roster_layout(1280.0, 720.0, &select.visible_classes());
         assert_eq!(cards.len(), 4);
-        let labels: Vec<&str> = headers.iter().map(|(l, _)| l.as_str()).collect();
-        assert_eq!(labels, ["MELEE", "RANGED", "MAGIC"]);
-        // Each header sits above its first card.
-        assert!(headers[1].1 < cards[2].1 && headers[2].1 < cards[3].1);
+        // One grid in reading order; the class tabs replace the headers.
+        assert!(headers.is_empty());
+        for pair in cards.windows(2) {
+            let (a, b) = (pair[0], pair[1]);
+            assert!(b.1 > a.1 || (b.1 == a.1 && b.0 > a.0));
+        }
     }
 
     #[test]
@@ -771,28 +823,43 @@ mod tests {
     }
 
     #[test]
-    fn team_rows_fit_inside_the_stage() {
+    fn team_rows_fit_inside_their_columns() {
         for (w, h) in [(1280.0, 720.0), (1920.0, 1080.0), (1024.0, 600.0)] {
-            let (sx, sy, sw, sh) = spotlight_rect(w, h);
-            let blue = team_slot_rects(w, h, Team::Blue);
-            let red = team_slot_rects(w, h, Team::Red);
-            for &(x, y, rw, rh) in blue.iter().chain(&red) {
-                assert!(x >= sx && x + rw <= sx + sw, "{w}x{h} x");
-                assert!(y >= sy && y + rh <= sy + sh + 0.01, "{w}x{h} y");
+            for team in [Team::Blue, Team::Red] {
+                let (cx, cy, cw, ch) = team_column(w, h, team);
+                for (x, y, rw, rh) in team_slot_rects(w, h, team) {
+                    assert!(x >= cx && x + rw <= cx + cw, "{w}x{h} x");
+                    assert!(y >= cy && y + rh <= cy + ch + 0.01, "{w}x{h} y");
+                }
             }
-            assert!(blue[0].0 + blue[0].2 < red[0].0, "{w}x{h} columns apart");
+            let blue = team_column(w, h, Team::Blue);
+            let red = team_column(w, h, Team::Red);
+            let (rx, _, rw, _) = roster_column(w, h);
+            assert!(
+                blue.0 + blue.2 < rx && rx + rw < red.0,
+                "{w}x{h} columns apart"
+            );
         }
     }
 
     #[test]
-    fn the_spotlight_sits_between_the_columns() {
+    fn the_spotlight_sits_on_the_parchment_under_the_roster() {
         for (w, h) in [(1280.0, 720.0), (1920.0, 1080.0)] {
-            let (lx, _, lw, _) = roster_column(w, h);
-            let (rx, _, _, _) = detail_rect(w, h);
-            let (sx, _, sw, _) = spotlight_rect(w, h);
-            assert!(sx > lx + lw && sx + sw < rx);
-            let (bx, by, _, bh) = confirm_rect(w, h);
-            assert!(bx > sx && by + bh < h, "{w}x{h} lock-in on screen");
+            let (dx, dy, dw, dh) = detail_rect(w, h);
+            let (sx, sy, sw, sh) = spotlight_rect(w, h);
+            assert!(sx > dx && sx + sw < dx + dw, "{w}x{h} x");
+            assert!(sy > dy && sy + sh < dy + dh, "{w}x{h} y");
+            let (_, ry, _, rh) = roster_column(w, h);
+            assert!(dy > ry + rh, "{w}x{h} under the roster");
+            let (bx, by, bw, bh) = confirm_rect(w, h);
+            let (fx, fy, fw, fh) = bottom_rect(w, h);
+            assert!(bx >= fx && bx + bw <= fx + fw && by >= fy && by + bh <= fy + fh);
+            assert!(by + bh < h, "{w}x{h} lock-in on screen");
+            let (lx, ly, lw, lh) = leave_rect(w, h);
+            assert!(
+                lx + lw < w && ly + lh < dy,
+                "{w}x{h} leave in the title bar"
+            );
         }
     }
 

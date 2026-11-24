@@ -84,25 +84,34 @@ impl MainMenu {
 
 /// The stone tablet behind the title and buttons.
 pub fn tablet_rect(width: f32, height: f32) -> (f32, f32, f32, f32) {
-    let w = (width * 0.36).clamp(380.0, 480.0);
-    let h = 62.0 + 3.0 * (52.0 + 22.0) + 6.0 + 34.0 + 22.0;
+    let w = (width * 0.42).clamp(420.0, 640.0);
+    let h = TABLET_TOP + 3.0 * (ROW_H + ROW_GAP) + 8.0 + QUIT_H + 30.0;
     let top = (height * 0.30).max(200.0).min(height - h - 70.0);
     ((width - w) * 0.5, top, w, h)
 }
 
+/// Height of a game-mode row, the gap between rows, and the header above
+/// them inside the tablet.
+const ROW_H: f32 = 60.0;
+const ROW_GAP: f32 = 10.0;
+const TABLET_TOP: f32 = 58.0;
+const QUIT_H: f32 = 34.0;
+
 /// Button rectangles, in [`BUTTONS`] order. Quit is a smaller button.
 pub fn button_rects(width: f32, height: f32) -> Vec<(f32, f32, f32, f32)> {
-    let (tx, ty, tw, th) = tablet_rect(width, height);
-    let bw = tw - 64.0;
-    let bh = 52.0;
-    let gap = 22.0;
-    let _ = th;
-    let top = ty + 62.0;
+    let (tx, ty, tw, _) = tablet_rect(width, height);
+    let bw = tw - 48.0;
+    let top = ty + TABLET_TOP;
     let mut rects: Vec<_> = (0..3)
-        .map(|i| (tx + 32.0, top + i as f32 * (bh + gap), bw, bh))
+        .map(|i| (tx + 24.0, top + i as f32 * (ROW_H + ROW_GAP), bw, ROW_H))
         .collect();
-    let qw = bw * 0.42;
-    rects.push((tx + (tw - qw) * 0.5, top + 3.0 * (bh + gap) + 6.0, qw, 34.0));
+    let qw = 150.0;
+    rects.push((
+        tx + (tw - qw) * 0.5,
+        top + 3.0 * (ROW_H + ROW_GAP) + 8.0,
+        qw,
+        QUIT_H,
+    ));
     rects
 }
 

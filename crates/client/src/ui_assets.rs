@@ -24,7 +24,10 @@ pub const SPOTLIGHT_RECT: (u32, u32, u32, u32) = (1024, 760, 384, 512);
 /// The ids are the font archives from index 13; their glyph sheets are the
 /// sprite group with the same id in index 8. `p12_full` is OSRS's overhead
 /// font, `b12_full` is the bold variant the hitsplat numbers use.
-const CACHE_FONTS: [(&str, u32); 3] = [("p11", 494), ("p12", 495), ("b12", 496)];
+/// `q8_full` is the quill font of interface titles.
+const CACHE_FONTS: [(&str, u32); 4] = [("p11", 494), ("p12", 495), ("b12", 496), ("q8", 497)];
+/// Row of the hitmark sprites, below the four font shelves.
+const HITMARK_ROW_Y: u32 = 1900;
 
 /// OSRS combat sprites from index 8. These are the exact splats from the
 /// cache: blue miss, red damage, gold-trimmed maximum hit, green poison,
@@ -40,8 +43,28 @@ const HITMARK_SPRITES: [(&str, u32); 8] = [
     ("skull", 439),
 ];
 
-/// Small cache UI icons the legacy HUD uses outside the hitmark family.
-const UI_SPRITES: [(&str, u32); 2] = [("icon_swords", 442), ("icon_skull", 439)];
+/// Small cache UI icons the legacy HUD uses outside the hitmark family,
+/// and the OSRS interface kit the front-end screens are built from: the
+/// notched grey and red buttons (293-296), the chatbox parchment (1017),
+/// the dark item slot (1077) and the skill icons the stat rows use.
+const UI_SPRITES: [(&str, u32); 16] = [
+    ("icon_swords", 442),
+    ("icon_skull", 439),
+    ("button_grey", 293),
+    ("button_red", 294),
+    ("button_grey_thin", 295),
+    ("button_red_thin", 296),
+    ("parchment", 1017),
+    ("slot", 1077),
+    ("stat_attack", 197),
+    ("stat_strength", 198),
+    ("stat_defence", 199),
+    ("stat_ranged", 200),
+    ("stat_magic", 202),
+    ("stat_hitpoints", 203),
+    ("stat_agility", 204),
+    ("stat_prayer", 201),
+];
 
 /// One cache sprite placed in the atlas, with its size in pixels.
 #[derive(Clone, Copy)]
@@ -153,7 +176,7 @@ impl UiAtlas {
         }
         let mut x = 2;
         for (key, id) in HITMARK_SPRITES {
-            match self.add_cache_sprite(cache, id, x, 1740) {
+            match self.add_cache_sprite(cache, id, x, HITMARK_ROW_Y) {
                 Ok(slot) => {
                     x += slot.width as u32 + 4;
                     self.hitmarks.insert(key.to_string(), slot);
@@ -164,6 +187,15 @@ impl UiAtlas {
         for (key, id) in UI_SPRITES {
             if let Err(error) = self.add_cache_ui_sprite(cache, id, key) {
                 tracing::warn!("cache UI sprite {key} ({id}): {error:#}");
+            }
+        }
+        for (key, spec) in [
+            ("frame_outer", crate::stone::OUTER),
+            ("frame_inner", crate::stone::INNER),
+        ] {
+            match crate::stone::compose(cache, &spec) {
+                Ok(image) => self.add_ui_image(key, &image),
+                Err(error) => tracing::warn!("cache frame {key}: {error:#}"),
             }
         }
         tracing::info!(
@@ -279,18 +311,36 @@ impl UiAtlas {
     /// Pack a cache sprite into the legacy HUD's UI shelf under `key`.
     /// Champion ability icons use this with their `icon.ability.*` roles.
     pub fn add_cache_ui_sprite(&mut self, cache: &Cache, id: u32, key: &str) -> Result<()> {
-        let (x, y, row_height) = self.ui_cursor;
-        let slot = self.add_cache_sprite(cache, id, x, y)?;
-        let width = slot.width.ceil() as u32;
-        let height = slot.height.ceil() as u32;
-        let (next_x, next_y, next_row) = if x + width + 1 > ATLAS_SIZE {
-            (2, y + row_height + 1, height)
-        } else {
-            (x + width + 1, y, row_height.max(height))
-        };
-        self.ui_cursor = (next_x, next_y, next_row);
-        self.ui_uv.insert(key.to_string(), slot.uv);
+        // Wraps to a new shelf row before placing, so a wide sprite (the
+        // parchment) is never clipped at the atlas edge.
+        let image = crate::stone::sprite_image(cache, id)?;
+        self.add_ui_image(key, &image);
         Ok(())
+    }
+
+    /// Pack an image made from cache pieces (a joined stone frame) into the
+    /// UI shelf under `key`.
+    pub fn add_ui_image(&mut self, key: &str, image: &image::RgbaImage) {
+        let (x, y, row_height) = self.ui_cursor;
+        let (width, height) = image.dimensions();
+        let (x, y, row_height) = if x + width + 1 > ATLAS_SIZE {
+            (2, y + row_height + 1, 0)
+        } else {
+            (x, y, row_height)
+        };
+        let uv = self.copy(image, x, y);
+        self.ui_cursor = (x + width + 1, y, row_height.max(height));
+        self.ui_uv.insert(key.to_string(), uv);
+    }
+
+    /// A UI sprite's size in atlas pixels.
+    pub fn ui_size(&self, name: &str) -> Option<(f32, f32)> {
+        self.ui_uv(name).map(|uv| {
+            (
+                ((uv[2] - uv[0]) * self.width as f32).round(),
+                ((uv[3] - uv[1]) * self.height as f32).round(),
+            )
+        })
     }
 
     /// Pack a cache-rendered item icon (32x32 inventory render) under the

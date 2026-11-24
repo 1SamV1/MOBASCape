@@ -13,6 +13,7 @@ use crate::scene::CampBuff;
 use crate::scene::srgb_to_linear;
 use crate::ui_assets::UiAtlas;
 
+mod kit;
 mod screens;
 
 /// OSRS interface colours. The RuneScape client draws all of its text with a
@@ -3099,7 +3100,9 @@ impl Hud {
     /// OSRS interface panel background. Uses the scraped cache panel sprite
     /// as a nine-slice, with the old flat quads as a fallback.
     pub fn hud_panel(&mut self, width: f32, height: f32, x: f32, y: f32, w: f32, h: f32) {
-        if let Some(uv) = self.atlas.ui_uv("panel") {
+        if self.atlas.ui_uv("frame_outer").is_some() {
+            self.stone_frame(width, height, (x, y, w, h));
+        } else if let Some(uv) = self.atlas.ui_uv("panel") {
             self.panel_sprite(width, height, x, y, w, h, uv, 12.0, [56, 53, 48]);
         } else {
             self.quad(width, height, x, y, w, h, [20, 20, 24]);

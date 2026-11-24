@@ -21,6 +21,7 @@ mod portraits;
 mod renderer;
 mod scene;
 mod spotlight;
+mod stone;
 mod terrain_textures;
 mod theme_file;
 mod ui_assets;
@@ -1079,7 +1080,9 @@ impl ApplicationHandler for App {
                             self.mouse_pos,
                             &self.hero_select.visible_classes(),
                         );
-                        if let Some(filter) = hero_select::filter_at(w, h, self.mouse_pos) {
+                        if hero_select::leave_at(w, h, self.mouse_pos) {
+                            self.back_to_menu();
+                        } else if let Some(filter) = hero_select::filter_at(w, h, self.mouse_pos) {
                             self.hero_select.set_filter(filter);
                         } else if let Some(slot) = card {
                             self.hero_select.select_slot(slot);
