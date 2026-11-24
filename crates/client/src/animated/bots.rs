@@ -113,6 +113,10 @@ pub struct BotBrain {
     build: Vec<ItemConfig>,
     pub bought: usize,
     gold_income: f32,
+    /// Q..R read from the champion data (see `bot_cast`).
+    pub spells: Vec<super::bot_cast::BotSpell>,
+    /// Seconds until the next ability may be cast.
+    pub cast_gap: f32,
 }
 
 /// Team-wide timers that pick when to gank and when to take the boss.
@@ -217,6 +221,8 @@ impl AnimatedScene {
                 build: builds.get(n).cloned().unwrap_or_default(),
                 bought: 0,
                 gold_income: 0.0,
+                spells: super::bot_cast::spells_for(&champion.abilities),
+                cast_gap: 0.0,
             });
             spawned += 1;
         }
@@ -234,6 +240,7 @@ impl AnimatedScene {
         if self.bots.is_empty() {
             return;
         }
+        self.tick_bot_spells(dt);
         for b in 0..self.bots.len() {
             let unit = self.bots[b].unit;
             let alive = self.units[unit].health > 0.0;
@@ -481,6 +488,8 @@ impl AnimatedScene {
             u.max_health += 40.0;
             u.health = (u.health + 40.0).min(u.max_health);
             u.attack_damage += 2.0;
+            u.max_mana += 20.0;
+            u.mana = (u.mana + 20.0).min(u.max_mana);
         }
     }
 
@@ -747,6 +756,10 @@ impl AnimatedScene {
             )
         };
         self.units[index].attack_target = Some(target);
+        if self.bot_try_cast(b, target) {
+            self.units[index].moving = false;
+            return;
+        }
         if in_range {
             let unit = &mut self.units[index];
             unit.moving = false;

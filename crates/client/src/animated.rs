@@ -7,6 +7,7 @@ use glam::{Mat3, Vec3};
 use rift_cache::{AnimationClip, AnimationScratch, Cache, Model, model::hsl_to_rgb};
 
 pub mod awowogei;
+pub mod bot_cast;
 pub mod bots;
 mod kit_runtime;
 pub mod ranks;
@@ -3126,6 +3127,9 @@ impl AnimatedScene {
         unit.is_champion = true;
         unit.home = pos;
         unit.level = 1;
+        // Bots cast from the champion's mana pool (`bot_cast`).
+        unit.max_mana = champion.mana;
+        unit.mana = champion.mana;
         unit.model_yaw_offset = champion.model_yaw;
         unit.walk_arm = champion.walk_arm;
         unit.attack_windup = champion.attack_windup;

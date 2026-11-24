@@ -835,3 +835,30 @@ only for now.
 The strongest camp on each side of the river is flagged `"boss": true` in
 the map (`inner_bot_west` on blue's side, `top_east` on red's). Camps now aggro on and retaliate
 against any hero, not only the player.
+
+## ADR-055 — Bots cast from the champion data, not the player's kit
+
+Status: accepted, 2026-11-24.
+
+The player's abilities run through `kit_runtime` and the hand-written
+casts, and both keep their state (charges, dashes, channels, combo
+stacks, cooldowns) for a single caster, the player. Making them caster-
+generic would mean threading a caster through about 20 call sites and
+splitting `kit_rt` per hero.
+
+Bots instead read the data every champion already ships for the ability
+bar: the Q/W/E/R rank tables and descriptions (`animated::bot_cast`).
+Each ability becomes one of four shapes: Care (no damage in its ranks:
+heal a quarter of missing health, or shield 15% of max health), Nova
+(range 0, a circle round the caster), Strike (range up to 450, a blast at
+the target with splash) or Bolt (longer range, a homing shot). "Stun",
+"root"/"snare" and "slow"/"chill" in the description add crowd control.
+Ranks unlock with level (Q 1, W 2, E 3, R 6, then every three levels),
+damage scales through `kit::scaled_damage`, and mana is spent and
+regenerated (2% per second). Ultimates are saved for heroes; damage
+spells go on minions only with mana to spare.
+
+This is an approximation: dashes, summons and zones read as bolts or
+strikes. A bot's casts are not its kit's exact visuals; they reuse the
+existing effect rings and projectile looks. When the kit runtime is made
+caster-generic, bots should switch to it.

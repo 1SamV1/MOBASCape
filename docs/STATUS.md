@@ -1,6 +1,20 @@
 # Status
 
-Last updated: bot heroes, open nexus, 2026-11-24.
+Last updated: bot abilities, 2026-11-24.
+
+## 2026-11-24 — Bots cast abilities
+
+- Bots now use their Q/W/E/R (`animated::bot_cast`, ADR-055), read from
+  each champion's rank tables: heals and shields below 60% health,
+  novas, short strikes with splash, and homing bolts, plus stuns, roots
+  and slows taken from the descriptions. Ranks unlock with level, damage
+  scales with ability power, and mana is spent and regenerated.
+- Bots were spawned with no mana pool; they now get the champion's mana
+  and +20 per level, like the player.
+- In a 6-minute sim, 110 casts across all nine bots; towers wore down on
+  both sides, inhibitors and nexuses held.
+- Approximation: dashes, summons and zones read as bolts or strikes.
+
 
 ## 2026-11-24 — Bot heroes play the draft; the nexus is open
 
@@ -10,7 +24,7 @@ Last updated: bot heroes, open nexus, 2026-11-24.
   side's region boss with a teammate from level 5, ganks in pairs (never
   into a base), and walks home under 30% health or when it can buy its
   next recommended item. Bots level and earn gold like the player; basic
-  attacks only so far. `--bots` fills both teams at boot for testing.
+  attacks only at first (abilities: see above). `--bots` fills both teams at boot for testing.
 - Region bosses: `inner_bot_west` (blue side) and `top_east` (red side) (`"boss": true` in the
   map). Camps now aggro on, and turn on, any hero, not only the player.
 - The nexus is always attackable (it was shielded until an inhibitor fell).
