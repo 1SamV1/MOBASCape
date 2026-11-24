@@ -21,7 +21,9 @@ The AppImage does not freeze a build. Every launch it:
 If the build fails, it runs the last good binary in `target/release`, then
 the snapshot bundled in the AppImage. `MOBASCAPE_NO_PULL=1` and
 `MOBASCAPE_NO_BUILD=1` turn steps 2 and 3 off. The log is at
-`~/.local/state/mobascape/launcher.log`. Rebuild the AppImage only when
+`~/.local/state/mobascape/launcher.log` (the previous run's is kept as
+`launcher.log.1`). Started without a terminal, the client's own output goes
+to that log too, and a crash shows an error dialog with the last lines. Rebuild the AppImage only when
 `AppRun` changes or the checkout moves. It contains no cache or `assets/`
 (the OSRS cache stays in `.cache/`).
 

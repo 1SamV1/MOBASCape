@@ -23,6 +23,8 @@ CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/mobascape"
 STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/mobascape"
 LOG="$STATE_DIR/launcher.log"
 mkdir -p "$CONFIG_DIR" "$STATE_DIR"
+# Keep the previous run's log, so relaunching after a crash does not wipe it.
+[ -s "$LOG" ] && mv -f "$LOG" "$LOG.1"
 : >"$LOG"
 export PATH="$HOME/.cargo/bin:$PATH"
 
@@ -155,4 +157,19 @@ esac
 [ $# -eq 0 ] && set -- --ui-live
 log "running $(git -C "$REPO" log -1 --format='%h %s' 2>/dev/null): $BIN $*"
 cd "$REPO" || fail "cannot enter $REPO"
-exec "$BIN" "$@"
+if interactive; then
+    exec "$BIN" "$@"
+fi
+# Launched from a file manager or menu: there is no terminal, so keep the
+# client's output in the log and report a crash instead of vanishing.
+"$BIN" "$@" >>"$LOG" 2>&1
+status=$?
+if [ "$status" -ne 0 ]; then
+    log "client exited with status $status"
+    if have zenity; then
+        tail_text="$(sed 's/\x1b\[[0-9;]*m//g' "$LOG" | grep -v 'Compiling' | tail -12 | sed 's/&/\&amp;/g; s/</\&lt;/g')"
+        zenity --error --title=MobaScape --width=640 \
+            --text="MobaScape closed with an error (status $status).\n\n<tt>$tail_text</tt>\n\nFull log: $LOG" 2>/dev/null
+    fi
+fi
+exit "$status"
