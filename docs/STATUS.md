@@ -1,6 +1,25 @@
 # Status
 
-Last updated: shop selling and Undo, 2026-11-24.
+Last updated: shop upgrades (builds from / into), 2026-11-24.
+
+## 2026-11-24 — Upgrade recipes
+
+- **Data**: `builds_from` on items in `data/items/items.json`. Shipped
+  ladders follow OSRS: bronze → iron → steel → mithril → adamant → rune
+  swords and platebodies; shortbow → oak → willow → maple → yew → magic
+  shortbow; staff of fire → mystic fire staff; Bandos boots → guardian
+  boots; ranger boots → pegasian boots; dragon boots → primordial boots.
+  Load fails if a recipe names an unknown or not-cheaper item.
+- **Rule**: owning the parts makes an item cost its price less theirs
+  (`ItemShop::upgrade`); buying it removes the parts and their stats, so
+  the slot is freed (a full bag can still upgrade). Undo refunds what was
+  paid and puts the parts back. Selling an upgraded item pays 70% of its
+  full cost.
+- **Live shop**: upgrade prices are green under the icons; the detail pane
+  shows "Upgrade N gold (full M)", "Builds from" and "Builds into"; the
+  tooltip shows the price you would pay now.
+- **Verified** with `--demo-shop`: iron sword upgraded for 250g of 550g,
+  steel for 300g of 850g, undo returned 300g and the iron sword.
 
 ## 2026-11-24 — Sell at 70%, Undo at 100%
 

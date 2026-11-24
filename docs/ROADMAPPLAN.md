@@ -179,7 +179,10 @@ All objects from the cache, placed through the map format
   recipes and Builds into data, selling and Undo (refund rate is a design
   call), recommended page, search.
 - 2026-11-24: phase 3 selling (70%) and Undo (100%, this visit) done.
-  Open in phase 3: recipes / Builds into data, recommended page, search. Bot portraits need bots to carry a
+  Open in phase 3: recipes / Builds into data, recommended page, search.
+- 2026-11-24: phase 3 upgrade recipes done (`builds_from`, OSRS ladders,
+  difference pricing, Undo restores parts). Open in phase 3: recommended
+  page, search box, multi-part recipes for late items (data only now). Bot portraits need bots to carry a
   champion id.
 
 ## Started with this plan

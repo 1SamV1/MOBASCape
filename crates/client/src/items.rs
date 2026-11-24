@@ -25,6 +25,10 @@ pub struct ItemConfig {
     /// Shop section override (0 starter .. 3 late); by cost when absent.
     #[serde(default)]
     pub tier: Option<u8>,
+    /// Item ids this one upgrades from. Owning them makes it cheaper by
+    /// their cost, and buying it uses them up.
+    #[serde(default)]
+    pub builds_from: Vec<String>,
 }
 
 impl ItemConfig {
@@ -57,12 +61,25 @@ pub fn sell_price(cost: u32) -> u32 {
 
 /// One purchase made on the current shop visit, which Undo can take back
 /// for its full price.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Purchase {
     pub index: usize,
     /// True when the item went to the chest to wait for delivery instead of
     /// into the bag.
     pub stored: bool,
+    /// Gold actually paid (less than the cost for an upgrade).
+    pub paid: u32,
+    /// Bag items the upgrade used up; Undo puts them back.
+    pub consumed: Vec<usize>,
+}
+
+/// What buying an item costs right now, given the bag.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Upgrade {
+    /// Bag items that buying it would use up.
+    pub consumed: Vec<usize>,
+    /// The item's cost less the used-up items' costs.
+    pub price: u32,
 }
 
 pub struct ItemShop {
@@ -91,8 +108,10 @@ impl ItemShop {
     pub fn load() -> Result<Self> {
         let data = std::fs::read_to_string("data/items/items.json")
             .context("reading data/items/items.json")?;
+        let items: Vec<ItemConfig> = serde_json::from_str(&data)?;
+        validate_recipes(&items)?;
         Ok(Self {
-            items: serde_json::from_str(&data)?,
+            items,
             owned: [None; 6],
             undo: Vec::new(),
             open: false,
@@ -144,6 +163,51 @@ impl ItemShop {
         }
     }
 
+    fn index_of(&self, id: &str) -> Option<usize> {
+        self.items.iter().position(|item| item.id == id)
+    }
+
+    /// The price of `index` given what is in the bag, and which bag items
+    /// it would use up (each component once, even with duplicates owned).
+    pub fn upgrade(&self, index: usize) -> Upgrade {
+        let Some(item) = self.items.get(index) else {
+            return Upgrade {
+                consumed: Vec::new(),
+                price: 0,
+            };
+        };
+        let mut consumed: Vec<usize> = Vec::new();
+        for id in &item.builds_from {
+            if let Some(part) = self.index_of(id) {
+                let used = consumed.iter().filter(|&&c| c == part).count();
+                if self.owned_count(part) > used {
+                    consumed.push(part);
+                }
+            }
+        }
+        let discount: u32 = consumed.iter().map(|&c| self.items[c].cost).sum();
+        Upgrade {
+            consumed,
+            price: item.cost.saturating_sub(discount),
+        }
+    }
+
+    /// Items that list `index` in their `builds_from`, cheapest first.
+    pub fn builds_into(&self, index: usize) -> Vec<usize> {
+        let Some(id) = self.items.get(index).map(|item| item.id.as_str()) else {
+            return Vec::new();
+        };
+        let mut into: Vec<usize> = self
+            .items
+            .iter()
+            .enumerate()
+            .filter(|(_, item)| item.builds_from.iter().any(|from| from == id))
+            .map(|(i, _)| i)
+            .collect();
+        into.sort_by_key(|&i| self.items[i].cost);
+        into
+    }
+
     /// End the visit's Undo history once the window is closed.
     pub fn sync_visit(&mut self) {
         if !self.open {
@@ -187,6 +251,22 @@ impl ItemShop {
             .map(|(index, _)| index)
             .collect()
     }
+}
+
+/// Every `builds_from` id must name another item that costs less, so an
+/// upgrade never pays the player.
+pub fn validate_recipes(items: &[ItemConfig]) -> Result<()> {
+    for item in items {
+        for id in &item.builds_from {
+            let Some(part) = items.iter().find(|other| &other.id == id) else {
+                anyhow::bail!("{} builds from unknown item {id}", item.id);
+            };
+            if part.id == item.id || part.cost >= item.cost {
+                anyhow::bail!("{} builds from {id}, which must cost less", item.id);
+            }
+        }
+    }
+    Ok(())
 }
 
 /// HUD button that calls the Armadylean delivery guard.
@@ -284,6 +364,84 @@ pub fn shop_button_at(width: f32, height: f32, cursor: (f64, f64)) -> bool {
 #[cfg(test)]
 mod tests {
 
+    fn item(id: &str, cost: u32, from: &[&str]) -> ItemConfig {
+        ItemConfig {
+            id: id.to_string(),
+            name: id.to_string(),
+            obj: None,
+            category: "melee".to_string(),
+            color: [0, 0, 0],
+            cost,
+            damage: 0.0,
+            health: 0.0,
+            mana: 0.0,
+            speed: 0.0,
+            ability: 0.0,
+            tier: None,
+            builds_from: from.iter().map(|s| s.to_string()).collect(),
+        }
+    }
+
+    #[test]
+    fn upgrades_cost_the_difference_and_use_up_owned_parts_once() {
+        let mut shop = ItemShop {
+            items: vec![
+                item("bronze", 300, &[]),
+                item("iron", 550, &["bronze"]),
+                item("pair", 1000, &["bronze", "bronze"]),
+            ],
+            owned: [None; 6],
+            undo: Vec::new(),
+            open: true,
+            selected: None,
+            category: 0,
+            scroll: 0,
+        };
+        assert_eq!(
+            shop.upgrade(1),
+            Upgrade {
+                consumed: vec![],
+                price: 550
+            }
+        );
+        shop.add_owned(0);
+        assert_eq!(
+            shop.upgrade(1),
+            Upgrade {
+                consumed: vec![0],
+                price: 250
+            }
+        );
+        assert_eq!(shop.upgrade(2).price, 700, "one bronze owned, one missing");
+        shop.add_owned(0);
+        assert_eq!(
+            shop.upgrade(2),
+            Upgrade {
+                consumed: vec![0, 0],
+                price: 400
+            }
+        );
+        assert_eq!(shop.builds_into(0), vec![1, 2]);
+        assert!(validate_recipes(&shop.items).is_ok());
+    }
+
+    #[test]
+    fn recipes_must_name_cheaper_known_items() {
+        assert!(validate_recipes(&[item("a", 100, &["ghost"])]).is_err());
+        assert!(validate_recipes(&[item("a", 100, &[]), item("b", 90, &["a"])]).is_err());
+    }
+
+    #[test]
+    fn the_shipped_recipes_are_valid() {
+        let text = std::fs::read_to_string(
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data/items/items.json"),
+        )
+        .expect("items.json");
+        let items: Vec<ItemConfig> = serde_json::from_str(&text).expect("parse");
+        validate_recipes(&items).expect("recipes");
+        assert!(items.iter().any(|i| !i.builds_from.is_empty()));
+    }
+
     #[test]
     fn selling_refunds_seventy_percent_rounded_down() {
         assert_eq!(sell_price(300), 210);
@@ -300,14 +458,20 @@ mod tests {
                 Purchase {
                     index: 3,
                     stored: false,
+                    paid: 300,
+                    consumed: vec![],
                 },
                 Purchase {
                     index: 5,
                     stored: true,
+                    paid: 300,
+                    consumed: vec![],
                 },
                 Purchase {
                     index: 3,
                     stored: false,
+                    paid: 300,
+                    consumed: vec![],
                 },
             ],
             open: true,
@@ -321,11 +485,15 @@ mod tests {
             vec![
                 Purchase {
                     index: 3,
-                    stored: false
+                    stored: false,
+                    paid: 300,
+                    consumed: vec![]
                 },
                 Purchase {
                     index: 5,
-                    stored: true
+                    stored: true,
+                    paid: 300,
+                    consumed: vec![]
                 }
             ],
             "selling drops the newest bag purchase of that item"

@@ -143,6 +143,10 @@ pub struct ShopItem {
     pub stats: Vec<String>,
     /// What this item builds into, when the item system has upgrades.
     pub builds_into: Option<String>,
+    /// What it upgrades from (names), owned or not.
+    pub builds_from: Vec<String>,
+    /// The full cost; `price` is lower when owned parts make it an upgrade.
+    pub full_price: u32,
     /// Shop section: 0 starter, 1 early, 2 core, 3 late (see
     /// `hud::shop::TIERS`).
     pub tier: u8,

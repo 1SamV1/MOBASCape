@@ -346,7 +346,8 @@ pub fn draw(theme: &Theme, list: &mut DrawList, shop: &ShopState, gold: u32) {
                 );
             }
         }
-        // The price under the icon: gold when affordable, greyed when not.
+        // The price under the icon: green for an upgrade, gold when
+        // affordable, greyed when not.
         if let Some(font) = small {
             let price = item.price.to_string();
             let width = font.width(&price) * s;
@@ -355,10 +356,12 @@ pub fn draw(theme: &Theme, list: &mut DrawList, shop: &ShopState, gold: u32) {
                 &price,
                 x + (cell.w * s - width) / 2,
                 y + 54 * s,
-                if item.price <= gold {
-                    gold_colour
-                } else {
+                if item.price > gold {
                     quiet
+                } else if item.price < item.full_price {
+                    good
+                } else {
+                    gold_colour
                 },
             );
         }
@@ -379,7 +382,11 @@ pub fn draw(theme: &Theme, list: &mut DrawList, shop: &ShopState, gold: u32) {
             );
         }
         if let Some(font) = small {
-            let price = format!("{} gold", item.price);
+            let price = if item.price < item.full_price {
+                format!("Upgrade {} gold  (full {})", item.price, item.full_price)
+            } else {
+                format!("{} gold", item.price)
+            };
             list.text(
                 font,
                 &price,
@@ -393,6 +400,15 @@ pub fn draw(theme: &Theme, list: &mut DrawList, shop: &ShopState, gold: u32) {
             for stat in &item.stats {
                 list.text(font, stat, detail.x + 12 * s, y, good);
                 y += 16 * s;
+            }
+            if !item.builds_from.is_empty() {
+                y += 8 * s;
+                list.text(font, "Builds from", detail.x + 12 * s, y, title);
+                y += 16 * s;
+                for part in &item.builds_from {
+                    list.text(font, part, detail.x + 12 * s, y, text);
+                    y += 16 * s;
+                }
             }
             if let Some(builds) = &item.builds_into {
                 y += 8 * s;

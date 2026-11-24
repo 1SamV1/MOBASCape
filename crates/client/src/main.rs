@@ -1567,11 +1567,25 @@ impl App {
                 tracing::info!("demo shop: granted 8000 gold, shop open");
                 self.demo_shop_stage = 1;
             }
+            // Three plain buys, then a sword bought up its ladder (the
+            // iron and steel swords are upgrades of the one before).
+            const DEMO_BUYS: [&str; 6] = [
+                "shortbow",
+                "staff_of_air",
+                "bronze_platebody",
+                "bronze_sword",
+                "iron_sword",
+                "steel_sword",
+            ];
+            let demo_index =
+                |shop: &ItemShop, id: &str| shop.items.iter().position(|item| item.id == id);
             if (1..=6).contains(&self.demo_shop_stage) {
                 let due = self.demo_shop_stage as f32 * 0.5;
                 if self.demo_shop_timer >= due {
-                    let index = (self.demo_shop_stage - 1) as usize;
-                    self.purchase_item(index);
+                    let id = DEMO_BUYS[(self.demo_shop_stage - 1) as usize];
+                    if let Some(index) = demo_index(&self.shop, id) {
+                        self.purchase_item(index);
+                    }
                     self.demo_shop_stage += 1;
                 }
             }
@@ -1592,25 +1606,38 @@ impl App {
                 self.mouse_pos = ((x + rw * 0.5) as f64, (y + rh * 0.5) as f64);
             }
             if self.demo_shop_stage == 7 && self.demo_shop_timer >= 3.5 {
-                // Sell the sixth item, then Undo the fifth, in one frame so
-                // passive gold cannot blur the refunds in the log.
+                // Sell the staff, then Undo the steel-sword upgrade, in one
+                // frame so passive gold cannot blur the refunds in the log.
                 let gold = |app: &Self| app.animated.as_ref().map(|a| a.player_stats().gold);
+                let staff = demo_index(&self.shop, "staff_of_air").unwrap_or(0);
+                let steel = demo_index(&self.shop, "steel_sword").unwrap_or(0);
                 let before = gold(self);
-                self.sell_item(5);
+                self.sell_item(staff);
                 let sold = gold(self);
                 self.undo_purchase();
                 let undone = gold(self);
                 if let (Some(a), Some(b), Some(c)) = (before, sold, undone) {
                     tracing::info!(
-                        "demo shop: sell refunded {}g ({}% of {}), undo refunded {}g (of {}), {} undo entries left",
+                        "demo shop: sell refunded {}g ({}% of {}), undo refunded {}g, {} undo entries left",
                         b - a,
                         items::SELL_REFUND_PERCENT,
-                        self.shop.items.get(5).map(|i| i.cost).unwrap_or(0),
+                        self.shop.items[staff].cost,
                         c - b,
-                        self.shop.items.get(4).map(|i| i.cost).unwrap_or(0),
                         self.shop.undo.len()
                     );
                 }
+                let bag: Vec<&str> = self
+                    .shop
+                    .owned
+                    .iter()
+                    .flatten()
+                    .map(|&i| self.shop.items[i].name.as_str())
+                    .collect();
+                tracing::info!(
+                    "demo shop: bag {bag:?}; steel sword now costs {}g",
+                    self.shop.upgrade(steel).price
+                );
+                self.shop.selected = Some(steel);
                 self.demo_shop_stage = 8;
             }
             if self.demo_shop_stage == 8 && self.demo_shop_timer >= 4.5 {
@@ -3213,12 +3240,14 @@ impl App {
         let Some(item) = self.shop.items.get(index).cloned() else {
             return;
         };
+        let plan = self.shop.upgrade(index);
         let pending = self
             .animated
             .as_ref()
             .map(|animated| animated.delivery_count())
             .unwrap_or(0);
-        if !self.shop.has_free_slot() || self.shop.item_count() + pending >= 6 {
+        // An upgrade frees the slots of the parts it uses up.
+        if self.shop.item_count() + pending >= 6 + plan.consumed.len() {
             tracing::info!("shop: inventory full (including items in transit)");
             log_event(&mut self.event_log, "INVENTORY FULL".to_string());
             return;
@@ -3226,29 +3255,50 @@ impl App {
         let Some(animated) = self.animated.as_mut() else {
             return;
         };
-        match animated.buy_item(index, &item) {
-            Ok(BuyOutcome::Delivered) => {
-                self.shop.add_owned(index);
+        let stats = animated.player_stats();
+        if stats.health <= 0.0 || stats.gold < plan.price {
+            tracing::info!("shop: {} failed: dead or not enough gold", item.name);
+            return;
+        }
+        // The parts leave the bag (and their stats come off) first.
+        for &part in &plan.consumed {
+            if let Some(config) = self.shop.items.get(part).cloned()
+                && animated.refund_item(&config, 0).is_ok()
+            {
+                self.shop.remove_owned(part);
+            }
+        }
+        let mut priced = item.clone();
+        priced.cost = plan.price;
+        let verb = if plan.consumed.is_empty() {
+            "BOUGHT"
+        } else {
+            "UPGRADED"
+        };
+        match animated.buy_item(index, &priced) {
+            Ok(outcome) => {
+                let stored = outcome == BuyOutcome::Stored;
+                if !stored {
+                    self.shop.add_owned(index);
+                }
                 self.shop.undo.push(items::Purchase {
                     index,
-                    stored: false,
+                    stored,
+                    paid: plan.price,
+                    consumed: plan.consumed.clone(),
                 });
                 tracing::info!(
-                    "shop: bought {} ({}) for {}g ({} slots used)",
+                    "shop: {} {} ({}) for {}g of {}g{} ({} slots used)",
+                    verb.to_lowercase(),
                     item.name,
                     item.id,
+                    plan.price,
                     item.cost,
+                    if stored { ", stored in the chest" } else { "" },
                     self.shop.item_count()
                 );
-                log_event(&mut self.event_log, format!("BOUGHT {}", item.name));
-            }
-            Ok(BuyOutcome::Stored) => {
-                self.shop.undo.push(items::Purchase {
-                    index,
-                    stored: true,
-                });
-                tracing::info!("shop: {} stored in the chest for delivery", item.name);
-                log_event(&mut self.event_log, format!("STORED {}", item.name));
+                let what = if stored { "STORED" } else { verb };
+                log_event(&mut self.event_log, format!("{what} {}", item.name));
             }
             Err(err) => tracing::info!("shop: {} failed: {err}", item.name),
         }
@@ -3294,7 +3344,7 @@ impl App {
         let undone = if purchase.stored {
             animated.cancel_stored(purchase.index)
         } else if self.shop.is_owned(purchase.index) {
-            match animated.refund_item(&item, item.cost) {
+            match animated.refund_item(&item, purchase.paid) {
                 Ok(()) => self.shop.remove_owned(purchase.index),
                 Err(err) => {
                     tracing::info!("shop: undo {} failed: {err}", item.name);
@@ -3305,7 +3355,19 @@ impl App {
             false
         };
         if undone {
-            tracing::info!("shop: undid {} (+{}g)", item.name, item.cost);
+            // An upgrade's parts come back into the bag (or as gold if the
+            // bag has filled since).
+            for &part in &purchase.consumed {
+                let Some(config) = self.shop.items.get(part).cloned() else {
+                    continue;
+                };
+                if self.shop.add_owned(part) {
+                    animated.grant_item(&config);
+                } else {
+                    animated.debug_grant_gold(config.cost);
+                }
+            }
+            tracing::info!("shop: undid {} (+{}g)", item.name, purchase.paid);
             log_event(&mut self.event_log, format!("UNDID {}", item.name));
         } else {
             tracing::info!("shop: nothing to undo for {}", item.name);

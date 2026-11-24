@@ -363,11 +363,13 @@ pub fn tooltip(shop: &ItemShop, mouse: (i32, i32)) -> Option<TooltipState> {
     if !shop.open {
         return None;
     }
-    let item = shop.items.get(shop.selected?)?;
+    let index = shop.selected?;
+    let item = shop.items.get(index)?;
     let stats = shop_item(item).stats;
     Some(TooltipState {
         title: item.name.clone(),
-        price: item.cost,
+        // What it costs now: an upgrade's price when parts are owned.
+        price: shop.upgrade(index).price,
         stats,
         passive: None,
         text: String::new(),
@@ -521,7 +523,24 @@ pub fn shop(shop: &ItemShop) -> ShopState {
     let filtered = shop.filtered_items();
     let items = filtered
         .iter()
-        .map(|&index| shop_item(&shop.items[index]))
+        .map(|&index| {
+            // Prices and recipe names depend on the bag.
+            let mut entry = shop_item(&shop.items[index]);
+            entry.price = shop.upgrade(index).price;
+            entry.builds_from = shop.items[index]
+                .builds_from
+                .iter()
+                .filter_map(|id| shop.items.iter().find(|item| &item.id == id))
+                .map(|item| item.name.clone())
+                .collect();
+            let into: Vec<&str> = shop
+                .builds_into(index)
+                .into_iter()
+                .map(|i| shop.items[i].name.as_str())
+                .collect();
+            entry.builds_into = (!into.is_empty()).then(|| into.join(", "));
+            entry
+        })
         .collect();
     let selected = shop
         .selected
@@ -538,7 +557,7 @@ pub fn shop(shop: &ItemShop) -> ShopState {
         items,
         selected,
         scroll: shop.scroll,
-        hint: "Click an item, then Buy. Undo refunds in full.".to_string(),
+        hint: "Owned parts make upgrades cheaper. Undo refunds in full.".to_string(),
         delivery: None,
         sell_price: shop
             .selected
@@ -594,6 +613,8 @@ pub fn shop_item(item: &ItemConfig) -> ShopItem {
         icon: item.obj.map(|_| format!("icon.item.{}", item.id)),
         stats,
         builds_into: None,
+        builds_from: Vec::new(),
+        full_price: item.cost,
         tier: item.tier(),
     }
 }
@@ -1133,6 +1154,7 @@ mod tests {
             speed: 0.0,
             ability: 15.0,
             tier: None,
+            builds_from: Vec::new(),
         };
         let converted = shop_item(&item);
         assert_eq!(converted.name, "Test blade");
@@ -1173,6 +1195,7 @@ mod tests {
             speed: 0.0,
             ability: 0.0,
             tier: None,
+            builds_from: Vec::new(),
         };
         let catalog = ItemShop {
             items: vec![item("Sword", [1, 2, 3]), item("Shield", [4, 5, 6])],
@@ -1232,6 +1255,7 @@ mod tests {
             speed: 0.0,
             ability: 0.0,
             tier: None,
+            builds_from: Vec::new(),
         };
         let catalog = ItemShop {
             items: vec![item],

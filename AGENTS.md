@@ -270,8 +270,10 @@ Cache location: `.cache/osrs-235/cache` by default. Pass `--cache` and
   900 units. Purchases are client-side in this prototype. Selling refunds
   70% (`items::sell_price`); Undo takes back the current shop visit's
   purchases, newest first, for 100% (in the bag or still in the delivery
-  chest), and the history ends when the shop closes. No combining or
-  passives yet.
+  chest), and the history ends when the shop closes. Upgrades: an item's
+  `builds_from` ids (in `items.json`, checked at load by
+  `items::validate_recipes`) make it cost the difference when owned, and
+  buying it uses them up; Undo gives them back. No passives yet.
 - Fog/brush is **client-side** in this prototype. A 192×192 visibility grid is
   computed from allied units/structures, enemy/neutral units outside vision are
   hidden, and brush rectangles hide units unless the player is close. The

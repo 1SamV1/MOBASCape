@@ -31,7 +31,10 @@
     "health": 0,
     "mana": 0,
     "speed": 0,
-    "ability": 0
+    "ability": 0,
+    "builds_from": [
+      "bronze_sword"
+    ]
   },
   {
     "id": "steel_sword",
@@ -48,7 +51,10 @@
     "health": 0,
     "mana": 0,
     "speed": 0,
-    "ability": 0
+    "ability": 0,
+    "builds_from": [
+      "iron_sword"
+    ]
   },
   {
     "id": "mithril_sword",
@@ -65,7 +71,10 @@
     "health": 0,
     "mana": 0,
     "speed": 0,
-    "ability": 0
+    "ability": 0,
+    "builds_from": [
+      "steel_sword"
+    ]
   },
   {
     "id": "adamant_sword",
@@ -82,7 +91,10 @@
     "health": 0,
     "mana": 0,
     "speed": 0,
-    "ability": 0
+    "ability": 0,
+    "builds_from": [
+      "mithril_sword"
+    ]
   },
   {
     "id": "rune_sword",
@@ -99,7 +111,10 @@
     "health": 0,
     "mana": 0,
     "speed": 0,
-    "ability": 0
+    "ability": 0,
+    "builds_from": [
+      "adamant_sword"
+    ]
   },
   {
     "id": "dragon_scimitar",
@@ -320,7 +335,10 @@
     "health": 0,
     "mana": 0,
     "speed": 0,
-    "ability": 0
+    "ability": 0,
+    "builds_from": [
+      "shortbow"
+    ]
   },
   {
     "id": "willow_shortbow",
@@ -337,7 +355,10 @@
     "health": 0,
     "mana": 0,
     "speed": 0,
-    "ability": 0
+    "ability": 0,
+    "builds_from": [
+      "oak_shortbow"
+    ]
   },
   {
     "id": "maple_shortbow",
@@ -354,7 +375,10 @@
     "health": 0,
     "mana": 0,
     "speed": 0,
-    "ability": 0
+    "ability": 0,
+    "builds_from": [
+      "willow_shortbow"
+    ]
   },
   {
     "id": "yew_shortbow",
@@ -371,7 +395,10 @@
     "health": 0,
     "mana": 0,
     "speed": 0,
-    "ability": 0
+    "ability": 0,
+    "builds_from": [
+      "maple_shortbow"
+    ]
   },
   {
     "id": "magic_shortbow",
@@ -388,7 +415,10 @@
     "health": 0,
     "mana": 0,
     "speed": 10,
-    "ability": 0
+    "ability": 0,
+    "builds_from": [
+      "yew_shortbow"
+    ]
   },
   {
     "id": "rune_crossbow",
@@ -592,7 +622,10 @@
     "health": 0,
     "mana": 70,
     "speed": 0,
-    "ability": 15
+    "ability": 15,
+    "builds_from": [
+      "staff_of_fire"
+    ]
   },
   {
     "id": "ancient_staff",
@@ -728,7 +761,10 @@
     "health": 120,
     "mana": 0,
     "speed": 0,
-    "ability": 0
+    "ability": 0,
+    "builds_from": [
+      "bronze_platebody"
+    ]
   },
   {
     "id": "steel_platebody",
@@ -745,7 +781,10 @@
     "health": 170,
     "mana": 0,
     "speed": 0,
-    "ability": 0
+    "ability": 0,
+    "builds_from": [
+      "iron_plate"
+    ]
   },
   {
     "id": "mithril_platebody",
@@ -762,7 +801,10 @@
     "health": 230,
     "mana": 0,
     "speed": 0,
-    "ability": 0
+    "ability": 0,
+    "builds_from": [
+      "steel_platebody"
+    ]
   },
   {
     "id": "adamant_platebody",
@@ -779,7 +821,10 @@
     "health": 300,
     "mana": 0,
     "speed": 0,
-    "ability": 0
+    "ability": 0,
+    "builds_from": [
+      "mithril_platebody"
+    ]
   },
   {
     "id": "rune_platebody",
@@ -796,7 +841,10 @@
     "health": 390,
     "mana": 0,
     "speed": 0,
-    "ability": 0
+    "ability": 0,
+    "builds_from": [
+      "adamant_platebody"
+    ]
   },
   {
     "id": "dragon_platebody",
@@ -1459,7 +1507,10 @@
     "health": 140,
     "mana": 0,
     "speed": 0,
-    "ability": 0
+    "ability": 0,
+    "builds_from": [
+      "bandos_boots"
+    ]
   },
   {
     "id": "primordial_boots",
@@ -1476,7 +1527,10 @@
     "health": 100,
     "mana": 0,
     "speed": 0,
-    "ability": 0
+    "ability": 0,
+    "builds_from": [
+      "boots"
+    ]
   },
   {
     "id": "pegasian_boots",
@@ -1493,7 +1547,10 @@
     "health": 80,
     "mana": 0,
     "speed": 10,
-    "ability": 0
+    "ability": 0,
+    "builds_from": [
+      "ranger_boots"
+    ]
   },
   {
     "id": "eternal_boots",

@@ -1684,6 +1684,12 @@ impl AnimatedScene {
         }
     }
 
+    /// Put an item's stats back on the player (Undo returning the parts an
+    /// upgrade used up).
+    pub fn grant_item(&mut self, item: &ItemConfig) {
+        self.apply_item(item);
+    }
+
     fn apply_item(&mut self, item: &ItemConfig) {
         let player = &mut self.units[self.player_index];
         player.attack_damage += item.damage;
