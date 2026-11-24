@@ -858,7 +858,13 @@ damage scales through `kit::scaled_damage`, and mana is spent and
 regenerated (2% per second). Ultimates are saved for heroes; damage
 spells go on minions only with mana to spare.
 
-This is an approximation: dashes, summons and zones read as bolts or
-strikes. A bot's casts are not its kit's exact visuals; they reuse the
+Movement: an ability whose name or first three description words carry
+a movement verb (charge, leap, dash, blink, swing, hop, ...) is a Dash
+when it deals damage (the bot hurls itself at the target and hits what
+is around it on landing) or a Leap when it does not (chasing a hero out
+of reach, or carrying a retreating bot home). Both ride the forced-
+movement path every unit obeys and stop at the first unwalkable tile.
+
+This is an approximation: summons and zones read as bolts or strikes. A bot's casts are not its kit's exact visuals; they reuse the
 existing effect rings and projectile looks. When the kit runtime is made
 caster-generic, bots should switch to it.

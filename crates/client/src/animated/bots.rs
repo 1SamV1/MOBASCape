@@ -117,6 +117,8 @@ pub struct BotBrain {
     pub spells: Vec<super::bot_cast::BotSpell>,
     /// Seconds until the next ability may be cast.
     pub cast_gap: f32,
+    /// A dash in flight, landing its hit when it comes down.
+    pub landing: Option<super::bot_cast::Landing>,
 }
 
 /// Team-wide timers that pick when to gank and when to take the boss.
@@ -223,6 +225,7 @@ impl AnimatedScene {
                 gold_income: 0.0,
                 spells: super::bot_cast::spells_for(&champion.abilities),
                 cast_gap: 0.0,
+                landing: None,
             });
             spawned += 1;
         }
@@ -512,6 +515,9 @@ impl AnimatedScene {
             BotMode::Retreat => {
                 let home = self.units[index].home;
                 self.units[index].attack_target = None;
+                if self.bot_try_escape(b, collision) {
+                    return;
+                }
                 self.bot_travel(b, home, dt, height, collision);
             }
             BotMode::Lane => self.bot_lane(b, dt, height, collision),
@@ -756,7 +762,7 @@ impl AnimatedScene {
             )
         };
         self.units[index].attack_target = Some(target);
-        if self.bot_try_cast(b, target) {
+        if self.bot_try_cast(b, target, collision) {
             self.units[index].moving = false;
             return;
         }

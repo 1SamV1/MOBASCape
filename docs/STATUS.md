@@ -1,6 +1,19 @@
 # Status
 
-Last updated: bot abilities, 2026-11-24.
+Last updated: bot dashes, 2026-11-24.
+
+## 2026-11-24 — Bots dash and leap
+
+- Two more bot spell shapes (ADR-055): Dash (damaging charges and leaps:
+  Callisto's Charge, Graardor's Bandos' Wrath, K'ril's Demonic Charge,
+  Venenatis's Pounce, Zilyana's Blessed Dash) hurls the bot at its target
+  and hits everything where it lands; Leap (Jad's Teleport, Kree's Leap,
+  Vine Swing, Ranger's Footwork) chases a hero out of reach or carries a
+  retreating bot home. Both stop at the first wall on the way.
+- These used to fire as ranged bolts (or, for leaps, as heals).
+- 6-minute sim: 47 bolts, 43 strikes, 1 nova, 1 dash (Callisto's charge,
+  two kills), 19 escapes (Jad 10, Kree 9).
+
 
 ## 2026-11-24 — Bots cast abilities
 
@@ -13,7 +26,7 @@ Last updated: bot abilities, 2026-11-24.
   and +20 per level, like the player.
 - In a 6-minute sim, 110 casts across all nine bots; towers wore down on
   both sides, inhibitors and nexuses held.
-- Approximation: dashes, summons and zones read as bolts or strikes.
+- Approximation: summons and zones read as bolts or strikes (dashes: see above).
 
 
 ## 2026-11-24 — Bot heroes play the draft; the nexus is open

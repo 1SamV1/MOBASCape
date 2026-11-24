@@ -13,9 +13,14 @@
 //! - **Strike**: damage, short range (≤ 450). A blast at the target that
 //!   splashes its neighbours.
 //! - **Bolt**: damage, long range. A homing shot that cannot miss.
+//! - **Dash**: damage, and the description opens with a movement verb
+//!   ("Charges at...", "Leaps onto...", "A quick dash"). The bot hurls
+//!   itself at the target and hits everything where it lands.
+//! - **Leap**: a movement verb and no damage (blinks, leaps, swings, hops).
+//!   Closes on a fleeing hero, or carries the bot home when it retreats.
 //!
-//! Crowd control comes from the description: "stun" stuns, "root"/"snare"
-//! roots, "slow"/"chill" slows. Ranks unlock with level like the player's
+//! Crowd control comes from the description: "stun" and "into the air"
+//! stun, "root"/"snare" roots, "slow"/"chill" slows. Ranks unlock with level like the player's
 //! (Q at 1, W at 2, E at 3, R at 6; another rank every three levels), and
 //! damage scales with ability power and level through `kit::scaled_damage`.
 
@@ -24,6 +29,7 @@ use glam::Vec3;
 use super::{AnimatedScene, Effect, HitsplatKind, Projectile, UnitKind, planar_delta};
 use crate::champion::{AbilityRank, ChampionAbility};
 use crate::fx;
+use crate::scene::WorldCollision;
 
 /// Splash radius of a strike and reach of a nova.
 const STRIKE_SPLASH: f32 = 170.0;
@@ -41,6 +47,15 @@ pub(super) const MANA_REGEN: f32 = 0.02;
 const CAST_GAP: f32 = 0.6;
 /// Bolt projectile speed.
 const BOLT_SPEED: f32 = 1400.0;
+/// Dash and leap travel speed, and how far short of the target a dash stops.
+const DASH_SPEED: f32 = 1700.0;
+const DASH_STOP: f32 = 110.0;
+/// Words that make an ability a dash or leap when its description opens
+/// with one (within its first three words).
+const MOVE_WORDS: [&str; 13] = [
+    "charge", "leap", "dash", "jump", "lunge", "pounce", "swing", "burrow", "rush", "dive",
+    "teleport", "blink", "hop",
+];
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum SpellShape {
@@ -48,6 +63,8 @@ pub enum SpellShape {
     Nova,
     Strike,
     Bolt,
+    Dash,
+    Leap,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -55,6 +72,15 @@ pub enum SpellCc {
     Stun(f32),
     Root(f32),
     Slow(f32, f32),
+}
+
+/// A dash in flight: the hit that lands where the bot comes down.
+#[derive(Debug, Clone, Copy)]
+pub struct Landing {
+    pub timer: f32,
+    pub damage: f32,
+    pub cc: Option<SpellCc>,
+    pub color: [u8; 3],
 }
 
 #[derive(Debug, Clone)]
@@ -79,7 +105,28 @@ impl BotSpell {
             .unwrap_or("Damage")
             .to_ascii_lowercase();
         let range = ability.ranks[0].range;
-        let shape = if !damage || label == "heal" || label == "shield" {
+        let text = ability.description.to_ascii_lowercase();
+        let name = ability.name.to_ascii_lowercase();
+        let words = |s: &str| -> Vec<String> {
+            s.split(|c: char| !c.is_ascii_alphabetic())
+                .filter(|w| !w.is_empty())
+                .map(str::to_string)
+                .collect()
+        };
+        // "Jad blinks across...", "Kree leaps...": the hero's own name may
+        // come first, so the verb can be any of the opening words; the
+        // ability's name ("VINE SWING") counts too.
+        let mut opening: Vec<String> = words(&text).into_iter().take(3).collect();
+        opening.extend(words(&name));
+        let moves = range > 1.0
+            && opening
+                .iter()
+                .any(|w| MOVE_WORDS.iter().any(|m| w.starts_with(m)));
+        let shape = if moves && damage {
+            SpellShape::Dash
+        } else if moves {
+            SpellShape::Leap
+        } else if !damage || label == "heal" || label == "shield" {
             SpellShape::Care {
                 shield: label == "shield",
             }
@@ -90,11 +137,10 @@ impl BotSpell {
         } else {
             SpellShape::Bolt
         };
-        let text = ability.description.to_ascii_lowercase();
         let ult = slot == 3;
-        let cc = if matches!(shape, SpellShape::Care { .. }) {
+        let cc = if matches!(shape, SpellShape::Care { .. } | SpellShape::Leap) {
             None
-        } else if text.contains("stun") {
+        } else if text.contains("stun") || text.contains("into the air") {
             Some(SpellCc::Stun(if ult { 1.2 } else { 0.8 }))
         } else if text.contains("root") || text.contains("snare") {
             Some(SpellCc::Root(1.0))
@@ -137,6 +183,7 @@ impl BotSpell {
         match self.shape {
             SpellShape::Care { shield: true } => [150, 200, 255],
             SpellShape::Care { shield: false } => [110, 230, 120],
+            SpellShape::Leap => [230, 230, 255],
             _ => [
                 [255, 190, 80],
                 [120, 200, 255],
@@ -161,7 +208,12 @@ impl AnimatedScene {
     /// Try one ability on `target` (an enemy the bot is fighting). Returns
     /// true when something was cast. Ultimates are saved for heroes; damage
     /// spells on minions only when the bot has mana to spare.
-    pub(super) fn bot_try_cast(&mut self, b: usize, target: usize) -> bool {
+    pub(super) fn bot_try_cast(
+        &mut self,
+        b: usize,
+        target: usize,
+        collision: &WorldCollision,
+    ) -> bool {
         let index = self.bots[b].unit;
         if self.bots[b].cast_gap > 0.0 {
             return false;
@@ -199,6 +251,16 @@ impl AnimatedScene {
             let numbers = spell.ranks[rank - 1];
             let wanted = match spell.shape {
                 SpellShape::Care { .. } => hp_frac < CARE_AT,
+                SpellShape::Leap => {
+                    // Chase a hero who is out of reach but within the leap.
+                    hero && distance > self.units[index].attack_range + 150.0
+                        && distance <= numbers.range
+                }
+                SpellShape::Dash => {
+                    distance <= numbers.range
+                        && distance > 150.0
+                        && (hero || (spell.slot < 3 && big))
+                }
                 SpellShape::Nova | SpellShape::Strike | SpellShape::Bolt => {
                     let reach = if spell.shape == SpellShape::Nova {
                         NOVA_RADIUS
@@ -215,13 +277,20 @@ impl AnimatedScene {
             self.units[index].cooldowns[spell.slot] = numbers.cooldown;
             self.units[index].mana -= cost;
             self.bots[b].cast_gap = CAST_GAP;
-            self.cast_bot_spell(index, target, spell, numbers);
+            self.cast_bot_spell(index, target, spell, numbers, collision);
             return true;
         }
         false
     }
 
-    fn cast_bot_spell(&mut self, index: usize, target: usize, spell: &BotSpell, rank: AbilityRank) {
+    fn cast_bot_spell(
+        &mut self,
+        index: usize,
+        target: usize,
+        spell: &BotSpell,
+        rank: AbilityRank,
+        collision: &WorldCollision,
+    ) {
         let (pos, team, ap, level) = {
             let u = &self.units[index];
             (u.pos, u.team, u.ability_power, u.level)
@@ -278,6 +347,22 @@ impl AnimatedScene {
             SpellShape::Strike => {
                 self.bot_spell_area(index, target_pos, STRIKE_SPLASH, damage, spell.cc, color);
             }
+            SpellShape::Dash => {
+                let gap = (dir.length() - DASH_STOP).clamp(0.0, rank.range.max(1.0));
+                let time = self.bot_hurl(index, dir, gap, collision);
+                if let Some(b) = self.bots.iter().position(|bot| bot.unit == index) {
+                    self.bots[b].landing = Some(Landing {
+                        timer: time,
+                        damage,
+                        cc: spell.cc,
+                        color,
+                    });
+                }
+            }
+            SpellShape::Leap => {
+                let gap = (dir.length() - 200.0).clamp(0.0, rank.range.max(1.0));
+                self.bot_hurl(index, dir, gap, collision);
+            }
             SpellShape::Bolt => {
                 let look = if spell.slot == 3 {
                     fx::look_by_name("fire_wave")
@@ -305,6 +390,78 @@ impl AnimatedScene {
                 }
             }
         }
+    }
+
+    /// Throw a unit `gap` units along `dir` (planar) at dash speed, through
+    /// the forced-movement path every unit already obeys. Returns the time
+    /// the move takes.
+    fn bot_hurl(&mut self, index: usize, dir: Vec3, gap: f32, collision: &WorldCollision) -> f32 {
+        // Stop at the first wall or blocked tile on the way.
+        let dir = dir.normalize_or_zero();
+        let from = self.units[index].pos;
+        let mut gap_ok = 0.0;
+        while gap_ok < gap {
+            let next = (gap_ok + 32.0).min(gap);
+            let p = from + dir * next;
+            if !collision.is_walkable_world(p.x, p.z) {
+                break;
+            }
+            gap_ok = next;
+        }
+        let gap = gap_ok;
+        let time = (gap / DASH_SPEED).clamp(0.12, 0.6);
+        let u = &mut self.units[index];
+        u.cc.displace = dir.normalize_or_zero() * (gap / time);
+        u.cc.displace_timer = time;
+        time
+    }
+
+    /// A retreating bot spends a leap to get home faster. True when cast.
+    pub(super) fn bot_try_escape(&mut self, b: usize, collision: &WorldCollision) -> bool {
+        let index = self.bots[b].unit;
+        if self.bots[b].cast_gap > 0.0 || self.units[index].stun_timer > 0.0 {
+            return false;
+        }
+        let (level, mana, pos, home) = {
+            let u = &self.units[index];
+            (u.level, u.mana, u.pos, u.home)
+        };
+        let to_home = planar_delta(pos, home);
+        if to_home.length() < 1500.0 {
+            return false;
+        }
+        let spells = self.bots[b].spells.clone();
+        for spell in &spells {
+            let rank = spell.rank_at(level);
+            if spell.shape != SpellShape::Leap
+                || rank == 0
+                || self.units[index].cooldowns[spell.slot] > 0.0
+                || mana < spell.cost(rank)
+            {
+                continue;
+            }
+            let numbers = spell.ranks[rank - 1];
+            self.units[index].cooldowns[spell.slot] = numbers.cooldown;
+            self.units[index].mana -= spell.cost(rank);
+            self.bots[b].cast_gap = CAST_GAP;
+            self.units[index].yaw = to_home.x.atan2(to_home.z);
+            self.effects.push(Effect {
+                pos,
+                radius: 110.0,
+                remaining: 0.3,
+                duration: 0.3,
+                color: spell.color(),
+            });
+            tracing::debug!("bots: {} escapes with {}", self.bots[b].name, spell.name);
+            self.bot_hurl(
+                index,
+                to_home,
+                numbers.range.min(to_home.length()),
+                collision,
+            );
+            return true;
+        }
+        false
     }
 
     /// Damage (and crowd control) on every enemy of `caster` in a circle.
@@ -359,10 +516,27 @@ impl AnimatedScene {
         }
     }
 
-    /// Cooldowns, cast gap and mana for every bot (alive or not).
+    /// Cooldowns, cast gap, mana and dash landings for every bot.
     pub(super) fn tick_bot_spells(&mut self, dt: f32) {
         for b in 0..self.bots.len() {
             self.bots[b].cast_gap = (self.bots[b].cast_gap - dt).max(0.0);
+            if let Some(mut landing) = self.bots[b].landing.take() {
+                landing.timer -= dt;
+                let index = self.bots[b].unit;
+                if landing.timer > 0.0 {
+                    self.bots[b].landing = Some(landing);
+                } else if self.units[index].health > 0.0 {
+                    let at = self.units[index].pos;
+                    self.bot_spell_area(
+                        index,
+                        at,
+                        STRIKE_SPLASH,
+                        landing.damage,
+                        landing.cc,
+                        landing.color,
+                    );
+                }
+            }
             let u = &mut self.units[self.bots[b].unit];
             for cd in &mut u.cooldowns {
                 *cd = (*cd - dt).max(0.0);
@@ -417,6 +591,21 @@ mod tests {
             shapes[3],
             (SpellShape::Bolt, Some(SpellCc::Slow(0.35, 2.0)))
         );
+    }
+
+    #[test]
+    fn movement_verbs_make_dashes_and_leaps() {
+        let charge = ability("Charges at the cursor.", None, &[(Some(40.0), 800.0)]);
+        let blink = ability("Jad blinks across the map.", None, &[(None, 640.0)]);
+        let swarm = ability(
+            "Kalphite workers burst out and charge in a line.",
+            None,
+            &[(Some(90.0), 1100.0)],
+        );
+        let shape = |a: &ChampionAbility| BotSpell::from_ability(1, a).unwrap().shape;
+        assert_eq!(shape(&charge), SpellShape::Dash);
+        assert_eq!(shape(&blink), SpellShape::Leap);
+        assert_eq!(shape(&swarm), SpellShape::Bolt);
     }
 
     #[test]
