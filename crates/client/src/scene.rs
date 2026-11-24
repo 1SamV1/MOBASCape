@@ -5367,22 +5367,22 @@ fn append_model_styled(
                 );
         }
 
+        // The face's own cache texture, when it has one.
+        let own_texture = model
+            .face_textures
+            .as_ref()
+            .and_then(|t| t.get(face_idx))
+            .copied()
+            .map(|t| t as u32)
+            .filter(|&t| t < 256);
         let mut texture_id = match style {
             ModelStyle::Castle { texture, .. } => texture,
             _ if wood_only => wood_hint,
-            _ => model
-                .face_textures
-                .as_ref()
-                .and_then(|t| t.get(face_idx))
-                .copied()
-                .map(|t| t as u32)
-                .filter(|&t| t < 256)
-                .or(dominant)
-                .unwrap_or_else(|| match style {
-                    ModelStyle::Scenery { texture_hint, .. } => texture_hint,
-                    ModelStyle::Decor { kind, seed } => decor_texture_hint(kind, seed),
-                    ModelStyle::Castle { texture, .. } => texture,
-                }),
+            _ => own_texture.or(dominant).unwrap_or_else(|| match style {
+                ModelStyle::Scenery { texture_hint, .. } => texture_hint,
+                ModelStyle::Decor { kind, seed } => decor_texture_hint(kind, seed),
+                ModelStyle::Castle { texture, .. } => texture,
+            }),
         };
         let leaf_based = !wood_only
             && !matches!(style, ModelStyle::Castle { .. })
@@ -5399,7 +5399,10 @@ fn append_model_styled(
                     .max(28.0);
             // Some broadleaf cache models carry their trunk almost to the
             // crown; only the outer canopy should receive leaf texture.
-            if top < 0.85 && radial < trunk_radius {
+            // Faces the cache textures itself keep their texture: an
+            // evergreen's narrow top tier sits inside the trunk radius and
+            // was painted as a bark ring.
+            if own_texture.is_none() && top < 0.85 && radial < trunk_radius {
                 texture_id = wood_hint;
             }
         }
