@@ -147,155 +147,151 @@ def logo(y, word):
 
 
 # ============================================================================
-def extruded_logo(y, word, depth=3):
-    """ACiD/iCE style extrusion: dim ░▒▓ layers stepping back down-right,
-    the lit face on top with a vertical gradient."""
-    width = len(word) * 10 - 1
-    x0 = (W - width) // 2 - depth // 2
-    clear(x0 - 3, y - 1, x0 + width + depth + 3, y + LOGO_ROWS + depth)
-    layers = [("░", FAINT), ("▒", DIM), ("▓", MID)]
-    for d in range(depth, 0, -1):
-        ch, col = layers[min(depth - d, 2)]
-        for i, letter in enumerate(word):
-            for r in range(LOGO_ROWS):
-                for c, px in enumerate(LOGO[letter][r]):
-                    if px != " ":
-                        put(x0 + i * 10 + c + d, y + r + d, ch, col)
+def italic_logo(y, word):
+    """Slanted block logo: each row shifts left as it goes down, with a ▒
+    shadow trailing right, like the 1990s ANSi group headers."""
+    width = len(word) * 10 - 1 + LOGO_ROWS
+    x0 = (W - width) // 2
+    clear(x0 - 3, y - 1, x0 + width + 4, y + LOGO_ROWS + 1)
     for i, letter in enumerate(word):
         for r in range(LOGO_ROWS):
+            shift = LOGO_ROWS - r
             for c, px in enumerate(LOGO[letter][r]):
-                if px != " ":
-                    put(x0 + i * 10 + c, y + r, px, LOGO_GRAD[r])
-    return x0, width
+                if px == " ":
+                    continue
+                x = x0 + shift + i * 10 + c
+                if grid[y + r + 1][x + 1][0] == " ":
+                    put(x + 1, y + r + 1, "▒", FAINT)
+                put(x, y + r, px, LOGO_GRAD[r])
+    # Speed lines off the left edge.
+    for r, length in [(1, 10), (3, 16), (5, 8)]:
+        for k in range(length):
+            put(x0 - 2 - k + (LOGO_ROWS - r), y + r, "─" if k % 3 else "═", DIM if k > length // 2 else MID)
 
 
 fade_bar(1, 2, W - 3)
-extruded_logo(3, "MOBASCAPE")
-center(12, "  ·:·  t H E   g R A N D   e X C H A N G E   o P E N s  ·:·  ", AMBER)
-center(13, "  " + elite("phase.3 initiated :: follow the gold") + "  ", WHITE)
-fade_bar(14, 2, W - 3)
+italic_logo(3, "MOBASCAPE")
+center(11, "  ░▒▓  t H E   e X C H A N G E   r A T E  ::  7 0  /  1 0 0  ▓▒░  ", AMBER)
+center(12, "  " + elite("phase.3 // sell, undo, repeat") + "  ", WHITE)
+fade_bar(13, 2, W - 3)
 
 # --- release info -------------------------------------------------------------
-header(16, elite("release info"))
-clear(4, 17, W - 5, 20)
+header(15, elite("release info"))
+clear(4, 16, W - 5, 19)
 info = [
-    ("rELEASE dATE", "2026-11-23", "cOMMIT", "cb46ddb  ->  sam/main"),
-    ("tYPE", "sHOP uI / mINIMAP", "tESTS", "387 PASS // 0 FAIL   (+4)"),
-    ("gAMEPLAY", "UNCHANGED :: layout only", "cLIPPY", "-D warnings :: CLEAN"),
-    ("rULE", "ONLY OSRS CACHE ASSETS", "iCONS", "cache item models, baked"),
+    ("rELEASE dATE", "2026-11-24", "cOMMIT", "f06c2d6  ->  sam/main"),
+    ("tYPE", "sHOP eCONOMY + uI", "tESTS", "389 PASS // 0 FAIL   (+2)"),
+    ("rATES", "SELL 70%  //  UNDO 100%", "cLIPPY", "-D warnings :: CLEAN"),
+    ("aPPROVED bY", "THE OPERATOR", "pROOF", "--demo-shop, one frame, exact gold"),
 ]
 for i, (k1, v1, k2, v2) in enumerate(info):
-    y = 17 + i
+    y = 16 + i
     text(8, y, f"{k1:.<16}", DIM)
-    text(25, y, v1, AMBER if k1 in ("rULE", "gAMEPLAY") else BRIGHT)
+    text(25, y, v1, AMBER if k1 == "rATES" else BRIGHT)
     text(76, y, f"{k2:.<12}", DIM)
     text(89, y, v2, HEAD)
 
-# --- left: the shop grid, drawn as an NFO ------------------------------------
-box(4, 22, 86, 42, elite("ge.exe // tiered grid"))
-ICONS = {"sword": " /", "bow": " D", "staff": " |*", "ring": " o", "boots": " L", "body": "[#]", "amulet": " Y", "shield": "(+)"}
-
-
-def item_cell(x, y, icon, price, selected=False, affordable=True):
-    frame = HEAD if selected else DIM
-    text(x, y, "┌───┐", frame)
-    text(x, y + 1, "│", frame)
-    text(x + 1, y + 1, f"{ICONS[icon]:^3}"[:3], CYAN if affordable else FAINT)
-    text(x + 4, y + 1, "│", frame)
-    text(x, y + 2, "└───┘", frame)
-    text(x + (5 - len(str(price))) // 2, y + 3, str(price), AMBER if affordable else DIM)
-
-
-sections = [
-    ("STARTER", ["body", "sword", "bow", "staff", "amulet", "body"], [200, 300, 300, 300, 300, 350]),
-    ("EARLY", ["sword", "body", "ring", "staff", "bow", "sword"], [550, 550, 600, 650, 800, 850]),
-    ("CORE", ["staff", "shield", "body", "bow", "boots", "sword"], [1450, 1600, 1800, 2100, 2400, 2400]),
+# --- left: the receipt ---------------------------------------------------------
+box(4, 21, 62, 43, elite("ledger.txt // demo run"))
+text(9, 23, "GRAND EXCHANGE  *  RECEIPT #0x2400", HEAD)
+text(9, 24, "-" * 46, DIM)
+ledger = [
+    ("GRANT  dev gold", "+8000", BRIGHT),
+    ("BUY    Bronze sword", "-300", RED),
+    ("BUY    Iron sword", "-550", RED),
+    ("BUY    Steel sword", "-850", RED),
+    ("BUY    Mithril sword", "-1200", RED),
+    ("BUY    Adamant sword", "-1700", RED),
+    ("BUY    Rune sword", "-2400", RED),
+    ("SELL   Rune sword       70%", "+1680", CYAN),
+    ("UNDO   Adamant sword   100%", "+1700", AMBER),
 ]
-gold = 1116
-y = 24
-for label, icons, prices in sections:
-    text(7, y, label, HEAD)
-    for x in range(8 + len(label), 58):
-        put(x, y, "─", DIM)
-    y += 1
-    for k, (icon, price) in enumerate(zip(icons, prices)):
-        item_cell(8 + k * 8, y, icon, price, selected=(label == "STARTER" and k == 1), affordable=price <= gold)
-    y += 5
-# Detail pane beside the grid.
-dx = 60
-text(dx, 24, "Bronze sword", AMBER)
-text(dx, 25, "300 gold", DIM)
-text(dx, 27, "+10 damage", BRIGHT)
-text(dx, 29, "tier ..... STARTER", DIM)
-text(dx, 30, "by cost .. <= 500", DIM)
-text(dx, 33, "▐ BUY ▌", WHITE)
-text(dx, 36, "gold:", DIM)
-text(dx + 6, 36, f"{gold}", AMBER)
-text(dx, 37, "white = can't", DIM)
-text(dx, 38, "afford yet", DIM)
-text(7, 40, "> click a cell, then buy. wheel stops at the end of the grid.", MID)
+for i, (what, amount, col) in enumerate(ledger):
+    y = 25 + i
+    text(9, y, what, WHITE if what.startswith(("SELL", "UNDO")) else MID)
+    dots = 46 - len(what) - len(amount) - 1
+    text(9 + len(what), y, " " + "." * (dots - 1), FAINT)
+    text(55 - len(amount), y, amount, col)
+text(9, 34, "-" * 46, DIM)
+text(9, 35, "BAG ........................ 4 / 6", MID)
+text(9, 36, "UNDO STACK ................. 4 left", MID)
+text(9, 37, "FINAL GOLD (+ passive 8/s)", MID)
+text(51, 37, "4415", AMBER)
+text(9, 39, "  ||| || ||| | |||| || | ||| || |||| |", DIM)
+text(9, 40, "  thank you for trading. no refunds", DIM)
+text(9, 41, "  after the window closes.", DIM)
 
-# --- right: the portrait ring --------------------------------------------------
-box(88, 22, W - 5, 42, elite("radar.sys // you are here"))
-cx, cy = 104, 31
-for row in range(-6, 7):
-    for col in range(-13, 14):
-        d = (col / 2.0) ** 2 + row ** 2
-        if 30 <= d <= 42:
-            put(cx + col, cy + row, "█", AMBER)
-        elif 24 <= d < 30:
-            put(cx + col, cy + row, "▓", (160, 130, 40))
-        elif d < 24:
-            put(cx + col, cy + row, "░", FAINT)
-face = ["  /^^^\\  ", " / ,-. \\ ", " | o o | ", " |  ^  | ", "/|_____|\\", "|=GREEN=|"]
-for i, line in enumerate(face):
-    text(cx - 4, cy - 3 + i, line, (200, 170, 60) if i < 4 else MID)
-text(119, 25, "portrait.map", CYAN)
-text(119, 26, "16px disc, cut from", DIM)
-text(119, 27, "the baked image: head", DIM)
-text(119, 28, "+ shoulders, corners", DIM)
-text(119, 29, "alpha'd clear.", DIM)
-text(119, 31, "ring r=10, gold =", DIM)
-text(119, 32, "the player.", DIM)
-text(119, 34, "clamped 11px in:", HEAD)
-text(119, 35, "the fountain no", DIM)
-text(119, 36, "longer halves you.", DIM)
-text(91, 39, "bots: plain team rings until they carry a hero id", MID)
+# --- right: coins + the rewind tape -------------------------------------------
+box(64, 21, W - 5, 43, elite("vault.sys // the stack"))
+coins = [
+    "           _.-------._",
+    "        .-'  _____    '-.",
+    "       /   .'  70% '.    \\",
+    "      |   /  SELL   \\    |",
+    "      |   \\  BACK   /    |",
+    "       \\   '._____.'    /",
+    "        '-._       _.-'",
+    "            '-----'",
+]
+for i, line in enumerate(coins):
+    text(66, 23 + i, line, AMBER if i not in (2, 3, 4) else (230, 200, 90))
+stack = ["    (@@@)", "   (@@@@@)", "  (@@@@@@@)", " (@@@@@@@@@)"]
+for i, line in enumerate(stack):
+    text(68, 32 + i, line, AMBER)
+text(68, 37, " 1680 + 1700", WHITE)
+# The cassette.
+cx, cy = 98, 24
+tape = [
+    "┌──────────────────────────────────────┐",
+    "│  ◄◄  UNDO.TAPE   side A: this visit  │",
+    "│   ╭────╮                  ╭────╮     │",
+    "│   │ ◉◉ │════════════════> │ ◉◉ │     │",
+    "│   ╰────╯   newest first   ╰────╯     │",
+    "│  bag item   -> stats off, 100% back  │",
+    "│  chest item -> leaves delivery list  │",
+    "│  sold item  -> struck from the tape  │",
+    "│  close shop -> tape erased           │",
+    "└──────────────────────────────────────┘",
+]
+for i, line in enumerate(tape):
+    for j, ch in enumerate(line):
+        col = DIM if ch in "┌┐└┘─│╭╮╰╯" else (AMBER if ch in "◄◉" else (BRIGHT if ch in "═>" else MID))
+        put(cx - 4 + j, cy + i, ch, col)
+text(94, 35, "guard handed it over mid-visit? the tape", DIM)
+text(94, 36, "re-labels it: chest -> bag. still undoable.", DIM)
+text(94, 38, "the old HUD's sell button: 50% -> 70% too.", MID)
+text(94, 40, "SELL greys out unless the item is in the bag", MID)
+text(94, 41, "UNDO greys out when the tape is empty", MID)
 
-# --- terminal -----------------------------------------------------------------
-header(44, elite("tty1 // incoming"))
-clear(4, 45, W - 5, 48)
-text(8, 45, "> wake up, neo...", BRIGHT)
-text(8, 46, "> the shop has you.", BRIGHT)
-text(8, 47, "> follow the gold coins: 200 . 300 . 550 . 1200 . 3000 ...", MID)
-text(78, 45, "knock, knock.", DIM)
-text(78, 46, "SELL / UNDO / RECIPES :: awaiting operator", AMBER)
-text(78, 47, "(the refund rate is your call)", DIM)
+# --- the code -----------------------------------------------------------------
+header(45, elite("the code of the exchange"))
+clear(4, 46, W - 5, 48)
+center(46, "I. sELL fOR sEVENTY   II. uNDO fOR aLL   III. tHE cHEST cOUNTS   IV. nO dOUBLE dIPPING   V. cLOSE iS fINAL", HEAD)
+center(47, "items::SELL_REFUND_PERCENT = 70   //   ItemShop::undo: Vec<Purchase>   //   AnimatedScene::cancel_stored()", DIM)
 
 # --- roadmap -------------------------------------------------------------------
 header(50, elite("roadmap // the oracle says"))
 clear(4, 51, W - 5, 54)
 phases = [
-    ("P1 LIGHT", 9), ("P2 MINIMAP", 5), ("P3 SHOP", 2), ("P4 SELECT", 1),
+    ("P1 LIGHT", 9), ("P2 MINIMAP", 5), ("P3 SHOP", 4), ("P4 SELECT", 1),
     ("P5 ARENA", 0), ("P6 HUD", 0), ("P7 POST", 0),
 ]
 for i, (name, done) in enumerate(phases):
-    col = i % 4
-    row = i // 4
-    x = 8 + col * 35
-    y = 51 + row * 2
+    x = 8 + (i % 4) * 35
+    y = 51 + (i // 4) * 2
     text(x, y, f"{name:<11}", CYAN)
     text(x + 11, y, "[", DIM)
     for j in range(10):
         put(x + 12 + j, y, "▓" if j < done else "░", BRIGHT if j < done else FAINT)
     text(x + 22, y, f"] {done * 10:>3}%", HEAD if done else FAINT)
+text(8, 54, ">> next in P3: recipes A+B>C, builds-into data, search box", MID)
 
 fade_bar(56, 2, W - 3)
 clear(10, 57, W - 11, 60)
-center(57, "gREETZ: tHE OSRS CACHE * sERDE * NAGA * wgpu * aLL WHO SPEND 300 GOLD ON A BRONZE SWORD", MID)
+center(57, "gREETZ: tHE OSRS CACHE * sERDE * wgpu * eVERY bOT tHAT eVER bOUGHT a rUNE sWORD aND rEGRETTED iT", MID)
 center(58, "nOT AFFILIATED WITH JAGEX. cACHE ASSETS STAY OUT OF GIT. aLWAYS.", DIM)
-center(59, "  t h e r e   i s   n o   s p o o n .   t h e r e   i s   a   b r o n z e   s w o r d .  ", HEAD)
-center(60, "-=[ mObAsCaPe // 2026 // nODE 3: gRAND eXCHANGE // 33.6k // sYSoP: rIFT // r/s: 70% ?? ]=-", AMBER)
+center(59, "  y o u   h a v e   t o   l e t   i t   a l l   g o ,   n e o .   f o r   s e v e n t y   p e r c e n t .  ", HEAD)
+center(60, "-=[ mObAsCaPe // 2026 // nODE 3: tHE vAULT // 57.6k // sYSoP: rIFT // r/s: 70 / 100 ]=-", AMBER)
 
 # --- outputs ------------------------------------------------------------------
 with open(out + ".txt", "w") as f:
