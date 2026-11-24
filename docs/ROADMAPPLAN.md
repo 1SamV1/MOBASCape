@@ -1,10 +1,18 @@
 # Roadmap plan: front end, shop, minimap and map look
 
-Written 2026-11-23 after studying a 17.5-minute gameplay video of
-*Legends of Gielinor*, another OSRS-themed 5v5 MOBA
-(<https://www.youtube.com/watch?v=uPArBJSbNRQ>, "Ahrim Mid Gameplay").
-Frames were taken every 15 s (70 stills) plus close crops of the minimap and
-action bar, and compared with MobaScape captures at the same 1280x720 size.
+A living plan for bringing MobaScape's screens and arena up to the bar set
+by *Legends of Gielinor*, another OSRS-themed 5v5 MOBA, as shown in a
+17.5-minute gameplay video (<https://www.youtube.com/watch?v=uPArBJSbNRQ>,
+"Ahrim Mid Gameplay").
+
+- **First study, 2026-11-23:** stills every 15 s at 1280x720, crops of the
+  minimap and action bar.
+- **Second study, 2026-11-24:** the full video again at 1920x1080, contact
+  sheets every 10 s, full-size stills of the hero select (0:03), shop
+  (11:44), lane fights (2:10, 7:30, 9:20, 11:40) and minimap. The stills
+  were measured for hue, saturation and value and compared with MobaScape
+  captures at the same size (`--screenshot`, `--shots`).
+
 The stills are not committed: they are someone else's footage.
 
 ## Ground rules
@@ -17,112 +25,130 @@ The stills are not committed: they are someone else's footage.
 - **Every visual element comes from the OSRS cache.** Sprites, fonts, item
   icons, models, textures, animations, spot animations and sounds come from
   `.cache/osrs-235` through `rift-cache`. Procedural geometry is allowed only
-  for plain fills, outlines and gradients (as now). Nothing is drawn by hand,
+  for plain fills, outlines and gradients. Nothing is drawn by hand,
   downloaded or AI-generated. Nothing from the cache is committed (AGENTS.md).
-- Each item below lists **acceptance** checks so a task can be closed by
-  screenshot plus test, as with earlier milestones.
+- Each task lists **acceptance** checks so it can be closed by screenshot
+  plus test.
 
-## What the reference does better (findings)
+## The OSRS interface kit (cache index 8)
 
-| Area | Reference (timestamp) | MobaScape today | Gap |
+Both interfaces now share one set of cache pieces. Use these before reaching
+for anything else.
+
+| Piece | Sprites | Where it is built |
+|---|---|---|
+| Window frame (bank / Grand Exchange) | tile 297, edges 954-957, riveted corners 958-961 | `stone::OUTER`, theme `panel.frame`, legacy `frame_outer` |
+| Recessed inner panel | tile 297 at 62%, edges 962/967, corners 972-975 | `stone::INNER`, theme `panel.inset`, legacy `frame_inner` |
+| Notched buttons | grey 293, red 294, thin 295/296 | theme `button.osrs`, `button.osrs.red`; `Hud::osrs_button` |
+| Parchment (chatbox scroll) | 1017 | `Hud::parchment` (stretched, not tiled) |
+| Item slot | 1077 | `Hud::item_slot`, theme `panel.slot` |
+| Skill icons | 197-204 | hero tags and stats |
+| Fonts | p11 494, p12 495, b12 496, q8 497 | both atlases |
+
+Text colours: orange `#FF981F` for titles, cream on stone, dark ink on
+parchment (`hud/kit.rs`).
+
+## Where we stand against the reference
+
+| Area | Reference | MobaScape now | Remaining gap |
 |---|---|---|---|
-| Hero select | 0:00. Beige OSRS stone panels; game mode and timer in a title bar; **lane picker** (Top/Jungle/Mid/Carry/Support with item icons); **both teams' columns** with player name, rank badge, pick-in-progress, lane and **two battle spells** each; roster grid with "Picked" overlays and recommended dots; detail panel with portrait, title, tags (role, archetype, difficulty), **passive plus Q/W/E/R with per-rank cooldowns**, popular build row; battle-spell picker; Lock in plus Elo note; Leave and music buttons | Dark custom panels, type-grouped roster, animated 3D spotlight, stats and abilities, 30 s timer | No lanes, no team columns, no battle spells, no passive or rank numbers, no "picked" state, panel style is not the OSRS stone and parchment |
-| Shop | 0:15. "Grand Exchange" window: left nav (Recommended, Item sets, All items, Starters, Weapons, Shields, Head ... Rings, Components, Fighter, Marksman, Assassin ...); search box; centre **tiered sections** (Starting items, Early, Core) as **icon grid with price under each**; **recipes** shown as `A + B > C`; right detail with stats (+1 Power, +4 Health), **Builds into**, Add to set, Buy and Sell; bottom: your items to sell back, **Undo**, coins | Same three-column window, but the centre is a flat text list by weapon category, the detail has only one stat, no recipes, no sell-back, no undo | Icon grid, tiers, recipe tree, build paths, sell and undo, a recommended page per hero |
-| Action bar | 0:15, 2:15. Compact bar: round portrait with level, skill-point "+" over abilities, Q/W/E/R plus D/F spell slots, two potion slots, HP and prayer bars with numbers. Inventory is an **OSRS equipment grid** (silhouette slot sprites) with gold and Shop/Teleport buttons | Large panel with square portrait, numbered 1-4 slots, a 6-slot grid with digits | Use the cache equipment-slot sprites; slimmer bar; level-up "+" |
-| Minimap | 2:15 crop. Painted map: beige lanes, dark jungle with camp icons, blue river; **team-coloured squares for minions, larger for towers, base buildings**; **hero portraits in team-coloured rings**; your hero with a gold ring; **camera view drawn as a trapezoid**; vision rings around allied wards and towers | Blurry terrain bake, thick blue river bar, lane polylines, 5 px dots, a rectangle for the camera, no hero identity, no vision | Sharper bake, hero icons, trapezoid frustum, **live allied vision (fog) and ally sight lines** |
-| Objectives panel | Always on screen: per-lane tower status for both gods; timers for Black dragon, TzKal-Zuk, Giant Mole, River chickens, Shooting star; wards count | Collapsed "Objectives" header only | Fill it with live tower and camp timers |
-| Team frames | Top right: four ally rows with name, level, HP bar, ultimate-ready icon | One portrait sliver | Full ally rows |
-| Kill feed and announcements | Top right feed with hero icons and bounty "+300"; centre text "First blood!", "A black dragon has appeared!" in OSRS yellow | Feed exists; announcer text sparse | More announcements, bounty numbers |
-| Map: art | Cliffs of grey OSRS rock separate lanes and jungle; **wooden plank bridges** over the river; lanes are dirt with worn edges; jungle floor dark green with ferns, flowers and dead trees; bases are **white Saradomin / dark Zamorak castles** with team banners; towers are obelisks and **god statues**; fountain is a glowing ice-blue octagon | Bright flat green, Lumbridge-style castle walls, grey cube rocks, almost no cliffs | Rebuild the arena's set dressing from cache objects (below) |
-| Map: light and colour | Dusk-like key light, **dark ambient**; strong contrast; **fog of war dims everything outside team vision to grey**, so the lit areas around allies read instantly; cast shadows from trees and walls; desaturated mid-tones with saturated team colours on top | High ambient (`ambient` 1.64 to 1.74), very light shadows, yellow-green oversaturation; darkening follows only the player's own radius (`scene.vision`) | Lower ambient, warmer key light, higher shadow strength, grade saturation down, and **team-grid fog of war** in the shader |
-| End of match | 16:50. Victory banner, rank progress bar (+18), tabs (Overview, ...), per-player K/D/A, CS, gold, items, damage bars; Play again, Ladder, Choose game mode; balloons | Win/lose text only | Post-match screen |
-| Meta screens | 17:20. Tier list (S to D) with hero icons and win rates | None | Later, needs server stats |
+| Main menu | Stone window over the arena, mode buttons | Stone tablet with the notched buttons over the orbiting arena | Mode menu entries for Practice and Spectate; a confirm dialog on Quit |
+| Hero select | Stone title bar with mode and timer; both teams' columns with name, pick, lane and two battle spells; roster with *Picked* overlays; detail with passive, Q/W/E/R per-rank cooldowns and tags; Lock in; Leave | Stone windows throughout: title bar with Leave, both team columns with portraits and staggered bot picks, role tabs and filters, best-fit roster grid with *Picked*, detail with abilities and tags, 3D spotlight, timer and Confirm | **Lane picker**, **battle spells**, passive row, per-rank cooldown numbers, popular build row, music toggle |
+| Shop | "Grand Exchange" window: nav, search, tier sections of icons with prices, recipe rows `A + B > C`, detail with Builds into, Buy/Sell, bag with sell-back, Undo, coins | The same: stone frame and insets, tier sections, upgrade ladders as `a > b > c` rows, two-part recipes as `a + b > c`, owned items outlined green, Builds from / into with icons, bag row with sell prices (click to select, then Sell), Undo, coins | Item sets ("Add to set"), slot-based nav (head, body, legs ...), cache arrow sprites in place of the `>` glyph, a hover tooltip with full stats |
+| Minimap | Painted map: dark green jungle masses, wide beige lanes, blue river; **soft lit circles where allies see**; team squares for towers, larger for bases; hero portraits in team rings; camera trapezoid | Live team vision as a dark green veil with a soft edge, following wall shadows; jungle darkened by blocked-tile density; wide lanes; team squares with a white core; player portrait in a gold ring; trapezoid | **Stylised bake** (below); portraits for bot heroes; camp icons from the cache `mapfunction` sprites; pings; ward circles |
+| World light and colour | Lit grass hue 111-114, saturation ~0.6, value p10-p90 about 0.2-0.7; dark but coloured fog of war | Hue 86-100, saturation 0.55-0.66, value p10-p90 0.19-0.49 (after the 2026-11-24 retune) | Slightly more green on the darkest jungle; brighter highlights on lit lanes (the reference's sunlit stone reaches 0.7) |
+| Arena dressing | Grey rock cliffs between lanes and jungle; plank bridges; Saradomin / Zamorak castles; god statues as towers; ice-blue fountain; ground mist in unseen areas | Castle walls, scattered trees, cube-like rocks, no cliffs or bridges | Phase 5 below |
+| HUD | Objectives with named camp timers; four ally frames; slim action bar with equipment grid; kill feed of hero kills only | Ally frames, objectives listing every camp, kill feed that includes minion kills, a debug line top left | Phase 6 below |
+| Death, end and meta | Greyscale world while dead with a respawn count; Tab scoreboard; victory screen with K/D/A, CS, gold, items and damage; tier list | Respawn timer; win/lose text | Phase 7 below |
+
+## Measured colour targets
+
+From the 2026-11-24 stills (1920x1080 game view, HUD panels cropped out;
+measured on the lit centre of the frame). Check a retune with the same
+HSV statistics on `--shots tools/shots/terrain.txt` captures.
+
+| | Lit grass hue | Lit saturation | Value p10 / p50 / p90 |
+|---|---|---|---|
+| Reference 2:10, 9:20, 11:40 | 111-114 (136 at 2:10, little grass lit) | 0.59-0.68 | 0.17-0.26 / 0.31-0.61 / 0.45-0.76 |
+| MobaScape before (2026-11-23 tune) | 71-83 | 0.64-0.70 (blue clipped to zero) | 0.22-0.31 / 0.33-0.36 / 0.37-0.39 |
+| MobaScape after (2026-11-24 tune) | 86-100 | 0.55-0.66 (jungle 0.45) | 0.19-0.38 / 0.27-0.45 / 0.41-0.49 |
+
+What moved hue most: the key light and haze colours in the map's
+`atmosphere` (a yellow sun and olive fog lifted red against green on every
+lit surface), not the grass tint. The old post-grade's per-channel contrast
+clipped blue to zero in dark linear values, which looked like saturation;
+the grade now stretches luma in a square-root space and lifts saturation
+explicitly.
 
 ## Phases
 
-Ordered by what the player sees most, then by dependency. Each phase ends
-with a commit, a push to `sam main` and a progress matrix.
+Ordered by what the player sees most, then by dependency. Each task ends
+with a commit and a push to `sam main`.
 
-### Phase 1: Map light and colour (small, high impact)
+### Phase 1: Map light and colour
 
-1. **Team fog of war in the world shader.** Upload `VisibilityGrid` (one
-   byte per tile, already line-of-sight tested in `update_visibility`) as an
-   R8 texture every refresh (0.15 s), blurred over one tile. In
-   `scene.wgsl`, darken and desaturate outside it (about 45% brightness, 35%
-   saturation) in place of the single `scene.vision` circle. Allies,
-   minions, towers and wards light their own areas.
-   *Acceptance:* with an ally in another lane, its circle is lit on screen
-   and on the minimap; walls cast sight shadows.
-2. **Light retune.** Ambient from 1.64 to about 1.15; sun from 0.72 to
-   about 0.95 and warmer (1.0, 0.92, 0.80); shadow floor from 0.52 to about
-   0.30; post-grade desaturation from 0.95 to about 0.82 on mid-tones only,
-   keeping team colours. Put the numbers in `data/` (a `lighting.json`) so
-   tuning needs no rebuild, with a `--lighting` reload key.
-   *Acceptance:* side-by-side capture against reference 2:15 reads within
-   reason; no regression in the `--ui-live` screenshot tests.
-3. **Terrain palette.** Darken the jungle floor hues and pull lane dirt
-   towards the reference's brown-grey. Use the cache's own underlay and
-   overlay colours (floor definitions, config archive 1 and 4), changing
-   only which floor ids the map uses, not inventing colours.
+1. ~~Team fog of war in the world shader.~~ Done 2026-11-23.
+2. ~~Light retune with `data/lighting.json` and F5 reload.~~ Done
+   2026-11-23; second retune 2026-11-24 (`lighting:` commit).
+3. **Terrain palette from cache floors.** Pull lane dirt towards the
+   reference's grey-brown and the jungle floor towards deep green using the
+   cache's own underlay and overlay colours (config archive 1 and 4),
+   changing which floor ids the map uses, not inventing colours.
+   *Acceptance:* lit grass hue above 100 everywhere and jungle saturation
+   above 0.5, with no change to lit lanes.
+4. **Highlights.** Let sunlit stone and lane dirt reach value 0.6-0.7 (the
+   reference's bright castle stone) without lifting the grass: a highlight
+   shoulder in the post grade, or a per-material sun response.
+5. **Post-grade uniforms.** Move saturation, contrast and split-tone
+   strengths from `post.wgsl` constants into `data/lighting.json` so the F5
+   reload covers the whole look.
 
-### Phase 2: Minimap (the user's priority)
+### Phase 2: Minimap
 
-1. **Live ally vision on the minimap.** Draw the team `VisibilityGrid` as a
-   dark veil over the map picture, so allies' line of sight shows in real
-   time (fog lifts where they see, including LOS shadows behind walls).
-   *(Started in this task; see below.)*
-2. **Hero markers.** Allied and visible enemy heroes get a ring in the team
-   colour, the player a gold ring. Then put the cache chathead or the baked
-   portrait inside the ring (portraits already exist in the HUD atlas).
-3. **Structures and minions.** Towers as larger team squares with a
-   cache-sprite icon; minions as small squares; camps with their cache
-   monster icons (map function sprites from the cache's `mapfunction`
-   sprite group).
-4. **Camera trapezoid.** Project the four screen corners onto the ground
-   (the renderer already ray-casts for picking) instead of a rectangle.
-5. **Sharper bake.** Bake at 512 px from the tile colours and overlay the
-   cache *world map* styling: lane colour from the overlay, river from water
-   tiles, cliffs darker. Keep the existing click-to-pan and drag.
-6. Pings (alt-click) and ward vision rings.
+1. ~~Live ally vision veil~~ (2026-11-23), ~~soft edge and green veil~~
+   (2026-11-24).
+2. ~~Hero rings~~, ~~player portrait~~, ~~camera trapezoid~~, ~~team
+   building squares~~.
+3. **Stylised bake.** Classify each tile (lane, grass, jungle wall or
+   blocked, water, base) from the map data and collision, then paint flat
+   colours sampled from the cache's world-map palette instead of averaging
+   scene vertex colours. The current bake shows the real brown jungle floor;
+   the reference paints the jungle a flat deep green with darker masses.
+   Bake at 512 px.
+   *Acceptance:* side by side with the reference crop, lanes, jungle and
+   river read at a glance; a test checks each class's colour.
+4. **Bot hero portraits.** Bots need a champion id in the match state; then
+   bake their portraits as the player's is baked.
+5. **Camp icons** from the cache `mapfunction` sprites; **pings**
+   (alt-click); **ward circles**.
 
 ### Phase 3: Shop
 
-1. **Item data.** Extend `data/items/items.json` with `tier`
-   (starter/early/core/late), `builds_from`, `builds_into`, and several
-   stats (power, health, armour, haste ...). Reuse cache item names and
-   icons only.
-2. **Layout.** Left nav (Recommended, All, by slot: weapons, shields,
-   head, body, legs, hands, boots, capes, necks, rings; components; by
-   role). Search box. Centre icon grid in tier sections with price under
-   each, recipe rows `A + B > C` drawn with icons and cache arrow sprites.
-   Right detail: stats, *Builds from / Builds into* trees, Buy and Sell.
-   Bottom: inventory with sell-back, **Undo** (last purchase this shop
-   visit), gold.
-3. **Recommended page** per hero from `data/champions/*.json`
-   (`recommended: [...]`).
-4. **Equipment-grid inventory** in the HUD using the cache equipment slot
-   sprites (the OSRS worn-equipment silhouettes).
-   *Acceptance:* buying a recipe consumes its parts; Undo refunds;
-   recommended items are listed first; tests cover recipe cost maths.
+1. ~~Tiers, recipes and ladders, Builds from / into, sell-back, Undo,
+   search, Recommended.~~ Done 2026-11-23 to 2026-11-24.
+2. ~~Grand Exchange look: stone frame, recipe rows, icon lists, bag row.~~
+   Done 2026-11-24.
+3. **Arrow sprites.** Replace the `>` and `+` glyphs between recipe icons
+   with cache arrow sprites (find them in the sprite dump first).
+4. **Slot navigation.** Head, body, legs, hands, boots, necks, rings next to
+   the role categories, from `items.json` slots.
+5. **Item sets.** "Add to set" plus a saved set per hero in
+   `data/` (local only until the server stores them).
+6. **Hover tooltip** on grid cells with full stats and the recipe.
 
 ### Phase 4: Hero select
 
-Keep the animated spotlight (MobaScape's own touch) and add the
-information the reference shows.
-
-1. **OSRS stone panels.** Rebuild the screen from the `panel.stone` kit and
-   the cache's parchment and scroll sprites rather than flat dark fills.
-2. **Team columns.** Five rows per side: player or bot name, picked hero
-   portrait, lane and battle spells; bots "pick" during the countdown with
-   a short delay each, and taken heroes show *Picked* on the roster.
-3. **Lane picker.** Top / Jungle / Mid / Carry / Support with cache item
-   icons. The lane feeds the bots' lane assignment in match.
-4. **Battle spells.** Two summoner-style spells chosen from a bar of OSRS
-   spell icons (cache magic sprites): e.g. Teleport, Heal Other, Vengeance,
-   Smite. Needs gameplay work (D/F slots exist on the bar already).
-5. **Detail panel.** Passive, per-rank cooldown numbers, tags (role,
-   archetype, difficulty), popular build row (from the shop data).
-6. Leave button, music toggle, and the mode plus map name in a title bar.
+1. ~~OSRS stone panels, title bar, Leave~~, ~~team columns and staggered
+   bot picks~~, ~~roster with Picked~~, ~~detail with abilities and tags~~.
+2. **Lane picker.** Top / Jungle / Mid / Carry / Support, each with a cache
+   item icon, in the player's team row. Feeds the bots' lane assignment.
+3. **Battle spells.** Two spells per player from OSRS spell sprites
+   (Teleport, Heal Other, Vengeance, a Smite-like jungle spell), shown in the
+   team rows and cast from the D/F slots in match. Needs gameplay work.
+4. **Passive row and per-rank cooldowns** in the detail panel, from the
+   champion data.
+5. **Popular build row** from the Recommended shop data.
+6. Music toggle in the title bar.
 
 ### Phase 5: Arena set dressing
 
@@ -130,73 +156,56 @@ All objects from the cache, placed through the map format
 (`docs/MAP_FORMAT.md`).
 
 1. **Cliffs.** Ring the lanes and jungle with cache rock and cliff objects
-   (the grey Trollheim and Wilderness rock walls) so the map has the
-   reference's layered, walled look. Collision follows them.
-2. **Bridges.** Wooden plank bridge objects over the river at the lane
-   crossings.
-3. **Bases.** Blue team: white Saradomin stone castle walls, banners and
-   statue. Red team: dark Zamorak castle pieces. Fountain: the cache's
-   glowing portal or pool effect.
-4. **Towers.** Obelisk and god statue models with their cache spot
+   (grey Trollheim and Wilderness rock walls). Collision follows them.
+2. **Bridges.** Wooden plank bridges over the river at the lane crossings.
+3. **Bases.** Blue: white Saradomin castle pieces, banners and statue. Red:
+   dark Zamorak pieces. Fountain: the cache's glowing portal or pool.
+4. **Towers** as obelisks and **god statues**, with their cache spot
    animations for shots.
 5. **Jungle flora.** Ferns, flowers, dead trees and stumps from the cache
-   scattered by the existing brush and camp regions.
-6. **Fog-of-war cloud layer** (the reference's grey mist) as a later
-   polish item, built from cache smoke spot animations.
+   across the brush and camp regions.
+6. **Tree bug.** Some trees render as large bark-textured cones with no
+   canopy (visible in the lane captures). Check which model ids they are and
+   whether the leaf faces are culled or retextured.
+7. **Ground mist** over unseen areas from cache smoke spot animations.
 
 ### Phase 6: HUD polish
 
-1. Objectives panel: tower states per lane, camp respawn timers, wards.
-2. Team frames: four ally rows with level, health and ultimate-ready icon.
-3. Slimmer action bar with round portrait, skill-point "+" over abilities,
-   and potion slots.
-4. Announcements in OSRS yellow for objectives; bounty values in the feed.
+1. **Remove the debug line** ("layout 1920 x 1008 scale 1 ...") from normal
+   runs; keep it behind a flag.
+2. **Kill feed:** hero kills, towers and objectives only; minion kills go to
+   the chat at most.
+3. **Objectives panel:** named objectives with respawn timers and per-lane
+   tower states, not one row per camp.
+4. Slimmer action bar with round portrait, skill-point "+" over abilities,
+   and potion slots; equipment-grid inventory from the cache slot sprites.
+5. Announcements in OSRS yellow for objectives; bounty values in the feed.
 
-### Phase 7: Post-match and meta
+### Phase 7: Death, end of match and meta
 
-1. Victory and defeat screen: per-player K/D/A, CS, gold, items, damage
+1. **Death:** greyscale world while dead (a post-grade flag) with the
+   respawn count centred.
+2. **Scoreboard** on Tab: both teams' K/D/A, CS, gold and items.
+3. **Victory and defeat screen:** per-player K/D/A, CS, gold, items, damage
    bars; Play again and Main menu.
-2. Match history and tier list need the server (M7/M8); park until then.
-
-## Already done in this area
-
-- Main menu with Bot, Public and Private (offline) modes, animated title and
-  braziers, orbiting arena (ADR-052).
-- Hero select countdown, type-grouped roster, 3D spotlight, wielded
-  weapons.
-- Shop window shell with categories, search line, detail and gold.
+4. Tier list and match history need the server (M7/M8); park until then.
 
 ## Progress
 
 - 2026-11-23: phase 1.1 (team fog of war in the world shader), 1.2
   (lighting retune) and the grass part of 1.3 are done.
 - 2026-11-23: 1.2 finished: `data/lighting.json` with F5 reload. Phase 2.4
-  (camera trapezoid) done. Open in phase 1: lane and jungle floor colours
-  from cache floor definitions. Post-grade saturation is still a shader
-  constant (the post pass has no uniform buffer).
+  (camera trapezoid) done. Post-grade saturation is still a shader constant.
 - 2026-11-23: phase 3.2 layout started: tiered icon grid with prices under
-  icons. Phase 2.2: player portrait in the minimap ring. Open in phase 3:
-  recipes and Builds into data, selling and Undo (refund rate is a design
-  call), recommended page, search.
+  icons. Phase 2.2: player portrait in the minimap ring.
 - 2026-11-24: phase 3 selling (70%) and Undo (100%, this visit) done.
-  Open in phase 3: recipes / Builds into data, recommended page, search.
 - 2026-11-24: phase 3 upgrade recipes done (`builds_from`, OSRS ladders,
-  difference pricing, Undo restores parts). Open in phase 3: recommended
-  page, search box, multi-part recipes for late items (data only now).
-- 2026-11-24: phase 3 search box done. Open in phase 3: recommended page,
-  multi-part late recipes.
-- 2026-11-24: phase 3 Recommended tab done (data-driven per class/role/
-  hero). Open in phase 3: multi-part late recipes, then phase 4 hero
-  select.
+  difference pricing, Undo restores parts).
+- 2026-11-24: phase 3 search box and Recommended tab done.
 - 2026-11-24: phase 4.2 team columns and staggered bot picks done; PICKED
-  roster state; lobby shows the real lineups. Multi-part recipes left for a
-  design call (no OSRS multi-part crafts among our items). Open in phase
-  4: lane picker, battle spells, detail panel extras, stone panels; bots
-  playing their picked heroes in match. Bot portraits need bots to carry a
-  champion id.
-
-## Started with this plan
-
-Phase 2.1 and 2.2 (first cut): the minimap now draws the team's live
-vision as a veil, with line-of-sight shadows, and shows heroes as team rings
-(the player in gold). See `docs/STATUS.md`.
+  roster state; lobby shows the real lineups.
+- 2026-11-24 (second study): front end rebuilt from the cache stone kit
+  (hero select, main menu); shop restyled as the Grand Exchange with recipe
+  rows, icon lists and the sell-back bag; minimap vision veil softened and
+  turned green, jungle masses, team squares; lighting retuned against
+  measured targets (sun, haze, grade, grass, fog of war).
