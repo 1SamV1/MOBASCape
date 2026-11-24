@@ -151,188 +151,180 @@ import math
 
 VIOLET = (190, 140, 255)
 GOLD = (255, 210, 90)
-EMBER = (255, 120, 60)
+ICE = (170, 230, 255)
 
 
-def extruded_logo(y, word):
-    """ACiD-style 3D block logo: the face in the green gradient, extruded
-    two cells down-right in ▓▒ shade, with a ░ cast shadow beneath."""
+def jump_logo(y, word, streak_x0):
+    """Motion-blur logo mid-dash: solid letters whose strokes smear to ▓
+    on their trailing edge, ▒ and ░ afterimages three and six cells
+    behind, and speed streaks running back from every row in ░▒═━."""
     width = len(word) * 10 - 1
-    x0 = (W - width) // 2 - 1
-    clear(x0 - 2, y - 1, x0 + width + 5, y + LOGO_ROWS + 2)
-    cells = {}
+    x0 = (W - width) // 2 + 4
+    clear(streak_x0, y - 1, x0 + width + 2, y + LOGO_ROWS)
+    cells = set()
     for i, letter in enumerate(word):
         for r in range(LOGO_ROWS):
             for c, px in enumerate(LOGO[letter][r]):
                 if px != " ":
-                    cells[(x0 + i * 10 + c, y + r)] = px
-    def enclosed(x, yy):
-        # Inside a letter's counter (face cells both sides on the row):
-        # the inner wall is drawn dark so the letter still reads.
-        return any((x - k, yy) in cells for k in range(1, 4)) and any(
-            (x + k, yy) in cells for k in range(1, 8))
-
-    for (dx, dy, ch, col) in ((3, 2, "░", (0, 40, 10)), (2, 1, "▒", (0, 90, 25)), (1, 1, "▓", (0, 140, 35))):
+                    cells.add((x0 + i * 10 + c, y + r))
+    # Speed streaks: from each row's leftmost cell back to streak_x0.
+    for r in range(LOGO_ROWS):
+        row = [x for (x, yy) in cells if yy == y + r]
+        if not row:
+            continue
+        left = min(row)
+        for x in range(streak_x0, left - 1):
+            f = (x - streak_x0) / max(1, left - 1 - streak_x0)
+            if (x + r * 3) % 7 == 0 and f < 0.5:
+                continue
+            ch = "░" if f < 0.3 else "▒" if f < 0.55 else "═" if f < 0.85 else "━"
+            col = (0, int(50 + 150 * f), int(15 + 50 * f))
+            put(x, y + r, ch, col)
+    # Afterimages three and six cells behind, only on empty ground.
+    for (back, ch, col) in ((6, "░", (0, 60, 18)), (3, "▒", (0, 105, 30))):
         for (x, yy) in cells:
-            tx, ty = x + dx, yy + dy
-            if (tx, ty) not in cells:
-                inner = enclosed(tx, ty)
-                put(tx, ty, "░" if inner else ch, (0, 45, 12) if inner else col)
-    for (x, yy), px in cells.items():
-        put(x, yy, px if px in "▀▄" else "█", LOGO_GRAD[yy - y])
+            tx = x - back
+            inside = x0 <= tx < x0 + width and (tx - x0) % 10 != 9
+            if (tx, yy) not in cells and not inside:
+                put(tx, yy, ch, col)
+    # Face: solid, with each stroke's trailing (left) edge smeared to ▓.
+    for (x, yy) in cells:
+        px = LOGO[word[(x - x0) // 10]][yy - y][(x - x0) % 10]
+        trailing = (x - 1, yy) not in cells and px not in "▀▄"
+        put(x, yy, "▓" if trailing else (px if px in "▀▄" else "█"), LOGO_GRAD[yy - y])
 
 
-def rune_circle(cx, cy, rx, ry, runes, col_ring, col_rune):
-    """A summoning circle: double ring at 2:1 aspect, runes on the outer
-    ring, a hexagram of ∙ chords inside, a ◆ at the heart."""
-    clear(cx - rx - 1, cy - ry, cx + rx + 1, cy + ry)
-    for k in range(240):
-        t = k / 240 * math.tau
-        for (sx, sy, ch) in ((1.0, 1.0, "·"), (0.78, 0.74, "∙")):
-            x = cx + round(math.cos(t) * rx * sx)
-            yy = cy + round(math.sin(t) * ry * sy)
-            put(x, yy, ch, col_ring if sx == 1.0 else DIM)
-    pts = [(cx + math.cos(math.tau * i / 6 - math.pi / 2) * rx * 0.7,
-            cy + math.sin(math.tau * i / 6 - math.pi / 2) * ry * 0.7) for i in range(6)]
-    for tri in ((0, 2, 4), (1, 3, 5)):
-        for j in range(3):
-            (ax, ay), (bx, by) = pts[tri[j]], pts[tri[(j + 1) % 3]]
-            for k in range(30):
-                f = k / 29
-                put(round(ax + (bx - ax) * f), round(ay + (by - ay) * f), "·", FAINT if tri[0] else (60, 40, 100))
-    for i, ch in enumerate(runes):
-        t = math.tau * i / len(runes) - math.pi / 2
-        put(cx + round(math.cos(t) * rx), cy + round(math.sin(t) * ry), ch, col_rune)
-    put(cx, cy, "◆", WHITE)
-
-
-extruded_logo(3, "MOBASCAPE")
-rune_circle(12, 6, 9, 4, "Q✶W†E‡R§", VIOLET, GOLD)
-rune_circle(W - 13, 6, 9, 4, "★Q☩W✦E☼R", VIOLET, GOLD)
+jump_logo(3, "MOBASCAPE", 3)
+# A comet over the logo's right shoulder.
+for i, (ch, col) in enumerate([("✈", WHITE), ("═", ICE), ("─", (90, 160, 200)), ("·", (50, 90, 120))]):
+    text(W - 12 + i * 2, 2, ch, col)
 fade_bar(1, 2, W - 3)
-center(12, "  ░▒▓  n O D E   1 0 :   t H E   g R I M O I R E   //   9   b O T S   l E A R N   t O   c A S T  ▓▒░  ", AMBER)
-center(13, "  " + elite("q. w. e. r. read from the rank tables, spoken in the lane.") + "  ", WHITE)
-fade_bar(14, 2, W - 3)
+center(10, "  ░▒▓  n O D E   1 1 :   t H E   j U M P   p R O G R A M   //   b O T S   d A S H   ,   b O T S   f L E E  ▓▒░  ", AMBER)
+center(11, "  " + elite("everybody falls the first time. callisto didn't. two kills.") + "  ", WHITE)
+fade_bar(12, 2, W - 3)
 
-# --- release info ---------------------------------------------------------------
-header(16, elite("release info"))
-clear(4, 17, W - 5, 20)
+# --- release info -------------------------------------------------------------
+header(14, elite("release info"))
+clear(4, 15, W - 5, 18)
 info = [
-    ("rELEASE dATE", "2026-11-24", "cOMMIT", "f7d6170  ->  sam/main"),
-    ("tYPE", "bOT aBILITIES", "tESTS", "410 pass // clippy clean"),
-    ("bUG", "BOTS SPAWNED WITH 0 MANA", "fIX", "champion pool, +20/level"),
-    ("aDR", "055: cast from the data", "cASTS", "110 in a 6:00 sim"),
+    ("rELEASE dATE", "2026-11-24", "cOMMIT", "4cbdf07  ->  sam/main"),
+    ("tYPE", "bOT dASHES + lEAPS", "tESTS", "411 pass // clippy clean"),
+    ("wAS", "CHARGES FIRED AS BOLTS", "nOW", "hurl, land, splash 170"),
+    ("wAS", "LEAPS CAST AS HEALS (!)", "nOW", "chase, or jump for home"),
 ]
 for i, (k1, v1, k2, v2) in enumerate(info):
-    yy = 17 + i
+    yy = 15 + i
     text(8, yy, f"{k1:.<16}", DIM)
-    text(25, yy, v1, RED if k1 == "bUG" else BRIGHT)
+    text(25, yy, v1, RED if k1 == "wAS" else BRIGHT)
     text(76, yy, f"{k2:.<12}", DIM)
     text(89, yy, v2, HEAD)
 
-# --- left: the spellbook ----------------------------------------------------------
-box(4, 22, 74, 46, elite("spellbook.dat // four shapes"))
-cards = [
-    ("CARE", "no damage in the ranks", [
-        "     +  ✚  +     ",
-        "   ✚    @    ✚   ",
-        "      /█\\        ",
-        "      / \\        ",
-        " heal 25% missing",
-        " or shield 15%   ",
-        " when hp < 60%   ",
-    ], (110, 230, 120)),
-    ("NOVA", "range 0", [
-        "   · ∙ ∙ ∙ ·     ",
-        " ∙  ░▒▒▒▒░  ∙    ",
-        "∙  ▒  @   ▒  ∙   ",
-        " ∙  ░▒▒▒▒░  ∙    ",
-        "   · ∙ ∙ ∙ ·     ",
-        " r 320 round the ",
-        " caster          ",
-    ], (255, 190, 80)),
-    ("STRIKE", "range <= 450", [
-        "                 ",
-        " @ ════► ✸  m    ",
-        "       ░▒█▒░     ",
-        "     m  ░▒░  m   ",
-        "                 ",
-        " blast + splash  ",
-        " 170 at target   ",
-    ], (120, 200, 255)),
-    ("BOLT", "range > 450", [
-        "                 ",
-        " @ ·∙•○◎●═══>  X ",
-        "                 ",
-        "  homing: never  ",
-        "  misses         ",
-        " stun/root/slow  ",
-        " land up front   ",
-    ], (200, 140, 255)),
+# --- left: the trajectory ------------------------------------------------------
+box(4, 20, 74, 45, elite("jump.prg // trajectory"))
+traj = [
+    "                                                                 ",
+    "   DASH  (damage)                 ✸ landing: splash 170          ",
+    "                   ╭──────────╮   ▼                              ",
+    "            ╭──────╯  1700/s  ╰────►  m  X  m                    ",
+    "   @ ░▒▓════╯                       ░▒▓█▓▒░                      ",
+    "   ▲ bot                         stops 110 short                 ",
+    "                                                                 ",
+    "   LEAP  (no damage)                                             ",
+    "                                        ▓▓                       ",
+    "   home ◄═════════════════════════╗     ▓▓ WALL                  ",
+    "    ▲         ╭───────────────╮   ║     ▓▓                       ",
+    "    │    ◄────╯   escape      ╰───@ ──► ▓▓ ✗ clamped at the      ",
+    "    │      hp < 30%, home > 1500  ▲     ▓▓   first unwalkable    ",
+    "    └─ fountain heal        retreating  ▓▓   tile (32u steps)    ",
+    "                                                                 ",
+    "   matched by verb in the NAME or first 3 words:                 ",
+    "   charge leap dash jump lunge pounce swing burrow               ",
+    "   rush dive teleport blink hop                                  ",
+    "                                                                 ",
+    "   'kalphite workers burst out and charge' -> stays a bolt       ",
+    "    (the verb is the workers', not the queen's)                  ",
 ]
-for i, (name, rule, art, col) in enumerate(cards):
-    cx = 7 + (i % 2) * 34
-    cy = 24 + (i // 2) * 11
-    text(cx, cy, f"[{name}]", col)
-    text(cx + len(name) + 3, cy, rule, DIM)
-    for j, line in enumerate(art):
-        for k, ch in enumerate(line):
-            if ch == " ":
-                continue
-            c = col if ch in "✚+░▒█✸●◎○•∙·═►>" else WHITE if ch == "@" else RED if ch in "Xm" else MID
-            put(cx + k, cy + 1 + j, ch, c)
-text(8, 45, "ranks: Q@1 W@2 E@3 R@6, +1 every 3 lv  //  mana 2%/s", HEAD)
+for i, line in enumerate(traj):
+    for j, ch in enumerate(line):
+        if ch == " ":
+            continue
+        if ch in "╭╮╯╰─═╗║►◄":
+            col = ICE
+        elif ch in "░▒▓█":
+            col = (110, 80, 60) if "WALL" in line or (i in (8, 10, 11, 12, 13) and 38 <= j <= 42) else (120, 200, 255)
+        elif ch in "✸✗X":
+            col = RED
+        elif ch == "@":
+            col = WHITE
+        elif ch == "m":
+            col = (255, 140, 120)
+        elif line.strip().startswith(("DASH", "LEAP")) and j < 10:
+            col = GOLD
+        elif i >= 15:
+            col = MID if i < 19 else DIM
+        else:
+            col = HEAD
+        put(6 + j, 22 + i, ch, col)
 
-# --- right: the cast log ------------------------------------------------------------
-box(76, 22, W - 5, 46, elite("cast.log // 6:00 headless sim"))
-casts = [
-    ("Kree'arra Jr.", 27, "ARCANE LANCE"), ("JalRek-Jad", 14, "strike"),
-    ("Cerberus", 12, "TRIPLE BITE + LAVA"), ("Big Frog", 12, "TONGUE LASH"),
-    ("Kolodion", 11, "3 GOD SPELLS"), ("General Graardor", 11, "SMASH, BODYGUARDS"),
-    ("Ancient Wyvern", 9, "ICY BREATH"), ("Callisto", 7, "MAUL"),
-    ("Kalphite Queen", 7, "MANDIBLE CRUSH"),
+# --- right: who moves ---------------------------------------------------------
+box(76, 20, W - 5, 45, elite("movers.dat // the roster in flight"))
+movers = [
+    ("DASH", "Callisto", "W", "CHARGE", "800"),
+    ("DASH", "General Graardor", "R", "BANDOS' WRATH", "900"),
+    ("DASH", "K'ril Tsutsaroth", "W", "DEMONIC CHARGE", "650"),
+    ("DASH", "Venenatis", "W", "POUNCE", "700"),
+    ("DASH", "Commander Zilyana", "W", "BLESSED DASH", "480"),
+    ("LEAP", "JalRek-Jad", "W", "TELEPORT", "640"),
+    ("LEAP", "Kree'arra Jr.", "W", "KREE'S LEAP", "896"),
+    ("LEAP", "King Awowogei", "W", "VINE SWING", "900"),
+    ("LEAP", "Blowpipe Ranger", "E", "RANGER'S FOOTWORK", "512"),
 ]
-for i, (who, n, what) in enumerate(casts):
+for x, label in ((79, "TYPE"), (87, "HERO"), (106, "KEY"), (111, "ABILITY"), (130, "RANGE")):
+    text(x, 22, label, DIM)
+for x, n in ((79, 6), (87, 17), (106, 3), (111, 17), (130, 14)):
+    text(x, 23, "─" * n, FAINT)
+for i, (kind, who, key, name, rng) in enumerate(movers):
     yy = 24 + i * 2
-    text(79, yy, f"{who:<17}", CYAN if i % 2 == 0 else (90, 210, 180))
-    for k in range(n):
-        shade = "█" if k < n - 2 else "▓" if k < n - 1 else "▒"
-        put(97 + k, yy, shade, BRIGHT if k < 14 else AMBER)
-    text(97 + n + 1, yy, f"{n:>2}", WHITE)
-    text(97 + n + 4, yy, what.lower() if what.isupper() else what, DIM)
-text(79, 42, "SHAPES  bolt 65  ███████████████████████████▒", (200, 140, 255))
-text(79, 43, "        strike 43 ██████████████████▒", (120, 200, 255))
-text(79, 44, "        nova 2 ▒   care 0 (nobody fell under 60% mid-fight)", (255, 190, 80))
+    col = (255, 150, 90) if kind == "DASH" else ICE
+    text(79, yy, ("► " if kind == "DASH" else "↷ ") + kind, col)
+    text(87, yy, f"{who:<17}", CYAN if i % 2 == 0 else (90, 210, 180))
+    text(106, yy, f"[{key}]", WHITE)
+    text(111, yy, f"{name:<17}", HEAD)
+    bar = int(int(rng) / 900 * 8)
+    text(130, yy, "▮" * bar, col)
+    text(139, yy, rng, DIM)
+text(79, 42, "6:00 SIM  bolt 47  strike 43  nova 1  dash 1  escape 19", AMBER)
+text(79, 43, "          escapes: jad 10, kree 9 // callisto's charge: 2 kills", DIM)
 
-# --- sysop's note ------------------------------------------------------------------
-header(48, elite("sysop's note // read the margins"))
-clear(4, 49, W - 5, 50)
-center(49, "aN aPPROXIMATION, sIGNED aND dATED: dASHES, sUMMONS aND zONES rEAD aS bOLTS oR sTRIKES fOR nOW.", HEAD)
-center(50, "the player's kit runtime is single-caster; making it caster-generic lets bots cast the real kits (ADR-055)", DIM)
+# --- sysop's note ------------------------------------------------------------
+header(47, elite("sysop's note // free your legs"))
+clear(4, 48, W - 5, 49)
+center(48, "sTILL aN aPPROXIMATION: sUMMONS aND zONES rEAD aS bOLTS oR sTRIKES.  tHE rEAL kITS nEED a cASTER-gENERIC rUNTIME.", HEAD)
+center(49, "animated::bot_cast  //  SpellShape::{Care,Nova,Strike,Bolt,Dash,Leap}  //  bot_hurl  //  bot_try_escape", DIM)
 
 # --- roadmap -------------------------------------------------------------------
-header(52, elite("roadmap // the oracle says"))
-clear(4, 53, W - 5, 56)
+header(51, elite("roadmap // the oracle says"))
+clear(4, 52, W - 5, 56)
 phases = [
     ("P1 LIGHT", 9), ("P2 MINIMAP", 5), ("P3 SHOP", 8), ("P4 SELECT", 5),
     ("P5 ARENA", 2), ("P6 HUD", 0), ("P7 POST", 0),
 ]
 for i, (name, done) in enumerate(phases):
     x = 8 + (i % 4) * 35
-    yy = 53 + (i // 4) * 2
+    yy = 52 + (i // 4) * 2
     text(x, yy, f"{name:<11}", CYAN)
     text(x + 11, yy, "[", DIM)
     for j in range(10):
         put(x + 12 + j, yy, "▓" if j < done else "░", BRIGHT if j < done else FAINT)
     text(x + 22, yy, f"] {done * 10:>3}%", HEAD if done else FAINT)
-text(8, 56, ">> next: caster-generic kits, bot dashes, lane picker (Top/Jungle/Mid/Carry/Support)", MID)
+text(8, 56, ">> next: caster-generic kit runtime (bots cast real kits), summons/zones, lane picker", MID)
 
 fade_bar(57, 2, W - 3)
 clear(10, 58, W - 11, 61)
-center(58, "gREETZ: kREE'ARRA jR. (27 lANCES) * jALREK-jAD (tHE sTRIKE kING) * tHE mANA bAR tHAT wAS zERO aLL aLONG", MID)
+center(58, "gREETZ: cALLISTO (oNE cHARGE, tWO kILLS) * jALREK-jAD (tEN tELEPORTS hOME) * tHE wALL tHAT sAID nO", MID)
 center(59, "nOT AFFILIATED WITH JAGEX. cACHE ASSETS STAY OUT OF GIT. aLWAYS.", DIM)
-center(60, "  f r e e   y o u r   m i n d .   t h e n   s p e n d   y o u r   m a n a .  ", HEAD)
-center(61, "-=[ mObAsCaPe // 2026 // nODE 10: tHE gRIMOIRE // 57.6k // sYSoP: rIFT // 110 cASTS, 0 mISSES ]=-", AMBER)
+center(60, "  y o u   h a v e   t o   l e t   i t   a l l   g o .   f e a r ,   d o u b t ,   c o o l d o w n s .  ", HEAD)
+center(61, "-=[ mObAsCaPe // 2026 // nODE 11: tHE jUMP pROGRAM // 57.6k // sYSoP: rIFT // 1 cHARGE, 19 jUMPS ]=-", AMBER)
 
 # --- outputs ------------------------------------------------------------------
 with open(out + ".txt", "w") as f:
