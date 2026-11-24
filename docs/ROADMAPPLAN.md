@@ -187,7 +187,12 @@ All objects from the cache, placed through the map format
   multi-part late recipes.
 - 2026-11-24: phase 3 Recommended tab done (data-driven per class/role/
   hero). Open in phase 3: multi-part late recipes, then phase 4 hero
-  select. Bot portraits need bots to carry a
+  select.
+- 2026-11-24: phase 4.2 team columns and staggered bot picks done; PICKED
+  roster state; lobby shows the real lineups. Multi-part recipes left for a
+  design call (no OSRS multi-part crafts among our items). Open in phase
+  4: lane picker, battle spells, detail panel extras, stone panels; bots
+  playing their picked heroes in match. Bot portraits need bots to carry a
   champion id.
 
 ## Started with this plan

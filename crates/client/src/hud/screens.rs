@@ -565,10 +565,111 @@ impl Hud {
                 &name,
                 [238, 232, 214],
             );
+            // Taken by a bot: dimmed, stamped, and not selectable.
+            if select.is_picked(index) {
+                self.quad_alpha(width, height, x, y, cw, ch, [6, 7, 10], 0.68);
+                let band = 16.0;
+                let by = y + (portrait - band) * 0.5 + 4.0;
+                self.quad_alpha(width, height, x, by, cw, band, [96, 30, 30], 0.92);
+                self.text_centered(
+                    width,
+                    height,
+                    x + cw * 0.5,
+                    by + 2.0,
+                    0.7,
+                    "PICKED",
+                    [255, 214, 196],
+                );
+            }
         }
 
         self.spotlight_stage(width, height, select, mouse);
+        self.team_columns(width, height, select);
         self.hero_detail(width, height, select);
+    }
+
+    /// Both teams' rows down the edges of the stage: portrait once a hero
+    /// is locked, a pulsing "..." while still choosing, your row showing
+    /// the highlighted hero.
+    fn team_columns(&mut self, width: f32, height: f32, select: &HeroSelect) {
+        use hero_select::Team;
+        for (team, slots, tint, label) in [
+            (Team::Blue, &select.blue, [88, 150, 255], "YOUR TEAM"),
+            (Team::Red, &select.red, [236, 96, 96], "ENEMY"),
+        ] {
+            let rects = hero_select::team_slot_rects(width, height, team);
+            if let Some(&(x, y, w, _)) = rects.first() {
+                self.text_centered(width, height, x + w * 0.5, y - 17.0, 0.66, label, tint);
+            }
+            for (row, (&(x, y, w, h), slot)) in rects.iter().zip(slots.iter()).enumerate() {
+                let you = team == Team::Blue && row == 0;
+                let shown = if you {
+                    Some(select.selected)
+                } else {
+                    slot.champion
+                };
+                self.quad_alpha(width, height, x, y, w, h, [14, 16, 22], 0.9);
+                self.quad_alpha(width, height, x, y, 3.0, h, tint, 0.95);
+                self.rect_outline(
+                    width,
+                    height,
+                    x,
+                    y,
+                    w,
+                    h,
+                    1.0,
+                    if you { GOLD } else { [70, 66, 60] },
+                    0.9,
+                );
+                let side = (w - 8.0).min(h - 16.0).max(8.0);
+                let px = x + (w - side) * 0.5 + 1.0;
+                let py = y + 3.0;
+                match shown.and_then(|i| select.champions.get(i)) {
+                    Some(champion) => {
+                        if let Some(uv) = self.atlas.hero_uv(&champion.id) {
+                            // Your row is still a choice until you lock in.
+                            let alpha = if you {
+                                0.65 + 0.25 * (select.time * 3.0).sin().abs()
+                            } else {
+                                1.0
+                            };
+                            self.sprite(
+                                width,
+                                height,
+                                px,
+                                py,
+                                side,
+                                side,
+                                uv,
+                                [255, 255, 255],
+                                alpha,
+                            );
+                        }
+                    }
+                    None => {
+                        let dots = 1 + ((select.time * 2.0) as usize + row) % 3;
+                        self.text_centered(
+                            width,
+                            height,
+                            x + w * 0.5,
+                            py + side * 0.5 - 6.0,
+                            0.9,
+                            &".".repeat(dots),
+                            [150, 146, 136],
+                        );
+                    }
+                }
+                self.text_centered(
+                    width,
+                    height,
+                    x + w * 0.5,
+                    y + h - 12.0,
+                    0.58,
+                    &slot.name,
+                    if you { GOLD } else { [200, 196, 184] },
+                );
+            }
+        }
     }
 
     /// The pick timer: a draining gold ring with the seconds left, red and

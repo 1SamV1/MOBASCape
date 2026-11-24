@@ -1,6 +1,20 @@
 # Status
 
-Last updated: shop Recommended tab, 2026-11-24.
+Last updated: hero select team columns, 2026-11-24.
+
+## 2026-11-24 — Hero select: team columns and bot picks
+
+- Five rows per team down the edges of the spotlight stage (your team
+  left, enemy right): portrait once locked, a pulsing "..." while
+  choosing; your row shows your highlighted hero, pulsing until you lock.
+- Bots lock in on `hero_select::PICK_SCHEDULE` (red 2.5 s, blue 4.5 s,
+  alternating, done by 22 s). A bot never takes your highlighted hero,
+  prefers a type its team lacks, and all ten heroes are different. Locking
+  in early fills the remaining picks at once.
+- Taken heroes are dimmed and stamped PICKED on the roster; clicks ignore
+  them and arrow keys step over them.
+- The 5v5 lobby shows these lineups (it used a fixed rotation before).
+- Still cosmetic in match: bots do not yet play the hero they picked.
 
 ## 2026-11-24 — Recommended tab
 

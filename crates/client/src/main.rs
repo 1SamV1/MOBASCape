@@ -3110,6 +3110,20 @@ impl App {
             return;
         };
         tracing::info!("hero select: locked in {} ({})", champion.name, champion.id);
+        self.hero_select.fill_picks();
+        let (blue, red) = self.hero_select.lineups();
+        let names = |team: &[usize]| {
+            team.iter()
+                .filter_map(|&i| self.hero_select.champions.get(i))
+                .map(|c| c.name.as_str())
+                .collect::<Vec<_>>()
+                .join(", ")
+        };
+        tracing::info!(
+            "hero select: blue [{}] vs red [{}]",
+            names(&blue),
+            names(&red)
+        );
         self.hero_select.open = false;
         self.lobby_open = true;
         self.lobby_deadline = Some(Instant::now() + Duration::from_secs(8));

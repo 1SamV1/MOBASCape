@@ -2289,7 +2289,12 @@ impl Hud {
             );
         }
 
-        let (radiant, dire) = hero_select::lobby_teams(&select.champions, select.selected);
+        // The picks made during hero select; the old rotation only if the
+        // lobby was reached without them (e.g. a test path).
+        let (radiant, dire) = match select.lineups() {
+            (blue, red) if blue.len() == 5 && red.len() == 5 => (blue, red),
+            _ => hero_select::lobby_teams(&select.champions, select.selected),
+        };
         let cards = hero_select::lobby_card_rects(width, height);
         for (index, &(x, y, cw, ch)) in cards.iter().enumerate() {
             let team = index / 5;

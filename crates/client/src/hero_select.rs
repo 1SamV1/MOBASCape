@@ -17,6 +17,37 @@ fn class_rank(class: &str) -> usize {
         .unwrap_or(CLASS_ORDER.len())
 }
 
+/// One row of a team column: who sits there and what they have picked.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PickSlot {
+    pub name: String,
+    /// The locked hero (a champion index); `None` while still choosing.
+    /// The player's own row stays `None`: it shows the highlighted hero.
+    pub champion: Option<usize>,
+    /// Seconds into the countdown when this bot locks in.
+    pub at: f32,
+}
+
+/// When each bot locks in, as (team, row, seconds into the countdown):
+/// red and blue alternate, two to three seconds apart, all done by 22 s.
+pub const PICK_SCHEDULE: [(Team, usize, f32); 9] = [
+    (Team::Red, 0, 2.5),
+    (Team::Blue, 1, 4.5),
+    (Team::Red, 1, 7.0),
+    (Team::Blue, 2, 9.5),
+    (Team::Red, 2, 12.0),
+    (Team::Blue, 3, 14.5),
+    (Team::Red, 3, 17.0),
+    (Team::Blue, 4, 19.5),
+    (Team::Red, 4, 22.0),
+];
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Team {
+    Blue,
+    Red,
+}
+
 /// State for the pre-match champion picker.
 pub struct HeroSelect {
     pub open: bool,
@@ -33,6 +64,12 @@ pub struct HeroSelect {
     pub countdown: f32,
     /// The match mode picked on the main menu.
     pub mode: MatchMode,
+    /// Your team's five rows; row 0 is you.
+    pub blue: Vec<PickSlot>,
+    /// The enemy team's five rows.
+    pub red: Vec<PickSlot>,
+    /// Varies the bots' choices between matches.
+    pub seed: u32,
 }
 
 impl HeroSelect {
@@ -48,9 +85,135 @@ impl HeroSelect {
             time: 0.0,
             countdown: PICK_SECONDS,
             mode: MatchMode::Bot,
+            blue: Vec::new(),
+            red: Vec::new(),
+            seed: 0,
         };
+        select.reset_picks(0);
         select.apply_filter();
         select
+    }
+
+    /// Empty both team columns for a new pick phase.
+    pub fn reset_picks(&mut self, seed: u32) {
+        self.seed = seed;
+        let row = |name: String, team: Team, index: usize| PickSlot {
+            name,
+            champion: None,
+            at: PICK_SCHEDULE
+                .iter()
+                .find(|(t, i, _)| *t == team && *i == index)
+                .map(|(_, _, at)| *at)
+                .unwrap_or(f32::INFINITY),
+        };
+        self.blue = (0..5)
+            .map(|i| {
+                let name = if i == 0 {
+                    "You".to_string()
+                } else {
+                    format!("Bot {i}")
+                };
+                row(name, Team::Blue, i)
+            })
+            .collect();
+        self.red = (0..5)
+            .map(|i| row(format!("Bot {}", i + 1), Team::Red, i))
+            .collect();
+    }
+
+    /// True when a bot on either team has locked this hero in.
+    pub fn is_picked(&self, index: usize) -> bool {
+        self.blue
+            .iter()
+            .chain(&self.red)
+            .any(|slot| slot.champion == Some(index))
+    }
+
+    /// Lock in every bot whose turn has come. Bots never take the hero
+    /// you have highlighted, and prefer a type their team lacks.
+    pub fn advance_picks(&mut self) {
+        let elapsed = PICK_SECONDS - self.countdown;
+        for (team, row, at) in PICK_SCHEDULE {
+            if at <= elapsed {
+                self.bot_pick(team, row);
+            }
+        }
+    }
+
+    /// Lock in every bot still choosing (you locked in early).
+    pub fn fill_picks(&mut self) {
+        for (team, row, _) in PICK_SCHEDULE {
+            self.bot_pick(team, row);
+        }
+    }
+
+    fn bot_pick(&mut self, team: Team, row: usize) {
+        let slots = match team {
+            Team::Blue => &self.blue,
+            Team::Red => &self.red,
+        };
+        if slots.get(row).is_none_or(|slot| slot.champion.is_some()) {
+            return;
+        }
+        let have: Vec<&str> = slots
+            .iter()
+            .enumerate()
+            .filter_map(|(i, slot)| {
+                if team == Team::Blue && i == 0 {
+                    Some(self.selected)
+                } else {
+                    slot.champion
+                }
+            })
+            .map(|index| self.champions[index].class.as_str())
+            .collect();
+        let free: Vec<usize> = (0..self.champions.len())
+            .filter(|&i| i != self.selected && !self.is_picked(i))
+            .collect();
+        let wanted: Vec<usize> = free
+            .iter()
+            .copied()
+            .filter(|&i| {
+                !have
+                    .iter()
+                    .any(|c| c.eq_ignore_ascii_case(&self.champions[i].class))
+            })
+            .collect();
+        let pool = if wanted.is_empty() { &free } else { &wanted };
+        if pool.is_empty() {
+            return;
+        }
+        let salt = (team as u32) * 5 + row as u32;
+        let roll = crate::menu::hash01(self.seed, salt);
+        let choice = pool[((roll * pool.len() as f32) as usize).min(pool.len() - 1)];
+        let slots = match team {
+            Team::Blue => &mut self.blue,
+            Team::Red => &mut self.red,
+        };
+        slots[row].champion = Some(choice);
+        // A highlighted hero is never taken, but a filter fallback can land
+        // on one: move off anything picked.
+        if self.is_picked(self.selected) {
+            self.cycle(1);
+        }
+    }
+
+    /// The final lineups (champion indices), you first.
+    pub fn lineups(&self) -> (Vec<usize>, Vec<usize>) {
+        let blue = self
+            .blue
+            .iter()
+            .enumerate()
+            .filter_map(|(i, slot)| {
+                if i == 0 {
+                    Some(self.selected)
+                } else {
+                    slot.champion
+                }
+            })
+            .collect();
+        let red = self.red.iter().filter_map(|slot| slot.champion).collect();
+        (blue, red)
     }
 
     /// Open the picker for a fresh match: full timer, all heroes shown.
@@ -60,6 +223,11 @@ impl HeroSelect {
         self.countdown = PICK_SECONDS;
         self.time = 0.0;
         self.hover = None;
+        let seed = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.subsec_nanos() ^ d.as_secs() as u32)
+            .unwrap_or(0);
+        self.reset_picks(seed);
         self.set_filter(0);
     }
 
@@ -69,6 +237,7 @@ impl HeroSelect {
             return false;
         }
         self.countdown = (self.countdown - dt).max(0.0);
+        self.advance_picks();
         self.countdown <= 0.0
     }
 
@@ -89,8 +258,8 @@ impl HeroSelect {
             .collect();
         visible.sort_by_key(|&index| (class_rank(&self.champions[index].class), index));
         self.visible = visible;
-        if !self.visible.contains(&self.selected) {
-            if let Some(&first) = self.visible.first() {
+        if !self.visible.contains(&self.selected) || self.is_picked(self.selected) {
+            if let Some(&first) = self.visible.iter().find(|&&i| !self.is_picked(i)) {
                 self.selected = first;
             }
         }
@@ -115,18 +284,28 @@ impl HeroSelect {
             return;
         }
         let count = self.visible.len() as isize;
-        let current = self
+        let mut current = self
             .visible
             .iter()
             .position(|&index| index == self.selected)
             .unwrap_or(0) as isize;
-        let next = (current + delta).rem_euclid(count) as usize;
-        self.selected = self.visible[next];
+        // Step over heroes the bots have taken.
+        for _ in 0..count {
+            current = (current + delta.signum().max(-1)).rem_euclid(count);
+            let index = self.visible[current as usize];
+            if !self.is_picked(index) {
+                self.selected = index;
+                return;
+            }
+        }
     }
 
-    /// Select by the slot shown in the roster grid.
+    /// Select by the slot shown in the roster grid (taken heroes cannot be
+    /// chosen).
     pub fn select_slot(&mut self, slot: usize) {
-        if let Some(&index) = self.visible.get(slot) {
+        if let Some(&index) = self.visible.get(slot)
+            && !self.is_picked(index)
+        {
             self.selected = index;
         }
     }
@@ -294,6 +473,23 @@ fn point_in_rect(rect: (f32, f32, f32, f32), cursor: (f64, f64)) -> bool {
     let mx = cursor.0 as f32;
     let my = cursor.1 as f32;
     mx >= x && mx <= x + w && my >= y && my <= y + h
+}
+
+/// Team column rows inside the spotlight: five down the left edge (your
+/// team) and five down the right (enemies), sized to fit the stage height.
+pub fn team_slot_rects(width: f32, height: f32, team: Team) -> Vec<(f32, f32, f32, f32)> {
+    let (sx, sy, sw, sh) = spotlight_rect(width, height);
+    let gap = 6.0;
+    let top = sy + 22.0;
+    let w = (sw * 0.15).clamp(44.0, 68.0);
+    let h = (w + 14.0).min((sh - 22.0 - gap * 4.0) / 5.0);
+    let x = match team {
+        Team::Blue => sx + 4.0,
+        Team::Red => sx + sw - 4.0 - w,
+    };
+    (0..5)
+        .map(|i| (x, top + i as f32 * (h + gap), w, h))
+        .collect()
 }
 
 /// The two five-strong lineups shown on the lobby screen.
@@ -494,6 +690,98 @@ mod tests {
         assert!(select.tick_countdown(1.0));
         assert!(!select.tick_countdown(1.0), "fires only once");
         assert_eq!(select.mode, MatchMode::Public);
+    }
+
+    fn roster() -> Vec<ChampionConfig> {
+        let classes = ["MELEE", "RANGED", "MAGIC"];
+        (0..16)
+            .map(|i| {
+                let mut c = champion(&format!("h{i}"));
+                c.class = classes[i % 3].to_string();
+                c
+            })
+            .collect()
+    }
+
+    #[test]
+    fn bots_pick_on_schedule_without_taking_your_hero() {
+        let mut select = HeroSelect::new(roster(), 4, true);
+        select.reset_picks(1234);
+        select.countdown = PICK_SECONDS;
+        select.advance_picks();
+        assert!(
+            select.red.iter().all(|s| s.champion.is_none()),
+            "nobody at 0 s"
+        );
+        select.countdown = PICK_SECONDS - 5.0;
+        select.advance_picks();
+        assert!(select.red[0].champion.is_some(), "red opens at 2.5 s");
+        assert!(select.blue[1].champion.is_some(), "blue answers at 4.5 s");
+        assert!(select.red[1].champion.is_none(), "not yet 7 s");
+        select.countdown = 1.0;
+        select.advance_picks();
+        let (blue, red) = select.lineups();
+        assert_eq!((blue.len(), red.len()), (5, 5));
+        assert_eq!(blue[0], 4, "you are first, with your highlight");
+        let mut all: Vec<usize> = blue.iter().chain(&red).copied().collect();
+        all.sort();
+        all.dedup();
+        assert_eq!(all.len(), 10, "ten different heroes");
+        assert!(!select.is_picked(4), "your highlight is never taken");
+    }
+
+    #[test]
+    fn bots_fill_missing_types_first() {
+        let mut select = HeroSelect::new(roster(), 0, true);
+        select.reset_picks(99);
+        select.fill_picks();
+        for team in [&select.blue, &select.red] {
+            let mut classes: Vec<&str> = team
+                .iter()
+                .enumerate()
+                .filter_map(|(i, slot)| {
+                    if std::ptr::eq(team, &select.blue) && i == 0 {
+                        Some(select.selected)
+                    } else {
+                        slot.champion
+                    }
+                })
+                .map(|i| select.champions[i].class.as_str())
+                .collect();
+            classes.sort();
+            classes.dedup();
+            assert_eq!(classes.len(), 3, "each team has melee, ranged and magic");
+        }
+    }
+
+    #[test]
+    fn picked_heroes_cannot_be_chosen() {
+        let mut select = HeroSelect::new(roster(), 0, true);
+        select.reset_picks(7);
+        select.red[0].champion = Some(1);
+        let slot = select.visible.iter().position(|&i| i == 1).unwrap();
+        select.select_slot(slot);
+        assert_eq!(select.selected, 0, "click on a picked card is ignored");
+        for _ in 0..40 {
+            select.cycle(1);
+            assert_ne!(select.selected, 1, "cycling steps over it");
+        }
+        select.reset_picks(7);
+        assert!(!select.is_picked(1), "a new pick phase clears the columns");
+    }
+
+    #[test]
+    fn team_rows_fit_inside_the_stage() {
+        for (w, h) in [(1280.0, 720.0), (1920.0, 1080.0), (1024.0, 600.0)] {
+            let (sx, sy, sw, sh) = spotlight_rect(w, h);
+            let blue = team_slot_rects(w, h, Team::Blue);
+            let red = team_slot_rects(w, h, Team::Red);
+            for &(x, y, rw, rh) in blue.iter().chain(&red) {
+                assert!(x >= sx && x + rw <= sx + sw, "{w}x{h} x");
+                assert!(y >= sy && y + rh <= sy + sh + 0.01, "{w}x{h} y");
+            }
+            assert!(blue[0].0 + blue[0].2 < red[0].0, "{w}x{h} columns apart");
+        }
     }
 
     #[test]
