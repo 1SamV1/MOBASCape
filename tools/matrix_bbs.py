@@ -167,8 +167,8 @@ def stencil_logo(y, word):
         put(x, y + 3, "·", FAINT)
 
 
-fade_bar(1, 2, W - 3)
 stencil_logo(3, "MOBASCAPE")
+fade_bar(1, 2, W - 3)
 center(12, "  ░▒▓  t H E   o R A C L E   r E C O M M E N D S  ::  1 3   i T E M S   f O R   y O U  ▓▒░  ", AMBER)
 center(13, "  " + elite("phase.3 // know thy build") + "  ", WHITE)
 fade_bar(14, 2, W - 3)
