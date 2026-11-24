@@ -1,6 +1,22 @@
 # Status
 
-Last updated: data-driven lighting and the minimap view trapezoid, 2026-11-23.
+Last updated: tiered shop grid and minimap portrait, 2026-11-23.
+
+## 2026-11-23 — Shop icon grid in tiers; the player's face on the minimap
+
+- **Shop** (ROADMAPPLAN phase 3, first slice, layout only): the centre of
+  the Grand Exchange is now an icon grid in four sections, Starter, Early,
+  Core and Late, cheapest first, with each item's price under its icon
+  (gold when affordable, pale when not) and the selection outlined in gold.
+  Tiers come from cost (500 / 1200 / 3000 gold) unless an item in
+  `data/items/items.json` names its own `tier`. Drawing and clicks share
+  one layout (`rift_ui::hud::shop::grid`), and the wheel scroll stops at
+  the end of the grid (`max_scroll`). No gameplay change: selling, undo and
+  recipes are still to come.
+- **Minimap portrait** (phase 2.2): the player's ring holds a 16 px disc
+  cut from the baked portrait (`portrait.map`). Hero rings are kept inside
+  the map picture, so the one at the fountain is no longer cut in half.
+  Bots have no hero identity yet, so their rings stay plain.
 
 ## 2026-11-23 — Lighting in data, minimap view trapezoid
 

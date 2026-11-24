@@ -150,15 +150,33 @@ pub fn draw(theme: &Theme, list: &mut DrawList, area: Rect, state: &MinimapState
     // Heroes: a dark disc inside a ring in the team colour (gold for the
     // player), drawn last so they sit over minions and camps.
     for hero in &state.heroes {
-        let (x, y) = at(hero.at);
+        // Keep the whole ring on the map: the fountains sit on its edge.
+        let inset = 11;
+        let (x, y) = at(MapPoint {
+            x: hero.at.x.clamp(inset, PICTURE.0 - inset),
+            y: hero.at.y.clamp(inset, PICTURE.1 - inset),
+        });
         let colour = if hero.player {
             [1.0, 0.82, 0.25, 1.0]
         } else {
             team(hero.blue)
         };
-        disc(list, x, y, 6 * s, [0.03, 0.03, 0.04, 0.92]);
-        ring(list, x, y, 7 * s, 2 * s.max(1), colour);
-        disc(list, x, y, 3 * s, colour);
+        match hero.portrait.filter(|role| theme.has_sprite(role)) {
+            Some(role) => {
+                // The hero's face in a slightly larger ring.
+                disc(list, x, y, 9 * s, [0.03, 0.03, 0.04, 0.95]);
+                list.sprite_fit(
+                    theme.sprite(role),
+                    Rect::new(x - 8 * s, y - 8 * s, 16 * s, 16 * s),
+                );
+                ring(list, x, y, 10 * s, 2 * s.max(1), colour);
+            }
+            None => {
+                disc(list, x, y, 6 * s, [0.03, 0.03, 0.04, 0.92]);
+                ring(list, x, y, 7 * s, 2 * s.max(1), colour);
+                disc(list, x, y, 3 * s, colour);
+            }
+        }
     }
 
     // What the screen shows: its true ground footprint (a trapezoid under
@@ -283,6 +301,7 @@ mod hit_tests {
             at: MapPoint { x: 120, y: 120 },
             blue: true,
             player: true,
+            portrait: None,
         });
         assert!(quads(&state) > before + 10);
     }

@@ -143,6 +143,7 @@ pub fn load_with_items_minimap_and_portrait(
     }
     if let Some(portrait) = portrait {
         builder.sprite("portrait.self", portrait_sprite_image(portrait));
+        builder.sprite("portrait.map", map_portrait_image(portrait));
     }
     // Code-supplied cache sprites, such as champion ability icons. A missing
     // sprite leaves the role out and the component keeps its fallback.
@@ -166,6 +167,44 @@ fn portrait_sprite_image(portrait: &image::RgbaImage) -> Image {
         resized
             .pixels()
             .map(|pixel| [pixel[0], pixel[1], pixel[2], pixel[3]])
+            .collect(),
+    )
+}
+
+/// Edge of the minimap's hero portrait, a disc inside the hero's ring.
+const MAP_PORTRAIT: u32 = 16;
+
+/// The portrait as a small disc for the minimap ring: the upper middle of
+/// the baked image (the head and shoulders), with the corners cut clear.
+fn map_portrait_image(portrait: &image::RgbaImage) -> Image {
+    let (w, h) = portrait.dimensions();
+    let side = (w.min(h) as f32 * 0.62) as u32;
+    let face = image::imageops::crop_imm(portrait, (w - side) / 2, h / 12, side, side).to_image();
+    let small = image::imageops::resize(
+        &face,
+        MAP_PORTRAIT,
+        MAP_PORTRAIT,
+        image::imageops::FilterType::Lanczos3,
+    );
+    let r = MAP_PORTRAIT as f32 / 2.0;
+    Image::new(
+        MAP_PORTRAIT as usize,
+        MAP_PORTRAIT as usize,
+        small
+            .enumerate_pixels()
+            .map(|(x, y, pixel)| {
+                let dx = x as f32 + 0.5 - r;
+                let dy = y as f32 + 0.5 - r;
+                if dx * dx + dy * dy <= r * r {
+                    // Opaque, over a dark backing, so a transparent part
+                    // of the bake still reads as part of the disc.
+                    let a = pixel[3] as f32 / 255.0;
+                    let mix = |c: u8| (c as f32 * a + 14.0 * (1.0 - a)).round() as u8;
+                    [mix(pixel[0]), mix(pixel[1]), mix(pixel[2]), 255]
+                } else {
+                    [0, 0, 0, 0]
+                }
+            })
             .collect(),
     )
 }
@@ -289,6 +328,15 @@ mod tests {
         let image = portrait_sprite_image(&portrait);
         assert_eq!((image.width, image.height), (64, 64));
         assert_eq!(image.pixels[0], [40, 80, 120, 255]);
+    }
+
+    #[test]
+    fn the_map_portrait_is_a_small_disc() {
+        let portrait = image::RgbaImage::from_pixel(256, 256, image::Rgba([40, 80, 120, 255]));
+        let image = map_portrait_image(&portrait);
+        assert_eq!((image.width, image.height), (16, 16));
+        assert_eq!(image.pixels[0][3], 0, "corner is cut clear");
+        assert_eq!(image.pixels[8 * 16 + 8], [40, 80, 120, 255]);
     }
 
     #[test]

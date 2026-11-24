@@ -608,5 +608,11 @@ fn shop_item(name: &str, price: u32, colour: [u8; 3], stats: &[&str]) -> ShopIte
         icon: None,
         stats: stats.iter().map(|line| (*line).to_string()).collect(),
         builds_into: None,
+        tier: match price {
+            0..=500 => 0,
+            501..=1200 => 1,
+            1201..=3000 => 2,
+            _ => 3,
+        },
     }
 }

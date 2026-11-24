@@ -1265,9 +1265,9 @@ impl ApplicationHandler for App {
                     MouseScrollDelta::PixelDelta(pos) => pos.y as f32 / 120.0,
                 };
                 if self.ui_live && self.shop.open {
-                    let rows = self.shop.filtered_items().len() as i32;
-                    let max = (rows * 44 - 398).max(0);
-                    let step = (amount * 44.0).round() as i32;
+                    let state = crate::ui_live::shop(&self.shop);
+                    let max = rift_ui::hud::shop::max_scroll(&state);
+                    let step = (amount * 58.0).round() as i32;
                     self.shop.scroll = (self.shop.scroll - step).clamp(0, max);
                     return;
                 }

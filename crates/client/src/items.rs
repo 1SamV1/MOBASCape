@@ -22,6 +22,25 @@ pub struct ItemConfig {
     pub speed: f32,
     #[serde(default)]
     pub ability: f32,
+    /// Shop section override (0 starter .. 3 late); by cost when absent.
+    #[serde(default)]
+    pub tier: Option<u8>,
+}
+
+impl ItemConfig {
+    /// The shop section this item is listed under: the file's `tier` when
+    /// given, else by cost (starter up to 500 gold, early up to 1200, core
+    /// up to 3000, late above).
+    pub fn tier(&self) -> u8 {
+        self.tier
+            .unwrap_or(match self.cost {
+                0..=500 => 0,
+                501..=1200 => 1,
+                1201..=3000 => 2,
+                _ => 3,
+            })
+            .min(3)
+    }
 }
 
 fn default_category() -> String {
@@ -223,6 +242,27 @@ pub fn shop_button_at(width: f32, height: f32, cursor: (f64, f64)) -> bool {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn shop_tiers_follow_cost_unless_the_file_names_one() {
+        let item = |cost: u32, tier: Option<u8>| -> ItemConfig {
+            let mut value = serde_json::json!({
+                "id": "x", "name": "x", "color": [0, 0, 0], "cost": cost
+            });
+            if let Some(tier) = tier {
+                value["tier"] = tier.into();
+            }
+            serde_json::from_value(value).unwrap()
+        };
+        assert_eq!(item(300, None).tier(), 0);
+        assert_eq!(item(500, None).tier(), 0);
+        assert_eq!(item(501, None).tier(), 1);
+        assert_eq!(item(3000, None).tier(), 2);
+        assert_eq!(item(5200, None).tier(), 3);
+        assert_eq!(item(5200, Some(1)).tier(), 1, "the file wins");
+        assert_eq!(item(100, Some(9)).tier(), 3, "clamped to the last tier");
+    }
+
     use super::*;
 
     fn test_shop() -> ItemShop {

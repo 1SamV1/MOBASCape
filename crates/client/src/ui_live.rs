@@ -115,6 +115,9 @@ pub fn minimap(
                 at: point(unit.pos),
                 blue: unit.team == 0,
                 player: unit.kind == UnitKind::Player,
+                // Only the player's own portrait is baked for the live theme;
+                // bots have no hero identity in the match yet.
+                portrait: (unit.kind == UnitKind::Player).then_some("portrait.map"),
             });
             continue;
         }
@@ -535,7 +538,7 @@ pub fn shop(shop: &ItemShop) -> ShopState {
         items,
         selected,
         scroll: shop.scroll,
-        hint: "Click a row, then Buy.".to_string(),
+        hint: "Click an item, then Buy.".to_string(),
         delivery: None,
     }
 }
@@ -577,6 +580,7 @@ pub fn shop_item(item: &ItemConfig) -> ShopItem {
         icon: item.obj.map(|_| format!("icon.item.{}", item.id)),
         stats,
         builds_into: None,
+        tier: item.tier(),
     }
 }
 
@@ -1114,6 +1118,7 @@ mod tests {
             mana: 0.0,
             speed: 0.0,
             ability: 15.0,
+            tier: None,
         };
         let converted = shop_item(&item);
         assert_eq!(converted.name, "Test blade");
@@ -1152,6 +1157,7 @@ mod tests {
             mana: 0.0,
             speed: 0.0,
             ability: 0.0,
+            tier: None,
         };
         let catalog = ItemShop {
             items: vec![item("Sword", [1, 2, 3]), item("Shield", [4, 5, 6])],
@@ -1209,6 +1215,7 @@ mod tests {
             mana: 0.0,
             speed: 0.0,
             ability: 0.0,
+            tier: None,
         };
         let catalog = ItemShop {
             items: vec![item],

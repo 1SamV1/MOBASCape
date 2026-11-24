@@ -153,15 +153,27 @@ fn clicks_hit_categories_rows_buy_and_close() {
             Some(ShopHit::Category(index))
         );
     }
+    // Every grid cell hits its own item, and scrolling moves the cells.
+    let (cells, _, _) = shop::grid(&state.shop.items);
+    let centre = |cell: Rect, scroll: i32| {
+        (
+            area.x + 178 + cell.x + cell.w / 2,
+            area.y + 82 + cell.y - scroll + cell.h / 2,
+        )
+    };
+    for &(index, cell) in &cells {
+        assert_eq!(
+            shop::hit(area, 1, &state.shop, centre(cell, 0)),
+            Some(ShopHit::Row(index))
+        );
+    }
+    let (index, cell) = cells[cells.len() - 1];
+    state.shop.scroll = 20;
     assert_eq!(
-        shop::hit(area, 1, &state.shop, (760, 485)),
-        Some(ShopHit::Row(3))
+        shop::hit(area, 1, &state.shop, centre(cell, 20)),
+        Some(ShopHit::Row(index))
     );
-    state.shop.scroll = 44;
-    assert_eq!(
-        shop::hit(area, 1, &state.shop, (760, 485)),
-        Some(ShopHit::Row(4))
-    );
+    state.shop.scroll = 0;
     assert_eq!(
         shop::hit(area, 1, &state.shop, (1228, 697)),
         Some(ShopHit::Buy)
@@ -176,4 +188,37 @@ fn clicks_hit_categories_rows_buy_and_close() {
         Some(ShopHit::Close)
     );
     assert_eq!(shop::hit(area, 1, &state.shop, (10, 10)), None);
+}
+
+#[test]
+fn the_grid_groups_items_by_tier_cheapest_first() {
+    let state = sample::state();
+    let items = &state.shop.items;
+    let (cells, headers, height) = shop::grid(items);
+    assert_eq!(cells.len(), items.len());
+    // Reading order never goes back a tier, and within a tier never down
+    // in price.
+    for pair in cells.windows(2) {
+        let (a, b) = (&items[pair[0].0], &items[pair[1].0]);
+        assert!((a.tier, a.price) <= (b.tier, b.price));
+    }
+    assert!(!headers.is_empty());
+    assert!(height > cells.iter().map(|(_, c)| c.bottom()).max().unwrap());
+    // Cells never overlap.
+    for (i, (_, a)) in cells.iter().enumerate() {
+        for (_, b) in &cells[i + 1..] {
+            assert!(a.right() <= b.x || b.right() <= a.x || a.bottom() <= b.y || b.bottom() <= a.y);
+        }
+    }
+}
+
+#[test]
+fn scrolling_stops_at_the_end_of_the_grid() {
+    let mut state = sample::state();
+    assert_eq!(
+        shop::max_scroll(&state.shop),
+        (shop::grid(&state.shop.items).2 - 398).max(0)
+    );
+    state.shop.items.clear();
+    assert_eq!(shop::max_scroll(&state.shop), 0);
 }

@@ -18,7 +18,54 @@ pub const SIZE: (i32, i32) = (782, 580);
 /// The dim goes under the fixed interface; the shop itself over it.
 const DIM_LAYER: i32 = 5;
 const LAYER: i32 = 45;
-const ROW: i32 = 44;
+/// The item grid: cells of an icon slot with the price under it.
+const CELL: (i32, i32) = (52, 58);
+const COLUMNS: i32 = 6;
+const TIER_HEADER: i32 = 22;
+/// The centre view, relative to the overlay's top left (unscaled).
+const VIEW: (i32, i32, i32, i32) = (178, 82, 360, 398);
+
+/// Section labels, by [`ShopItem::tier`].
+pub const TIERS: [&str; 4] = ["Starter", "Early", "Core", "Late"];
+
+/// Where each item sits in the grid, unscaled and before scrolling, from
+/// the view's top left: `(item index, cell)`, plus the section headers
+/// `(label, y)` and the content height. Items are grouped by tier and
+/// cheapest first inside a tier, the shop's reading order.
+#[allow(clippy::type_complexity)]
+pub fn grid(items: &[ShopItem]) -> (Vec<(usize, Rect)>, Vec<(&'static str, i32)>, i32) {
+    let mut order: Vec<usize> = (0..items.len()).collect();
+    order.sort_by_key(|&i| (items[i].tier.min(3), items[i].price, i));
+    let mut cells = Vec::with_capacity(items.len());
+    let mut headers = Vec::new();
+    let mut y = 6;
+    let mut i = 0;
+    while i < order.len() {
+        let tier = items[order[i]].tier.min(3);
+        let run = order[i..]
+            .iter()
+            .take_while(|&&k| items[k].tier.min(3) == tier)
+            .count();
+        headers.push((TIERS[tier as usize], y));
+        y += TIER_HEADER;
+        for (k, &index) in order[i..i + run].iter().enumerate() {
+            let column = k as i32 % COLUMNS;
+            let row = k as i32 / COLUMNS;
+            cells.push((
+                index,
+                Rect::new(10 + column * (CELL.0 + 6), y + row * CELL.1, CELL.0, CELL.1),
+            ));
+        }
+        y += (run as i32 + COLUMNS - 1) / COLUMNS * CELL.1 + 6;
+        i += run;
+    }
+    (cells, headers, y)
+}
+
+/// How far the grid can scroll, in interface pixels.
+pub fn max_scroll(state: &ShopState) -> i32 {
+    (grid(&state.items).2 - VIEW.3).max(0)
+}
 
 /// Where the shop sits: centred, and never larger than the window.
 pub fn rect(screen: Rect, scale: i32) -> Rect {
@@ -62,18 +109,19 @@ pub fn hit(area: Rect, scale: i32, state: &ShopState, mouse: (i32, i32)) -> Opti
             return Some(ShopHit::Category(index));
         }
     }
-    let view = Rect::new(area.x + 178 * s, area.y + 82 * s, 360 * s, 398 * s);
-    for (index, _) in state.items.iter().enumerate() {
-        let y = view.y + index as i32 * ROW * s - state.scroll * s;
-        let row = Rect::new(view.x, y, view.w, 42 * s);
-        if mouse.1 >= row.y
-            && mouse.1 < row.bottom()
-            && mouse.1 >= view.y
-            && mouse.1 < view.bottom()
-            && mouse.0 >= row.x
-            && mouse.0 < row.right()
-        {
-            return Some(ShopHit::Row(index));
+    let view = Rect::new(
+        area.x + VIEW.0 * s,
+        area.y + VIEW.1 * s,
+        VIEW.2 * s,
+        VIEW.3 * s,
+    );
+    if mouse.1 >= view.y && mouse.1 < view.bottom() {
+        for (index, cell) in grid(&state.items).0 {
+            let x = view.x + cell.x * s;
+            let y = view.y + (cell.y - state.scroll) * s;
+            if point(x, y, cell.w * s, cell.h * s) {
+                return Some(ShopHit::Row(index));
+            }
         }
     }
     let detail = Rect::new(area.x + 550 * s, area.y + 48 * s, 218 * s, 432 * s);
@@ -194,23 +242,53 @@ pub fn draw(theme: &Theme, list: &mut DrawList, shop: &ShopState, gold: u32) {
         );
     }
 
-    // The item rows, clipped and scrolled.
-    let view = Rect::new(area.x + 178 * s, area.y + 82 * s, 360 * s, 398 * s);
+    // The item grid, in tier sections, clipped and scrolled.
+    let view = Rect::new(
+        area.x + VIEW.0 * s,
+        area.y + VIEW.1 * s,
+        VIEW.2 * s,
+        VIEW.3 * s,
+    );
     dark(theme, list, view);
-    let content = shop.items.len().max(1) as i32 * ROW * s;
-    let scroll = Scroll::new(view, content, shop.scroll * s);
+    let (cells, headers, content) = grid(&shop.items);
+    let scroll = Scroll::new(view, content * s, shop.scroll * s);
     list.push_clip(view);
-    for (n, item) in shop.items.iter().enumerate() {
-        let y = scroll.place(n as i32 * ROW * s);
-        if y + 42 * s < view.y || y > view.bottom() {
+    for (label, y) in headers {
+        let y = scroll.place(y * s);
+        if let Some(font) = bold {
+            list.text(font, label, view.x + 10 * s, y + 15 * s, title);
+            let width = font.width(label) * s;
+            list.rect(
+                Rect::new(
+                    view.x + 18 * s + width,
+                    y + 10 * s,
+                    view.w - 30 * s - width,
+                    1,
+                ),
+                [0.62, 0.50, 0.28, 0.55],
+            );
+        }
+    }
+    for (n, cell) in cells {
+        let Some(item) = shop.items.get(n) else {
+            continue;
+        };
+        let x = view.x + cell.x * s;
+        let y = scroll.place(cell.y * s);
+        if y + cell.h * s < view.y || y > view.bottom() {
             continue;
         }
-        let row = Rect::new(view.x, y, view.w, 42 * s);
+        let frame = Rect::new(x + 4 * s, y + 2 * s, (cell.w - 8) * s, 38 * s);
         if n == shop.selected {
-            list.rect(row, [0.16, 0.20, 0.27, 0.92]);
+            list.rect(
+                Rect::new(x, y, cell.w * s, cell.h * s),
+                [0.30, 0.24, 0.10, 0.85],
+            );
         }
-        let frame = Rect::new(view.x + 8 * s, y + 5 * s, 36 * s, 32 * s);
         slot(theme, list, frame);
+        if n == shop.selected {
+            list.outline(frame, s.max(1), [0.95, 0.80, 0.40, 1.0]);
+        }
         let icon = item
             .icon
             .as_deref()
@@ -245,24 +323,22 @@ pub fn draw(theme: &Theme, list: &mut DrawList, shop: &ShopState, gold: u32) {
                 );
             }
         }
-        if let Some(font) = body {
-            list.text(font, &item.name, view.x + 54 * s, y + 25 * s, text);
-        }
-        if let Some(font) = bold {
+        // The price under the icon: gold when affordable, greyed when not.
+        if let Some(font) = small {
             let price = item.price.to_string();
             let width = font.width(&price) * s;
             list.text(
                 font,
                 &price,
-                view.right() - 10 * s - width,
-                y + 25 * s,
-                gold_colour,
+                x + (cell.w * s - width) / 2,
+                y + 54 * s,
+                if item.price <= gold {
+                    gold_colour
+                } else {
+                    quiet
+                },
             );
         }
-        list.rect(
-            Rect::new(view.x + 8 * s, y + 43 * s, view.w - 16 * s, 1),
-            [0.30, 0.28, 0.22, 0.50],
-        );
     }
     list.pop_clip();
 

@@ -143,6 +143,9 @@ pub struct ShopItem {
     pub stats: Vec<String>,
     /// What this item builds into, when the item system has upgrades.
     pub builds_into: Option<String>,
+    /// Shop section: 0 starter, 1 early, 2 core, 3 late (see
+    /// `hud::shop::TIERS`).
+    pub tier: u8,
 }
 
 /// The shop overlay. Stage 3 holds one category and our six items; stage 4
@@ -413,6 +416,8 @@ pub struct HeroMark {
     pub at: MapPoint,
     pub blue: bool,
     pub player: bool,
+    /// Theme role of a small disc portrait drawn inside the ring.
+    pub portrait: Option<&'static str>,
 }
 
 /// The team's live vision over the map picture: `cols` by `rows` cells,

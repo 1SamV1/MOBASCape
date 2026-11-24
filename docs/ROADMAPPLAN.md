@@ -174,6 +174,11 @@ All objects from the cache, placed through the map format
   (camera trapezoid) done. Open in phase 1: lane and jungle floor colours
   from cache floor definitions. Post-grade saturation is still a shader
   constant (the post pass has no uniform buffer).
+- 2026-11-23: phase 3.2 layout started: tiered icon grid with prices under
+  icons. Phase 2.2: player portrait in the minimap ring. Open in phase 3:
+  recipes and Builds into data, selling and Undo (refund rate is a design
+  call), recommended page, search. Bot portraits need bots to carry a
+  champion id.
 
 ## Started with this plan
 
