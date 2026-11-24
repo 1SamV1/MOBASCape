@@ -147,114 +147,124 @@ def logo(y, word):
 
 
 # ============================================================================
-def stencil_logo(y, word):
-    """Stencil logo: letters cut by a horizontal gap at mid-height and
-    framed top and bottom with ▄▀ rails, like a BBS sysop's door banner."""
+def shaded_logo(y, word):
+    """Logo shaded left-to-right with the four block densities, the
+    classic ░▒▓█ ramp, so each letter fades in from the dark."""
     width = len(word) * 10 - 1
     x0 = (W - width) // 2
-    clear(x0 - 4, y - 2, x0 + width + 4, y + LOGO_ROWS + 2)
-    for x in range(x0 - 3, x0 + width + 3):
-        put(x, y - 1, "▄", DIM if x % 2 else MID)
-        put(x, y + LOGO_ROWS + 1, "▀", DIM if x % 2 else MID)
+    clear(x0 - 3, y - 1, x0 + width + 3, y + LOGO_ROWS)
+    ramp = "░▒▓█"
     for i, letter in enumerate(word):
         for r in range(LOGO_ROWS):
             for c, px in enumerate(LOGO[letter][r]):
                 if px == " ":
                     continue
-                row = r if r < 3 else r + 1
-                put(x0 + i * 10 + c, y + row, px, LOGO_GRAD[min(r, len(LOGO_GRAD) - 1)])
-    for x in range(x0 - 3, x0 + width + 3, 4):
-        put(x, y + 3, "·", FAINT)
+                ch = px if px in "▀▄" else ramp[min(3, c * 4 // 9 + 1)]
+                put(x0 + i * 10 + c, y + r, ch, LOGO_GRAD[r])
 
 
-stencil_logo(3, "MOBASCAPE")
+shaded_logo(3, "MOBASCAPE")
 fade_bar(1, 2, W - 3)
-center(12, "  ░▒▓  t H E   o R A C L E   r E C O M M E N D S  ::  1 3   i T E M S   f O R   y O U  ▓▒░  ", AMBER)
-center(13, "  " + elite("phase.3 // know thy build") + "  ", WHITE)
-fade_bar(14, 2, W - 3)
+center(10, "  ░▒▓  t H E   d R A F T  ::  1 0   h E R O E S   //   0   d U P L I C A T E S  ▓▒░  ", AMBER)
+center(11, "  " + elite("phase.4 // choose wisely, they are watching") + "  ", WHITE)
+fade_bar(12, 2, W - 3)
 
 # --- release info -------------------------------------------------------------
-header(16, elite("release info"))
-clear(4, 17, W - 5, 19)
+header(14, elite("release info"))
+clear(4, 15, W - 5, 18)
 info = [
-    ("rELEASE dATE", "2026-11-24", "cOMMIT", "815f2f6  ->  sam/main"),
-    ("tYPE", "rECOMMENDED tAB + fIX", "tESTS", "396 PASS // 0 FAIL   (+2)"),
-    ("lISTS", "MELEE RANGED MAGIC TANK", "fIXED", "detail != buy target. now one."),
+    ("rELEASE dATE", "2026-11-24", "cOMMIT", "96cef36  ->  sam/main"),
+    ("tYPE", "hERO sELECT: tEAM cOLUMNS", "tESTS", "400 PASS // 0 FAIL   (+4)"),
+    ("pICKS", "9 BOTS // DONE BY 22 s", "lOBBY", "shows the real lineups now"),
+    ("rULE", "NEVER STEAL YOUR HIGHLIGHT", "sTILL", "bots don't play their pick yet"),
 ]
 for i, (k1, v1, k2, v2) in enumerate(info):
-    y = 17 + i
+    y = 15 + i
     text(8, y, f"{k1:.<16}", DIM)
-    text(25, y, v1, AMBER if k1 == "lISTS" else BRIGHT)
+    text(25, y, v1, AMBER if k1 == "rULE" else BRIGHT)
     text(76, y, f"{k2:.<12}", DIM)
-    text(89, y, v2, RED if k2 == "fIXED" else HEAD)
+    text(89, y, v2, RED if k2 == "sTILL" else HEAD)
 
-# --- left: BBS door menu -------------------------------------------------------
-box(4, 21, 66, 44, elite("door.exe // the oracle"))
-text(8, 23, "╔══════════════════════════════════════════════════╗", DIM)
-text(8, 24, "║", DIM); text(10, 24, "THE ORACLE's ITEM DOOR  v1.0       node 6 of 6", HEAD); text(59, 24, "║", DIM)
-text(8, 25, "╠══════════════════════════════════════════════════╣", DIM)
-menu = [
-    ("[1]", "consult by HERO ID", "jad, kril, kree ..."),
-    ("[2]", "consult by ROLE WORD", "TANK"),
-    ("[3]", "consult by CLASS", "MELEE / RANGED / MAGIC"),
-    ("[4]", "no list? open on", "ALL"),
+# --- left: the draft timeline --------------------------------------------------
+box(4, 20, 74, 44, elite("draft.log // 30 seconds"))
+text(8, 22, "  t(s)  0    5    10   15   20   25   30", DIM)
+text(8, 23, "        ├────┼────┼────┼────┼────┼────┤", DIM)
+picks = [
+    ("RED  1", 2.5, "Kalphite Queen", RED),
+    ("BLUE 2", 4.5, "Venenatis", CYAN),
+    ("RED  2", 7.0, "Vorkath", RED),
+    ("BLUE 3", 9.5, "Blowpipe Ranger", CYAN),
+    ("RED  3", 12.0, "Ancient Wyvern", RED),
+    ("BLUE 4", 14.5, "Big Frog", CYAN),
+    ("RED  4", 17.0, "Kree'arra Jr.", RED),
+    ("BLUE 5", 19.5, "JalRek-Jad", CYAN),
+    ("RED  5", 22.0, "General Graardor", RED),
 ]
-for i, (k, what, eg) in enumerate(menu):
-    y = 26 + i * 2
-    text(8, y, "║", DIM); text(59, y, "║", DIM)
-    text(10, y, k, AMBER)
-    text(14, y, what, WHITE)
-    text(36, y, eg, CYAN)
-    text(8, y + 1, "║", DIM); text(59, y + 1, "║", DIM)
-text(8, 34, "╚══════════════════════════════════════════════════╝", DIM)
-text(8, 36, "Your choice? _", (120, 255, 140))
-put(21, 36, "█", BRIGHT)
-text(8, 38, "> kolodion :: BATTLE MAGE :: MAGIC", MID)
-text(8, 39, "  id? no.  BATTLE? no.  MAGE? no.  MAGIC? YES.", MID)
-text(8, 40, "  13 items. starter -> late. shop opens here.", (120, 255, 140))
-text(8, 42, "first match wins. _comments ignored. typos fail.", DIM)
+for i, (who, t, hero, col) in enumerate(picks):
+    y = 24 + i * 2
+    text(8, y, who, col)
+    x = 16 + int(t)
+    for k in range(16, x):
+        put(k, y, "·", FAINT)
+    put(x, y, "◆", col)
+    text(x + 2, y, hero, WHITE)
+text(8, 42, "YOU    ", AMBER)
+text(15, 42, "─" * 31 + "► Kolodion (locked)", AMBER)
 
-# --- right: the list as a file listing -----------------------------------------
-box(68, 21, W - 5, 44, elite("recommended.json // magic"))
-text(71, 23, "FILENAME            TIER     SIZE(gp)  DESC", HEAD)
-text(71, 24, "─" * 70, DIM)
-listing = [
-    ("STAFF_AIR.ITM", "starter", "300", "where every mage begins"),
-    ("BOOTS_LTH.ITM", "starter", "200", "leather. humble. fast."),
-    ("BOOTS_MYS.ITM", "early", "900", "mystic boots"),
-    ("STAFF_FIR.ITM", "early", "850", "builds into mystic fire"),
-    ("ROBE_MYS.ITM ", "core", "1400", "mystic robe top"),
-    ("STAFF_MFS.ITM", "core", "1400", "the upgrade lands"),
-    ("RING_SEER.ITM", "core", "2000", "seers ring"),
-    ("NECK_OCLT.ITM", "core", "2800", "occult necklace"),
-    ("ROBE_AHR.ITM ", "late", "3200", "ahrim's robetop"),
-    ("TRIDENT.ITM  ", "late", "3800", "trident of the seas"),
-    ("BOOTS_ETR.ITM", "late", "4200", "eternal boots"),
-    ("ROBE_ANC.ITM ", "late", "4800", "ancestral robe top"),
-    ("RING_MAGS.ITM", "late", "5000", "magus ring. endgame."),
+# --- right: the stage ---------------------------------------------------------
+box(76, 20, W - 5, 44, elite("stage.scr // the spotlight"))
+stage = [
+    " YOUR TEAM              ▲ 17 ▲              ENEMY ",
+    " ┌──────┐            ░░░░░░░░░░░            ┌──────┐",
+    " │ YOU  │           ░░░▒▒▒▒▒▒▒░░░           │ BOT1 │",
+    " │ ~*~  │          ░░▒▒▓▓▓▓▓▓▓▒▒░░          │ KQ   │",
+    " ├──────┤          ░▒▒▓▓  o  ▓▓▒▒░          ├──────┤",
+    " │ BOT1 │         ░▒▓▓▓  /|\\  ▓▓▓▒░         │ BOT2 │",
+    " │ VEN  │         ░▒▓▓▓  / \\  ▓▓▓▒░         │ VRK  │",
+    " ├──────┤        ░▒▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▒░        ├──────┤",
+    " │ BOT2 │       ░▒▒▓▓█ KOLODION █▓▓▒▒░      │ BOT3 │",
+    " │ ...  │        ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀        │ ...  │",
+    " └──────┘          [  LOCK IN  ]            └──────┘",
 ]
-tier_col = {"starter": (120, 255, 140), "early": CYAN, "core": AMBER, "late": RED}
-for i, (name, tier, size, desc) in enumerate(listing):
-    y = 25 + i
-    text(71, y, name, WHITE)
-    text(91, y, tier, tier_col[tier])
-    text(100, y, f"{size:>6}", HEAD)
-    text(111, y, desc, DIM)
-text(71, 39, "─" * 70, DIM)
-text(71, 40, "13 file(s)   30,850 gp total   bytes free: your gold", MID)
-text(71, 42, "[D]ownload = Buy    [S]ell = 70%    [U]ndo = 100%", AMBER)
+for i, line in enumerate(stage):
+    for j, ch in enumerate(line):
+        if ch == " ":
+            continue
+        if ch in "░▒▓█▀":
+            col = (230, 200, 120) if ch in "▓█" else (150, 130, 80) if ch == "▒" else (90, 80, 50)
+        elif ch in "┌┐└┘─│├┤":
+            col = DIM
+        elif j < 10:
+            col = CYAN
+        elif j > 40:
+            col = RED
+        else:
+            col = WHITE
+        put(79 + j, 22 + i, ch, col)
+roster = [
+    ("[Big Frog]", MID), ("[Callisto]", MID), ("[PICKED]", RED), ("[PICKED]", RED),
+    ("[Venenatis]", MID), ("[PICKED]", RED), ("[Kolodion]", AMBER), ("[Wise Old M]", MID),
+]
+x = 80
+for i, (name, col) in enumerate(roster):
+    text(80 + (i % 4) * 15, 35 + i // 4, name, col)
+text(80, 38, "PICKED  = dimmed, stamped, unclickable", MID)
+text(80, 39, "arrows  = step right over it", MID)
+text(80, 40, "bots    = take the type their team lacks", MID)
+text(80, 41, "lock in = the rest pick instantly", MID)
+text(80, 42, "result  = melee + ranged + magic, both sides", (120, 255, 140))
 
-# --- patch notes ---------------------------------------------------------------
-header(46, elite("patch notes // two minds, one item"))
+# --- design call --------------------------------------------------------------
+header(46, elite("sysop's note // left on your desk"))
 clear(4, 47, W - 5, 49)
-center(47, "tHE dETAIL pANE sHOWED sTAFF oF aIR wHILE bUY pOINTED aT a bRONZE sWORD tHE tAB hID.  ItemShop::shown() nOW rULES tHEM aLL.", HEAD)
-center(48, "data/items/recommended.json   //   recommend_for(id, role, class)   //   CATEGORY_LABELS[0] = RECOMMENDED", DIM)
+center(47, "mULTI-pART lATE rECIPES nEED a dESIGN cALL: nO oSRS cRAFT tAKES tWO oF oUR iTEMS.  wE'LL wAIT fOR tHE oPERATOR.", HEAD)
+center(48, "hero_select::PICK_SCHEDULE   //   HeroSelect { blue, red, seed }   //   is_picked()   //   lineups()   //   fill_picks()", DIM)
 
 # --- roadmap -------------------------------------------------------------------
 header(51, elite("roadmap // the oracle says"))
 clear(4, 52, W - 5, 56)
 phases = [
-    ("P1 LIGHT", 9), ("P2 MINIMAP", 5), ("P3 SHOP", 8), ("P4 SELECT", 1),
+    ("P1 LIGHT", 9), ("P2 MINIMAP", 5), ("P3 SHOP", 8), ("P4 SELECT", 3),
     ("P5 ARENA", 0), ("P6 HUD", 0), ("P7 POST", 0),
 ]
 for i, (name, done) in enumerate(phases):
@@ -265,14 +275,14 @@ for i, (name, done) in enumerate(phases):
     for j in range(10):
         put(x + 12 + j, y, "▓" if j < done else "░", BRIGHT if j < done else FAINT)
     text(x + 22, y, f"] {done * 10:>3}%", HEAD if done else FAINT)
-text(8, 55, ">> next: multi-part late recipes, then P4 hero select (lanes, team columns, battle spells)", MID)
+text(8, 55, ">> next in P4: lane picker (Top/Jungle/Mid/Carry/Support), battle spells, bots that play their pick", MID)
 
 fade_bar(57, 2, W - 3)
 clear(10, 58, W - 11, 61)
-center(58, "gREETZ: tHE oRACLE * tHE dOOR gAME sYSOPS * lORD * tRADEWARS * eVERY 'wHAT dO i bUY' iN aLL cHAT", MID)
+center(58, "gREETZ: eVERY 'mID oR fEED' * tHE 30-sECOND tIMER * tHE bOT wHO lOCKED iN kALPHITE qUEEN aT 2.5 s", MID)
 center(59, "nOT AFFILIATED WITH JAGEX. cACHE ASSETS STAY OUT OF GIT. aLWAYS.", DIM)
-center(60, "  y o u ' r e   n o t   t h e   o n e .   b u t   y o u r   b u i l d   c o u l d   b e .  ", HEAD)
-center(61, "-=[ mObAsCaPe // 2026 // nODE 6: tHE oRACLE // 57.6k // sYSoP: rIFT // cOOKIE iNCLUDED ]=-", AMBER)
+center(60, "  w h a t   i f   i   t o l d   y o u   t h e   e n e m y   d r a f t   i s   a   h a s h   o f   t h e   c l o c k ?  ", HEAD)
+center(61, "-=[ mObAsCaPe // 2026 // nODE 7: tHE dRAFT // 57.6k // sYSoP: rIFT // 10 hEROES, 0 dUPES ]=-", AMBER)
 
 # --- outputs ------------------------------------------------------------------
 with open(out + ".txt", "w") as f:
