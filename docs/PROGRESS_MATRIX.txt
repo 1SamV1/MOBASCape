@@ -1,62 +1,62 @@
    Z        4  ^8 :? : ~TQ  9T    -k7 ~ X  @           AA +     .     7  -D -  A    $B         |  97 7 :             6           X     $       ~ :.
   ░▒▓▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▓▒░
-       8    k  B  |# X !3D                                                                                                     &.F     ?       | C=
-    *  -       =  @@ 6 E@9+   ▀▀▀   ▀▀▀  ▀█████▀  ▀▀█████▀   ▀█████▀   ▀███████  ▀███████  ▀█████▀  ▀▀█████▀  ▀▀███████        Tk?     !       = 7F
-    :  Z       =  +1 < 7B78   █░▄▀ ▀▄░█ ▀█     █▀ ██     ██ ▀█     █▀ ██        ▀█        ▀█     █▀ ██     ██ ██             7 !J^     &       3  T
-    #  F       9  k> ~ F<JE   ██ ▄█▄ ██ ██     ██ █░██████  █░█████░█  ▄█████▀  ██        █░█████░█ █░█████▄  █░█████        3 :7#>    -       E  5
-    8  |       6  5T + C70? ──██─────██─██─────██─██─────█▀─██─────██────────█▀─██────────██─────██─██────────██─────────    : 8F$#    C       7  =
-    Q  A       X  6E . J|A&   ██     ██ ▄█     █▄ ██     █▄ ██     ██        █▄ ▄█        ██     ██ ██        ██             + <|88            7
-    ?  F       4  <7 J ~$.=   ▄▄     ▄▄  ▄█████▄  ▄▄█████▄  ▄▄     ▄▄ ███████▄   ▄███████ ▄▄     ▄▄ ▄▄        ▄▄███████      8  XT<
-    > -1       $  5D &%||^:                                                                                                  F  k~2
-    0 J  A     3   . !=0|4>                  ░▒▓  b U I L D S   f R O M   //   b U I L D S   i N T O  ▓▒░                    =  ?E*         8
-    < 8  ?     *  Q@ ~!==Z2  %  ?  A    + !T      |     Z   PHaSe.3 // THe uPGRaDe LaDDeR       D  B      | J     J      .   3  $%2         Z
+       8    k  B  |# X !                                                                                                       &.F     ?       | C=
+    *  -       =  @@ 6 E      ██▄   ▄██  ▄█████▄  ███████▄   ▄█████▄   ▄██████▄  ▄██████▄  ▄█████▄  ███████▄  █████████        Tk?     !       = 7F
+    :  Z       =  +1 < 7 ▌▌   ░░░░█░░░░█░░██   ░░█░░██   ░░█░░██   ░░█░░██      ░░██      ░░██   ░░█░░██   ░░█░░██             !J^     &       3  T
+    #  F       9  k> ~ F      ██ ▀█▀ ██ ██     ██ ███████▀  █████████  ▀█████▄  ██        █████████ ███████▀  ███████          :7#>    -       E  5
+    8  |       6  5T + C   ██ ░░  ██ ██ ░░  ██ ██ ░░  ██ ██ ░░  ██ ░░     ██ ██ ░░     ██ ░░  ██ ██ ░░     ██ ░░          ▐▐   8F$#    C       7  =
+    Q  A       X  6E . J  ▌▌  ░░█    ░░█░░█    ░░█░░█    ░░█░░█    ░░█       ░░█░░█       ░░█    ░░█░░█       ░░█              <|88            7
+    ?  F       4  <7 J ~      ██     ██  ▀█████▀  ███████▀  ██     ██ ▀██████▀   ▀██████▀ ██     ██ ██        █████████         XT<
+    > -1       $  5D &%|                                                                                                        k~2
+    0 J  A     3   . !=0|4>  T  D  4   ░▒▓  g R E P   t H E   e X C H A N G E   ::   s E A R C H   "sword"  ▓▒░   !      F   =  ?E*         8
+    < 8  ?     *  Q@ ~!==Z2  %  ?  A    + !T      |       PHaSe.3 // SeeK aND Ye SHaLL FiND     D  B      | J     J      .   3  $%2         Z
   ░▒▓▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▓▒░
     J =  @     ~  >@ !JJCQk  E  Q  T      T7      #     & :       $C  5  4 23   ! B @+          +  +      Z 4     C      #   :  AT4  7      *      *
     ■─────────────────────────────────────────────────────────  -=[ ReLeaSe iNFo ]=-  ───────────────────────────────────────────────────────────■ 2
-        rELEASE dATE.... 2026-11-24                                         cOMMIT...... 1a78702  ->  sam/main                                     F
-        tYPE............ sHOP rECIPES + dATA                                tESTS....... 392 PASS // 0 FAIL   (+3)                                 Q
-        rULE............ PAY THE DIFFERENCE                                 cLIPPY...... -D warnings :: CLEAN                                      J5
-        lADDERS......... 7 FAMILIES // 19 RECIPES                           gUARD....... validate_recipes() at load                                $E
+        rELEASE dATE.... 2026-11-24                                         cOMMIT...... d7bdcf1  ->  sam/main                                     F
+        tYPE............ sHOP sEARCH + bUGFIX                               tESTS....... 394 PASS // 0 FAIL   (+2)                                 Q
+        mATCH........... ALL WORDS, ANY FIELD                               cLIPPY...... -D warnings :: CLEAN                                      J5
+        fIXED........... LOBBY CARDS LINGERING                              kEYS........ box eats them: no stray Q casts                           $E
     * @  <J       4  +66    5   :   A     ?       <-    C  ~      ?$       Q+   4 E #&          -  !        E     +1         >  5 :  6      8 :    #.
-    ▄▀▀▐ LaDDeR.eXe // FoRGe RuN ▌▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▄ ▄▀▀▐ ReCiPeS.DaT // TRee ▌▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▄ 3&
-    █                                                                 █ █                                                                        █ B1
-    █   ╔═══════════════╗                                             █ █  ■ shortbow ─► oak ─► willow ─► maple ─► yew ─► magic                  █ <Q
-    █   ║ RUNE          ║  o==[]============----->   2400g  +700g     █ █                                                                        █ +&
-    █   ╚═══════▲═══════╝                                             █ █  ■ bronze plate ─► iron ─► steel ─► mithril ─► adamant ─► rune         █ ~T
-    █   ╔═══════════════╗                                             █ █                                                                        █  ?
-    █   ║ ADAMANT       ║  o==[]============---->    1700g  +500g     █ █  ■ staff of fire ─────────────► mystic fire staff                      █  $
-    █   ╚═══════▲═══════╝                                             █ █                                                                        █  T
-    █   ╔═══════════════╗                                             █ █  ■ bandos boots ──────────────► guardian boots                         █ 1%
-    █   ║ MITHRIL       ║  o==[]============--->     1200g  +350g     █ █                                                                        █ #D
-    █   ╚═══════▲═══════╝                                             █ █  ■ ranger boots ──────────────► pegasian boots                         █ !-
-    █   ╔═══════════════╗                                             █ █                                                                        █ <+
-    █   ║ STEEL         ║  o==[]============-->       850g  +300g     █ █  ■ dragon boots ──────────────► primordial boots                       █ |X
-    █   ╚═══════▲═══════╝                                             █ █                                                                        █ D-
-    █   ╔═══════════════╗                                             █ █  ┌─[ demo-shop.log ]───────────────────────────────────┐               █ ~F
-    █   ║ IRON          ║  o==[]============->        550g  +250g     █ █  │ > upgraded Iron sword   250g of 550g                │               █ 4k
-    █   ╚═══════▲═══════╝                                             █ █  │ > upgraded Steel sword  300g of 850g                │               █ 4
-    █   ╔═══════════════╗                                             █ █  │ > sold Staff of air     210g (70%)                  │               █ 6
-    █   ║ BRONZE        ║  o==[]============>         300g  buy       █ █  │ > undid Steel sword    +300g, Iron sword returns    │               █ @
-  ? █   ╚═══════════════╝                                             █ █  └─────────────────────────────────────────────────────┘               █ J
-  > █                                                                 █ █                                                                        █ :
-  B █   climb: 300 + 250 + 300 + 350 + 500 + 700 = 2400               █ █  grid: GREEN price = upgrade   GOLD = buy   GREY = broke               █ -
-  3 █   the parts melt down. the slot comes back.                     █ █  a full bag can still upgrade: the part frees its slot                 █ B
-  . █                                                                 █ █                                                                        █ J
-  9 █▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄█ █▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄█ C
+    ▄▀▀▐ TTY1 // THe eXCHaNGe ▌▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▄ ▄▀▀▐ MaTCHeR.C // THe SieVe ▌▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▄ 3&
+    █                                                                   █ █                                                                      █ B1
+    █   rift@exchange:~$ search staff fire                              █ █         query: "staff fire"                                          █ <Q
+    █     > Staff of fire ............ 850   [magic]                    █ █               │                                                      █ +&
+    █     > Mystic fire staff ....... 1400   [magic]                    █ █         ┌─────┴─────┐  split on whitespace, lowercase                █ ~T
+    █                                                                   █ █         ▼           ▼                                                █  ?
+    █   rift@exchange:~$ search mana                                    █ █      "staff"      "fire"                                             █  $
+    █     > every item that GIVES mana. stats are words too.            █ █         │           │                                                █  T
+    █                                                                   █ █         ▼           ▼                                                █ 1%
+    █   rift@exchange:~$ search fire sword                              █ █    ╔═══════════════════════════════════════╗                         █ #D
+    █     No items match the search.                                    █ █    ║ name      Staff of fire        ✓  ✓   ║                         █ !-
+    █     (every word must hit. no sword is on fire. yet.)              █ █    ║ id        staff of fire        ✓  ✓   ║                         █ <+
+    █                                                                   █ █    ║ category  magic                       ║                         █ |X
+    █   rift@exchange:~$ search sword                                   █ █    ║ stats     ability power               ║                         █ D-
+    █     > 8 items // starter 1 // early 3 // core 3 // late 1         █ █    ╚═══════════════════════════════════════╝                         █ ~F
+    █     > selection kept: Steel sword (still matches)                 █ █                 │  ALL words hit?                                    █ 4k
+    █                                                                   █ █                 ▼                                                    █ 4
+    █   rift@exchange:~$ q                                              █ █           [ SHOWN IN THE GRID ]                                      █ 6
+    █     > typed. not cast. the box holds the keyboard.                █ █                                                                      █ @
+  ? █                                                                   █ █   click box   -> gold frame + caret                                  █ J
+  > █   rift@exchange:~$ <ESC>                                          █ █   any click   -> stop typing                                         █ :
+  B █     > cleared. back to the fight.                                 █ █   close shop  -> search forgotten                                    █ -
+  3 █   rift@exchange:~$ █                                              █ █   held keys   -> released, no runaway camera                         █ B
+  . █                                                                   █ █                                                                      █ J
+  9 █▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄█ █▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄█ C
   3        % |  0%     B  9:  -% T  X& ^  : :    %  7  4 0=      &      3 #   9  4$    E -  ? +  25  % 1   C  111     ? :    Q 7      k   T     8  2
-  k ■─────────────────────────────────────────────────────  -=[ THe LaW oF THe FoRGe ]=-  ───────────────────────────────────────────────────────■ C
-                 I. oWN tHE pARTS   II. pAY tHE dIFFERENCE   III. tHE pARTS aRE cONSUMED   IV. uNDO rETURNS tHEM   V. nO pROFIT lOOPS              D
-                 "builds_from": ["iron_sword"]   //   ItemShop::upgrade() -> Upgrade { consumed, price }   //   part.cost < item.cost              4
+  k ■─────────────────────────────────────────────  -=[ PaTCH NoTeS // THe GHoST iN THe LoBBY ]=-  ──────────────────────────────────────────────■ C
+                    tHE 5v5 tEAM cARDS hAUNTED tHE aRENA: tHE oLD hUD mESH wAS uPLOADED eVERY fRAME bUT nEVER cLEARED.  eXORCISED.                 D
+                     items::matches_query()   //   ShopHit::Search   //   ItemShop { query, typing }   //   hud.vertices.clear()                   4
                                                                                                                                                    E
            J *   7     J  DD  %J - 4 $ $    2            D@      !   B  . Z  ^C  $     + J  58@  &         %  87      6 E    | Q      +   +     %  B
     ■──────────────────────────────────────────────────  -=[ RoaDMaP // THe oRaCLe SaYS ]=-  ────────────────────────────────────────────────────■ 1
-        P1 LIGHT   [▓▓▓▓▓▓▓▓▓░]  90%       P2 MINIMAP [▓▓▓▓▓░░░░░]  50%       P3 SHOP    [▓▓▓▓▓▓░░░░]  60%       P4 SELECT  [▓░░░░░░░░░]  10%     3k
+        P1 LIGHT   [▓▓▓▓▓▓▓▓▓░]  90%       P2 MINIMAP [▓▓▓▓▓░░░░░]  50%       P3 SHOP    [▓▓▓▓▓▓▓░░░]  70%       P4 SELECT  [▓░░░░░░░░░]  10%     3k
                                                                                                                                                   BB
         P5 ARENA   [░░░░░░░░░░]   0%       P6 HUD     [░░░░░░░░░░]   0%       P7 POST    [░░░░░░░░░░]   0%                                        @
-        >> next in P3: search box, recommended page, multi-part late recipes                                                                      7
+        >> next in P3: recommended page, multi-part late recipes                                                                                  7
                                                                                                                                                   1
   ░▒▓▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▓▒░
-  3      B                 gREETZ: dORIC's aNVIL * tHE dWARVEN mINE * eVERY nOOB wHO sMITHED 300 bRONZE dAGGERS tO gET hERE                     E @  &
+  3      B             gREETZ: gREP * tHE sEARCH bOX oN eVERY bBS fILE aREA * aNYONE wHO eVER tYPED /msg iNTO tHE wRONG wINDOW                  E @  &
   D      %                                 nOT AFFILIATED WITH JAGEX. cACHE ASSETS STAY OUT OF GIT. aLWAYS.                                     -    E
-  7      %    t h e r e   i s   n o   s p o o n .   o n l y   a   b r o n z e   s w o r d   y o u   w i l l   s o o n   o u t g r o w .         .    >
-  A      0                  -=[ mObAsCaPe // 2026 // nODE 4: tHE fORGE // 57.6k // sYSoP: rIFT // sTEEL - iRON = 300g ]=-                       T    &
+  7      %                    t h e   m a t r i x   h a s   y o u .   t y p e   ' s w o r d '   t o   c o n t i n u e .                         .    >
+  A      0                    -=[ mObAsCaPe // 2026 // nODE 5: tHE iNDEX // 57.6k // sYSoP: rIFT // 8 mATCHES fOUND ]=-                         T    &
