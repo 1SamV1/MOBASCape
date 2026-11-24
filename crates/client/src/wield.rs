@@ -59,10 +59,15 @@ fn prepare(model: &mut Model, def: &ItemDefinition) {
     }
 }
 
-/// The body with the weapon merged in (weapon parts last, like the client).
-pub fn armed_body(body: &[Model], weapon: &[Model]) -> Model {
+/// The body with the weapon merged in (weapon parts last, like the client),
+/// every part bound to the skeleton so the weapon stays in the hand.
+pub fn armed_body(
+    body: &[Model],
+    weapon: &[Model],
+    clips: &[std::sync::Arc<rift_cache::AnimationClip>],
+) -> Model {
     let parts: Vec<Model> = body.iter().chain(weapon).cloned().collect();
-    Model::merge(&parts)
+    crate::animated::bind_parts(&parts, clips, "armed body")
 }
 
 /// The weapon a hero should hold: the first held weapon in the inventory,
@@ -146,6 +151,7 @@ mod tests {
             texture_coords: None,
             face_normals: Vec::new(),
             vertex_groups: None,
+            follow_groups: None,
             priority: 0,
             face_alphas: None,
         }

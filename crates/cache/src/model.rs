@@ -19,6 +19,11 @@ pub struct Model {
     pub texture_coords: Option<Vec<i8>>,
     pub face_normals: Vec<[f32; 3]>,
     pub vertex_groups: Option<Vec<Vec<u32>>>,
+    /// Vertices that take a group's transforms without counting toward its
+    /// pivot: parts bound to the nearest body limb by
+    /// [`crate::skeleton::assemble`] (a foreign weapon, a crown). Keeping them
+    /// out of the pivot average stops them dragging the body's joints.
+    pub follow_groups: Option<Vec<Vec<u32>>>,
     pub priority: i8,
     /// Per-face transparency, 0 opaque to 255 invisible. `None` when the
     /// model has no translucent faces. Spell and projectile models use it
@@ -247,6 +252,7 @@ impl Model {
             texture_coords,
             face_normals,
             vertex_groups,
+            follow_groups: None,
             priority,
             face_alphas,
         })
@@ -434,6 +440,7 @@ impl Model {
             },
             face_normals,
             vertex_groups,
+            follow_groups: None,
             priority,
             face_alphas,
         })
@@ -621,6 +628,7 @@ impl Model {
             texture_coords: None,
             face_normals: Vec::new(),
             vertex_groups: None,
+            follow_groups: None,
             priority: parts.iter().map(|part| part.priority).max().unwrap_or(0),
             face_alphas: None,
         };
@@ -725,6 +733,7 @@ impl Model {
                 .as_ref()
                 .is_some_and(|groups| group_ids.len() * 2 >= groups.len());
             let mut vertices = Vec::new();
+            let mut followers = Vec::new();
             for &group in group_ids {
                 if !global && masked_groups.is_some_and(|masked| masked.contains(&group)) {
                     continue;
@@ -735,6 +744,13 @@ impl Model {
                     .and_then(|g| g.get(group as usize))
                 {
                     vertices.extend_from_slice(group_vertices);
+                }
+                if let Some(group_vertices) = self
+                    .follow_groups
+                    .as_ref()
+                    .and_then(|g| g.get(group as usize))
+                {
+                    followers.extend_from_slice(group_vertices);
                 }
             }
             if group_type == 0 {
@@ -749,6 +765,8 @@ impl Model {
                 offset = pivot_of(&points, [dx, dy, dz]);
                 continue;
             }
+            // Followers move with the group but never set its pivot.
+            vertices.extend_from_slice(&followers);
             if vertices.is_empty() {
                 continue;
             }
@@ -1092,6 +1110,7 @@ mod tests {
             texture_coords: None,
             face_normals: vec![[0.0, 1.0, 0.0]],
             vertex_groups: Some(groups),
+            follow_groups: None,
             priority: 0,
             face_alphas: None,
         }

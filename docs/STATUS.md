@@ -1,6 +1,24 @@
 # Status
 
-Last updated: hero select team columns, 2026-11-24.
+Last updated: skeleton binding, 2026-11-24.
+
+## 2026-11-24 — Skeleton binding: no more floating limbs
+
+- Multi-part heroes no longer come apart while they animate. Before this,
+  every attachment was frozen in the rest pose (`Model::merge` dropped its
+  labels): Graardor's arms, kit heroes' hands and heads, Kree'arra's bird,
+  Zilyana's sword, the Ranger's legs.
+- `rift_cache::skeleton::assemble` binds each part native / follow / rigid
+  by measuring drift and stretch over idle, walk and attack (ADR-053).
+  Followers never move a pivot (`Model::follow_groups`), so the old
+  blowpipe pivot bug stays fixed.
+- Limb identification (`identify_limbs`) names each label head / torso /
+  arm / leg / tail and limits a following vertex to its own limb region.
+- In the pinned cache, frozen parts drifted 0.02–0.76 of the hero's height;
+  bound, every part stays under 0.03, and that limit is a test.
+- `rift-tools skeleton <hero|all> [--sheet out.png]` shows bindings, the
+  limb map and old-vs-new poses. `--demo-anim` now honours `--champion`.
+
 
 ## 2026-11-24 — Hero select: team columns and bot picks
 

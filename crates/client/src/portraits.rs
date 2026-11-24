@@ -49,9 +49,9 @@ fn bake_models_with_clip(
             .with_context(|| format!("loading model {id}"))?;
         parts.push(Model::load(id, &group.data)?);
     }
-    // Multi-model NPCs must be merged before animation so the parts share the
-    // body's vertex-group transforms.
-    let model = Model::merge(&parts);
+    // Multi-model NPCs must be merged and bound to one skeleton before
+    // animation so every part follows the body.
+    let model = rift_cache::skeleton::assemble(&parts, &[clip]).0;
     let positions = model.animated_positions(clip, time_ms);
     if positions.is_empty() || model.faces.is_empty() {
         anyhow::bail!("model {model_id} has no geometry");
@@ -306,6 +306,7 @@ mod tests {
             texture_coords: None,
             face_normals: Vec::new(),
             vertex_groups: None,
+            follow_groups: None,
             priority: 0,
             face_alphas: None,
         };

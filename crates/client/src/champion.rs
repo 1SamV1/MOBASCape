@@ -407,4 +407,64 @@ mod tests {
             "blowpipe range should be long"
         );
     }
+
+    /// Every shipped hero, animated through idle and walk on the pinned
+    /// cache: no part may drift off the body (the old merge froze
+    /// attachments, so heads, feet and hands came apart).
+    #[test]
+    fn every_hero_part_stays_on_the_body() {
+        use rift_cache::skeleton::{Binding, DRIFT_LIMIT, assemble};
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let cache_dir = root.join(".cache/osrs-235/cache");
+        if !cache_dir.join("main_file_cache.dat2").exists() {
+            return;
+        }
+        let cache = rift_cache::Cache::open(&cache_dir).expect("cache");
+        let mut checked = 0;
+        for entry in std::fs::read_dir(root.join("data/champions")).expect("champions") {
+            let path = entry.expect("entry").path();
+            let config: ChampionConfig =
+                serde_json::from_str(&std::fs::read_to_string(&path).expect("read"))
+                    .expect("parse");
+            if config.attachments.is_empty() {
+                continue;
+            }
+            let parts: Vec<rift_cache::Model> = std::iter::once(config.model)
+                .chain(config.attachments.iter().copied())
+                .map(|id| {
+                    rift_cache::Model::load(id, &cache.group(7, id).expect("model").data)
+                        .expect("decode")
+                })
+                .collect();
+            let clips: Vec<rift_cache::AnimationClip> = [config.idle, config.walk]
+                .iter()
+                .map(|&seq| rift_cache::AnimationClip::load(&cache, seq).expect("clip"))
+                .collect();
+            let refs: Vec<&rift_cache::AnimationClip> = clips.iter().collect();
+            let (_, reports) = assemble(&parts, &refs);
+            for r in reports.iter().skip(1) {
+                let chosen = match r.binding {
+                    Binding::Native => r.native_drift,
+                    Binding::Rigid => r.rigid_drift,
+                    _ => r.follow_drift,
+                };
+                assert!(
+                    chosen <= DRIFT_LIMIT,
+                    "{} part {} (model {}) drifts {chosen:.3} of its height",
+                    config.name,
+                    r.index,
+                    r.model_id
+                );
+                // Allow integer rounding in the transforms (0.5% of height).
+                assert!(
+                    chosen <= r.static_drift + 0.005,
+                    "{} part {} got worse",
+                    config.name,
+                    r.index
+                );
+            }
+            checked += 1;
+        }
+        assert!(checked >= 10, "multi-part heroes checked: {checked}");
+    }
 }

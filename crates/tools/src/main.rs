@@ -168,6 +168,18 @@ enum Command {
         #[arg(long, default_value_t = 100_000)]
         window: u32,
     },
+    /// Bind each champion's parts to its skeleton and print the decision per
+    /// part (native labels or follow the nearest limb) with the measured
+    /// drift, plus the limb each label moves. `champion` is a file stem in
+    /// data/champions, or `all`.
+    Skeleton {
+        champion: String,
+        /// Write a before/after contact sheet: per hero, a row posed with the
+        /// old merge (attachments frozen) and a row with the bound skeleton,
+        /// across the walk and attack clips.
+        #[arg(long)]
+        sheet: Option<PathBuf>,
+    },
     Match {
         #[arg(long, default_value_t = 1)]
         seed: u32,
@@ -237,6 +249,9 @@ fn main() -> Result<()> {
             }
         }
         Command::Animate { model, sequence } => animate(&cache, model, sequence)?,
+        Command::Skeleton { champion, sheet } => {
+            skeleton_report(&cache, &champion, sheet.as_deref())?
+        }
         Command::Model { id } => model(&cache, id)?,
         Command::ExportObj { id, out } => export_obj(&cache, id, &out)?,
         Command::Sprite { id, out } => sprite(&cache, id, &out)?,
@@ -1141,6 +1156,103 @@ fn skeleton_anims(
             }
         }
         model_sheet::sheet(&tiles, 12, 96).save(path)?;
+        println!("wrote {} tiles to {}", tiles.len(), path.display());
+    }
+    Ok(())
+}
+
+fn skeleton_report(cache: &Cache, which: &str, sheet: Option<&Path>) -> Result<()> {
+    const POSES: usize = 6;
+    let mut tiles = Vec::new();
+    use rift_cache::skeleton::{Binding, assemble, identify_limbs};
+    let mut files: Vec<PathBuf> = std::fs::read_dir("data/champions")?
+        .filter_map(|e| e.ok().map(|e| e.path()))
+        .filter(|p| p.extension().is_some_and(|x| x == "json"))
+        .filter(|p| which == "all" || p.file_stem().is_some_and(|s| s == which))
+        .collect();
+    files.sort();
+    for path in files {
+        let json: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&path)?)?;
+        let name = json["name"].as_str().unwrap_or("?");
+        let ids: Vec<u32> = std::iter::once(json["model"].as_u64().unwrap_or(0) as u32)
+            .chain(
+                json["attachments"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .filter_map(|v| v.as_u64().map(|v| v as u32)),
+            )
+            .collect();
+        let parts: Vec<Model> = ids
+            .iter()
+            .map(|&id| Model::load(id, &cache.group(7, id)?.data))
+            .collect::<std::result::Result<_, _>>()?;
+        let clips: Vec<rift_cache::AnimationClip> = ["idle", "walk", "attack_anim"]
+            .iter()
+            .filter_map(|key| json[*key].as_u64())
+            .filter_map(|seq| rift_cache::AnimationClip::load(cache, seq as u32).ok())
+            .collect();
+        let refs: Vec<&rift_cache::AnimationClip> = clips.iter().collect();
+        let (model, reports) = assemble(&parts, &refs);
+        println!("== {name} ({} parts, {} clips)", parts.len(), clips.len());
+        for r in &reports {
+            let how = match r.binding {
+                Binding::Base => "base  ",
+                Binding::Native => "NATIVE",
+                Binding::Follow => "FOLLOW",
+                Binding::Rigid => "RIGID ",
+            };
+            if r.binding == Binding::Base {
+                println!(
+                    "  part {} model {:>6}: {how} {} verts, {} labelled",
+                    r.index, r.model_id, r.vertices, r.labelled
+                );
+            } else {
+                println!(
+                    "  part {} model {:>6}: {how} {} verts, {} labelled, {} touching | drift static {:.3} native {:.3} follow {:.3} rigid {:.3} | stretch native {:.3} follow {:.3} | tear {:.3}",
+                    r.index,
+                    r.model_id,
+                    r.vertices,
+                    r.labelled,
+                    r.contacts,
+                    r.static_drift,
+                    r.native_drift,
+                    r.follow_drift,
+                    r.rigid_drift,
+                    r.native_stretch,
+                    r.follow_stretch,
+                    r.native_tear
+                );
+            }
+        }
+        if sheet.is_some() && parts.len() > 1 {
+            let old = Model::merge(&parts);
+            // Walk (second clip) when there is one, then the attack.
+            let posed: Vec<&rift_cache::AnimationClip> = clips.iter().skip(1).collect();
+            for (label, m) in [("old", &old), ("new", &model)] {
+                for clip in &posed {
+                    for i in 0..POSES / posed.len().max(1) {
+                        let t =
+                            clip.loop_ms() * (i as f32 + 0.5) / (POSES / posed.len().max(1)) as f32;
+                        let positions = m.animated_positions(clip, t);
+                        let tile = model_sheet::render_pose(m, &positions, 160, [44, 44, 52, 255]);
+                        let short: String = name.chars().take(10).collect();
+                        tiles.push((format!("{label} {short}"), tile));
+                    }
+                }
+            }
+        }
+        let limbs = identify_limbs(&model);
+        let named: Vec<String> = limbs
+            .iter()
+            .enumerate()
+            .filter(|(_, l)| **l != rift_cache::skeleton::Limb::Empty)
+            .map(|(i, l)| format!("{i}:{}", l.label()))
+            .collect();
+        println!("  limbs {}", named.join(" "));
+    }
+    if let Some(path) = sheet {
+        model_sheet::sheet(&tiles, POSES, 160).save(path)?;
         println!("wrote {} tiles to {}", tiles.len(), path.display());
     }
     Ok(())

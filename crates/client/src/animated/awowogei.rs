@@ -208,10 +208,15 @@ impl AwowogeiState {
             .ok();
         let gorilla = (|| -> anyhow::Result<GorillaAssets> {
             let parts = assets.merged_parts(GORILLA_MODELS[0], &GORILLA_MODELS[1..])?;
+            let idle = assets.clip(GORILLA_IDLE)?;
+            let walk = assets.clip(GORILLA_WALK).ok();
+            let clips: Vec<Arc<AnimationClip>> = std::iter::once(Arc::clone(&idle))
+                .chain(walk.iter().cloned())
+                .collect();
             Ok(GorillaAssets {
-                model: Arc::new(Model::merge(&parts)),
-                idle: assets.clip(GORILLA_IDLE)?,
-                walk: assets.clip(GORILLA_WALK).ok(),
+                model: Arc::new(super::bind_parts(&parts, &clips, "gorilla")),
+                idle,
+                walk,
                 attack: assets.clip(GORILLA_ATTACK).ok(),
             })
         })()

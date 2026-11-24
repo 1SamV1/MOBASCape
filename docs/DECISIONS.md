@@ -778,3 +778,33 @@ which avoids a second 3D pass for one model.
 Humanoid heroes visibly wield their weapon, using the OSRS method of
 merging item wield models into the body. Only the player skeleton supports
 this, so boss heroes keep whatever their models hold.
+
+## ADR-053 — Multi-part heroes bind every part to one skeleton
+
+**Status:** accepted; supersedes the `Model::merge` note on the Ranger
+blowpipe above.
+
+`Model::merge` dropped every attachment's skeleton labels so a held
+blowpipe could not corrupt the body's pivots. The cost was that 12 of 16
+heroes had parts frozen in the rest pose while the body animated:
+Graardor's arms left his body, kit heroes' hands, heads and feet came
+apart, Kree'arra's bird hung beside its body.
+
+`rift_cache::skeleton::assemble` now merges the parts and, for each
+attachment, measures three bindings over the hero's idle, walk and attack
+clips:
+
+- native labels (what the OSRS client does),
+- regional follow (each vertex follows the nearest already-bound vertex
+  in the same limb region, found by limb identification),
+- rigid follow (the whole part follows one label; for solid single-label
+  parts like a staff, never for left/right pairs).
+
+Followers move with a label but never count toward its pivot
+(`Model::follow_groups`), so a foreign part cannot drag the joints, which
+was the original blowpipe bug. Each candidate scores contact drift plus
+mesh-edge stretch. Native labels are kept unless they tear the body's own
+joints or score clearly worse. Every hero, NPC summon, the gorilla form,
+the armed body, the hero-select spotlight and the portraits use it. A
+cache-gated test holds every shipped hero part within 3% of its height of
+the body. `rift-tools skeleton --sheet` draws the before/after poses.

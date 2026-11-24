@@ -940,7 +940,7 @@ impl AnimatedScene {
             )?;
             if !spawn.attachments.is_empty() {
                 let parts = assets.merged_parts(spawn.model_id, &spawn.attachments)?;
-                unit.model = Arc::new(Model::merge(&parts));
+                unit.model = Arc::new(bind_parts(&parts, &unit_clips(&unit), "ambient"));
             }
             for &(find, replace) in &spawn.recolors {
                 Arc::make_mut(&mut unit.model).recolor(&[find], &[replace]);
@@ -977,7 +977,10 @@ impl AnimatedScene {
         let player_can_wield = crate::wield::can_wield(&units[player_index].idle);
         {
             if !champion.attachments.is_empty() {
-                units[player_index].model = Arc::new(Model::merge(&player_body));
+                units[player_index].attack_clip = champion_clips(&mut assets, champion).0;
+                let clips = unit_clips(&units[player_index]);
+                units[player_index].model =
+                    Arc::new(bind_parts(&player_body, &clips, &champion.name));
             }
             let player = &mut units[player_index];
             player.mana = champion.mana;
@@ -3087,7 +3090,8 @@ impl AnimatedScene {
         )?;
         if !champion.attachments.is_empty() {
             let parts = assets.merged_parts(champion.model, &champion.attachments)?;
-            unit.model = Arc::new(Model::merge(&parts));
+            unit.attack_clip = champion_clips(&mut assets, champion).0;
+            unit.model = Arc::new(bind_parts(&parts, &unit_clips(&unit), &champion.name));
         }
         unit.armor = champion.armor;
         unit.is_champion = true;
@@ -6243,6 +6247,37 @@ impl<'a> UnitAssets<'a> {
         }
         Ok(parts)
     }
+}
+
+/// The clips a unit plays most (idle, walk and attack when it has them),
+/// used to score how its parts bind to the skeleton.
+pub(crate) fn unit_clips(unit: &AnimatedUnit) -> Vec<Arc<AnimationClip>> {
+    std::iter::once(Arc::clone(&unit.idle))
+        .chain(unit.walk.iter().cloned())
+        .chain(unit.attack_clip.iter().cloned())
+        .collect()
+}
+
+/// Merge a hero's or NPC's parts and bind each one to the skeleton (see
+/// `rift_cache::skeleton`): parts on the body's skeleton keep their labels,
+/// foreign or unlabelled parts follow the nearest limb, so nothing is left
+/// frozen while the body animates.
+pub(crate) fn bind_parts(parts: &[Model], clips: &[Arc<AnimationClip>], who: &str) -> Model {
+    let refs: Vec<&AnimationClip> = clips.iter().map(|clip| clip.as_ref()).collect();
+    let (model, reports) = rift_cache::skeleton::assemble(parts, &refs);
+    for report in reports.iter().skip(1) {
+        tracing::debug!(
+            "skeleton: {who} part {} (model {}) {:?}: drift native {:.3} follow {:.3} frozen {:.3}, tear {:.3}",
+            report.index,
+            report.model_id,
+            report.binding,
+            report.native_drift,
+            report.follow_drift,
+            report.static_drift,
+            report.native_tear
+        );
+    }
+    model
 }
 
 #[allow(clippy::too_many_arguments)]

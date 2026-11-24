@@ -304,8 +304,9 @@ fn main() -> Result<()> {
         cli.region_y
     );
     let mut champions = ChampionConfig::load_all()?;
+    // The animation demo shows King Awowogei unless a hero is named.
     let requested_champion = if cli.demo_anim {
-        Some("monkey")
+        cli.champion.as_deref().or(Some("monkey"))
     } else {
         cli.champion.as_deref()
     };

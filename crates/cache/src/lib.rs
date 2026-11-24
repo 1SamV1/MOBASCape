@@ -11,6 +11,7 @@ pub mod locations;
 pub mod model;
 pub mod reference;
 pub mod sequence;
+pub mod skeleton;
 pub mod sound;
 pub mod spotanim;
 pub mod sprite;

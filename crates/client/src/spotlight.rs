@@ -264,11 +264,12 @@ impl Spotlight {
         if crate::wield::can_wield(&idle) {
             parts.extend(weapon.iter().cloned());
         }
-        let model = Model::merge(&parts);
         let intro = champion
             .cast_anim
             .or(champion.attack_anim)
             .and_then(|id| AnimationClip::load(cache, id).ok());
+        let refs: Vec<&AnimationClip> = std::iter::once(&idle).chain(intro.as_ref()).collect();
+        let model = rift_cache::skeleton::assemble(&parts, &refs).0;
         let mut poses = vec![model.animated_positions(&idle, 0.0)];
         if let Some(intro) = &intro {
             let length = intro.loop_ms();

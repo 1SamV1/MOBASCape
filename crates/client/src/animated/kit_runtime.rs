@@ -209,8 +209,11 @@ impl KitRuntime {
                 } else {
                     None
                 };
+                let clips: Vec<Arc<AnimationClip>> = std::iter::once(Arc::clone(&idle))
+                    .chain(walk.iter().cloned())
+                    .collect();
                 Ok(NpcAssets {
-                    model: Arc::new(Model::merge(&parts)),
+                    model: Arc::new(super::bind_parts(&parts, &clips, "summon")),
                     idle,
                     walk,
                 })
@@ -859,7 +862,8 @@ impl AnimatedScene {
             return;
         }
         self.player_weapon = obj;
-        let model = Arc::new(crate::wield::armed_body(&self.player_body, parts));
+        let clips = super::unit_clips(&self.units[self.player_index]);
+        let model = Arc::new(crate::wield::armed_body(&self.player_body, parts, &clips));
         match self.kit_rt.transform.as_mut() {
             Some(transform) => transform.model = model,
             None => {
