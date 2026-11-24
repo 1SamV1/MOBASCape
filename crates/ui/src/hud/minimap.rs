@@ -15,6 +15,12 @@ pub const SIZE: (i32, i32) = (266, 264);
 const FRAME: i32 = 6;
 const PICTURE: (i32, i32) = (254, 252);
 const LAYER: i32 = 20;
+/// The veil over ground the team cannot see.
+/// Dark green, not navy: over the brown jungle floor a blue veil read
+/// grey, while the reference's unseen jungle stays a deep green.
+const VEIL: Colour = [0.01, 0.05, 0.02, 0.66];
+/// The lighter veil just outside the team's sight.
+const VEIL_EDGE: Colour = [0.01, 0.05, 0.02, 0.32];
 
 /// Where a click lands on the map picture, as fractions of its width and
 /// height (0 at the top left, 1 at the bottom right). `None` outside the
@@ -70,39 +76,56 @@ pub fn draw(theme: &Theme, list: &mut DrawList, area: Rect, state: &MinimapState
         }
     };
 
-    // The river and then the three lanes, so the lanes read over it.
-    line(list, &state.river, 9, [0.07, 0.24, 0.36, 0.95]);
+    // The river as a soft band, then the three lanes as worn beige
+    // roads over it, as the reference map paints them.
+    line(list, &state.river, 7, [0.30, 0.52, 0.66, 0.42]);
     for lane in &state.lanes {
-        line(list, lane, 3, [0.52, 0.47, 0.29, 0.92]);
+        line(list, lane, 6, [0.70, 0.64, 0.45, 0.92]);
     }
 
     // The team's live vision: unseen ground sits under a dark veil, so the
     // areas allies can see (and the shadows walls cast in their sight)
-    // show in real time. Runs of hidden cells merge into one rectangle.
+    // show in real time. Hidden cells touching seen ones take a lighter
+    // veil, which softens the edge as the reference's sight circles are.
+    // Runs of cells with the same veil merge into one rectangle.
     if let Some(vision) = &state.vision
         && vision.cols > 0
         && vision.rows > 0
         && vision.seen.len() == vision.cols * vision.rows
     {
-        let cell = |i: usize, total: usize, span: i32| (i as i32 * span) / total as i32;
-        for row in 0..vision.rows {
-            let y0 = cell(row, vision.rows, PICTURE.1);
-            let y1 = cell(row + 1, vision.rows, PICTURE.1);
+        let (cols, rows) = (vision.cols as i32, vision.rows as i32);
+        let seen = |c: i32, r: i32| {
+            c >= 0 && r >= 0 && c < cols && r < rows && vision.seen[(r * cols + c) as usize]
+        };
+        // 0 seen, 1 hidden at the edge of sight, 2 hidden.
+        let veil = |c: i32, r: i32| {
+            if seen(c, r) {
+                0
+            } else if (-1..=1).any(|dr| (-1..=1).any(|dc| seen(c + dc, r + dr))) {
+                1
+            } else {
+                2
+            }
+        };
+        let cell = |i: i32, total: i32, span: i32| (i * span) / total;
+        for row in 0..rows {
+            let y0 = cell(row, rows, PICTURE.1);
+            let y1 = cell(row + 1, rows, PICTURE.1);
             let mut col = 0;
-            while col < vision.cols {
-                if vision.seen[row * vision.cols + col] {
+            while col < cols {
+                let kind = veil(col, row);
+                let start = col;
+                while col < cols && veil(col, row) == kind {
                     col += 1;
+                }
+                if kind == 0 {
                     continue;
                 }
-                let start = col;
-                while col < vision.cols && !vision.seen[row * vision.cols + col] {
-                    col += 1;
-                }
-                let x0 = cell(start, vision.cols, PICTURE.0);
-                let x1 = cell(col, vision.cols, PICTURE.0);
+                let x0 = cell(start, cols, PICTURE.0);
+                let x1 = cell(col, cols, PICTURE.0);
                 list.rect(
                     Rect::new(map.x + x0 * s, map.y + y0 * s, (x1 - x0) * s, (y1 - y0) * s),
-                    [0.0, 0.01, 0.02, 0.52],
+                    if kind == 1 { VEIL_EDGE } else { VEIL },
                 );
             }
         }
@@ -116,16 +139,33 @@ pub fn draw(theme: &Theme, list: &mut DrawList, area: Rect, state: &MinimapState
             theme.colour("text.team.red")
         }
     };
+    // Bases and towers as solid team squares with a white core, the way
+    // the reference minimap marks buildings.
+    let building = |list: &mut DrawList, x: i32, y: i32, half: i32, core: i32, colour: Colour| {
+        let outer = Rect::new(
+            x - half * s - s,
+            y - half * s - s,
+            (half * 2 + 2) * s,
+            (half * 2 + 2) * s,
+        );
+        list.rect(outer, [0.02, 0.02, 0.02, 0.95]);
+        list.rect(
+            Rect::new(x - half * s, y - half * s, half * 2 * s, half * 2 * s),
+            colour,
+        );
+        list.outline(
+            Rect::new(x - core * s, y - core * s, core * 2 * s, core * 2 * s),
+            s.max(1),
+            [1.0, 1.0, 1.0, 0.95],
+        );
+    };
     for StructureMark { at: point, blue } in &state.bases {
         let (x, y) = at(*point);
-        let ring = Rect::new(x - 8 * s, y - 8 * s, 16 * s, 16 * s);
-        list.rect(ring, [0.02, 0.02, 0.02, 0.9]);
-        list.outline(ring, 2 * s.max(1), team(*blue));
+        building(list, x, y, 7, 3, team(*blue));
     }
     for StructureMark { at: point, blue } in &state.structures {
         let (x, y) = at(*point);
-        let ring = Rect::new(x - 4 * s, y - 4 * s, 8 * s, 8 * s);
-        list.outline(ring, s.max(1), team(*blue));
+        building(list, x, y, 4, 1, team(*blue));
     }
 
     // Camps and units, the unit colours from the theme's map dots.
@@ -260,7 +300,7 @@ mod hit_tests {
     }
 
     #[test]
-    fn unseen_ground_is_veiled_in_merged_runs() {
+    fn unseen_ground_is_veiled_in_merged_runs_with_a_soft_edge() {
         let lit = quads(&empty_state());
         let mut state = empty_state();
         // Two rows: the first fully hidden (one run), the second with a
@@ -270,7 +310,16 @@ mod hit_tests {
             rows: 2,
             seen: vec![false, false, false, false, true, false],
         });
+        // Every hidden cell touches the seen one, so all take the edge
+        // veil: one run on the first row, two on the second.
         assert_eq!(quads(&state), lit + 3);
+        // Far from any seen cell the full veil takes over as its own run.
+        state.vision = Some(VisionMask {
+            cols: 4,
+            rows: 1,
+            seen: vec![true, false, false, false],
+        });
+        assert_eq!(quads(&state), lit + 2);
         state.vision = Some(VisionMask {
             cols: 3,
             rows: 2,
