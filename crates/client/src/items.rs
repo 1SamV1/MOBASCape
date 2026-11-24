@@ -96,9 +96,43 @@ pub struct ItemShop {
     pub query: String,
     /// True while keys go to the search box instead of the game.
     pub typing: bool,
+    /// The Recommended tab for the current hero (indices into `items`).
+    pub recommended: Vec<usize>,
+    /// `data/items/recommended.json`: key (champion id, role word or
+    /// class) to item ids.
+    pub recommendations: std::collections::BTreeMap<String, Vec<String>>,
 }
 
-pub const CATEGORY_LABELS: [&str; 7] = [
+/// Where the Recommended lists live. Optional: without it the tab is empty
+/// and the shop opens on ALL.
+pub const RECOMMENDED_PATH: &str = "data/items/recommended.json";
+
+/// Parse the Recommended file, dropping `_`-prefixed comment keys and
+/// rejecting unknown item ids.
+pub fn parse_recommendations(
+    text: &str,
+    items: &[ItemConfig],
+) -> Result<std::collections::BTreeMap<String, Vec<String>>> {
+    let raw: std::collections::BTreeMap<String, serde_json::Value> = serde_json::from_str(text)?;
+    let mut out = std::collections::BTreeMap::new();
+    for (key, value) in raw {
+        if key.starts_with('_') {
+            continue;
+        }
+        let ids: Vec<String> = serde_json::from_value(value)
+            .with_context(|| format!("{RECOMMENDED_PATH}: {key} must be a list of item ids"))?;
+        for id in &ids {
+            if !items.iter().any(|item| &item.id == id) {
+                anyhow::bail!("{RECOMMENDED_PATH}: {key} names unknown item {id}");
+            }
+        }
+        out.insert(key.to_uppercase(), ids);
+    }
+    Ok(out)
+}
+
+pub const CATEGORY_LABELS: [&str; 8] = [
+    "RECOMMENDED",
     "ALL",
     "MELEE",
     "RANGED",
@@ -114,13 +148,19 @@ impl ItemShop {
             .context("reading data/items/items.json")?;
         let items: Vec<ItemConfig> = serde_json::from_str(&data)?;
         validate_recipes(&items)?;
+        let recommendations = match std::fs::read_to_string(RECOMMENDED_PATH) {
+            Ok(text) => parse_recommendations(&text, &items)?,
+            Err(_) => Default::default(),
+        };
         Ok(Self {
             items,
             owned: [None; 6],
             undo: Vec::new(),
+            recommended: Vec::new(),
+            recommendations,
             open: false,
             selected: Some(0),
-            category: 0,
+            category: 1,
             scroll: 0,
             query: String::new(),
             typing: false,
@@ -133,10 +173,45 @@ impl ItemShop {
         self.undo.clear();
         self.open = false;
         self.selected = Some(0);
-        self.category = 0;
+        self.category = self.default_category();
         self.scroll = 0;
         self.query.clear();
         self.typing = false;
+    }
+
+    /// The item the detail pane shows and Buy/Sell act on: the selection
+    /// when the current tab and search show it, else the first item shown.
+    pub fn shown(&self) -> Option<usize> {
+        let shown = self.filtered_items();
+        self.selected
+            .filter(|index| shown.contains(index))
+            .or_else(|| shown.first().copied())
+    }
+
+    /// The tab the shop opens on: Recommended when there is a list.
+    pub fn default_category(&self) -> usize {
+        if self.recommended.is_empty() { 1 } else { 0 }
+    }
+
+    /// Pick the Recommended list for a hero: its id, then each word of its
+    /// role, then its class. Returns the key used, if any.
+    pub fn recommend_for(&mut self, id: &str, role: &str, class: &str) -> Option<String> {
+        let keys = std::iter::once(id.to_uppercase())
+            .chain(role.split_whitespace().map(str::to_uppercase))
+            .chain(std::iter::once(class.to_uppercase()));
+        for key in keys {
+            if let Some(ids) = self.recommendations.get(&key) {
+                self.recommended = ids
+                    .iter()
+                    .filter_map(|wanted| self.items.iter().position(|item| &item.id == wanted))
+                    .collect();
+                self.category = self.default_category();
+                return Some(key);
+            }
+        }
+        self.recommended.clear();
+        self.category = self.default_category();
+        None
     }
 
     pub fn is_owned(&self, index: usize) -> bool {
@@ -277,14 +352,10 @@ impl ItemShop {
             .iter()
             .enumerate()
             .filter(|(_, item)| matches_query(item, &self.query))
-            .filter(|(_, item)| match self.category {
-                1 => item.category == "melee",
-                2 => item.category == "ranged",
-                3 => item.category == "magic",
-                4 => item.category == "armour",
-                5 => item.category == "jewellery",
-                6 => item.category == "boots",
-                _ => true,
+            .filter(|(index, item)| match CATEGORY_LABELS.get(self.category) {
+                Some(&"RECOMMENDED") => self.recommended.contains(index),
+                Some(&"ALL") | None => true,
+                Some(label) => item.category.eq_ignore_ascii_case(label),
             })
             .map(|(index, _)| index)
             .collect()
@@ -466,6 +537,8 @@ mod tests {
             scroll: 0,
             query: String::new(),
             typing: false,
+            recommended: Vec::new(),
+            recommendations: Default::default(),
         };
         assert_eq!(
             shop.upgrade(1),
@@ -520,10 +593,12 @@ mod tests {
             undo: Vec::new(),
             open: true,
             selected: Some(1),
-            category: 0,
+            category: 1,
             scroll: 120,
             query: String::new(),
             typing: true,
+            recommended: Vec::new(),
+            recommendations: Default::default(),
         };
         for ch in "sw!".chars() {
             shop.type_char(ch);
@@ -541,6 +616,74 @@ mod tests {
         shop.open = false;
         shop.sync_visit();
         assert!(shop.query.is_empty() && !shop.typing);
+    }
+
+    #[test]
+    fn recommendations_pick_id_then_role_word_then_class() {
+        let items = vec![
+            item("bronze_sword", 300, &[]),
+            item("staff_of_air", 300, &[]),
+            item("bronze_platebody", 350, &[]),
+        ];
+        let text = r#"{"_doc": "x", "melee": ["bronze_sword"], "MAGIC": ["staff_of_air"],
+                       "TANK": ["bronze_platebody"], "jad": ["staff_of_air", "bronze_sword"]}"#;
+        let mut shop = ItemShop {
+            recommendations: parse_recommendations(text, &items).expect("parse"),
+            items,
+            owned: [None; 6],
+            undo: Vec::new(),
+            recommended: Vec::new(),
+            open: false,
+            selected: None,
+            category: 1,
+            scroll: 0,
+            query: String::new(),
+            typing: false,
+        };
+        assert!(
+            !shop.recommendations.contains_key("_DOC"),
+            "comments dropped"
+        );
+        assert_eq!(
+            shop.recommend_for("kril", "DEMON BRUISER", "Melee")
+                .as_deref(),
+            Some("MELEE")
+        );
+        assert_eq!(shop.recommended, vec![0]);
+        assert_eq!(shop.category, 0, "opens on Recommended");
+        assert_eq!(shop.filtered_items(), vec![0]);
+        shop.selected = Some(1);
+        assert_eq!(
+            shop.shown(),
+            Some(0),
+            "a selection the tab hides is not acted on"
+        );
+        assert_eq!(
+            shop.recommend_for("kq", "SWARM TANK", "MELEE").as_deref(),
+            Some("TANK")
+        );
+        assert_eq!(
+            shop.recommend_for("jad", "TANK", "RANGED").as_deref(),
+            Some("JAD")
+        );
+        assert_eq!(shop.recommended, vec![1, 0]);
+        assert_eq!(shop.recommend_for("x", "", "CHEF"), None);
+        assert_eq!(shop.category, 1, "no list: opens on ALL");
+        assert!(parse_recommendations(r#"{"MELEE": ["ghost"]}"#, &shop.items).is_err());
+    }
+
+    #[test]
+    fn the_shipped_recommendations_cover_every_class() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let items: Vec<ItemConfig> = serde_json::from_str(
+            &std::fs::read_to_string(root.join("data/items/items.json")).expect("items"),
+        )
+        .expect("parse items");
+        let text = std::fs::read_to_string(root.join(RECOMMENDED_PATH)).expect("recommended");
+        let lists = parse_recommendations(&text, &items).expect("recommended parses");
+        for class in ["MELEE", "RANGED", "MAGIC"] {
+            assert!(lists.get(class).is_some_and(|l| l.len() >= 8), "{class}");
+        }
     }
 
     #[test]
@@ -598,6 +741,8 @@ mod tests {
             scroll: 0,
             query: String::new(),
             typing: false,
+            recommended: Vec::new(),
+            recommendations: Default::default(),
         };
         shop.forget_purchase(3);
         assert_eq!(
@@ -668,10 +813,12 @@ mod tests {
             undo: Vec::new(),
             open: false,
             selected: Some(0),
-            category: 0,
+            category: 1,
             scroll: 0,
             query: String::new(),
             typing: false,
+            recommended: Vec::new(),
+            recommendations: Default::default(),
         }
     }
 
@@ -729,19 +876,22 @@ mod tests {
     #[test]
     fn category_filtering_works() {
         let mut shop = test_shop();
-        assert_eq!(shop.filtered_items(), vec![0, 1, 2, 3, 4, 5]);
         shop.category = 1;
-        assert_eq!(shop.filtered_items(), vec![0]);
+        assert_eq!(shop.filtered_items(), vec![0, 1, 2, 3, 4, 5]);
         shop.category = 2;
-        assert_eq!(shop.filtered_items(), vec![2]);
+        assert_eq!(shop.filtered_items(), vec![0]);
         shop.category = 3;
-        assert_eq!(shop.filtered_items(), vec![3]);
+        assert_eq!(shop.filtered_items(), vec![2]);
         shop.category = 4;
-        assert_eq!(shop.filtered_items(), vec![1]);
+        assert_eq!(shop.filtered_items(), vec![3]);
         shop.category = 5;
-        assert_eq!(shop.filtered_items(), vec![4]);
+        assert_eq!(shop.filtered_items(), vec![1]);
         shop.category = 6;
+        assert_eq!(shop.filtered_items(), vec![4]);
+        shop.category = 7;
         assert_eq!(shop.filtered_items(), vec![5]);
+        shop.category = 0;
+        assert!(shop.filtered_items().is_empty(), "no Recommended list yet");
     }
 
     #[test]

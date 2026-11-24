@@ -184,7 +184,10 @@ All objects from the cache, placed through the map format
   difference pricing, Undo restores parts). Open in phase 3: recommended
   page, search box, multi-part recipes for late items (data only now).
 - 2026-11-24: phase 3 search box done. Open in phase 3: recommended page,
-  multi-part late recipes. Bot portraits need bots to carry a
+  multi-part late recipes.
+- 2026-11-24: phase 3 Recommended tab done (data-driven per class/role/
+  hero). Open in phase 3: multi-part late recipes, then phase 4 hero
+  select. Bot portraits need bots to carry a
   champion id.
 
 ## Started with this plan

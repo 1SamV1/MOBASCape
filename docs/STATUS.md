@@ -1,6 +1,21 @@
 # Status
 
-Last updated: shop search box, 2026-11-24.
+Last updated: shop Recommended tab, 2026-11-24.
+
+## 2026-11-24 — Recommended tab
+
+- `data/items/recommended.json`: lists keyed by champion id, a role word
+  (`TANK`) or class (`MELEE`, `RANGED`, `MAGIC`), tried in that order
+  (`ItemShop::recommend_for`). Unknown item ids fail at load; `_` keys are
+  comments. Shipped: one list per class plus TANK, 12–13 items each across
+  all four tiers.
+- New first category, RECOMMENDED; the shop opens on it when the hero has
+  a list (else ALL). Categories now filter by label, not index.
+- Fixed: the detail pane, tooltip and Buy/Sell could act on a selection
+  the current tab or search hid (the demo showed Staff of air while Buy
+  pointed at the bronze sword). `ItemShop::shown()` is now the one item
+  all of them use.
+- Verified: Kolodion (BATTLE MAGE, MAGIC) gets the 13-item MAGIC list.
 
 ## 2026-11-24 — Shop search
 

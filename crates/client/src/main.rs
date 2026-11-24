@@ -338,7 +338,14 @@ fn main() -> Result<()> {
         "private" => menu::MatchMode::Private,
         _ => menu::MatchMode::Bot,
     });
-    let shop = ItemShop::load()?;
+    let mut shop = ItemShop::load()?;
+    let key = shop.recommend_for(&champion.id, &champion.role, &champion.class);
+    tracing::info!(
+        "shop: {} recommended items for {} (list {})",
+        shop.recommended.len(),
+        champion.name,
+        key.as_deref().unwrap_or("none")
+    );
     let phase = Instant::now();
     let scene = scene::build(&cache, cli.region_x, cli.region_y, cli.radius, &cli.map)?;
     tracing::info!(
@@ -1091,13 +1098,13 @@ impl ApplicationHandler for App {
                         return;
                     }
                     if shop_buy_at(w, h, self.mouse_pos) {
-                        if let Some(item) = self.shop.selected {
+                        if let Some(item) = self.shop.shown() {
                             self.purchase_item(item);
                         }
                         return;
                     }
                     if shop_sell_at(w, h, self.mouse_pos) {
-                        if let Some(item) = self.shop.selected {
+                        if let Some(item) = self.shop.shown() {
                             self.sell_item(item);
                         }
                         return;
@@ -1664,7 +1671,9 @@ impl App {
                     self.shop.upgrade(steel).price
                 );
                 self.shop.selected = Some(steel);
-                // Search for swords: the steel sword stays selected.
+                // Search every item for swords: the steel sword stays
+                // selected.
+                self.shop.category = 1;
                 self.shop.typing = true;
                 self.shop.set_query("sword");
                 tracing::info!(
@@ -3192,6 +3201,8 @@ impl App {
         self.animated = Some(animated);
         self.hero_select.open = false;
         self.hero_select.hover = None;
+        self.shop
+            .recommend_for(&champion.id, &champion.role, &champion.class);
         self.shop.reset();
         self.event_log = vec![
             format!("{} READY", champion.name.to_uppercase()),
@@ -3506,13 +3517,13 @@ impl App {
                         }
                     }
                     rift_ui::hud::shop::ShopHit::Buy => {
-                        if let Some(item) = self.shop.selected {
+                        if let Some(item) = self.shop.shown() {
                             self.purchase_item(item);
                         }
                     }
                     rift_ui::hud::shop::ShopHit::Search => self.shop.typing = true,
                     rift_ui::hud::shop::ShopHit::Sell => {
-                        if let Some(item) = self.shop.selected {
+                        if let Some(item) = self.shop.shown() {
                             self.sell_item(item);
                         }
                     }

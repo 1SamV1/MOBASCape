@@ -1,0 +1,26 @@
+{
+  "_doc": "Shop 'Recommended' tab. Keys are tried in order: the champion id, each word of its role (e.g. TANK), then its class (MELEE, RANGED, MAGIC). Values are item ids from items.json; the shop groups them by tier.",
+  "MELEE": [
+    "bronze_sword", "leather_boots", "amulet_of_accuracy", "warrior_ring",
+    "boots", "rune_sword", "fighter_torso", "dragon_scimitar",
+    "amulet_of_torture", "primordial_boots", "abyssal_whip", "bandos_chestplate",
+    "ultor_ring"
+  ],
+  "RANGED": [
+    "shortbow", "leather_boots", "amulet_of_accuracy", "ranger_boots",
+    "archers_ring", "black_dhide_body", "magic_shortbow", "necklace_of_anguish",
+    "rune_crossbow", "pegasian_boots", "armadyl_chestplate", "venator_ring"
+  ],
+  "MAGIC": [
+    "staff_of_air", "leather_boots", "mystic_boots", "mystic_robe_top",
+    "seers_ring", "staff_of_fire", "mystic_fire_staff", "occult_necklace",
+    "ahrims_robetop", "trident_of_the_seas", "eternal_boots",
+    "ancestral_robe_top", "magus_ring"
+  ],
+  "TANK": [
+    "bronze_platebody", "leather_boots", "ring_of_life", "amulet_of_glory",
+    "steel_platebody", "rune_platebody", "rune_platelegs", "bandos_boots",
+    "guardian_boots", "dragon_platebody", "ring_of_suffering",
+    "bandos_chestplate", "torva_platebody"
+  ]
+}

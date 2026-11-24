@@ -363,7 +363,7 @@ pub fn tooltip(shop: &ItemShop, mouse: (i32, i32)) -> Option<TooltipState> {
     if !shop.open {
         return None;
     }
-    let index = shop.selected?;
+    let index = shop.shown()?;
     let item = shop.items.get(index)?;
     let stats = shop_item(item).stats;
     Some(TooltipState {
@@ -542,8 +542,8 @@ pub fn shop(shop: &ItemShop) -> ShopState {
             entry
         })
         .collect();
-    let selected = shop
-        .selected
+    let shown = shop.shown();
+    let selected = shown
         .and_then(|wanted| filtered.iter().position(|&index| index == wanted))
         .unwrap_or(0);
     ShopState {
@@ -564,13 +564,11 @@ pub fn shop(shop: &ItemShop) -> ShopState {
         scroll: shop.scroll,
         hint: "Owned parts make upgrades cheaper. Undo refunds in full.".to_string(),
         delivery: None,
-        sell_price: shop
-            .selected
+        sell_price: shown
             .filter(|&index| shop.is_owned(index))
             .and_then(|index| shop.items.get(index))
             .map(|item| crate::items::sell_price(item.cost)),
-        owned: shop
-            .selected
+        owned: shown
             .map(|index| shop.owned_count(index) as u32)
             .unwrap_or(0),
         undo: shop
@@ -1173,15 +1171,17 @@ mod tests {
             undo: Vec::new(),
             open: true,
             selected: Some(0),
-            category: 1,
+            category: 2,
             scroll: 0,
             query: String::new(),
             typing: false,
+            recommended: Vec::new(),
+            recommendations: Default::default(),
         };
         let state = shop(&catalog);
         assert!(state.open);
-        assert_eq!(state.category, 1);
-        assert_eq!(state.categories[1], "MELEE");
+        assert_eq!(state.category, 2);
+        assert_eq!(state.categories[2], "MELEE");
         assert_eq!(state.categories.len(), CATEGORY_LABELS.len());
         assert_eq!(state.items.len(), 1);
         assert_eq!(state.selected, 0);
@@ -1214,6 +1214,8 @@ mod tests {
             scroll: 0,
             query: String::new(),
             typing: false,
+            recommended: Vec::new(),
+            recommendations: Default::default(),
         };
         let slots = inventory(&catalog);
         assert_eq!(slots.len(), 6);
@@ -1272,10 +1274,12 @@ mod tests {
             undo: Vec::new(),
             open: true,
             selected: Some(0),
-            category: 0,
+            category: 1,
             scroll: 0,
             query: String::new(),
             typing: false,
+            recommended: Vec::new(),
+            recommendations: Default::default(),
         };
         let tooltip = tooltip(&catalog, (400, 250)).expect("a tooltip");
         assert_eq!(tooltip.title, "Test ring");
