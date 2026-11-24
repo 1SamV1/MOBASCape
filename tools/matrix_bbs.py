@@ -147,160 +147,192 @@ def logo(y, word):
 
 
 # ============================================================================
-def glitch_logo(y, word):
-    """Signal-loss logo: the block font on interlaced scanlines (odd rows
-    dimmed to ▓, even rows solid), with two rows torn sideways like a
-    VHS tracking error and RGB-split ghosts trailing the tear."""
+import math
+
+VIOLET = (190, 140, 255)
+GOLD = (255, 210, 90)
+EMBER = (255, 120, 60)
+
+
+def extruded_logo(y, word):
+    """ACiD-style 3D block logo: the face in the green gradient, extruded
+    two cells down-right in ▓▒ shade, with a ░ cast shadow beneath."""
     width = len(word) * 10 - 1
-    x0 = (W - width) // 2
-    clear(x0 - 5, y - 1, x0 + width + 5, y + LOGO_ROWS)
-    tear = {1: 2, 4: -3}
-    for ghosts in (True, False):
+    x0 = (W - width) // 2 - 1
+    clear(x0 - 2, y - 1, x0 + width + 5, y + LOGO_ROWS + 2)
+    cells = {}
+    for i, letter in enumerate(word):
         for r in range(LOGO_ROWS):
-            shift = tear.get(r, 0)
-            if ghosts and not shift:
-                continue
-            for i, letter in enumerate(word):
-                for c, px in enumerate(LOGO[letter][r]):
-                    if px == " ":
-                        continue
-                    x = x0 + i * 10 + c
-                    if ghosts:
-                        # RGB-split ghost left where the row used to be.
-                        put(x, y + r, "░", (150, 40, 50) if shift > 0 else (40, 120, 150))
-                    else:
-                        ch = px if px in "▀▄" else ("█" if r % 2 == 0 else "▓")
-                        put(x + shift, y + r, ch, LOGO_GRAD[r])
+            for c, px in enumerate(LOGO[letter][r]):
+                if px != " ":
+                    cells[(x0 + i * 10 + c, y + r)] = px
+    def enclosed(x, yy):
+        # Inside a letter's counter (face cells both sides on the row):
+        # the inner wall is drawn dark so the letter still reads.
+        return any((x - k, yy) in cells for k in range(1, 4)) and any(
+            (x + k, yy) in cells for k in range(1, 8))
+
+    for (dx, dy, ch, col) in ((3, 2, "░", (0, 40, 10)), (2, 1, "▒", (0, 90, 25)), (1, 1, "▓", (0, 140, 35))):
+        for (x, yy) in cells:
+            tx, ty = x + dx, yy + dy
+            if (tx, ty) not in cells:
+                inner = enclosed(tx, ty)
+                put(tx, ty, "░" if inner else ch, (0, 45, 12) if inner else col)
+    for (x, yy), px in cells.items():
+        put(x, yy, px if px in "▀▄" else "█", LOGO_GRAD[yy - y])
 
 
-glitch_logo(3, "MOBASCAPE")
+def rune_circle(cx, cy, rx, ry, runes, col_ring, col_rune):
+    """A summoning circle: double ring at 2:1 aspect, runes on the outer
+    ring, a hexagram of ∙ chords inside, a ◆ at the heart."""
+    clear(cx - rx - 1, cy - ry, cx + rx + 1, cy + ry)
+    for k in range(240):
+        t = k / 240 * math.tau
+        for (sx, sy, ch) in ((1.0, 1.0, "·"), (0.78, 0.74, "∙")):
+            x = cx + round(math.cos(t) * rx * sx)
+            yy = cy + round(math.sin(t) * ry * sy)
+            put(x, yy, ch, col_ring if sx == 1.0 else DIM)
+    pts = [(cx + math.cos(math.tau * i / 6 - math.pi / 2) * rx * 0.7,
+            cy + math.sin(math.tau * i / 6 - math.pi / 2) * ry * 0.7) for i in range(6)]
+    for tri in ((0, 2, 4), (1, 3, 5)):
+        for j in range(3):
+            (ax, ay), (bx, by) = pts[tri[j]], pts[tri[(j + 1) % 3]]
+            for k in range(30):
+                f = k / 29
+                put(round(ax + (bx - ax) * f), round(ay + (by - ay) * f), "·", FAINT if tri[0] else (60, 40, 100))
+    for i, ch in enumerate(runes):
+        t = math.tau * i / len(runes) - math.pi / 2
+        put(cx + round(math.cos(t) * rx), cy + round(math.sin(t) * ry), ch, col_rune)
+    put(cx, cy, "◆", WHITE)
+
+
+extruded_logo(3, "MOBASCAPE")
+rune_circle(12, 6, 9, 4, "Q✶W†E‡R§", VIOLET, GOLD)
+rune_circle(W - 13, 6, 9, 4, "★Q☩W✦E☼R", VIOLET, GOLD)
 fade_bar(1, 2, W - 3)
-center(10, "  ░▒▓  t H E   b O T N E T  ::  9   h E R O E S   j A C K E D   i N   //   1   n E X U S   o P E N  ▓▒░  ", AMBER)
-center(11, "  " + elite("they lane. they jungle. they gank in pairs. they buy boots.") + "  ", WHITE)
-fade_bar(12, 2, W - 3)
+center(12, "  ░▒▓  n O D E   1 0 :   t H E   g R I M O I R E   //   9   b O T S   l E A R N   t O   c A S T  ▓▒░  ", AMBER)
+center(13, "  " + elite("q. w. e. r. read from the rank tables, spoken in the lane.") + "  ", WHITE)
+fade_bar(14, 2, W - 3)
 
-# --- release info -------------------------------------------------------------
-header(14, elite("release info"))
-clear(4, 15, W - 5, 19)
+# --- release info ---------------------------------------------------------------
+header(16, elite("release info"))
+clear(4, 17, W - 5, 20)
 info = [
-    ("rELEASE dATE", "2026-11-24", "cOMMIT", "52da251  ->  sam/main"),
-    ("tYPE", "bOT hEROES + oPEN nEXUS", "tESTS", "407 pass // clippy clean"),
-    ("hITSPLATS", "48x46 -> 24x23 (cache 1x)", "bANANA", "40% pure chips towers"),
-    ("lANE bUGS", "WAVES DIED OUT AT 2:00", "fIX", "cap counts the living"),
-    ("", "WAVES WALKED PAST TOWERS", "fIX", "edge + 400 reach"),
+    ("rELEASE dATE", "2026-11-24", "cOMMIT", "f7d6170  ->  sam/main"),
+    ("tYPE", "bOT aBILITIES", "tESTS", "410 pass // clippy clean"),
+    ("bUG", "BOTS SPAWNED WITH 0 MANA", "fIX", "champion pool, +20/level"),
+    ("aDR", "055: cast from the data", "cASTS", "110 in a 6:00 sim"),
 ]
 for i, (k1, v1, k2, v2) in enumerate(info):
-    y = 15 + i
-    text(8, y, f"{k1:.<16}", DIM)
-    text(25, y, v1, RED if y >= 18 else BRIGHT)
-    text(76, y, f"{k2:.<12}", DIM)
-    text(89, y, v2, HEAD)
+    yy = 17 + i
+    text(8, yy, f"{k1:.<16}", DIM)
+    text(25, yy, v1, RED if k1 == "bUG" else BRIGHT)
+    text(76, yy, f"{k2:.<12}", DIM)
+    text(89, yy, v2, HEAD)
 
-# --- left: the bot brain --------------------------------------------------------
-box(4, 21, 74, 44, elite("brain.c // one think per second"))
-brain = [
-    "            ┌────────────┐   90 s    ┌────────────┐",
-    "   spawn ──►│    LANE    │──────────►│   JUNGLE   │",
-    "            │ last-hit   │◄──────────│ own side   │",
-    "            │ no tower   │  1 camp   │ of river   │",
-    "            │ dives solo │           └─────┬──────┘",
-    "            └──┬───┬─────┘                 │ lv 5+",
-    "     every 80 s│   │ gold >= item+400      ▼",
-    "        ┌──────▼┐  │            ┌─────────────────┐",
-    "        │ GANK  │  │            │  REGION  BOSS   │",
-    "        │ x  2  │  │            │ jungler+laner   │",
-    "        │weakest│  │            │ -> TEAM BUFF    │",
-    "        └───────┘  ▼            └─────────────────┘",
-    "            ┌──────────────┐",
-    "  hp < 30% ►│   RETREAT    │► heal 6%/s, buy next",
-    "            └──────────────┘  recommended item",
+# --- left: the spellbook ----------------------------------------------------------
+box(4, 22, 74, 46, elite("spellbook.dat // four shapes"))
+cards = [
+    ("CARE", "no damage in the ranks", [
+        "     +  ✚  +     ",
+        "   ✚    @    ✚   ",
+        "      /█\\        ",
+        "      / \\        ",
+        " heal 25% missing",
+        " or shield 15%   ",
+        " when hp < 60%   ",
+    ], (110, 230, 120)),
+    ("NOVA", "range 0", [
+        "   · ∙ ∙ ∙ ·     ",
+        " ∙  ░▒▒▒▒░  ∙    ",
+        "∙  ▒  @   ▒  ∙   ",
+        " ∙  ░▒▒▒▒░  ∙    ",
+        "   · ∙ ∙ ∙ ·     ",
+        " r 320 round the ",
+        " caster          ",
+    ], (255, 190, 80)),
+    ("STRIKE", "range <= 450", [
+        "                 ",
+        " @ ════► ✸  m    ",
+        "       ░▒█▒░     ",
+        "     m  ░▒░  m   ",
+        "                 ",
+        " blast + splash  ",
+        " 170 at target   ",
+    ], (120, 200, 255)),
+    ("BOLT", "range > 450", [
+        "                 ",
+        " @ ·∙•○◎●═══>  X ",
+        "                 ",
+        "  homing: never  ",
+        "  misses         ",
+        " stun/root/slow  ",
+        " land up front   ",
+    ], (200, 140, 255)),
 ]
-for i, line in enumerate(brain):
-    for j, ch in enumerate(line):
-        if ch == " ":
-            continue
-        if ch in "┌┐└┘─│┬┴├┤▼►◄":
-            col = DIM
-        elif ch.isupper():
-            col = AMBER if line[j:j + 4] in ("GANK", "RETR") else CYAN
-        else:
-            col = MID
-        put(7 + j, 23 + i, ch, col)
-text(8, 38, "bLUE  you(mid)  top  bot  bot  jungle", CYAN)
-text(8, 39, "rED   top  mid  bot  bot  jungle", RED)
-text(8, 41, "BOSSES  inner_bot_west (blue, 190 hp)  //  top_east (red, 150 hp)", HEAD)
-text(8, 42, "ganks never enter a base. camps now fight back at bots.", DIM)
+for i, (name, rule, art, col) in enumerate(cards):
+    cx = 7 + (i % 2) * 34
+    cy = 24 + (i // 2) * 11
+    text(cx, cy, f"[{name}]", col)
+    text(cx + len(name) + 3, cy, rule, DIM)
+    for j, line in enumerate(art):
+        for k, ch in enumerate(line):
+            if ch == " ":
+                continue
+            c = col if ch in "✚+░▒█✸●◎○•∙·═►>" else WHITE if ch == "@" else RED if ch in "Xm" else MID
+            put(cx + k, cy + 1 + j, ch, c)
+text(8, 45, "ranks: Q@1 W@2 E@3 R@6, +1 every 3 lv  //  mana 2%/s", HEAD)
 
-# --- right: the lane exploit ----------------------------------------------------
-box(76, 21, W - 5, 44, elite("exploit.txt // the tower nobody saw"))
-lane = [
-    "   ░░ TOWER ░░          minion aggro 520 from CENTRE",
-    "  ░▒▒▓▓██▓▓▒▒░                                       ",
-    "  ░▒▓  ◆◆  ▓▒░ ◄── 230 radius                        ",
-    "  ░▒▒▓▓██▓▓▒▒░                                       ",
-    "   ░░░░░░░░░░                                        ",
-    "        │ 5 tiles off the lane + formation spread    ",
-    "        ▼                                            ",
-    "  ─ ─ ─ m m m ─ ─ ─ ─ ─ ─ ─ ─►  INHIBITOR  ► NEXUS   ",
-    "        the wave walks by, the tower shoots it,      ",
-    "        nobody answers. ~900 > 520.              ",
-    "                                                     ",
-    "  PATCH:  distance - hit_radius - 400               ",
-    "          900 - 230 - 400 = 270 < 520  ► ENGAGE      ",
+# --- right: the cast log ------------------------------------------------------------
+box(76, 22, W - 5, 46, elite("cast.log // 6:00 headless sim"))
+casts = [
+    ("Kree'arra Jr.", 27, "ARCANE LANCE"), ("JalRek-Jad", 14, "strike"),
+    ("Cerberus", 12, "TRIPLE BITE + LAVA"), ("Big Frog", 12, "TONGUE LASH"),
+    ("Kolodion", 11, "3 GOD SPELLS"), ("General Graardor", 11, "SMASH, BODYGUARDS"),
+    ("Ancient Wyvern", 9, "ICY BREATH"), ("Callisto", 7, "MAUL"),
+    ("Kalphite Queen", 7, "MANDIBLE CRUSH"),
 ]
-for i, line in enumerate(lane):
-    for j, ch in enumerate(line):
-        if ch == " ":
-            continue
-        if ch in "░▒▓█":
-            col = (200, 70, 60) if ch in "▓█" else (130, 50, 40)
-        elif ch == "◆":
-            col = WHITE
-        elif ch == "m":
-            col = CYAN
-        elif ch.isdigit() or ch in "<>=-":
-            col = AMBER
-        elif ch.isupper():
-            col = HEAD
-        else:
-            col = MID
-        put(79 + j, 23 + i, ch, col)
-text(80, 36, "sim, before: red nexus 1500 -> 1230,", RED)
-text(80, 37, "             inhibitor dead, towers ~full", RED)
-text(80, 38, "7:30 sim, after: a blue tower down, red", (120, 255, 140))
-text(80, 39, "             at 204 / 368, inhibs 3/3", (120, 255, 140))
-text(80, 41, "the nexus shield is gone (your call).", HEAD)
-text(80, 42, "inhibitors still spawn super minions.", DIM)
+for i, (who, n, what) in enumerate(casts):
+    yy = 24 + i * 2
+    text(79, yy, f"{who:<17}", CYAN if i % 2 == 0 else (90, 210, 180))
+    for k in range(n):
+        shade = "█" if k < n - 2 else "▓" if k < n - 1 else "▒"
+        put(97 + k, yy, shade, BRIGHT if k < 14 else AMBER)
+    text(97 + n + 1, yy, f"{n:>2}", WHITE)
+    text(97 + n + 4, yy, what.lower() if what.isupper() else what, DIM)
+text(79, 42, "SHAPES  bolt 65  ███████████████████████████▒", (200, 140, 255))
+text(79, 43, "        strike 43 ██████████████████▒", (120, 200, 255))
+text(79, 44, "        nova 2 ▒   care 0 (nobody fell under 60% mid-fight)", (255, 190, 80))
 
-# --- sysop's note --------------------------------------------------------------
-header(46, elite("sysop's note // left on your desk"))
-clear(4, 47, W - 5, 49)
-center(47, "bOTS fIGHT wITH bASIC aTTACKS oNLY fOR nOW.  aBILITIES fOR bOTS aRE tHE nEXT bIG jOB.", HEAD)
-center(48, "animated::bots  //  BotBrain  //  BotMode::{Lane,Jungle,Boss,Gank,Retreat}  //  --bots", DIM)
+# --- sysop's note ------------------------------------------------------------------
+header(48, elite("sysop's note // read the margins"))
+clear(4, 49, W - 5, 50)
+center(49, "aN aPPROXIMATION, sIGNED aND dATED: dASHES, sUMMONS aND zONES rEAD aS bOLTS oR sTRIKES fOR nOW.", HEAD)
+center(50, "the player's kit runtime is single-caster; making it caster-generic lets bots cast the real kits (ADR-055)", DIM)
 
 # --- roadmap -------------------------------------------------------------------
-header(51, elite("roadmap // the oracle says"))
-clear(4, 52, W - 5, 56)
+header(52, elite("roadmap // the oracle says"))
+clear(4, 53, W - 5, 56)
 phases = [
     ("P1 LIGHT", 9), ("P2 MINIMAP", 5), ("P3 SHOP", 8), ("P4 SELECT", 5),
-    ("P5 ARENA", 1), ("P6 HUD", 0), ("P7 POST", 0),
+    ("P5 ARENA", 2), ("P6 HUD", 0), ("P7 POST", 0),
 ]
 for i, (name, done) in enumerate(phases):
     x = 8 + (i % 4) * 35
-    y = 52 + (i // 4) * 2
-    text(x, y, f"{name:<11}", CYAN)
-    text(x + 11, y, "[", DIM)
+    yy = 53 + (i // 4) * 2
+    text(x, yy, f"{name:<11}", CYAN)
+    text(x + 11, yy, "[", DIM)
     for j in range(10):
-        put(x + 12 + j, y, "▓" if j < done else "░", BRIGHT if j < done else FAINT)
-    text(x + 22, y, f"] {done * 10:>3}%", HEAD if done else FAINT)
-text(8, 55, ">> next: bot abilities, lane picker (Top/Jungle/Mid/Carry/Support), battle spells", MID)
+        put(x + 12 + j, yy, "▓" if j < done else "░", BRIGHT if j < done else FAINT)
+    text(x + 22, yy, f"] {done * 10:>3}%", HEAD if done else FAINT)
+text(8, 56, ">> next: caster-generic kits, bot dashes, lane picker (Top/Jungle/Mid/Carry/Support)", MID)
 
 fade_bar(57, 2, W - 3)
 clear(10, 58, W - 11, 61)
-center(58, "gREETZ: tHE 37tH mINION (fIRST iN 2 mINUTES) * kREE'ARRA jR. (lV 6, bOSS sLAYER) * eVERY bOT tHAT bOUGHT bOOTS", MID)
+center(58, "gREETZ: kREE'ARRA jR. (27 lANCES) * jALREK-jAD (tHE sTRIKE kING) * tHE mANA bAR tHAT wAS zERO aLL aLONG", MID)
 center(59, "nOT AFFILIATED WITH JAGEX. cACHE ASSETS STAY OUT OF GIT. aLWAYS.", DIM)
-center(60, "  t h e r e   i s   n o   s p o o n .   t h e r e   i s   o n l y   t h e   w a v e .  ", HEAD)
-center(61, "-=[ mObAsCaPe // 2026 // nODE 9: tHE bOTNET // 57.6k // sYSoP: rIFT // 9 bOTS, 1 oPEN nEXUS ]=-", AMBER)
+center(60, "  f r e e   y o u r   m i n d .   t h e n   s p e n d   y o u r   m a n a .  ", HEAD)
+center(61, "-=[ mObAsCaPe // 2026 // nODE 10: tHE gRIMOIRE // 57.6k // sYSoP: rIFT // 110 cASTS, 0 mISSES ]=-", AMBER)
 
 # --- outputs ------------------------------------------------------------------
 with open(out + ".txt", "w") as f:

@@ -166,15 +166,18 @@ Cache location: `.cache/osrs-235/cache` by default. Pass `--cache` and
 - Client renders a 3×3 region block (192×192 tiles); there is no terrain skirt
   or streaming beyond it, and the collision grid is approximate (water + object
   footprints, no cliffs/bridges).
-- Three lanes with two towers and one inhibitor per lane, plus one shielded
-  nexus per team. The lanes run diagonally between 28-tile castle courtyards
+- Three lanes with two towers and one inhibitor per lane, plus one nexus
+  per team. The lanes run diagonally between 28-tile castle courtyards
   in the bottom-left and top-right corners, inside a 282×282 crenellated
   perimeter wall with towers and gatehouses. The diagonal river has three
   bridge crossings. Inhibitors respawn after 120 s; while an enemy inhibitor
   is down, that lane's waves include a super minion (2.5x health, 2x damage,
   1.6x scale). Four jungle camps grant Might (+25% damage) or Swift (+20%
   speed) for 60 s. Brush and client-side fog of war are implemented.
-- Nexus is damageable only after at least one enemy inhibitor falls.
+- The nexus is always damageable (ADR-054). In dev matches the other nine
+  draft picks play as bots (`animated::bots`, `--bots`): they lane, jungle,
+  take region bosses, gank in pairs and cast abilities read from the
+  champion rank tables (`animated::bot_cast`, ADR-055).
 - The HUD uses cache-native OSRS fonts. `crates/client/src/ui_assets.rs`
   bakes `p11_full`, `p12_full` and `b12_full` from the cache's font and sprite
   archives at startup: `p12_full` for interface text and overhead names,
