@@ -1,62 +1,62 @@
    Z        4  ^8 :? : ~TQ  9T    -k7 ~ X  @           AA +     .     7  -D -  A    $B         |  97 7 :             6           X     $       ~ :.
   ░▒▓▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▓▒░
-   ▐ sENTINEL ▌                         tANK, lOAD tHE cONSTRUCT.   cLIFFS, bRIDGES, gODS.   sENTINELS oNLINE.                      ▐ cONSTRUCT ▌
-    ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄  +   ##     %0   BM$M0 . %8X@%#$     #XZ0%     ZM8Q&Q    W@MQMM   :%Q$8Z   8XM&&ZZ   M%Z$W#ZMW      cliff rocks....... ok
-    █ > sentinel LOCK  █  8   W&8   #88  &ZZMZMM- %#&WBW## . %Q0@$W#   %&$M#Q#M  W&Z&W#0%  @&&8XX0. MQX@B##X  &Q&QQ&%BW      plank bridges..... ok
-    █ target: kolodion █  E   8@$   X08 W0     Z@ %# -   Z% Q&     M$.0W :  -   8B: ,.'  .@@:    @W X8   ,`@Z XZ`   .        god statues....... ok
-    █              ▄█▄ █  ?   0Z8& BW#$ 8%     W8:M0 :   QZ %Z :`  MZ W% :  :   WZ  ,:`   &Q     8M #Z   ::M& BQ:   :.       god banners....... ok
-    █ ¤@¤ ◄~~~●~~  ███ █  & : Z&:@%W XZ ZZ     ZW:80$%BQ##: MQMZZ80M8 :&%0#ZQ   $Q  : :   QWBB#%8MQ #%$$#0&M  WMBWWBZ    .   ferns+stumps...... ok
-    █ 1466   1528  ███ █  = : #%  #  0% 8@     M@:X#Z8BW@   Z&Z@#%#Z0   %0#8X$  Q#      . %&&&%$8Z$ W8BMQM#   $0%QZZZ   .-   plain texture..... ok
-    █ ▓▓▓▓▓▓▓▓▓▒░-15   █  : : BX     0& %Z -   ZB B8     &# W&     #0        8W 8M  .    .%Q ::  B# 0% .'     ZZ ::  .   ,   surge splash...... ok
-    █ > splash. ok.    █  >.  %0   - MB ## -   $@ BQ     M8 #0     #Q.    ,  #0 ZZ       .&M  :  XQ.$&  :  .  B#   .     :   hit_scale......... ok
-    █▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄█  2   @M   : B8 &W :   &M &Q     08 Q8    .Q8.    :  #W &$        $B     $8.$0        &@   `   '     flesh hook........ ok
-          ▄▄█████▄▄       B  .MM   : #W @M     %B @W     @W.&M     M0  '  :  X8,&B  .     8B     0% $W        WB   :   '     devour............ ok
-     ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄   k'  %M     80. Z08WQ$W  &BXWB$QX -##    'Z% XMZQ&8&& :.Q#00M0$Q M8   ' 0$ ZZ        8B$&8$Z8B:     thrall scrolls.... ok
-     ▀▪▪▪▪▪▪▪▪▪▪▪▪▪▪▪▪▀   +,  %$.    0@'  B88MZ   BB%Q%%B. :0B    -8&  B8WZWW. :: %QXZ&@  Q0.  ` 80 BQ`    -  #BQ0W&X&&      opcode 99......... ok
-    % *  ^>       @7 0.$E>     ◄◄ PLANK BRIDGES ◄◄ GOD STATUES ◄◄ SURGE SPLASH ◄◄ FLESH HOOK ◄◄ THRALLS RISE ◄◄ PLANK B      6  ? X  .      ~ B    F
-    % &  @F         ░▒▓  n O D E   1 7 :   t H E   c O N S T R U C T   //   r O C K S ,   b R I D G E S ,   s E N T I N E L S  ▓▒░   B      7 %    Q
-    7 4  2=       T2 Q?^ D  3   -  :      70      T%      We NeeD CLiFFS.   LoTS oF CLiFFS.     k  ^        7     =C         @  6 <  6      X !    J5
+   ▐ tHE pILLS ▌                 bLUE pILL: wHITE sTONE, gOLD.   rED pILL: dARK sTONE, bLOOD.   tHE fOUNTAIN iS rEAL.               ▐ lOADED ▌
+    ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄  +- .W$  :.:%8   W0#M&`  8Q&W%#Q   .:B#&&Q `   8ZZ$X$    0ZW80W    Z&M0& . @M&M@8Z:  B#@W@##0M      fountain 6750..... ok
+    █ > choose.        █  8:  0B$   $&8  XZ#M#%8  QZ&8&ZB&. ,M#Q8Q@M: .8#ZZZ@$%  XX@#8%$$  #&Z8$&0, @$B@$08@  $&8BB%B@M -    model 13149....... ok
+    █ SARA       ZAM   █  E   MMW   Z@@ Q@.    Q#.%X     B% Q@ -   %M Z%`       @%     :  BW     Q% $X     #B-M8   `    -    24 on a sheet..... ok
+    █  ▄██▄      ▄██▄  █  ?  -$W$@ M$$0 &%     &Q'#$     8B M0 -   X% XM:       $0 ,      BX     #@ #$     @#.%M   :    :    mirror spawns..... ok
+    █ ▐████▌ or ▐████▌ █  &  `W0 W$@ 0& Z8     BQ:08W%QZ0Q:-0$W&M#X#8. @08B8@   W& ,      %&@%Z@8MB.QZB8&B%X :08Q8#$%        team_at........... ok
+    █  ▀██▀      ▀██▀  █  =  :Q@  B. X8 MM -   &X #&8W%@% :`0MX0$##$%: :&&W&##  ## :      QZM$ZXW&@ %Z08B#8   0M%@X8#        CastlePalette..... ok
+    █ blue gold blood  █  :   ZX     ZX ZQ:'   $@ $X    -88:$0     MQ,       BB 0$ .      ##     B@ XX  .    .8M             blue band......... ok
+    █ > both. ok.      █  >   Q%     %$'WW.: . %0 MM    :0M $%     88:       B& BZ    '   #X     @@ 8&   :    &X             gold merlons...... ok
+    █▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄█  2   Z0  .  $B:MM:.:  B$ Z8     8W QB     80        #Z 8M,   '   @B     ZX #& - :    Q@  ,  -       dark stone........ ok
+          ▄▄█████▄▄       B   $&     &X:0Z  ,  QB ZZ  .  X@ #B     &W        %& BM.   :   QB     B$ #B ' :    B8  -  - ,     blood band........ ok
+     ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄   k : %M     @B  MQX&0W8  80WZM8%0  #% .   XX XZ$XM$%8   0MB@M##M 8Z-    QB MZ :    . MMMW&8%M0'     red pool.......... ok
+     ▀▪▪▪▪▪▪▪▪▪▪▪▪▪▪▪▪▀   + - %8 '   0M   ZXW%W   $8$&0W@   M8     MB  $$W8#Z:    8@QM@&  Q#,    Q% Z8        #MQ&Z&MZB: .   white perim....... ok
+    % *  ^>       @7 0.$E>     ◄◄ ICE-BLUE FOUNTAIN ◄◄ SARADOMIN BLUE ◄◄ ZAMORAK RED ◄◄ GOLD MERLONS ◄◄ BLOOD BAND ◄◄ I      6  ? X  .      ~ B    F
+    % &  @F      ░▒▓  n O D E   1 8 :   t H E   p I L L S   //   b L U E   o R   r E D ,   y O U R   c A S T L E   c H O O S E S  ▓▒░       7 %    Q
+    7 4  2=       T2 Q?^ D  3   -  :      70      You TaKe THe BLue PiLL,   THe CaSTLe STaYS WHiTe.         7     =C         @  6 <  6      X !    J5
   ░▒▓▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▓▒░E
     ■─────────────────────────────────────────────────────────  -=[ ReLeaSe iNFo ]=-  ───────────────────────────────────────────────────────────■ #.
-        rELEASE dATE.... 2026-11-25                                         cOMMITS..... 0435638 .. fc65463  ->  sam/main                          3&
-        tYPE............ aRENA, sENTINELS, bLOAT, tHRALLS, oPCODE 99        tESTS....... 470 pass // clippy clean                                  B1
-        wAS............. wHITE vOID: cUBE rOCKS, nO cLIFFS, nO bRIDGES      nOW......... 410 rocks, 1950 ferns, 3 bridges, 2 gods                  <Q
+        rELEASE dATE.... 2026-11-25                                         cOMMITS..... 9c3ab09 fountain + 1338896 colours  ->  sam/main          3&
+        tYPE............ pHASE 5.3: bASES. fOUNTAINS + gOD cOLOURS          tESTS....... 470 pass // clippy clean                                  B1
+        wAS............. tWO wHITE cASTLES aND a gREEN gLOW rING            nOW......... sARADOMIN bLUE + gOLD // zAMORAK bLOOD                    <Q
     $ T   =       1  *56    #   B   2    %@       > J  %^  3      <        1&4  E Z ^           =  |        B      9         1  1 &  B        8    +&
-    ▄▀▀▐ CoNSTRuCT.DaT // PHaSe 5 ▌▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▄5▄▀▀▐ SeNTiNeL.DaT + BLoaT.DaT ▌▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▄ ~T
+    ▄▀▀▐ PiLLS.DaT // THe aReNa FRoM aBoVe ▌▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▄5▄▀▀▐ FouNTaiN.DaT + PaLeTTe.DaT ▌▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▄ ~T
     █                                                                     █.█                                                                    █  ?
-    █  THE CONSTRUCT // map.json props: place · lines · scatter           █&█  THE SENTINELS // tower shots: cache orb out, Surge splash in      █  $
+    █  THE MAP // 282x282 perimeter, courtyards in the corners            █&█  THE FOUNTAIN // 24 cache fountains on one model-sheet             █  $
     █                                                                     █5█  ────────────────────────────────────────────────────────────────  █  T
-    █   ¶Ψ ♣ , ♣  ▲▲ ▲▲▲ ▲▲  ▲ ▲▲    ≈≈≈≈    ▲▲▲ ▲▲  ▲ ▲▲▲  ♣ , ♣   Ψ¶    █5█  blue   orb 1526  ●~~~► ¤ 1460 water surge   saradomin             █ 1%
-    █   ▐█▌  ♣    ,   ♣    ,   ♣    ≈≈≈≈   ♣    ,    ♣   ▄█▄   ,    ▐█▌   █D█  red    orb 1528  ●~~~► ¤ 1466 fire surge    zamorak               █ #D
-    █   ▐█▌                       ##########             ███       ▐█▌    █T█  watch  orb 1527  ●~~~► ¤ 1463 earth surge   neutral               █ !-
-    █   ▐█▌                 ¤@¤◄~~##########~~~●~~~      ███       ▐█▌    █>█  hit_scale flies at 3.2x, splashes at 1.3 (hero size)              █ <+
-    █   ▐█▌                       ##########                       ▐█▌    █4█  ────────────────────────────────────────────────────────────────  █ |X
-    █   ▐█▌  ,   ♣    ,  ♣    ,   ≈≈≈≈≈   ,    ♣     ,    ♣    ,    ▐█▌   █^█  PESTILENT BLOAT // npc 8359 · MELEE · the flesh hooker            █ D-
-    █   ¶Ψ ♣  ▲▲▲ ▲▲  ▲ ▲▲▲  ▲▲ ≈≈≈≈≈   ▲▲ ▲▲▲  ▲▲  ▲ ▲▲▲  ▲▲ ♣ ,   Ψ¶    █Z█   P  Flesh heap   +2 max hp per death near it, +25 a hero    ---   █ ~F
-    █     ,  ♣   ,   ♣  ,   ♣ ≈≈≈≈≈   ♣  ,    ♣   ,   ♣    ,   ♣    ,     █ █   Q  Flesh Hook   thrown limb drags the first enemy home     1574  █ 4k
-    █   SARADOMIN 9146 + 2065     bridge 699      1400 + 8655 ZAMORAK     █ █   W  Swarm        flies ride it 5 s: bite, slow, 4 hp/tick   1568  █ 4
-    █                                                                     █ █   E  Bloated Hide 140 shield + 20% less damage for 4 s       1579  █ 6
-    █  ────────────────────────────────────────────────────────────────── █ █   R  Devour       2.4 s channel, stun, chew, heal 15 a bite  1576  █ @
-  ? █  cliffs   ~410 rocks (19997/818/819) 8.5 tiles off lanes            █ █  ────────────────────────────────────────────────────────────────  █ J
-  > █  flora    ~1,950 ferns + stumps, seeded, off camps                  █ █  THE OPERATOR LOADS // thrall scrolls, 300 gp, keys 1-6            █ :
-  B █  plain    cache face colours: white gods, green ferns               █ █  ghostly 10880 mage   skeletal 10883 range   zombified 10886       █ -
-  3 █                                                                     █ █  opcode 99 a flag, not a byte ──► bloat, hydra, nightmare          █ B
-  . █  > tank, load the construct.              rift-tools model-sheet    █ █                                                                    █ J
-  9 █  > we need cliffs. lots of cliffs.        picks props by eye        █ █  TESTS  470 pass  +1: tower looks stay on verified ids             █ C
-  3 █  > and bridges. █                         MAP_FORMAT v1.8           █ █  FLAGS  --demo-tower  --demo-thrall  --items a,b                   █ 2
+    █    ████████████████████████████████▄▀▄▀▄▀▄▀▄▀▄▀   ZAMORAK           █5█  o6750  Large fountain    white stone, blue water    ◄ CHOSEN      █ 1%
+    █    █·  ····························█          █   dark stone        █D█  o2654  Sinclair family   teal pool, stone rim       runner-up     █ #D
+    █    █·      ≈≈                      █       ♦  █   blood band        █T█  o31625 Fountain of Uhld  dark rim, blue water       too dark      █ !-
+    █    █·         ≈≈                   █   Ψ ◉ Ψ  █   red pool          █>█  o39162 Fountain          red stand                  zamorak?      █ <+
+    █    █·            ≈≈            ·   █          █                     █4█  at blue (2713,3165) ◄─ mirror ─► red (2977,2925)                  █ |X
+    █    █·               ≈≈      ·      ████████████   ♦ fountain        █^█  x1.7  2x2 block  plain texture  inside the 900 heal range         █ D-
+    █    █·                  ≈·                    ·█   ◉ dais            █Z█  ────────────────────────────────────────────────────────────────  █ ~F
+    █    ▄▀▄▀▄▀▄▀▄▀▄▀     ·     ≈≈                 ·█   ≈ river           █ █  CASTLEPALETTE // team_at: base rect + 1 tile owns the piece       █ 4k
+    █    █          █  ·           ≈≈              ·█                     █ █  SARADOMIN      top          band         merlon       pool        █ 4
+    █    █          █                 ≈≈           ·█   SARADOMIN         █ █  ZAMORAK        top          band         merlon       pool        █ 6
+    █    █  ♦Ψ ◉ Ψ  █                    ≈≈        ·█   white stone       █ █  NEUTRAL        top          band         merlon       pool        █ @
+  ? █    █          █····························  ·█   blue band         █ █                                                                    █ J
+  > █    ████████████████████████████████████████████   gold merlons      █ █  perimeter open walls stay white; only courtyards take sides       █ :
+  B █                                                                     █ █  test      gates + dais own a team, mid-wall none, 0 != 1          █ -
+  3 █  ────────────────────────────────────────────────────────────────── █ █                                                                    █ B
+  . █  > you take the blue pill: white stone, gold.                       █ █                                                                    █ J
+  9 █  > you take the red pill: the castle bleeds.                        █ █  TESTS  470 pass  castle layout test checks every team             █ C
+  3 █  > i'm offering the truth. nothing more. █                          █ █  SHOTS  --shots: both spawns, both courtyards, perimeter           █ 2
   k █▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄█ █▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄█ C
            - k   -     ~  .0  #: ~  Q| T    -       k    ?6      <   ?  D @  4   :X    ! D  9=2  T>  A :   *  +J*     X *    8 6      k   &     7  D
-    ■─────────────────────────────────────────────────  -=[ SYSoP'S NoTe // THe CoNSTRuCT ]=-  ──────────────────────────────────────────────────■ 4
-                   sTILL oPEN: gOD-cOLOURED cASTLES + tHE fOUNTAIN (p5.3), gROUND mIST (p5.7), mUSIC tOGGLE (p4.6), iTEM sETS (p3).                E
-                        scene::props // ProjectileLook::hit_scale // Passive::FleshHeap // items::ThrallSpec // npc opcode 99                      B
+    ■───────────────────────────────────────────────────  -=[ SYSoP'S NoTe // THe PiLLS ]=-  ────────────────────────────────────────────────────■ 4
+                   sTILL oPEN: gROUND mIST oVER uNSEEN aREAS (p5.7), mUSIC tOGGLE (p4.6), iTEM sETS (p3), oBJECTIVES pANEL (p6.3).                 E
+                       CastlePalette::{SARADOMIN, ZAMORAK, NEUTRAL} // CastleSpec::team_at // props.place o6750 x2 // scene.rs                     B
     ■────────────────────────────────────────────────  -=[ RoaDMaP // DoCS/RoaDMaPPLaN.MD ]=-  ──────────────────────────────────────────────────■ 1
         P1 LIGHT   [▓▓▓▓▓░░░░░]  50%       P2 MINIMAP [▓▓▓▓▓▓░░░░]  60%       P3 SHOP    [▓▓▓▓▓▓▓░░░]  70%       P4 SELECT  [▓▓▓▓▓▓▓▓▓░]  90%     3k
                                                                                                                                                   BB
-        P5 ARENA   [▓▓▓▓▓▓▓▓░░]  80%       P6 HUD     [▓▓▓▓░░░░░░]  40%       P7 POST    [░░░░░░░░░░]   0%                                        @
+        P5 ARENA   [▓▓▓▓▓▓▓▓▓░]  90%       P6 HUD     [▓▓▓▓░░░░░░]  40%       P7 POST    [░░░░░░░░░░]   0%                                        @
                                                                                                                                                   7
-        >> next: the fountain + god-coloured castle pieces (P5.3), ground mist from cache smoke (P5.7), the music toggle (P4.6)                   1
+        >> next: ground mist from cache smoke over unseen areas (P5.7, closes P5), then the objectives panel (P6.3)                               1
   ░▒▓▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▓▒░
-  3      B          gREETZ: tANK (tHE cONSTRUCT) * tHE sENTINELS * pESTILENT bLOAT * tHE tHRALLS * sARADOMIN * zAMORAK * kOLODION               E @  &
+  3      B            gREETZ: mORPHEUS (tHE pILLS) * sARADOMIN * zAMORAK * tHE lARGE fOUNTAIN * tHE sENTINELS * tANK * kOLODION                 E @  &
   D      %                                 nOT AFFILIATED WITH JAGEX. cACHE ASSETS STAY OUT OF GIT. aLWAYS.                                     -    E
-  7      %                w e   n e e d   c l i f f s .   l o t s   o f   c l i f f s .   s e n t i n e l s   o n l i n e .                     .    >
-  A      0         -=[ mObAsCaPe // 2026 // nODE 17: tHE cONSTRUCT // 57.6k // sYSoP: rIFT // 410 rOCKS, 3 bRIDGES, 3 sPLASHES ]=-              T    &
+  7      %                       b l u e   p i l l ,   r e d   p i l l .   t h e   f o u n t a i n   i s   r e a l .                            .    >
+  A      0           -=[ mObAsCaPe // 2026 // nODE 18: tHE pILLS // 57.6k // sYSoP: rIFT // 2 fOUNTAINS, 2 gODS, 1 wHITE wALL ]=-               T    &
