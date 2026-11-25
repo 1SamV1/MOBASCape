@@ -105,6 +105,11 @@ struct Cli {
     /// `--champion` that hero starts highlighted.
     #[arg(long)]
     start_select: Option<String>,
+    /// Call this lane on hero select (`top`, `jungle`, `mid`, `carry` or
+    /// `support`). A note to your team, not a rule: you can change it on the
+    /// screen, and nothing in the match holds you to it.
+    #[arg(long)]
+    lane: Option<String>,
     /// Demo: walk to this tile coordinate after one second (x y).
     #[arg(long, num_args = 2, value_names = ["X", "Y"])]
     demo_target: Option<Vec<f32>>,
@@ -391,7 +396,13 @@ fn main() -> Result<()> {
         let pick = |n: usize| others[n % others.len().max(1)];
         let blue: Vec<usize> = std::iter::once(me).chain((0..4).map(pick)).collect();
         let red: Vec<usize> = (4..9).map(pick).collect();
-        let lineup = bot_lineup(&champions, &blue, &red);
+        // No pick phase on this path: the default calls (blue's bots leave
+        // mid open, red covers every lane).
+        let blue_lanes: Vec<Option<hero_select::Lane>> = std::iter::once(None)
+            .chain(hero_select::bot_lanes(None).map(Some))
+            .collect();
+        let red_lanes = hero_select::RED_LANES.map(Some);
+        let lineup = bot_lineup(&champions, &blue, &red, (&blue_lanes, &red_lanes));
         let builds = bot_builds(&shop, &lineup);
         let count = animated.spawn_bots(&cache, &lineup, &builds, &height);
         tracing::info!("bots: {count} bot heroes in the match");
@@ -582,6 +593,14 @@ fn main() -> Result<()> {
             let mut select = HeroSelect::new(champions, selected_champion, false);
             if let (true, Some(mode)) = (hero_select_open, start_select) {
                 select.begin(mode);
+            }
+            match cli.lane.as_deref().map(hero_select::Lane::parse) {
+                Some(Some(lane)) => select.set_lane(Some(lane)),
+                Some(None) => tracing::warn!(
+                    "--lane {:?}: expected top, jungle, mid, carry or support",
+                    cli.lane.as_deref().unwrap_or_default()
+                ),
+                None => {}
             }
             select
         },
@@ -1093,6 +1112,8 @@ impl ApplicationHandler for App {
                             self.back_to_menu();
                         } else if let Some(filter) = hero_select::filter_at(w, h, self.mouse_pos) {
                             self.hero_select.set_filter(filter);
+                        } else if let Some(lane) = hero_select::lane_at(w, h, self.mouse_pos) {
+                            self.hero_select.toggle_lane(lane);
                         } else if let Some(slot) = card {
                             self.hero_select.select_slot(slot);
                         } else if hero_select::confirm_at(w, h, self.mouse_pos) {
@@ -3258,7 +3279,13 @@ impl App {
         };
         // The draft's other nine picks play as bots.
         let (blue, red) = self.hero_select.lineups();
-        let lineup = bot_lineup(&self.hero_select.champions, &blue, &red);
+        let (blue_lanes, red_lanes) = self.hero_select.lanes();
+        let lineup = bot_lineup(
+            &self.hero_select.champions,
+            &blue,
+            &red,
+            (&blue_lanes, &red_lanes),
+        );
         let builds = bot_builds(&self.shop, &lineup);
         let count = animated.spawn_bots(&self.cache, &lineup, &builds, &scene.height);
         tracing::info!("bots: {count} bot heroes in the match");
@@ -4171,17 +4198,30 @@ fn print_camera(renderer: &Renderer) {
     );
 }
 
-/// The draft as bots: blue's picks after the player's own, then red's, each
-/// with its lane or jungle role.
+/// The draft as bots: blue's picks after the player's own, then red's.
+/// Each bot plays the lane it called on hero select (`lanes` runs in the
+/// same order as the picks, the player first on blue); a row without a call
+/// falls back to the draft-order role.
 fn bot_lineup(
     champions: &[ChampionConfig],
     blue: &[usize],
     red: &[usize],
+    lanes: (&[Option<hero_select::Lane>], &[Option<hero_select::Lane>]),
 ) -> Vec<(ChampionConfig, u8, animated::bots::BotRole)> {
     let mut out = Vec::new();
-    for (team, picks) in [(0u8, blue.get(1..).unwrap_or(&[])), (1u8, red)] {
+    let blue_calls = lanes.0.get(1..).unwrap_or(&[]);
+    for (team, picks, calls) in [
+        (0u8, blue.get(1..).unwrap_or(&[]), blue_calls),
+        (1u8, red, lanes.1),
+    ] {
         let roles = animated::bots::roles_for(team, picks.len());
-        for (&pick, role) in picks.iter().zip(roles) {
+        for (row, (&pick, fallback)) in picks.iter().zip(roles).enumerate() {
+            let role = calls
+                .get(row)
+                .copied()
+                .flatten()
+                .map(hero_select::Lane::bot_role)
+                .unwrap_or(fallback);
             if let Some(champion) = champions.get(pick) {
                 out.push((champion.clone(), team, role));
             }
@@ -4220,5 +4260,40 @@ mod tests {
         assert_eq!(resolve_render_scale("0.85", (1920, 1080)), Some(0.85));
         assert_eq!(resolve_render_scale("0.4", (1920, 1080)), None);
         assert_eq!(resolve_render_scale("1.2", (1920, 1080)), None);
+    }
+
+    #[test]
+    fn bots_play_the_lanes_they_called() {
+        use animated::bots::BotRole;
+        use hero_select::Lane;
+        let champions: Vec<ChampionConfig> = (0..10)
+            .map(|i| hero_select::tests::champion(&format!("h{i}")))
+            .collect();
+        let blue: Vec<usize> = (0..5).collect();
+        let red: Vec<usize> = (5..10).collect();
+        // You call jungle: blue's bots take top, mid and bottom.
+        let blue_calls: Vec<Option<Lane>> = std::iter::once(Some(Lane::Jungle))
+            .chain(hero_select::bot_lanes(Some(Lane::Jungle)).map(Some))
+            .collect();
+        let red_calls = hero_select::RED_LANES.map(Some);
+        let lineup = bot_lineup(&champions, &blue, &red, (&blue_calls, &red_calls));
+        let roles: Vec<(u8, BotRole)> = lineup.iter().map(|(_, t, r)| (*t, *r)).collect();
+        assert_eq!(
+            &roles[..4],
+            &[
+                (0, BotRole::Lane(0)),
+                (0, BotRole::Lane(1)),
+                (0, BotRole::Lane(2)),
+                (0, BotRole::Lane(2)),
+            ]
+        );
+        assert!(
+            !roles[..4].contains(&(0, BotRole::Jungle)),
+            "the jungle is yours"
+        );
+        // A row with no call falls back to its draft-order role.
+        let lineup = bot_lineup(&champions, &blue, &red, (&[], &[]));
+        let fallback: Vec<BotRole> = lineup.iter().skip(4).map(|(_, _, r)| *r).collect();
+        assert_eq!(fallback, animated::bots::roles_for(1, 5));
     }
 }

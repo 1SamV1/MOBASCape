@@ -17,6 +17,90 @@ fn class_rank(class: &str) -> usize {
         .unwrap_or(CLASS_ORDER.len())
 }
 
+/// A lane a player calls for. It is a note to the team, not a rule: two
+/// players may call the same lane, anyone may change their call until the
+/// match starts, and nothing in the match holds a player to it. Bots call
+/// the lane they will really play, so the columns read true.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Lane {
+    Top,
+    Jungle,
+    Mid,
+    Carry,
+    Support,
+}
+
+impl Lane {
+    /// The picker's order, top lane to support.
+    pub const ALL: [Lane; 5] = [
+        Lane::Top,
+        Lane::Jungle,
+        Lane::Mid,
+        Lane::Carry,
+        Lane::Support,
+    ];
+
+    /// Read a lane name, any case (`--lane mid`).
+    pub fn parse(name: &str) -> Option<Lane> {
+        Lane::ALL
+            .into_iter()
+            .find(|lane| lane.label().eq_ignore_ascii_case(name.trim()))
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Lane::Top => "Top",
+            Lane::Jungle => "Jungle",
+            Lane::Mid => "Mid",
+            Lane::Carry => "Carry",
+            Lane::Support => "Support",
+        }
+    }
+
+    /// The cache skill icon drawn with the lane (a UI atlas key): Defence,
+    /// Hunter, Runecraft, Fletching and Herblore, apart from the Attack,
+    /// Ranged and Magic icons the class filters use.
+    pub fn icon(self) -> &'static str {
+        match self {
+            Lane::Top => "stat_defence",
+            Lane::Jungle => "skill_hunter",
+            Lane::Mid => "skill_runecraft",
+            Lane::Carry => "skill_fletching",
+            Lane::Support => "skill_herblore",
+        }
+    }
+
+    /// The bot role that plays the lane: carry and support share bottom.
+    pub fn bot_role(self) -> crate::animated::bots::BotRole {
+        use crate::animated::bots::BotRole;
+        match self {
+            Lane::Top => BotRole::Lane(0),
+            Lane::Mid => BotRole::Lane(1),
+            Lane::Carry | Lane::Support => BotRole::Lane(2),
+            Lane::Jungle => BotRole::Jungle,
+        }
+    }
+}
+
+/// The red bots' calls, row by row: every lane once, in draft order (the
+/// roles they played before the picker).
+pub const RED_LANES: [Lane; 5] = [
+    Lane::Top,
+    Lane::Mid,
+    Lane::Carry,
+    Lane::Support,
+    Lane::Jungle,
+];
+
+/// What blue's four bots call (and play) around the player's call: the
+/// lanes nobody has called, in draft order. With no call they leave mid
+/// open, as they did before the picker.
+pub fn bot_lanes(player: Option<Lane>) -> [Lane; 4] {
+    let taken = player.unwrap_or(Lane::Mid);
+    let mut free = RED_LANES.into_iter().filter(|&lane| lane != taken);
+    std::array::from_fn(|_| free.next().unwrap_or(Lane::Mid))
+}
+
 /// One row of a team column: who sits there and what they have picked.
 #[derive(Debug, Clone, PartialEq)]
 pub struct PickSlot {
@@ -26,6 +110,8 @@ pub struct PickSlot {
     pub champion: Option<usize>,
     /// Seconds into the countdown when this bot locks in.
     pub at: f32,
+    /// The lane this player has called, if any (see [`Lane`]).
+    pub lane: Option<Lane>,
 }
 
 /// When each bot locks in, as (team, row, seconds into the countdown):
@@ -97,6 +183,9 @@ impl HeroSelect {
     /// Empty both team columns for a new pick phase.
     pub fn reset_picks(&mut self, seed: u32) {
         self.seed = seed;
+        // Your call is a standing preference: it carries into the next
+        // match's pick phase.
+        let mine = self.blue.first().and_then(|slot| slot.lane);
         let row = |name: String, team: Team, index: usize| PickSlot {
             name,
             champion: None,
@@ -105,6 +194,7 @@ impl HeroSelect {
                 .find(|(t, i, _)| *t == team && *i == index)
                 .map(|(_, _, at)| *at)
                 .unwrap_or(f32::INFINITY),
+            lane: None,
         };
         self.blue = (0..5)
             .map(|i| {
@@ -119,6 +209,34 @@ impl HeroSelect {
         self.red = (0..5)
             .map(|i| row(format!("Bot {}", i + 1), Team::Red, i))
             .collect();
+        for (slot, lane) in self.red.iter_mut().zip(RED_LANES) {
+            slot.lane = Some(lane);
+        }
+        self.set_lane(mine);
+    }
+
+    /// Call a lane for yourself (or clear the call). Blue's bots move their
+    /// own calls to the lanes left open; nothing stops two humans calling
+    /// the same lane.
+    pub fn set_lane(&mut self, lane: Option<Lane>) {
+        if let Some(you) = self.blue.first_mut() {
+            you.lane = lane;
+        }
+        for (slot, call) in self.blue.iter_mut().skip(1).zip(bot_lanes(lane)) {
+            slot.lane = Some(call);
+        }
+    }
+
+    /// Click a lane button: call it, or clear the call if it is yours.
+    pub fn toggle_lane(&mut self, lane: Lane) {
+        let mine = self.blue.first().and_then(|slot| slot.lane);
+        self.set_lane(if mine == Some(lane) { None } else { Some(lane) });
+    }
+
+    /// Every row's call, in lineup order (you first).
+    pub fn lanes(&self) -> (Vec<Option<Lane>>, Vec<Option<Lane>>) {
+        let calls = |slots: &[PickSlot]| slots.iter().map(|slot| slot.lane).collect();
+        (calls(&self.blue), calls(&self.red))
     }
 
     /// True when a bot on either team has locked this hero in.
@@ -432,24 +550,63 @@ pub fn spotlight_rect(width: f32, height: f32) -> Rect {
     (x + 22.0, y + 18.0, pw, ph)
 }
 
-/// Filter tab rectangles, after the "Show:" label in the tab bar.
+/// Width of the "Your lane:" label at the bar's left.
+const LANE_LABEL: f32 = 96.0;
+/// Width of the "Show:" label before the class filters.
+const SHOW_LABEL: f32 = 56.0;
+/// The class filters are compact icon tabs at the bar's right end, as
+/// wide as this at most and as narrow as the smallest tab an icon fits.
+const FILTER_W: f32 = 52.0;
+const TAB_MIN: f32 = 36.0;
+/// Gap between tabs, and the wider gap between the two groups.
+const TAB_GAP: f32 = 8.0;
+const GROUP_GAP: f32 = 20.0;
+
+/// The bar's shared tab height and top.
+fn tab_row(width: f32, height: f32) -> (f32, f32, f32, f32) {
+    let (x, y, w, h) = tabs_rect(width, height);
+    (x, y + 10.0, w, h - 20.0)
+}
+
+/// Class filter tabs, right-aligned in the bar after the "Show:" label. On
+/// a narrow bar they shrink first, so the lane tabs keep room for icons.
 pub fn filter_rects(width: f32, height: f32) -> Vec<Rect> {
-    let (x0, y, w, h) = tabs_rect(width, height);
-    let label = 96.0;
-    let inner = w - PAD * 2.0 - label;
-    let gap = 8.0;
-    let tab = ((inner - gap * (FILTERS.len() as f32 - 1.0)) / FILTERS.len() as f32).min(190.0);
-    let th = h - 20.0;
+    let (x0, y, w, th) = tab_row(width, height);
+    let n = FILTERS.len() as f32;
+    let lanes = Lane::ALL.len() as f32;
+    let lanes_min = TAB_MIN * lanes + TAB_GAP * (lanes - 1.0);
+    let spare = w - PAD * 2.0 - LANE_LABEL - GROUP_GAP - SHOW_LABEL - lanes_min;
+    let tab = ((spare - TAB_GAP * (n - 1.0)) / n).clamp(TAB_MIN, FILTER_W);
+    let start = x0 + w - PAD - (tab * n + TAB_GAP * (n - 1.0));
     (0..FILTERS.len())
-        .map(|index| {
-            (
-                x0 + PAD + label + index as f32 * (tab + gap),
-                y + 10.0,
-                tab,
-                th,
-            )
-        })
+        .map(|index| (start + index as f32 * (tab + TAB_GAP), y, tab, th))
         .collect()
+}
+
+/// Where the "Show:" label sits: just before the filter tabs.
+pub fn show_label_x(width: f32, height: f32) -> f32 {
+    filter_rects(width, height)[0].0 - SHOW_LABEL + 6.0
+}
+
+/// The lane tabs after the "Your lane:" label, in [`Lane::ALL`] order,
+/// sharing the bar with the filters and taking whatever width they leave.
+pub fn lane_rects(width: f32, height: f32) -> Vec<Rect> {
+    let (x0, y, _, th) = tab_row(width, height);
+    let start = x0 + PAD + LANE_LABEL;
+    let end = show_label_x(width, height) - GROUP_GAP;
+    let n = Lane::ALL.len() as f32;
+    let tab = ((end - start - TAB_GAP * (n - 1.0)) / n).clamp(TAB_MIN, 170.0);
+    (0..Lane::ALL.len())
+        .map(|index| (start + index as f32 * (tab + TAB_GAP), y, tab, th))
+        .collect()
+}
+
+/// Which lane tab the cursor is over.
+pub fn lane_at(width: f32, height: f32, cursor: (f64, f64)) -> Option<Lane> {
+    lane_rects(width, height)
+        .iter()
+        .position(|&rect| point_in_rect(rect, cursor))
+        .map(|index| Lane::ALL[index])
 }
 
 pub fn filter_at(width: f32, height: f32, cursor: (f64, f64)) -> Option<usize> {
@@ -623,11 +780,12 @@ pub fn wrap_text(text: &str, columns: usize) -> Vec<String> {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use crate::champion::ChampionConfig;
 
-    fn champion(id: &str) -> ChampionConfig {
+    /// A stub hero with neutral numbers (also used by `main`'s tests).
+    pub(crate) fn champion(id: &str) -> ChampionConfig {
         ChampionConfig {
             id: id.to_string(),
             name: id.to_string(),
@@ -820,6 +978,91 @@ mod tests {
         }
         select.reset_picks(7);
         assert!(!select.is_picked(1), "a new pick phase clears the columns");
+    }
+
+    #[test]
+    fn blue_bots_call_the_lanes_you_leave_open() {
+        use std::collections::HashSet;
+        // With no call they leave mid for you, as before the picker.
+        assert_eq!(
+            bot_lanes(None),
+            [Lane::Top, Lane::Carry, Lane::Support, Lane::Jungle]
+        );
+        for lane in Lane::ALL {
+            let bots = bot_lanes(Some(lane));
+            assert!(!bots.contains(&lane), "{lane:?} left to you");
+            let all: HashSet<_> = bots.iter().copied().chain([lane]).collect();
+            assert_eq!(all.len(), 5, "{lane:?}: one of each lane");
+        }
+    }
+
+    #[test]
+    fn default_calls_play_the_old_draft_roles() {
+        use crate::animated::bots::roles_for;
+        let blue: Vec<_> = bot_lanes(None).map(Lane::bot_role).to_vec();
+        assert_eq!(blue, roles_for(0, 4));
+        let red: Vec<_> = RED_LANES.map(Lane::bot_role).to_vec();
+        assert_eq!(red, roles_for(1, 5));
+    }
+
+    #[test]
+    fn a_lane_call_is_a_note_not_a_rule() {
+        let mut select = HeroSelect::new(roster(), 0, true);
+        select.begin(MatchMode::Bot);
+        assert_eq!(select.blue[0].lane, None, "nobody calls for you");
+        select.toggle_lane(Lane::Jungle);
+        assert_eq!(select.blue[0].lane, Some(Lane::Jungle));
+        assert!(
+            select.blue[1..]
+                .iter()
+                .all(|slot| slot.lane != Some(Lane::Jungle)),
+            "bots move off your lane"
+        );
+        // Clicking your lane again takes the call back.
+        select.toggle_lane(Lane::Jungle);
+        assert_eq!(select.blue[0].lane, None);
+        // A call changes nothing about picking or locking in.
+        select.set_lane(Some(Lane::Carry));
+        let before = select.selected;
+        select.fill_picks();
+        let (blue, red) = select.lineups();
+        assert_eq!((blue.len(), red.len()), (5, 5));
+        assert_eq!(blue[0], before);
+        // It carries over to the next pick phase.
+        select.begin(MatchMode::Bot);
+        assert_eq!(select.blue[0].lane, Some(Lane::Carry));
+        assert_eq!(select.lanes().1, RED_LANES.map(Some).to_vec());
+    }
+
+    #[test]
+    fn lane_names_parse_in_any_case() {
+        assert_eq!(Lane::parse("MID"), Some(Lane::Mid));
+        assert_eq!(Lane::parse(" support "), Some(Lane::Support));
+        assert_eq!(Lane::parse("bot"), None);
+    }
+
+    #[test]
+    fn lane_and_class_tabs_share_the_bar_without_overlap() {
+        for (w, h) in [(1280.0, 720.0), (1920.0, 1080.0), (1024.0, 600.0)] {
+            let (bx, by, bw, bh) = tabs_rect(w, h);
+            let lanes = lane_rects(w, h);
+            let filters = filter_rects(w, h);
+            for &(x, y, rw, rh) in lanes.iter().chain(&filters) {
+                assert!(x >= bx && x + rw <= bx + bw, "{w}x{h} inside the bar");
+                assert!(y >= by && y + rh <= by + bh, "{w}x{h} inside the bar");
+            }
+            let last = lanes[lanes.len() - 1];
+            assert!(
+                last.0 + last.2 < show_label_x(w, h),
+                "{w}x{h} lanes end before Show:"
+            );
+            assert!(show_label_x(w, h) < filters[0].0, "{w}x{h}");
+            for (index, &(x, y, rw, rh)) in lanes.iter().enumerate() {
+                let centre = ((x + rw * 0.5) as f64, (y + rh * 0.5) as f64);
+                assert_eq!(lane_at(w, h, centre), Some(Lane::ALL[index]));
+                assert_eq!(filter_at(w, h, centre), None);
+            }
+        }
     }
 
     #[test]

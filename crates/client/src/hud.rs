@@ -2300,10 +2300,18 @@ impl Hud {
             (blue, red) if blue.len() == 5 && red.len() == 5 => (blue, red),
             _ => hero_select::lobby_teams(&select.champions, select.selected),
         };
+        let (blue_lanes, red_lanes) = select.lanes();
         let cards = hero_select::lobby_card_rects(width, height);
         for (index, &(x, y, cw, ch)) in cards.iter().enumerate() {
             let team = index / 5;
             let slot = index % 5;
+            let lane = if team == 0 {
+                blue_lanes.get(slot)
+            } else {
+                red_lanes.get(slot)
+            }
+            .copied()
+            .flatten();
             let champion_index = if team == 0 {
                 radiant.get(slot)
             } else {
@@ -2348,7 +2356,9 @@ impl Hud {
             // Team stripe.
             self.quad(width, height, x + 4.0, y + 4.0, 6.0, ch - 8.0, accent);
 
-            let portrait = (cw * 0.52).min(ch * 0.60);
+            // The portrait leaves room for the four lines under it (name,
+            // class, stats, lane: 47px from its foot, a line and a margin).
+            let portrait = (cw * 0.52).min(ch * 0.60).min(ch - 10.0 - 70.0);
             let px = x + (cw - portrait) * 0.5;
             let py = y + 10.0;
             self.quad_alpha(
@@ -2404,6 +2414,20 @@ impl Hud {
                     champion.health as i32, champion.mana as i32, champion.ranged as i32
                 ),
                 [176, 178, 186],
+            );
+            // The lane this player called on hero select.
+            self.text_centered(
+                width,
+                height,
+                x + cw * 0.5,
+                py + portrait + 47.0,
+                0.72,
+                lane.map_or("No lane called", hero_select::Lane::label),
+                if lane.is_some() {
+                    [255, 152, 31]
+                } else {
+                    [150, 144, 132]
+                },
             );
         }
 

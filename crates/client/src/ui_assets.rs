@@ -47,7 +47,7 @@ const HITMARK_SPRITES: [(&str, u32); 8] = [
 /// and the OSRS interface kit the front-end screens are built from: the
 /// notched grey and red buttons (293-296), the chatbox parchment (1017),
 /// the dark item slot (1077) and the skill icons the stat rows use.
-const UI_SPRITES: [(&str, u32); 16] = [
+const UI_SPRITES: [(&str, u32); 20] = [
     ("icon_swords", 442),
     ("icon_skull", 439),
     ("button_grey", 293),
@@ -64,6 +64,11 @@ const UI_SPRITES: [(&str, u32); 16] = [
     ("stat_hitpoints", 203),
     ("stat_agility", 204),
     ("stat_prayer", 201),
+    // Lane icons on hero select (`hero_select::Lane::icon`).
+    ("skill_herblore", 205),
+    ("skill_fletching", 208),
+    ("skill_runecraft", 215),
+    ("skill_hunter", 220),
 ];
 
 /// One cache sprite placed in the atlas, with its size in pixels.

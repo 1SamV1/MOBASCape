@@ -440,24 +440,51 @@ impl Hud {
 
         self.team_columns(width, height, select);
 
-        // Class tabs over the roster.
+        // The tab bar over the roster: your lane call, then the compact
+        // class filters at the right end.
         let tabs = hero_select::tabs_rect(width, height);
         self.stone_frame(width, height, tabs);
+        let label_y = tabs.1 + tabs.3 * 0.5 - 7.0;
         self.text_named(
             "p12",
             width,
             height,
             tabs.0 + 22.0,
-            tabs.1 + tabs.3 * 0.5 - 7.0,
+            label_y,
+            1.0,
+            "Your lane:",
+            STONE_QUIET,
+        );
+        let mine = select.blue.first().and_then(|slot| slot.lane);
+        let lane_rects = hero_select::lane_rects(width, height);
+        let lane_labels = self.tabs_hold_labels(
+            lane_rects[0].2,
+            &hero_select::Lane::ALL.map(hero_select::Lane::label),
+        );
+        for (lane, &rect) in hero_select::Lane::ALL.iter().zip(lane_rects.iter()) {
+            let hot = point_in(rect, mouse);
+            self.icon_tab(
+                width,
+                height,
+                rect,
+                Some(lane.icon()),
+                lane.label(),
+                lane_labels,
+                mine == Some(*lane),
+                hot,
+            );
+        }
+        self.text_named(
+            "p12",
+            width,
+            height,
+            hero_select::show_label_x(width, height),
+            label_y,
             1.0,
             "Show:",
             STONE_QUIET,
         );
         for (index, &rect) in hero_select::filter_rects(width, height).iter().enumerate() {
-            let active = index == select.filter;
-            let hot = point_in(rect, mouse);
-            self.osrs_button(width, height, rect, active, hot, false);
-            let (x, y, w, h) = rect;
             let icon = match index {
                 1 => Some("stat_attack"),
                 2 => Some("stat_ranged"),
@@ -465,35 +492,17 @@ impl Hud {
                 _ => None,
             };
             let label = sentence_case(hero_select::FILTERS[index]);
-            let lw = self.text_width_named("p12", &label, 1.0);
-            let icon_w = if icon.is_some() { 26.0 } else { 0.0 };
-            let start = x + (w - lw - icon_w) * 0.5;
-            if let Some(key) = icon
-                && let Some((iw, ih)) = self.atlas.ui_size(key)
-                && let Some(uv) = self.atlas.ui_uv(key)
-            {
-                let k = ((h - 12.0) / ih).min(1.0);
-                self.sprite(
-                    width,
-                    height,
-                    start,
-                    y + (h - ih * k) * 0.5,
-                    iw * k,
-                    ih * k,
-                    uv,
-                    [255, 255, 255],
-                    1.0,
-                );
-            }
-            self.text_named(
-                "p12",
+            let hot = point_in(rect, mouse);
+            // Compact tabs: the class icons alone (All keeps its word).
+            self.icon_tab(
                 width,
                 height,
-                start + icon_w,
-                y + h * 0.5 - 7.0,
-                1.0,
+                rect,
+                icon,
                 &label,
-                if active { STONE_TEXT } else { ORANGE },
+                false,
+                index == select.filter,
+                hot,
             );
         }
 
@@ -640,24 +649,97 @@ impl Hud {
             "Lock in",
             if hot { [255, 255, 255] } else { STONE_TEXT },
         );
+        // The timer note, only where it clears the six stats (it ran over
+        // them at 1280x720): the stats sit in cells from the bar's left, the
+        // last one about 72px wide.
         let note = "At zero the highlighted hero is locked in.";
         let nw = self.text_width_named("p11", note, 1.0);
-        self.text_named(
-            "p11",
-            width,
-            height,
-            confirm.0 - nw - 18.0,
-            confirm.1 + confirm.3 * 0.5 - 6.0,
-            1.0,
-            note,
-            STONE_QUIET,
-        );
+        let note_x = confirm.0 - nw - 18.0;
+        let bar_x = hero_select::bottom_rect(width, height).0;
+        let cell = ((confirm.0 - bar_x - 30.0).max(200.0) / 6.0).min(110.0);
+        if note_x >= bar_x + 20.0 + cell * 5.0 + 72.0 {
+            self.text_named(
+                "p11",
+                width,
+                height,
+                note_x,
+                confirm.1 + confirm.3 * 0.5 - 6.0,
+                1.0,
+                note,
+                STONE_QUIET,
+            );
+        }
+    }
+
+    /// Whether every tab of `width` holds its icon and the longest of
+    /// `labels`, so a row of tabs shows its labels all together or not at
+    /// all.
+    fn tabs_hold_labels(&self, width: f32, labels: &[&str]) -> bool {
+        let widest = labels
+            .iter()
+            .map(|label| self.text_width_named("p12", label, 1.0))
+            .fold(0.0, f32::max);
+        26.0 + widest + 14.0 <= width
+    }
+
+    /// A notched tab with a cache icon and, when `labels` allows, its label
+    /// (a tab without an icon always shows its label).
+    #[allow(clippy::too_many_arguments)]
+    fn icon_tab(
+        &mut self,
+        width: f32,
+        height: f32,
+        rect: (f32, f32, f32, f32),
+        icon: Option<&str>,
+        label: &str,
+        labels: bool,
+        active: bool,
+        hot: bool,
+    ) {
+        use super::kit::{ORANGE, STONE_TEXT};
+        self.osrs_button(width, height, rect, active, hot, false);
+        let (x, y, w, h) = rect;
+        let sprite = icon.and_then(|key| Some((self.atlas.ui_uv(key)?, self.atlas.ui_size(key)?)));
+        let lw = self.text_width_named("p12", label, 1.0);
+        let icon_w = if sprite.is_some() { 26.0 } else { 0.0 };
+        let with_label = sprite.is_none() || labels;
+        let start = if with_label {
+            x + (w - lw - icon_w) * 0.5
+        } else {
+            x + (w - icon_w + 2.0) * 0.5
+        };
+        if let Some((uv, (iw, ih))) = sprite {
+            let k = ((h - 12.0) / ih).min(1.0);
+            self.sprite(
+                width,
+                height,
+                start,
+                y + (h - ih * k) * 0.5,
+                iw * k,
+                ih * k,
+                uv,
+                [255, 255, 255],
+                1.0,
+            );
+        }
+        if with_label {
+            self.text_named(
+                "p12",
+                width,
+                height,
+                start + icon_w,
+                y + h * 0.5 - 7.0,
+                1.0,
+                label,
+                if active { STONE_TEXT } else { ORANGE },
+            );
+        }
     }
 
     /// Both teams' windows: the side's name, then five rows with a portrait
     /// slot, the player, the hero (or "Picking...") and the hero's role.
     fn team_columns(&mut self, width: f32, height: f32, select: &HeroSelect) {
-        use super::kit::{STONE_QUIET, STONE_TEXT};
+        use super::kit::{ORANGE, STONE_QUIET, STONE_TEXT};
         use hero_select::Team;
         for (team, slots, tint, label) in [
             (Team::Blue, &select.blue, [96, 160, 255], "Blue team"),
@@ -726,9 +808,11 @@ impl Hud {
                     }
                 }
                 let text_x = px + side + 12.0;
-                // Three lines centred on the portrait: player, hero, role.
+                // Lines centred on the portrait: player, hero, the hero's
+                // role once there is a hero, and the lane they have called.
                 let line = 18.0;
-                let top = py + side * 0.5 - line * 1.5;
+                let lines = if champion.is_some() { 4.0 } else { 3.0 };
+                let top = py + side * 0.5 - line * lines * 0.5;
                 let name = if you {
                     "You".to_string()
                 } else {
@@ -777,6 +861,50 @@ impl Hud {
                         &role,
                         Self::class_color(&champion.class),
                     );
+                }
+                let lane_y = top + line * (lines - 1.0) + 2.0;
+                match slot.lane {
+                    Some(lane) => {
+                        let icon = lane.icon();
+                        if let (Some(uv), Some((iw, ih))) =
+                            (self.atlas.ui_uv(icon), self.atlas.ui_size(icon))
+                        {
+                            let k = 16.0 / iw.max(ih);
+                            self.sprite(
+                                width,
+                                height,
+                                text_x,
+                                lane_y - 1.0,
+                                iw * k,
+                                ih * k,
+                                uv,
+                                [255, 255, 255],
+                                1.0,
+                            );
+                        }
+                        self.text_named(
+                            "p12",
+                            width,
+                            height,
+                            text_x + 20.0,
+                            lane_y,
+                            1.0,
+                            lane.label(),
+                            ORANGE,
+                        );
+                    }
+                    None => {
+                        self.text_named(
+                            "p11",
+                            width,
+                            height,
+                            text_x,
+                            lane_y + 1.0,
+                            1.0,
+                            "No lane called",
+                            STONE_QUIET,
+                        );
+                    }
                 }
             }
         }

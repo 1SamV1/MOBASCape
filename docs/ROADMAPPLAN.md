@@ -140,8 +140,13 @@ with a commit and a push to `sam main`.
 
 1. ~~OSRS stone panels, title bar, Leave~~, ~~team columns and staggered
    bot picks~~, ~~roster with Picked~~, ~~detail with abilities and tags~~.
-2. **Lane picker.** Top / Jungle / Mid / Carry / Support, each with a cache
-   item icon, in the player's team row. Feeds the bots' lane assignment.
+2. ~~**Lane picker.**~~ Done: "Your lane:" tabs (Top / Jungle / Mid /
+   Carry / Support with the cache Defence, Hunter, Runecraft, Fletching and
+   Herblore icons) over the roster; every team row and lobby card shows its
+   call. A call is a note to the team, not a rule: optional, clicked again
+   to take back, kept for the next draft, never checked in the match. Blue's
+   bots call the lanes you leave open and play what they call. `--lane`
+   sets a call from the command line.
 3. **Battle spells.** Two spells per player from OSRS spell sprites
    (Teleport, Heal Other, Vengeance, a Smite-like jungle spell), shown in the
    team rows and cast from the D/F slots in match. Needs gameplay work.
@@ -219,3 +224,6 @@ All objects from the cache, placed through the map format
 - 2026-11-24: phase 6.1 and 6.2 done: no debug line over the match; the
   kill feed and announcements carry hero, structure and hero-landed dummy
   kills only.
+- 2026-11-24: phase 4.2 lane picker done (team indicator only; bots fill
+  the lanes the player leaves open). Class filters became compact icon tabs
+  on the same bar; the timer note hides where it would cover the stats.
