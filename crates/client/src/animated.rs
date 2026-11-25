@@ -11,6 +11,7 @@ pub mod bot_cast;
 pub mod bots;
 mod kit_runtime;
 pub mod ranks;
+mod teleport;
 
 use crate::champion::ChampionConfig;
 use crate::fx::{self, FxMesh};
@@ -213,6 +214,8 @@ pub struct AnimatedUnit {
     pub lock_range: f32,
     /// Crowd control from kit abilities, and summon lifetime.
     pub cc: crate::kit::Afflictions,
+    /// The teleport scroll every hero carries (unused by other units).
+    pub scroll: crate::scroll::ScrollState,
     /// One-shot clips for basic attacks and ability casts.
     pub attack_clip: Option<Arc<AnimationClip>>,
     pub cast_clip: Option<Arc<AnimationClip>>,
@@ -413,6 +416,26 @@ pub struct SpotBurst {
     pub follow: Option<usize>,
     /// Seconds a held graphic has left. Unused by the other modes.
     pub hold: f32,
+    /// Drawn whatever the team can see (a teleport's destination marker).
+    pub seen_by_all: bool,
+}
+
+impl SpotBurst {
+    /// A graphic at the origin with nothing else set: scale 1, playing from
+    /// the start, not riding a unit.
+    pub fn new(spotanim: u32, mode: SpotDraw) -> Self {
+        Self {
+            spotanim,
+            pos: Vec3::ZERO,
+            yaw: 0.0,
+            time_ms: 0.0,
+            scale: 1.0,
+            mode,
+            follow: None,
+            hold: 0.0,
+            seen_by_all: false,
+        }
+    }
 }
 
 /// At most this many spot animations play at once; more are dropped.
@@ -861,6 +884,10 @@ pub struct AnimatedScene {
     pub kill_feed: Vec<(String, f32)>,
     /// Minimap ping on the last enemy the player hit.
     pub ping: Option<(Vec3, f32)>,
+    /// The teleport scroll's numbers (`data/spells/teleport_scroll.json`).
+    pub scroll_config: crate::scroll::ScrollConfig,
+    /// Teleport destinations on the minimap: point, team, seconds left.
+    pub scroll_pings: Vec<(Vec3, u8, f32)>,
     pub wave_timer: f32,
     /// Monotonic wave counter used to stagger formation jitter deterministically.
     pub wave_serial: u32,
@@ -1312,6 +1339,7 @@ impl AnimatedScene {
         // Projectile and impact models for every look. A missing spot
         // animation only costs that look its model; the glow still draws.
         let mut spot_models = HashMap::new();
+        let scroll_config = crate::scroll::ScrollConfig::load();
         let kit_spots = champion.kit.as_ref().map(|kit| kit.spotanims());
         for id in kit_spots.iter().flatten() {
             if !crate::kit::spot::VERIFIED.contains(id) {
@@ -1324,6 +1352,7 @@ impl AnimatedScene {
         let wanted = fx::spotanim_ids()
             .into_iter()
             .chain(crate::kit::spot::ALL)
+            .chain(scroll_config.spotanims())
             .chain(kit_spots.into_iter().flatten());
         for id in wanted {
             if spot_models.contains_key(&id) {
@@ -1381,6 +1410,8 @@ impl AnimatedScene {
             announcement_pinned: false,
             kill_feed: Vec::new(),
             ping: None,
+            scroll_config,
+            scroll_pings: Vec::new(),
             wave_timer: 0.0,
             wave_serial: 0,
             kills: [0, 0],
@@ -1992,6 +2023,8 @@ impl AnimatedScene {
         collision: &WorldCollision,
         height: &HeightGrid,
     ) -> usize {
+        // Moving or attacking cancels a teleport scroll channel.
+        self.cancel_scroll(self.player_index);
         self.steer_wish = None;
         let start = self.player_pos();
         let path = collision.path_world(start, target, height);
@@ -2012,6 +2045,8 @@ impl AnimatedScene {
         collision: &WorldCollision,
         height: &HeightGrid,
     ) -> bool {
+        // Moving or attacking cancels a teleport scroll channel.
+        self.cancel_scroll(self.player_index);
         if index >= self.units.len() {
             return false;
         }
@@ -2054,6 +2089,9 @@ impl AnimatedScene {
     }
 
     pub fn steer_player(&mut self, direction: Vec3) {
+        if direction.length_squared() > 1e-6 {
+            self.cancel_scroll(self.player_index);
+        }
         let flat = Vec3::new(direction.x, 0.0, direction.z);
         if flat.length_squared() < 1e-6 {
             self.steer_wish = None;
@@ -2405,6 +2443,8 @@ impl AnimatedScene {
             return;
         }
         let pi = self.player_index;
+        // Casting cancels a teleport scroll channel.
+        self.cancel_scroll(pi);
         self.last_cast_slot = Some(slot);
         self.cast_flash = Some((slot, 0.45));
         // A cast interrupts a basic attack that has not landed yet.
@@ -3243,12 +3283,18 @@ impl AnimatedScene {
     /// Play a spell graphic once riding `unit` (a cast on the caster, a hit
     /// on a target). Ids that did not load are skipped.
     pub(crate) fn gfx_on(&mut self, id: u32, unit: usize, scale: f32) {
-        self.push_spot(id, Vec3::ZERO, Some(unit), SpotDraw::Spell, 0.0, scale);
+        let mut burst = SpotBurst::new(id, SpotDraw::Spell);
+        burst.follow = Some(unit);
+        burst.scale = scale;
+        self.push_spot(burst);
     }
 
     /// Play a spell graphic once standing at `pos` (an area landing).
     pub(crate) fn gfx_at(&mut self, id: u32, pos: Vec3, scale: f32) {
-        self.push_spot(id, pos, None, SpotDraw::Spell, 0.0, scale);
+        let mut burst = SpotBurst::new(id, SpotDraw::Spell);
+        burst.pos = pos;
+        burst.scale = scale;
+        self.push_spot(burst);
     }
 
     /// Hold a looping status graphic on `unit` for `seconds`. The same
@@ -3263,34 +3309,34 @@ impl AnimatedScene {
             held.hold = held.hold.max(seconds);
             return;
         }
-        self.push_spot(id, Vec3::ZERO, Some(unit), SpotDraw::Held, seconds, scale);
+        let mut burst = SpotBurst::new(id, SpotDraw::Held);
+        burst.follow = Some(unit);
+        burst.hold = seconds;
+        burst.scale = scale;
+        self.push_spot(burst);
     }
 
-    fn push_spot(
-        &mut self,
-        id: u32,
-        pos: Vec3,
-        follow: Option<usize>,
-        mode: SpotDraw,
-        hold: f32,
-        scale: f32,
-    ) {
-        if !self.spot_models.contains_key(&id) || self.spot_bursts.len() >= MAX_SPOT_BURSTS {
+    /// Hold a looping graphic standing at `pos` for `seconds`, seen by both
+    /// teams through the fog (a teleport's destination).
+    pub(crate) fn gfx_hold_at(&mut self, id: u32, pos: Vec3, seconds: f32, scale: f32) {
+        let mut burst = SpotBurst::new(id, SpotDraw::Held);
+        burst.pos = pos;
+        burst.hold = seconds;
+        burst.scale = scale;
+        burst.seen_by_all = true;
+        self.push_spot(burst);
+    }
+
+    fn push_spot(&mut self, mut burst: SpotBurst) {
+        if !self.spot_models.contains_key(&burst.spotanim)
+            || self.spot_bursts.len() >= MAX_SPOT_BURSTS
+        {
             return;
         }
-        let yaw = follow
-            .and_then(|index| self.units.get(index))
-            .map_or(0.0, |unit| unit.yaw);
-        self.spot_bursts.push(SpotBurst {
-            spotanim: id,
-            pos,
-            yaw,
-            time_ms: 0.0,
-            scale,
-            mode,
-            follow,
-            hold,
-        });
+        if let Some(unit) = burst.follow.and_then(|index| self.units.get(index)) {
+            burst.yaw = unit.yaw;
+        }
+        self.spot_bursts.push(burst);
     }
 
     /// Load spot animations that no projectile look names, so a demo or a
@@ -3338,6 +3384,7 @@ impl AnimatedScene {
                     mode: SpotDraw::Spell,
                     follow: None,
                     hold: 0.0,
+                    seen_by_all: false,
                 });
             }
             // A missing id keeps its label, marked, so the sheet shows it.
@@ -3826,6 +3873,7 @@ impl AnimatedScene {
         self.update_bot_brains(dt);
         self.update_player(dt, height, collision);
         self.update_kit(dt, height, collision);
+        self.update_scrolls(dt);
         self.update_delivery(dt, height);
 
         let unit_count = self.units.len();
@@ -5313,6 +5361,7 @@ impl AnimatedScene {
                 mode: SpotDraw::Burst,
                 follow: None,
                 hold: 0.0,
+                seen_by_all: false,
             });
         }
     }
@@ -5538,6 +5587,7 @@ impl AnimatedScene {
                 ambient_seed: 0,
                 lock_range: 0.0,
                 cc: Default::default(),
+                scroll: Default::default(),
                 attack_clip: template.attack.clone(),
                 cast_clip: None,
                 attack_hit: 0.5,
@@ -6263,7 +6313,7 @@ impl AnimatedScene {
                     }
                     None => burst.pos,
                 };
-                if !self.in_team_vision(pos) {
+                if !burst.seen_by_all && !self.in_team_vision(pos) {
                     return None;
                 }
                 let spot = self.spot_models.get(&burst.spotanim)?.clone();
@@ -6917,6 +6967,7 @@ fn build_unit(
         ambient_seed: 0,
         lock_range: 0.0,
         cc: Default::default(),
+        scroll: Default::default(),
         attack_clip: None,
         cast_clip: None,
         attack_hit: 0.5,

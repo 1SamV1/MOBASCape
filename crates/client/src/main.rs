@@ -20,6 +20,7 @@ mod motion;
 mod portraits;
 mod renderer;
 mod scene;
+mod scroll;
 mod spotlight;
 mod stone;
 mod terrain_textures;
@@ -1326,6 +1327,8 @@ impl ApplicationHandler for App {
                         self.cast_e();
                     } else if code == KeyCode::KeyR {
                         self.cast_r();
+                    } else if code == KeyCode::KeyT {
+                        self.use_scroll();
                     } else if code == KeyCode::KeyB {
                         self.shop.open = !self.shop.open;
                         if self.shop.open {
@@ -3764,6 +3767,32 @@ impl App {
             .unwrap_or(fallback);
         let cast = animated.cast_q(point);
         println!("Q cast={cast}");
+    }
+
+    /// T: the teleport scroll, toward the allied structure nearest the
+    /// cursor (docs/SPELLS.md, Part B).
+    fn use_scroll(&mut self) {
+        let (Some(renderer), Some(height), Some(collision), Some(animated)) = (
+            self.renderer.as_ref(),
+            self.height.as_ref(),
+            self.collision.as_ref(),
+            self.animated.as_mut(),
+        ) else {
+            return;
+        };
+        let aim = renderer
+            .pick_ground(self.mouse_pos.0, self.mouse_pos.1, height)
+            .unwrap_or(animated.player_pos());
+        let player = animated.player_index;
+        match animated.start_scroll(player, aim, collision, height) {
+            Ok(()) => tracing::info!("scroll: channelling"),
+            Err(why) => {
+                let (cooldown, _, channel) = animated.player_scroll();
+                tracing::info!(
+                    "scroll: refused ({why:?}), cooldown {cooldown:.1} s, channel {channel:?}"
+                );
+            }
+        }
     }
 
     fn cast_w(&mut self) {

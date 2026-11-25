@@ -16,6 +16,7 @@
   "kit_zone": { "id": 2596, "volume": 0.6 },
   "kit_dash": { "id": 1930, "volume": 0.55, "speed": 0.9 },
   "kit_heal": { "id": 2678, "volume": 0.6 },
+  "teleport": { "id": 200, "volume": 0.6 },
   "kit_shield": { "id": 2687, "volume": 0.6 },
   "kit_haste": { "id": 2667, "volume": 0.6 },
   "kit_buff": { "id": 2690, "volume": 0.6 },

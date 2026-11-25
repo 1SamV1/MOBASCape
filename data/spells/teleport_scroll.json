@@ -1,0 +1,10 @@
+{
+  "name": "TELEPORT SCROLL",
+  "item": 12642,
+  "channel": 3.0,
+  "cooldown": 80.0,
+  "offset": 160.0,
+  "origin_gfx": 678,
+  "arrival_gfx": 111,
+  "marker_gfx": 750
+}
