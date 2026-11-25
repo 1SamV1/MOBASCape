@@ -615,6 +615,59 @@ pub const LOOKS: &[ProjectileLook] = &[
         light_radius: 320.0,
         ..ProjectileLook::base("tele_block")
     },
+    // Chaos Elemental Discord: the three-colour swirl (557) landing in its
+    // ring (558), with a trail that shifts through red, green and blue.
+    ProjectileLook {
+        spotanim: Some(557),
+        hit_spotanim: Some(558),
+        model_scale: 1.1,
+        glow: [220, 140, 255],
+        glow_size: 80.0,
+        glow_intensity: 1.3,
+        trail: [120, 255, 140],
+        trail_width: 34.0,
+        trail_points: 12,
+        embers: 60.0,
+        ember_color: [255, 120, 120],
+        impact_radius: 180.0,
+        impact_sparks: 18,
+        impact_color: [140, 200, 255],
+        light: [0.8, 0.55, 1.0],
+        light_radius: 420.0,
+        ..ProjectileLook::base("chaos")
+    },
+    // Chaos Elemental Confusion: the green orb (551) and ring (552).
+    ProjectileLook {
+        spotanim: Some(551),
+        hit_spotanim: Some(552),
+        glow: [140, 255, 140],
+        glow_size: 64.0,
+        trail: [70, 220, 90],
+        trail_width: 24.0,
+        trail_points: 10,
+        impact_radius: 150.0,
+        impact_sparks: 12,
+        impact_color: [150, 255, 150],
+        light: [0.4, 1.0, 0.45],
+        light_radius: 340.0,
+        ..ProjectileLook::base("confusion")
+    },
+    // Chaos Elemental Madness: the red recolour (554) and ring (555).
+    ProjectileLook {
+        spotanim: Some(554),
+        hit_spotanim: Some(555),
+        glow: [255, 110, 100],
+        glow_size: 64.0,
+        trail: [230, 60, 50],
+        trail_width: 24.0,
+        trail_points: 10,
+        impact_radius: 150.0,
+        impact_sparks: 12,
+        impact_color: [255, 140, 120],
+        light: [1.0, 0.4, 0.35],
+        light_radius: 340.0,
+        ..ProjectileLook::base("madness")
+    },
 ];
 
 /// Resolve a look by name. Unknown names fall back to the default orb so a

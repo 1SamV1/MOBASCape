@@ -1,6 +1,27 @@
 # Status
 
-Last updated: hero select passive row and popular build, 2026-11-24.
+Last updated: Chaos Elemental, 2026-11-25.
+
+## 2026-11-25 — Chaos Elemental joins the roster
+
+- New MAGIC hero from npc 2054 (`data/champions/chaos_elemental.json`):
+  models 11216 + 57329, idle 3144, walk 3145, attack 3146, 520 health,
+  600 range. Its basic attack is the new `chaos` look (Discord swirl 557,
+  ring 558); Confusion and Madness have their own looks (551/552, 554/555).
+- Kit: Pure chaos (every third ability hit lands a random slow, venom or
+  mana drain), Q Discord (skillshot + mana drain), W Confusion (burst that
+  throws each enemy 350 in a random direction), E Madness (skillshot that
+  disarms for 2 s), R Chaos Storm (1.2 s channel of three-bolt fans, each
+  bolt a random drain, throw or disarm).
+- New kit schema: statuses `disarm`, `scramble` and `one_of`, and
+  `Passive::Chaos`. A disarmed unit starts no basic attacks and loses the
+  one it was winding up; it holds the red spike crown (559). A throw plays
+  the green Confusion splash (552) at both ends.
+- Icons 586 / 16 / 120 / 578. Magic, so it picks battle spells on hero
+  select. Balance report regenerated; nothing flagged after Q and E went up
+  by 10 and 5.
+- Verified with `--demo-abilities --champion chaos_elemental` screenshots
+  and hero select at 1280x720. 462 tests pass.
 
 ## 2026-11-24 — Hero select: passive row, popular build, short windows
 

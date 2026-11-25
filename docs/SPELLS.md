@@ -11,9 +11,8 @@ and no cache art is committed.
 ## Decisions
 
 - **Battle spells are for MAGIC-class heroes only** (`"class": "MAGIC"`).
-  Today that's Kolodion, the Wise Old Man, the Ancient Wyvern and TzTok-Jad,
-  plus the Chaos Elemental once it lands. Each picks two before the match, on
-  D and F.
+  Today that's Kolodion, the Wise Old Man, the Ancient Wyvern, TzTok-Jad and
+  the Chaos Elemental. Each picks two before the match, on D and F.
 - **Every hero carries a teleport scroll** that works like Dota 2's Town
   Portal: its own slot on T, a channel to an allied structure, a cooldown.
 - **Lane calls never force a pick.** The lane only pre-fills the two spell
@@ -228,20 +227,35 @@ think tick, casting at most one spell then. The rules live in
 
 ## Part D: Chaos Elemental (npc 2054)
 
-A MAGIC hero (tagline "CHAOS MAGE") built from the boss's three OSRS
-attacks:
+Shipped in `data/champions/chaos_elemental.json`. A MAGIC hero (role "CHAOS
+MAGE") built from the boss's three OSRS attacks: Discord (a hit), Confusion
+(teleports you nearby) and Madness (strips your gear).
 
-- **Discord**: a hit.
-- **Confusion**: teleports you nearby.
-- **Madness**: strips your gear.
+| | |
+|---|---|
+| Models | 11216 and 57329 (`rift-tools npc 2054`), scale 0.6 |
+| Animations | idle 3144, walk 3145, attack 3146 |
+| Stats | 520 health, 300 mana, 600 range, ranged basic attacks |
+| Basic attack | the `chaos` look: the Discord swirl (557) landing in its ring (558) |
+| Icons | 586 vortex, 16 Confuse spiral, 120 red brain, 578 storm cloud |
 
 Its kit:
 
-- **Passive, Pure chaos**: every third ability hit adds a random slow, venom
-  or mana drain.
-- **Q Discord**: a skillshot, 556-558.
-- **W Confusion**: throws enemies a short random distance, 551 and 552, with
-  111 at both ends.
-- **E Madness**: disarms one hero, 554 and 555, then holds 559.
-- **R Chaos Storm**: a channel of three-bolt fans, each bolt carrying one of
-  the three effects.
+| Slot | Name | What it does | Graphics |
+|---|---|---|---|
+| Passive | Pure chaos | Every third ability hit also lands a random 30% slow, venom or 25 mana drain (`Passive::Chaos`) | 558 on the proc |
+| Q | Discord | Skillshot, 80 damage and 30 mana drain | `chaos` look: 557, 558 |
+| W | Confusion | Burst at the cursor (radius 220): 50 damage, and each enemy is thrown 350 in a random direction (`scramble`) | 550 where it lands, 552 at both ends of each throw |
+| E | Madness | Skillshot: 45 damage and the first enemy hit is disarmed for 2 s (`disarm`) | `madness` look: 554, 555, then holds 559 |
+| R | Chaos Storm | 1.2 s channel, a three-bolt fan every 0.4 s, 45 damage each; every bolt lands one of a 40 mana drain, a 250 throw or a 1.5 s disarm (`one_of`) | `chaos` look |
+
+Two things changed from the first design, after watching them play:
+
+- Madness is a skillshot rather than a point-and-click on a hero within 650,
+  so it matches its OSRS projectile and has counterplay.
+- Confusion's throw uses the Chaos Elemental's own green splash (552) rather
+  than the teleport sparkle (111). 111 is a solid model that reads as a
+  purple blob at camp-monster size.
+
+Bots cast it from the rank tables like every hero (ADR-055).
+

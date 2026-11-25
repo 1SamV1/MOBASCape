@@ -105,8 +105,13 @@ pub mod spot {
     pub const ICE_BLOCK: u32 = 369;
     /// Purple bars over a tele blocked unit.
     pub const TELE_BLOCK: u32 = 342;
+    /// The Chaos Elemental's red spikes over a disarmed unit.
+    pub const DISARM: u32 = 559;
+    /// The Chaos Elemental's green Confusion splash, where a scrambled unit
+    /// leaves and where it lands.
+    pub const SCRAMBLE: u32 = 552;
     /// Every graphic above.
-    pub const ALL: [u32; 4] = [STUN, SPLASH, ICE_BLOCK, TELE_BLOCK];
+    pub const ALL: [u32; 6] = [STUN, SPLASH, ICE_BLOCK, TELE_BLOCK, DISARM, SCRAMBLE];
 
     /// Spot animations someone has watched play and named in
     /// docs/SPELLS.md. Kits may only use these, so a typo cannot ship a
@@ -447,6 +452,18 @@ pub enum Status {
     NoMobility {
         duration: f32,
     },
+    /// No basic attacks for `duration` (the Chaos Elemental's Madness).
+    Disarm {
+        duration: f32,
+    },
+    /// Thrown `distance` in a random direction (its Confusion).
+    Scramble {
+        distance: f32,
+    },
+    /// One of these, picked at random each time it lands.
+    OneOf {
+        of: Vec<Status>,
+    },
 }
 
 impl Status {
@@ -462,6 +479,7 @@ impl Status {
                 Some((None, duration))
             }
             Status::NoMobility { duration } => Some((Some(spot::TELE_BLOCK), duration)),
+            Status::Disarm { duration } => Some((Some(spot::DISARM), duration)),
             _ => None,
         }
     }
@@ -506,6 +524,8 @@ pub enum Passive {
     /// Chill statuses stack to a freeze (handled by `Status::Chill`); this
     /// passive also chills on basic attacks.
     FrostBite { pct: f32, duration: f32 },
+    /// Every `every`th ability hit also lands one of `statuses`, at random.
+    Chaos { every: u32, statuses: Vec<Status> },
 }
 
 /// Crowd control and summon state carried by every unit.
@@ -523,6 +543,8 @@ pub struct Afflictions {
     pub heal_cut_timer: f32,
     /// Tele Block: no dashes, blinks or scroll.
     pub no_mobility_timer: f32,
+    /// Disarm: no basic attacks.
+    pub disarm_timer: f32,
     /// Forced movement (knockback or pull), world units per second.
     pub displace: glam::Vec3,
     pub displace_timer: f32,
@@ -554,6 +576,7 @@ impl Afflictions {
         self.taunt_timer = (self.taunt_timer - dt).max(0.0);
         self.heal_cut_timer = (self.heal_cut_timer - dt).max(0.0);
         self.no_mobility_timer = (self.no_mobility_timer - dt).max(0.0);
+        self.disarm_timer = (self.disarm_timer - dt).max(0.0);
         self.lift_timer = (self.lift_timer - dt).max(0.0);
         self.chill_timer = (self.chill_timer - dt).max(0.0);
         if self.chill_timer <= 0.0 {
@@ -685,6 +708,16 @@ fn pct(share: f32) -> String {
     format!("{:.0}", share * 100.0)
 }
 
+/// Status phrases joined as alternatives: "a, b or c".
+fn either(statuses: &[Status]) -> String {
+    let parts: Vec<String> = statuses.iter().map(Status::describe).collect();
+    match parts.split_last() {
+        None => String::new(),
+        Some((last, [])) => last.clone(),
+        Some((last, rest)) => format!("{} or {last}", rest.join(", ")),
+    }
+}
+
 /// Seconds without trailing zeros: 2.5 -> "2.5", 6.0 -> "6", 1.25 ->
 /// "1.25".
 fn secs(seconds: f32) -> String {
@@ -752,6 +785,11 @@ impl Status {
                     secs(*duration)
                 )
             }
+            Status::Disarm { duration } => format!("disarm for {} s", secs(*duration)),
+            Status::Scramble { distance } => {
+                format!("throw {distance:.0} in a random direction")
+            }
+            Status::OneOf { of } => format!("one of: {}", either(of)),
         }
     }
 }
@@ -835,6 +873,11 @@ impl Passive {
                 pct(*p),
                 secs(*duration)
             ),
+            Passive::Chaos { every, statuses } => format!(
+                "Every {} ability hit also lands one of: {}.",
+                ordinal(*every),
+                either(statuses)
+            ),
         }
     }
 }
@@ -912,6 +955,52 @@ mod tests {
         want.extend(spot::ALL);
         want.sort_unstable();
         assert_eq!(kit.spotanims(), want);
+    }
+
+    #[test]
+    fn chaos_statuses_parse_describe_and_hold() {
+        let statuses: Vec<Status> = serde_json::from_str(
+            r#"[
+                { "type": "disarm", "duration": 2 },
+                { "type": "scramble", "distance": 350 },
+                { "type": "one_of", "of": [
+                    { "type": "mana_drain", "amount": 40 },
+                    { "type": "scramble", "distance": 250 },
+                    { "type": "disarm", "duration": 1.5 }
+                ] }
+            ]"#,
+        )
+        .unwrap();
+        let text: Vec<String> = statuses.iter().map(Status::describe).collect();
+        assert_eq!(
+            text,
+            [
+                "disarm for 2 s",
+                "throw 350 in a random direction",
+                "one of: drain 40 mana, throw 250 in a random direction or disarm for 1.5 s",
+            ]
+        );
+        assert_eq!(statuses[0].hold(), Some((Some(spot::DISARM), 2.0)));
+        assert_eq!(statuses[1].hold(), None);
+        let passive: Passive = serde_json::from_str(
+            r#"{ "type": "chaos", "every": 3, "statuses": [
+                { "type": "slow", "pct": 0.3, "duration": 1.5 },
+                { "type": "mana_drain", "amount": 25 }
+            ] }"#,
+        )
+        .unwrap();
+        assert_eq!(
+            passive.describe(),
+            "Every third ability hit also lands one of: slow by 30% for 1.5 s or drain 25 mana."
+        );
+        let mut cc = Afflictions {
+            disarm_timer: 1.0,
+            ..Default::default()
+        };
+        cc.tick(0.6);
+        assert!(cc.disarm_timer > 0.0);
+        cc.tick(0.6);
+        assert_eq!(cc.disarm_timer, 0.0);
     }
 
     #[test]

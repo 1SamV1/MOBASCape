@@ -339,8 +339,8 @@ mod tests {
             }
         }
         assert!(
-            kits >= 12,
-            "expected the twelve kit champions, found {kits}"
+            kits >= 15,
+            "expected the fifteen kit champions, found {kits}"
         );
     }
 

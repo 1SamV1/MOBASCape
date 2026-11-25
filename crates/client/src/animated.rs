@@ -2336,6 +2336,11 @@ impl AnimatedScene {
     /// hit lands on its swing. A unit without a clip hits at once.
     fn begin_strike(&mut self, index: usize, target: usize, damage: f32, ranged: bool) {
         let unit = &mut self.units[index];
+        // Disarmed (the Chaos Elemental's Madness): no basic attacks.
+        if unit.cc.disarm_timer > 0.0 {
+            unit.attack_cooldown = unit.attack_cooldown.max(0.2);
+            return;
+        }
         let interval = unit.attack_interval / unit.attack_speed_mult.max(0.1);
         unit.attack_cooldown = interval;
         let strike = PendingStrike {

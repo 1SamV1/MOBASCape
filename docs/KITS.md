@@ -70,6 +70,10 @@ Some statuses hold a graphic of their own:
 
 - Stun and knock-up hold the circling stars (80).
 - Chill's freeze holds the Ice Barrage block (369).
+- Tele Block (`no_mobility`) holds the purple bars (342).
+- Disarm holds the Chaos Elemental's red spike crown (559).
+- Scramble plays the green Confusion splash (552) where the unit leaves and
+  again on it as it lands.
 - A root holds nothing unless the action names a `hold`, because both ice
   and vines root.
 
@@ -161,9 +165,20 @@ for that slot and `q_cast` plays on cast. Check an id with
 (all `{duration}`), `knockback {distance}`, `pull {distance}`,
 `venom` / `bleed {damage, duration}` (damage per second), `heal_cut`,
 `mana_drain {amount}`, `armor_shred {amount, duration}`,
-`current_health {pct}` (extra pure damage), and `chill {pct, duration}`
-(a stacking slow; the third stack roots for 1.2 s). Structures take damage
-but ignore crowd control.
+`current_health {pct}` (extra pure damage), `chill {pct, duration}`
+(a stacking slow; the third stack roots for 1.2 s), `no_mobility {duration}`
+(Tele Block: no dashes, blinks or teleport scroll), `disarm {duration}`
+(no basic attacks), `scramble {distance}` (thrown that far in a random
+direction over 0.2 s) and `one_of {of: [statuses]}` (one of the list, picked
+at random each time it lands; the held graphic is the one that landed).
+Structures take damage but ignore crowd control.
+
+```json
+"on_hit": [{"type": "one_of", "of": [
+  {"type": "mana_drain", "amount": 40},
+  {"type": "scramble", "distance": 250},
+  {"type": "disarm", "duration": 1.5}]}]
+```
 
 ## Passives
 
@@ -171,7 +186,10 @@ but ignore crowd control.
 `second_form {threshold, heal, npc, duration, scale, range, damage}`,
 `on_hit {statuses}`, `thick_hide {reduction}`,
 `swift {move_speed, dash_bonus}`, `spell_combo {per_stack, max, window}`,
-`splash {radius, pct}`, `scholar {xp}`, `frost_bite {pct, duration}`.
+`splash {radius, pct}`, `scholar {xp}`, `frost_bite {pct, duration}`,
+`chaos {every, statuses}` (every `every`th ability hit, counted across all
+targets, also lands one of `statuses` at random, with the Discord ring 558;
+basic attacks do not count).
 
 ## Testing a kit
 

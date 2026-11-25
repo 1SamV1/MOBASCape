@@ -26,6 +26,11 @@ pub struct NpcAssets {
     pub walk: Option<Arc<AnimationClip>>,
 }
 
+/// Seconds a Scramble's throw takes.
+const SCRAMBLE_SECONDS: f32 = 0.2;
+/// The Discord swirl's landing ring, shown when the Chaos passive procs.
+const CHAOS_PROC: u32 = 558;
+
 /// What an action needs to know about its cast.
 #[derive(Clone)]
 struct CastCtx {
@@ -176,6 +181,8 @@ pub struct KitRuntime {
     haste_timer: f32,
     untargetable_timer: f32,
     rooted_timer: f32,
+    /// Ability hits counted for the Chaos passive.
+    chaos_hits: u32,
 }
 
 impl KitRuntime {
@@ -301,6 +308,10 @@ impl AnimatedScene {
         if self.units[index].health <= 0.0 {
             return;
         }
+        // A "one of" status picks its effect now, so its held graphic is
+        // the one that landed.
+        let statuses: Vec<Status> = statuses.iter().map(|s| self.resolve_status(s)).collect();
+        let statuses = statuses.as_slice();
         let size = gfx.scale * self.gfx_size(index);
         if splashed {
             self.gfx_on(kit::spot::SPLASH, index, size);
@@ -332,6 +343,51 @@ impl AnimatedScene {
             .clamp(0.8, 1.6)
     }
 
+    /// One of `of`, at random.
+    fn pick_status(&mut self, of: &[Status]) -> Option<Status> {
+        if of.is_empty() {
+            return None;
+        }
+        let n = ((self.next_random() * of.len() as f32) as usize).min(of.len() - 1);
+        Some(of[n].clone())
+    }
+
+    /// The concrete status a "one of" lands as (others as they are).
+    fn resolve_status(&mut self, status: &Status) -> Status {
+        match status {
+            Status::OneOf { of } => match self.pick_status(of) {
+                Some(pick) => self.resolve_status(&pick),
+                None => status.clone(),
+            },
+            _ => status.clone(),
+        }
+    }
+
+    /// The Chaos passive: every few ability hits on `index` also land one
+    /// of its statuses, with the Discord swirl.
+    fn chaos_passive(&mut self, index: usize, from: Vec3) {
+        let Some(Passive::Chaos { every, statuses }) =
+            self.kit.as_ref().and_then(|kit| kit.passive.clone())
+        else {
+            return;
+        };
+        if self.units[index].health <= 0.0 {
+            return;
+        }
+        self.kit_rt.chaos_hits += 1;
+        if self.kit_rt.chaos_hits % every.max(1) != 0 {
+            return;
+        }
+        if let Some(pick) = self.pick_status(&statuses) {
+            let pi = self.player_index;
+            let gfx = Gfx {
+                hit: Some(CHAOS_PROC),
+                ..Gfx::default()
+            };
+            self.land_statuses(index, &[pick], from, &gfx, false, pi);
+        }
+    }
+
     /// A status from `caster` (who a taunt makes the target attack).
     pub(super) fn apply_status_from(
         &mut self,
@@ -340,6 +396,28 @@ impl AnimatedScene {
         from: Vec3,
         caster: usize,
     ) {
+        match status {
+            Status::OneOf { of } => {
+                if let Some(pick) = self.pick_status(of) {
+                    self.apply_status_from(index, &pick, from, caster);
+                }
+                return;
+            }
+            Status::Scramble { distance } if !self.units[index].kind.is_structure() => {
+                let angle = self.next_random() * std::f32::consts::TAU;
+                let dir = Vec3::new(angle.cos(), 0.0, angle.sin());
+                let start = self.units[index].pos;
+                let size = self.gfx_size(index);
+                self.gfx_at(kit::spot::SCRAMBLE, start, size);
+                let unit = &mut self.units[index];
+                unit.cc.displace = dir * (distance / SCRAMBLE_SECONDS);
+                unit.cc.displace_timer = SCRAMBLE_SECONDS;
+                unit.attack_target = None;
+                self.gfx_on(kit::spot::SCRAMBLE, index, size);
+                return;
+            }
+            _ => {}
+        }
         let pi = caster;
         let structure = self.units[index].kind.is_structure();
         let unit = &mut self.units[index];
@@ -385,6 +463,11 @@ impl AnimatedScene {
             Status::NoMobility { duration } => {
                 unit.cc.no_mobility_timer = unit.cc.no_mobility_timer.max(duration);
             }
+            Status::Disarm { duration } => {
+                unit.cc.disarm_timer = unit.cc.disarm_timer.max(duration);
+                unit.strike = None;
+            }
+            Status::Scramble { .. } | Status::OneOf { .. } => {}
             Status::Stun { duration } => unit.stun_timer = unit.stun_timer.max(duration),
             Status::Knockup { duration } => {
                 unit.stun_timer = unit.stun_timer.max(duration);
@@ -1341,6 +1424,7 @@ impl AnimatedScene {
                 if !dash.hit.contains(&index) {
                     dash.hit.push(index);
                     self.kit_hit(index, dash.damage, &dash.on_hit, pos, &dash.gfx);
+                    self.chaos_passive(index, pos);
                 }
             }
         }
@@ -1448,6 +1532,9 @@ impl AnimatedScene {
                     }
                 }
                 self.kit_hit(index, shot.damage, &shot.on_hit, shot.from, &shot.gfx);
+                if !shot.basic {
+                    self.chaos_passive(index, shot.from);
+                }
                 self.impact_burst(shot.pos, &look);
                 if shot.explode > 0.0 {
                     let center = shot.pos;
@@ -1541,6 +1628,7 @@ impl AnimatedScene {
             let count = hits.len();
             for index in hits {
                 self.kit_hit(index, area.damage, &area.on_hit, area.from, &area.gfx);
+                self.chaos_passive(index, area.from);
             }
             if area.heal_per_hit > 0.0 && count > 0 {
                 let pi = self.player_index;

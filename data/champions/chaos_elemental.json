@@ -1,0 +1,178 @@
+{
+  "name": "Chaos Elemental",
+  "role": "CHAOS MAGE",
+  "class": "MAGIC",
+  "tagline": "The Wilderness's living storm: every spell it casts is a gamble for someone else.",
+  "model": 11216,
+  "attachments": [
+    57329
+  ],
+  "idle": 3144,
+  "walk": 3145,
+  "attack_anim": 3146,
+  "attack_hit": 0.5,
+  "projectile": "chaos",
+  "scale": 0.6,
+  "health": 520,
+  "mana": 300,
+  "damage": 12,
+  "armor": 20.0,
+  "attack_range": 600,
+  "attack_interval": 1.2,
+  "speed": 400,
+  "ranged_auto": true,
+  "weight": 75,
+  "attack_windup": 0.3,
+  "abilities": [
+    {
+      "key": "Q",
+      "name": "DISCORD",
+      "description": "A swirling bolt that burns away the target's mana.",
+      "ranks": [
+        { "damage": 80, "range": 950, "cooldown": 7 },
+        { "damage": 110, "range": 950, "cooldown": 6.5 },
+        { "damage": 140, "range": 1000, "cooldown": 6 },
+        { "damage": 170, "range": 1000, "cooldown": 5.5 }
+      ]
+    },
+    {
+      "key": "W",
+      "name": "CONFUSION",
+      "description": "A burst at the cursor throws every enemy in it somewhere nearby.",
+      "ranks": [
+        { "damage": 50, "range": 850, "cooldown": 12 },
+        { "damage": 72, "range": 850, "cooldown": 11 },
+        { "damage": 94, "range": 900, "cooldown": 10 },
+        { "damage": 116, "range": 900, "cooldown": 9 }
+      ]
+    },
+    {
+      "key": "E",
+      "name": "MADNESS",
+      "description": "A red bolt that leaves the first enemy it hits unable to attack.",
+      "ranks": [
+        { "damage": 45, "range": 900, "cooldown": 14 },
+        { "damage": 65, "range": 900, "cooldown": 13 },
+        { "damage": 85, "range": 950, "cooldown": 12 },
+        { "damage": 105, "range": 950, "cooldown": 11 }
+      ]
+    },
+    {
+      "key": "R",
+      "name": "CHAOS STORM",
+      "description": "Three fans of bolts, each carrying Discord, Confusion or Madness at random.",
+      "ranks": [
+        { "damage": 45, "range": 900, "cooldown": 70 },
+        { "damage": 65, "range": 950, "cooldown": 60 },
+        { "damage": 85, "range": 1000, "cooldown": 50 }
+      ]
+    }
+  ],
+  "ability_icons": [
+    586,
+    16,
+    120,
+    578
+  ],
+  "kit": {
+    "passive_name": "Pure chaos",
+    "passive": {
+      "type": "chaos",
+      "every": 3,
+      "statuses": [
+        { "type": "slow", "pct": 0.3, "duration": 1.5 },
+        { "type": "venom", "damage": 8, "duration": 3 },
+        { "type": "mana_drain", "amount": 25 }
+      ]
+    },
+    "abilities": [
+      {
+        "cost": 35,
+        "cooldown": 7,
+        "color": [200, 120, 255],
+        "actions": [
+          {
+            "type": "projectile",
+            "visual": "chaos",
+            "speed": 1500,
+            "range": 950,
+            "damage": 80,
+            "width": 90,
+            "on_hit": [
+              { "type": "mana_drain", "amount": 30 }
+            ]
+          }
+        ]
+      },
+      {
+        "cost": 50,
+        "cooldown": 12,
+        "color": [110, 255, 120],
+        "actions": [
+          {
+            "type": "area",
+            "gfx": { "land": 550 },
+            "radius": 220,
+            "range": 850,
+            "delay": 0.3,
+            "damage": 50,
+            "on_hit": [
+              { "type": "scramble", "distance": 350 }
+            ]
+          }
+        ]
+      },
+      {
+        "cost": 45,
+        "cooldown": 14,
+        "color": [255, 90, 80],
+        "actions": [
+          {
+            "type": "projectile",
+            "visual": "madness",
+            "speed": 1400,
+            "range": 900,
+            "damage": 45,
+            "width": 80,
+            "on_hit": [
+              { "type": "disarm", "duration": 2 }
+            ]
+          }
+        ]
+      },
+      {
+        "cost": 100,
+        "cooldown": 70,
+        "color": [220, 160, 255],
+        "actions": [
+          {
+            "type": "channel",
+            "duration": 1.2,
+            "interval": 0.4,
+            "action": {
+              "type": "projectile",
+              "visual": "chaos",
+              "speed": 1400,
+              "range": 900,
+              "damage": 45,
+              "width": 80,
+              "count": 3,
+              "spread": 40,
+              "on_hit": [
+                {
+                  "type": "one_of",
+                  "of": [
+                    { "type": "mana_drain", "amount": 40 },
+                    { "type": "scramble", "distance": 250 },
+                    { "type": "disarm", "duration": 1.5 }
+                  ]
+                }
+              ]
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "source_npc": 2054
+}
