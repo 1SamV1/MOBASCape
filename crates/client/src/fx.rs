@@ -40,6 +40,9 @@ pub struct ProjectileLook {
     pub hit_spotanim: Option<u32>,
     /// Multiplier on the spot animation's own resize.
     pub model_scale: f32,
+    /// Scale of the hit graphic; `None` uses `model_scale`. Tower orbs fly
+    /// at 3x but splash at the size of the unit they hit.
+    pub hit_scale: Option<f32>,
     /// Core glow colour and sprite size in world units.
     pub glow: [u8; 3],
     pub glow_size: f32,
@@ -71,6 +74,7 @@ impl ProjectileLook {
             spotanim: None,
             hit_spotanim: None,
             model_scale: 1.0,
+            hit_scale: None,
             glow: [255, 170, 80],
             glow_size: 60.0,
             glow_intensity: 1.4,
@@ -454,9 +458,13 @@ pub const LOOKS: &[ProjectileLook] = &[
         light_radius: 240.0,
         ..ProjectileLook::base("minion_red")
     },
-    // Tower shots: a heavy orb with a thick trail.
+    // Tower shots: a heavy cache orb (one model in three recolours) with a
+    // thick trail, landing in the matching surge splash: water for
+    // Saradomin blue, fire for Zamorak red, earth for the watchtower.
     ProjectileLook {
         spotanim: Some(1526),
+        hit_spotanim: Some(1460),
+        hit_scale: Some(1.3),
         model_scale: 3.2,
         glow: [110, 180, 255],
         glow_size: 120.0,
@@ -476,6 +484,8 @@ pub const LOOKS: &[ProjectileLook] = &[
     },
     ProjectileLook {
         spotanim: Some(1528),
+        hit_spotanim: Some(1466),
+        hit_scale: Some(1.3),
         model_scale: 3.2,
         glow: [255, 120, 80],
         glow_size: 120.0,
@@ -495,6 +505,8 @@ pub const LOOKS: &[ProjectileLook] = &[
     },
     ProjectileLook {
         spotanim: Some(1527),
+        hit_spotanim: Some(1463),
+        hit_scale: Some(1.3),
         model_scale: 3.6,
         glow: [255, 220, 120],
         glow_size: 140.0,
@@ -1065,6 +1077,21 @@ mod tests {
     #[test]
     fn lookup_ignores_case() {
         assert_eq!(look_by_name("FIRE_WAVE"), look_by_name("fire_wave"));
+    }
+
+    #[test]
+    fn tower_shots_play_verified_graphics() {
+        for name in ["tower_blue", "tower_red", "watchtower"] {
+            let look = look(look_by_name(name));
+            for id in [look.spotanim, look.hit_spotanim] {
+                let id = id.expect(name);
+                assert!(crate::kit::spot::VERIFIED.contains(&id), "{name}: {id}");
+            }
+            assert!(
+                look.hit_scale.is_some_and(|s| s < look.model_scale),
+                "{name}"
+            );
+        }
     }
 
     #[test]

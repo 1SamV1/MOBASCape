@@ -80,6 +80,9 @@ beside the hero, looping, so spell graphics can be checked by eye. Add
 `--distance 1500` to bring the camera in. A label ending in `?` failed to
 load. The verified ids are listed in [SPELLS.md](SPELLS.md).
 
+`--demo-tower` stands the hero 4 tiles from the nearest red tower one
+second in, so tower shots and their Surge hit splashes can be checked.
+
 `--spells ice_barrage,vengeance` picks a magic hero's battle spells (D then
 F) by id; without it the lane call's pair is used, and non-magic heroes get
 none. `--demo-spells` casts D one second in and F at three seconds, at the

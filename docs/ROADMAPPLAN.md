@@ -186,8 +186,11 @@ All objects from the cache, placed through the map format
    banners (2065) at the blue gates, Zamorak statues (1400) and banners
    (8655) at the red gates. Still to do: castle pieces in each god's
    colours, and the fountain as a cache portal or pool.
-4. **Towers** are already the Obelisk of Earth (1761). Still to do: their
-   cache spot animations for shots.
+4. ~~**Towers.**~~ Done 2026-11-25: the Obelisk of Earth (1761) fires the
+   cache orb (1526 blue, 1528 red, 1527 watchtower), now verified, and each
+   shot lands in the matching Surge splash (water 1460, fire 1466, earth
+   1463) at hit size (`ProjectileLook::hit_scale`). `--demo-tower` stands
+   the hero under a red tower.
 5. ~~**Jungle flora.**~~ Done 2026-11-25: about 1,950 cache ferns and
    stumps scattered across the brush and camp regions (`props.scatter`),
    keeping off lanes and camps.

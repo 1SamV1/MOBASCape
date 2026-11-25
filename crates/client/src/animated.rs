@@ -3199,9 +3199,18 @@ impl AnimatedScene {
 
     /// Closest watchtower of the given team, used by the verification demo.
     pub fn nearest_watchtower(&self, team: u8, pos: Vec3) -> Option<usize> {
+        self.nearest_of_kind(UnitKind::Watchtower, team, pos)
+    }
+
+    /// The nearest living lane tower of `team`.
+    pub fn nearest_tower(&self, team: u8, pos: Vec3) -> Option<usize> {
+        self.nearest_of_kind(UnitKind::Tower, team, pos)
+    }
+
+    fn nearest_of_kind(&self, kind: UnitKind, team: u8, pos: Vec3) -> Option<usize> {
         let mut best: Option<(usize, f32)> = None;
         for (i, unit) in self.units.iter().enumerate() {
-            if unit.kind != UnitKind::Watchtower || unit.team != team || unit.health <= 0.0 {
+            if unit.kind != kind || unit.team != team || unit.health <= 0.0 {
                 continue;
             }
             let d = unit.pos.distance_squared(pos);
@@ -5416,7 +5425,7 @@ impl AnimatedScene {
                 pos,
                 yaw,
                 time_ms: 0.0,
-                scale: look.model_scale,
+                scale: look.hit_scale.unwrap_or(look.model_scale),
                 mode: SpotDraw::Burst,
                 follow: None,
                 hold: 0.0,

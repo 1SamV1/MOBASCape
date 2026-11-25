@@ -194,6 +194,10 @@ struct Cli {
     /// Demo: read the bag's first thrall scroll one second in.
     #[arg(long)]
     demo_thrall: bool,
+    /// Demo: one second in, stand 4 tiles from the nearest enemy lane tower
+    /// so its shots and surge hit graphics play on the hero.
+    #[arg(long)]
+    demo_tower: bool,
     /// Hero select: open the battle spell picker for slot 0 (D) or 1 (F),
     /// for screenshots.
     #[arg(long)]
@@ -738,6 +742,7 @@ fn main() -> Result<()> {
         demo_gfx_loaded: false,
         demo_scroll: cli.demo_scroll.then_some(0.5),
         demo_thrall: cli.demo_thrall.then_some(1.0),
+        demo_tower: cli.demo_tower.then_some(1.0),
         demo_spells: if cli.demo_spells {
             vec![(1.0, 0), (3.0, 1)]
         } else {
@@ -917,6 +922,8 @@ struct App {
     demo_spells: Vec<(f32, usize)>,
     /// Seconds until `--demo-thrall` reads the first thrall scroll.
     demo_thrall: Option<f32>,
+    /// Seconds until `--demo-tower` moves the hero under an enemy tower.
+    demo_tower: Option<f32>,
     /// Seconds until the `--demo-gfx` grid plays again.
     demo_gfx_timer: f32,
     demo_gfx_loaded: bool,
@@ -2122,6 +2129,23 @@ impl App {
                         "demo watchtower: at 24 tiles (outside lock) hp {hp:.0}, tower target {target:?}"
                     );
                     self.demo_watchtower = false;
+                }
+            }
+            if let Some(timer) = self.demo_tower.as_mut() {
+                *timer -= dt;
+                if *timer <= 0.0 {
+                    self.demo_tower = None;
+                    let here = animated.player_pos();
+                    let tower = animated.nearest_tower(1, here);
+                    if let Some(pos) = tower.and_then(|i| animated.unit_pos(i)) {
+                        // Approach from the hero's side so the spot is on
+                        // the lane, not behind the tower.
+                        let dir = Vec3::new(here.x - pos.x, 0.0, here.z - pos.z)
+                            .try_normalize()
+                            .unwrap_or(Vec3::Z);
+                        animated.teleport_player(pos + dir * 4.0 * 128.0);
+                    }
+                    tracing::info!("demo tower: standing beside red tower {tower:?}");
                 }
             }
             if let Some(timer) = self.demo_thrall.as_mut() {

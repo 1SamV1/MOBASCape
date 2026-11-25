@@ -1,6 +1,24 @@
 # Status
 
-Last updated: Phase 5 arena set dressing, 2026-11-25.
+Last updated: Phase 5 tower shot graphics, 2026-11-25.
+
+## 2026-11-25 — Phase 5: tower shot graphics
+
+- Tower orbs (spot animations 1526 / 1528, the watchtower's 1527: one
+  cache model in three recolours) are now checked on a contact sheet and
+  listed in `kit::spot::VERIFIED`, with all twelve Surge graphics
+  (1455-1466).
+- Every tower shot lands in the OSRS Surge splash of its colour: water
+  (1460) for blue, fire (1466) for red, earth (1463) for the watchtower.
+  A new `ProjectileLook::hit_scale` draws the splash at unit size (1.3)
+  while the orb still flies at 3.2-3.6x. A test keeps tower looks on
+  verified ids.
+- `--demo-tower` moves the hero 4 tiles from the nearest red tower one
+  second in. Verified: the red orb flies and the fire splash covers
+  Kolodion on the hit; the watchtower demo shows the earth splash, though
+  the tower's own model hides part of it from the default camera.
+- Still open in Phase 5: god-coloured castle pieces, the fountain and
+  ground mist.
 
 ## 2026-11-25 — Phase 5: arena set dressing
 
