@@ -57,6 +57,7 @@ frame shows; "Use" is where MobaScape puts it.
 | 343 | purple starburst | Tele Block cast | Tele Block cast |
 | 344 | dark streaks | projectile | Tele Block projectile |
 | 345 | purple flecks | Tele Block hit | (spare) |
+| 354 | grey smoke puffs (all translucent) | smoke cloud | ground mist over unseen areas, flattened to 0.28 |
 | 359-362 | ice spray and shards | Ice Rush/Burst | (spare) |
 | 363 | ice spike pillar | Ice Burst | Ancient Wyvern Q hit |
 | 368 | ice flecks | Ice Blitz projectile | Ice Barrage projectile |

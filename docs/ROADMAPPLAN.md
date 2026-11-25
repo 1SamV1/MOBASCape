@@ -201,7 +201,11 @@ All objects from the cache, placed through the map format
    with `wood_only`, which put bark on every face of the full-canopy
    models (and over their own cache textures). They keep their leaves now,
    tinted darker.
-7. **Ground mist** over unseen areas from cache smoke spot animations.
+7. ~~**Ground mist**~~ Done 2026-11-25: the cache smoke cloud (spot
+   animation 354) flattened into low banks on a seeded 5-tile grid inside
+   the walls, fading in out of team vision and out where allies see
+   (`animated/mist.rs`); the nearest 48 are drawn, capped at half the fx
+   budget.
 
 ### Phase 6: HUD polish
 

@@ -1,6 +1,30 @@
 # Status
 
-Last updated: Phase 5 bases (fountains, god colours), 2026-11-25.
+Last updated: Phase 5 done (ground mist), 2026-11-25.
+
+## 2026-11-25 — Phase 5: ground mist; the arena phase is done
+
+- Searched spot animations 0-392 on contact sheets for a soft cloud. The
+  smoke spells (384-391) are dark flecks; spot animation 354 (model 6288,
+  27 frames over 1.88 s, every face translucent) is a cluster of grey
+  smoke puffs and joins `kit::spot::VERIFIED`.
+- `animated/mist.rs`: puffs on a seeded, jittered 5-tile grid inside the
+  castle walls (about 3,000), each scaled 5-8x and flattened to 0.28 so it
+  lies on the ground as a bank. A puff fades towards full mist while its
+  tile is out of team vision and out once an ally sees it (1.4 per
+  second, smoothstep), so the edge of vision is soft. The nearest 48
+  within 22 tiles of the camera are drawn in the additive glow pass, and
+  mist stops at half the fx vertex budget so spell graphics always fit
+  (`FxMesh::used_fraction`).
+- Tests: puff layout is seeded and inside the walls, fades follow vision
+  without popping, only the nearest unseen puffs are drawn.
+- Verified with `--shots` over the jungle, the river and a low angle: low
+  mist banks over unseen ground, clear ground in vision. Benchmark at
+  spawn: 77.8 fps (p95 13.8 ms); a view with heavy mist was not
+  benchmarked.
+- First pass was too bright (round white balls); the glow went from 0.32
+  to 0.06. Tuning lives in the constants at the top of `mist.rs`.
+- Phase 5 (arena set dressing) is complete.
 
 ## 2026-11-25 — Phase 5: fountains and god-coloured castles
 
