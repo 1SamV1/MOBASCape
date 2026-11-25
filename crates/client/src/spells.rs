@@ -342,6 +342,55 @@ pub fn bolt_target(
         .map(|&(index, _)| index)
 }
 
+/// What a bot sees when it weighs a battle spell.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct BotView {
+    /// Its own health, as a fraction.
+    pub health: f32,
+    /// The nearest enemy hero in sight: distance and health fraction.
+    pub enemy: Option<(f32, f32)>,
+    /// Hostile units, and of those heroes, within the spell's radius (a
+    /// nova's reach).
+    pub enemies_near: usize,
+    pub heroes_near: usize,
+    /// Allied heroes within reach below 60% health.
+    pub hurt_allies: usize,
+}
+
+/// Where a bot aims a battle spell.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BotAim {
+    /// Away, toward its fountain (a blink out).
+    Home,
+    /// At the nearest enemy hero.
+    Enemy,
+    /// On itself.
+    Here,
+}
+
+/// A bot's rules for a battle spell (docs/SPELLS.md, Part C): blink out
+/// under 25% health with a hero near, heal under 35% or with two hurt
+/// allies, Vengeance with a hero in melee reach, a bolt at a hero in range
+/// who is under half health (or to peel when the bot is low), Entangle
+/// with a hero and another enemy close.
+pub fn bot_aim(spell: &Spell, view: &BotView) -> Option<BotAim> {
+    let enemy = view.enemy;
+    let fire = match &spell.effect {
+        Effect::Blink { .. } => view.health < 0.25 && enemy.is_some_and(|(d, _)| d <= 900.0),
+        Effect::HealGroup { .. } => view.health < 0.35 || view.hurt_allies >= 2,
+        Effect::Vengeance { .. } => enemy.is_some_and(|(d, _)| d <= 300.0),
+        Effect::Bolt { range, .. } => {
+            enemy.is_some_and(|(d, hp)| d <= *range && (hp < 0.5 || view.health < 0.4))
+        }
+        Effect::Nova { .. } => view.heroes_near >= 1 && view.enemies_near >= 2,
+    };
+    fire.then_some(match &spell.effect {
+        Effect::Blink { .. } => BotAim::Home,
+        Effect::Bolt { .. } => BotAim::Enemy,
+        _ => BotAim::Here,
+    })
+}
+
 /// Vengeance waiting on a hero.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Vengeance {
@@ -568,6 +617,86 @@ mod tests {
         assert!(v.is_some());
         tick_vengeance(&mut v, 0.6);
         assert!(v.is_none());
+    }
+
+    #[test]
+    fn bots_cast_by_simple_rules() {
+        let book = SpellBook::shipped();
+        let spell = |id: &str| book.get(book.index_of(id).unwrap()).unwrap().clone();
+        let calm = BotView {
+            health: 0.9,
+            ..Default::default()
+        };
+        for id in [
+            "ancient_teleport",
+            "heal_group",
+            "vengeance",
+            "ice_barrage",
+            "entangle",
+        ] {
+            assert_eq!(
+                bot_aim(&spell(id), &calm),
+                None,
+                "{id} waits when nothing is near"
+            );
+        }
+        // Low, with a hero close: blink home and heal.
+        let low = BotView {
+            health: 0.2,
+            enemy: Some((500.0, 0.9)),
+            ..Default::default()
+        };
+        assert_eq!(
+            bot_aim(&spell("ancient_teleport"), &low),
+            Some(BotAim::Home)
+        );
+        assert_eq!(bot_aim(&spell("heal_group"), &low), Some(BotAim::Here));
+        // A hurt team heals even when the bot is fine.
+        let team = BotView {
+            health: 0.9,
+            hurt_allies: 2,
+            ..Default::default()
+        };
+        assert_eq!(bot_aim(&spell("heal_group"), &team), Some(BotAim::Here));
+        // Vengeance only in melee reach.
+        let close = BotView {
+            health: 0.8,
+            enemy: Some((250.0, 0.9)),
+            ..Default::default()
+        };
+        assert_eq!(bot_aim(&spell("vengeance"), &close), Some(BotAim::Here));
+        assert_eq!(
+            bot_aim(&spell("ice_barrage"), &close),
+            None,
+            "a healthy hero is not chased"
+        );
+        // A weak hero in range takes the bolt; out of range it does not.
+        let weak = BotView {
+            health: 0.8,
+            enemy: Some((650.0, 0.3)),
+            ..Default::default()
+        };
+        assert_eq!(bot_aim(&spell("ice_barrage"), &weak), Some(BotAim::Enemy));
+        assert_eq!(bot_aim(&spell("tele_block"), &weak), Some(BotAim::Enemy));
+        let far = BotView {
+            enemy: Some((900.0, 0.3)),
+            ..weak.clone()
+        };
+        assert_eq!(bot_aim(&spell("ice_barrage"), &far), None);
+        // Entangle wants a hero and another enemy inside it.
+        let crowd = BotView {
+            health: 0.8,
+            heroes_near: 1,
+            enemies_near: 3,
+            ..Default::default()
+        };
+        assert_eq!(bot_aim(&spell("entangle"), &crowd), Some(BotAim::Here));
+        let lone = BotView {
+            heroes_near: 1,
+            enemies_near: 1,
+            ..crowd
+        };
+        assert_eq!(bot_aim(&spell("entangle"), &lone), None);
     }
 
     #[test]

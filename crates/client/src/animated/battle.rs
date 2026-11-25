@@ -357,6 +357,92 @@ impl AnimatedScene {
             .map(|(i, _)| i)
     }
 
+    /// What bot `index` sees for `spell`'s rules.
+    fn bot_view(&self, index: usize, spell: &spells::Spell) -> spells::BotView {
+        let me = &self.units[index];
+        let reach = match &spell.effect {
+            Effect::Nova { radius, .. } => *radius,
+            Effect::HealGroup { radius, .. } => *radius,
+            _ => 0.0,
+        };
+        let distance = |pos: Vec3| planar_delta(me.pos, pos).length();
+        let enemy = self.nearest_enemy_hero(index).and_then(|e| {
+            let other = &self.units[e];
+            (me.team != 0 || other.visible).then(|| {
+                (
+                    distance(other.pos),
+                    other.health / other.max_health.max(1.0),
+                )
+            })
+        });
+        let mut view = spells::BotView {
+            health: me.health / me.max_health.max(1.0),
+            enemy,
+            ..Default::default()
+        };
+        for (i, other) in self.units.iter().enumerate() {
+            if i == index || other.health <= 0.0 || other.spawn_delay > 0.0 {
+                continue;
+            }
+            let near = distance(other.pos) <= reach + other.hit_radius.max(40.0) * 0.5;
+            if !near {
+                continue;
+            }
+            if other.team == me.team {
+                if other.kind.is_champion() && other.health < other.max_health * 0.6 {
+                    view.hurt_allies += 1;
+                }
+            } else if !other.kind.is_structure() {
+                view.enemies_near += 1;
+                if other.kind.is_champion() {
+                    view.heroes_near += 1;
+                }
+            }
+        }
+        view
+    }
+
+    /// A bot's battle spells, weighed on its think tick: at most one goes
+    /// off.
+    pub(super) fn bot_battle_spells(
+        &mut self,
+        index: usize,
+        collision: &WorldCollision,
+        height: &HeightGrid,
+    ) {
+        let loadout = self.units[index].spells.clone();
+        if !loadout.has_spells() || self.units[index].health <= 0.0 {
+            return;
+        }
+        for slot in 0..2 {
+            let Some(n) = loadout.picks[slot] else {
+                continue;
+            };
+            if loadout.cooldowns[slot] > 0.0 {
+                continue;
+            }
+            let spell = self.spell_book.spells[n].clone();
+            let Some(aim) = spells::bot_aim(&spell, &self.bot_view(index, &spell)) else {
+                continue;
+            };
+            let me = &self.units[index];
+            let target = match aim {
+                spells::BotAim::Home => me.home,
+                spells::BotAim::Here => me.pos,
+                spells::BotAim::Enemy => match self.nearest_enemy_hero(index) {
+                    Some(enemy) => self.units[enemy].pos,
+                    None => continue,
+                },
+            };
+            if self
+                .cast_battle_spell(index, slot, target, collision, height)
+                .is_ok()
+            {
+                return;
+            }
+        }
+    }
+
     /// The player casts D (0) or F (1).
     pub fn cast_player_spell(
         &mut self,

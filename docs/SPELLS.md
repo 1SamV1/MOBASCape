@@ -176,6 +176,20 @@ Camera follow moves from F to Y to free F.
 - Hovering D, F or T in the assembled interface explains the spell or the
   scroll. Non-magic heroes see greyed D and F slots ("Magic heroes only").
 
+### Bots
+
+Magic bots carry their lane call's pair and check it once a second, on their
+think tick, casting at most one spell then. The rules live in
+`spells::bot_aim` and are tested:
+
+| Spell | When a bot casts it |
+|---|---|
+| Ancient Teleport | Under 25% health with an enemy hero within 900. It blinks toward its fountain. |
+| Heal Group | Under 35% health, or when two allied heroes nearby are under 60% |
+| Vengeance | An enemy hero within 300 |
+| Ice Barrage, Tele Block | An enemy hero in range under half health, or the bot is under 40% (to peel) |
+| Entangle | An enemy hero and at least one other enemy inside the radius |
+
 ### On hero select
 
 - The two slots sit under the hero's name and tags on the parchment. The

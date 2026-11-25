@@ -538,6 +538,7 @@ impl AnimatedScene {
         if self.bots[b].think <= 0.0 {
             self.bots[b].think += THINK_INTERVAL;
             self.bot_think(b);
+            self.bot_battle_spells(index, collision, height);
         }
         match self.bots[b].mode {
             BotMode::Retreat => {
