@@ -145,7 +145,10 @@ impl NpcDefinition {
                 95 => def.combat_level = b.read_u16()? as i32,
                 97 => def.width_scale = b.read_u16()?,
                 98 => def.height_scale = b.read_u16()?,
-                99..=101 => {
+                // 99 (render priority) is a flag with no payload; 100 and
+                // 101 (ambient, contrast) carry one byte each.
+                99 => {}
+                100 | 101 => {
                     b.read_u8()?;
                 }
                 102 => {
@@ -619,6 +622,23 @@ mod tests {
         assert_eq!(def.standing_animation, 4484);
         assert_eq!(def.walking_animation, 4488);
         assert_eq!(def.combat_level, 318, "opcodes after 249 still decode");
+    }
+
+    /// Opcode 99 (render priority) has no payload. Pestilent Bloat (8359)
+    /// opens 99, 101 (contrast 0x2c), 12 (size 5): reading a byte for 99
+    /// used to swallow the 101 and stop on "opcode 44".
+    #[test]
+    fn npc_render_priority_flag_has_no_payload() {
+        let bytes = [
+            99, 101, 0x2c, 12, 5, 13, 0x1f, 0x90, 14, 0x1f, 0x91, 100, 0x10, 2, b'B', 0, 1, 2,
+            0x8a, 0x4c, 0xc3, 0x96, 0,
+        ];
+        let def = NpcDefinition::parse(8359, &bytes).expect("parses");
+        assert_eq!(def.size, 5);
+        assert_eq!(def.standing_animation, 8080);
+        assert_eq!(def.walking_animation, 8081);
+        assert_eq!(def.name, "B");
+        assert_eq!(def.models, [35404, 50070]);
     }
 
     #[test]
