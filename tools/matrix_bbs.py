@@ -148,129 +148,103 @@ def logo(y, word):
 
 # ============================================================================
 GOLD = (255, 210, 90)
-WOOD = (176, 128, 70)
-WOOD_DIM = (110, 78, 40)
 STONE = (206, 192, 156)
 STONE_DIM = (128, 116, 92)
 ORANGE = (255, 152, 31)
-SPOON = [WHITE, (214, 255, 222), (150, 214, 170), (96, 160, 116), (70, 120, 86), (52, 92, 64), (40, 70, 50), (30, 54, 38)]
-# One colour per lane, after its cache skill icon.
-LANE_COL = {
-    "Top": (196, 204, 210),      # Defence 199: steel
-    "Jungle": (196, 150, 92),    # Hunter 220: paw-print brown
-    "Mid": (255, 110, 90),       # Runecraft 215: the red rift
-    "Carry": (120, 230, 120),    # Fletching 208: green fletch
-    "Support": (90, 255, 150),   # Herblore 205: the herb
+YELLOW = (255, 255, 0)
+LED_OFF = (0, 44, 12)
+LED_GRAD = [WHITE, HEAD, (120, 255, 150), BRIGHT, BRIGHT, MID, (0, 160, 40)]
+
+# A 5x7 dot-matrix font, the scoreboard kind.
+DOTS = {
+    "M": ["#...#", "##.##", "#.#.#", "#.#.#", "#...#", "#...#", "#...#"],
+    "O": [".###.", "#...#", "#...#", "#...#", "#...#", "#...#", ".###."],
+    "B": ["####.", "#...#", "#...#", "####.", "#...#", "#...#", "####."],
+    "A": [".###.", "#...#", "#...#", "#####", "#...#", "#...#", "#...#"],
+    "S": [".####", "#....", "#....", ".###.", "....#", "....#", "####."],
+    "C": [".###.", "#...#", "#....", "#....", "#....", "#...#", ".###."],
+    "P": ["####.", "#...#", "#...#", "####.", "#....", "#....", "#...."],
+    "E": ["#####", "#....", "#....", "####.", "#....", "#....", "#####"],
+    "5": ["#####", "#....", "####.", "....#", "....#", "#...#", ".###."],
 }
-LANES = ["Top", "Jungle", "Mid", "Carry", "Support"]
-RED_LANES = ["Top", "Mid", "Carry", "Support", "Jungle"]
 
 
-def bot_lanes(player):
-    """hero_select::bot_lanes: the lanes nobody called, in draft order."""
-    taken = player or "Mid"
-    return [lane for lane in RED_LANES if lane != taken][:4]
-
-
-def bent_logo(y, word, bend=4):
-    """The logo bent like the Oracle's spoon. Drawn at half-block height, so
-    each column can drop by half a row: the ends sag `bend` half-rows on a
-    parabola and the middle holds. Re-encoded to ▀ ▄ █ after; each cell
-    keeps the gradient of the row it came from, so the letters stay lit
-    from above while the word curves."""
-    width = len(word) * 10 - 1
-    x0 = (W - width) // 2
-    halves = {"█": (1, 1), "▀": (1, 0), "▄": (0, 1), " ": (0, 0)}
-    src = [[0] * width for _ in range(LOGO_ROWS * 2)]
+def led_logo(y, word):
+    """The logo on an LED board: every dot of the panel is there, dark or
+    lit, two columns apart, with one dark column between letters and a dark
+    margin. Lit dots take a top-down gradient; where two lit dots sit side
+    by side the gap between them glows faintly, like LED bleed."""
+    cols = len(word) * 6 - 1 + 2
+    x0 = (W - cols * 2) // 2
+    lit = set()
     for i, letter in enumerate(word):
-        for r in range(LOGO_ROWS):
-            for c, px in enumerate(LOGO[letter][r]):
-                top, bottom = halves[px]
-                src[r * 2][i * 10 + c] = top
-                src[r * 2 + 1][i * 10 + c] = bottom
-    rows = LOGO_ROWS + (bend + 1) // 2
-    mid = (width - 1) / 2
-    drop = [round(bend * ((x - mid) / mid) ** 2) for x in range(width)]
-    dst = [[None] * width for _ in range(rows * 2)]
-    for x in range(width):
-        for sy in range(LOGO_ROWS * 2):
-            if src[sy][x]:
-                dst[sy + drop[x]][x] = sy
-    clear(x0 - 2, y, x0 + width + 2, y + rows - 1)
-    cells = {}
-    for r in range(rows):
-        for x in range(width):
-            t, b = dst[2 * r][x], dst[2 * r + 1][x]
-            if t is None and b is None:
-                continue
-            ch = "█" if (t is not None and b is not None) else ("▀" if t is not None else "▄")
-            cells[(x0 + x, y + r)] = (ch, LOGO_GRAD[(t if t is not None else b) // 2])
-    for (x, yy) in cells:
-        if (x + 1, yy + 1) not in cells:
-            put(x + 1, yy + 1, "░", DIM)
-    for (x, yy), (ch, col) in cells.items():
-        put(x, yy, ch, col)
-    return x0, width, rows
+        for r, line in enumerate(DOTS[letter]):
+            for c, px in enumerate(line):
+                if px == "#":
+                    lit.add((1 + i * 6 + c, r))
+    clear(x0 - 1, y, x0 + cols * 2, y + 6)
+    for r in range(7):
+        for c in range(cols):
+            x = x0 + c * 2
+            if (c, r) in lit:
+                put(x, y + r, "●", LED_GRAD[r])
+                if (c + 1, r) in lit:
+                    put(x + 1, y + r, "•", MID if r > 3 else BRIGHT)
+            else:
+                put(x, y + r, "·", LED_OFF)
+    return x0, cols * 2
 
 
-def plaque(x0, y0):
-    """The carved sign over the Oracle's kitchen door."""
-    inner = 20
-    lines = [
-        ("╔" + "═" * inner + "╗", WOOD),
-        ("║" + "T E M E T".center(inner) + "║", GOLD),
-        ("║" + "N O S C E".center(inner) + "║", GOLD),
-        ("╟" + "─" * inner + "╢", WOOD_DIM),
-        ("║" + "know thy lane:".center(inner) + "║", HEAD),
-        ("║" + "call it, or don't.".center(inner) + "║", MID),
-        ("║" + "it's not a rule.".center(inner) + "║", MID),
-        ("╚" + "═" * inner + "╝", WOOD),
-    ]
-    clear(x0 - 1, y0, x0 + inner + 2, y0 + len(lines) - 1)
-    for k, (line, col) in enumerate(lines):
-        for j, ch in enumerate(line):
-            put(x0 + j, y0 + k, ch, WOOD if ch in "╔╗╚╝═║╟╢" else WOOD_DIM if ch == "─" else col)
+def led_digit(x0, y0, ch, colour):
+    for r, line in enumerate(DOTS[ch]):
+        for c, px in enumerate(line):
+            put(x0 + c * 2, y0 + r, "●" if px == "#" else "·", colour if px == "#" else LED_OFF)
 
 
-def spoon(x0, y0):
-    """The spoon, bowl up, its neck bending away to the right."""
+def phone(x0, y0):
+    """The hardline: a desk phone, handset on its cradle."""
     art = [
-        "    ▄▄▄▄▄",
-        "  ▄█▀   ▀█▄",
-        "  █▌     ▐█",
-        "  ▀█▄   ▄█▀",
-        "    ▀███▀",
-        "      ▐█",
-        "       ▀█▄",
-        "         ▀▀█▄▄▄▄",
+        "▄▄▄▄▄▄▄▄▄▄▄▄",
+        "█▀▀▀▀▀▀▀▀▀▀█",
+        "▀▀█▄▄▄▄▄▄█▀▀",
+        "  █ ▪ ▪ ▪ █",
+        "  █ ▪ ▪ ▪ █",
+        "  █ ▪ ▪ ▪ █",
+        " ▀▀▀▀▀▀▀▀▀▀",
     ]
-    clear(x0 - 1, y0, x0 + 18, y0 + len(art) - 1)
+    clear(x0 - 1, y0, x0 + 13, y0 + len(art) - 1)
     for k, line in enumerate(art):
         for j, ch in enumerate(line):
             if ch != " ":
-                put(x0 + j, y0 + k, ch, SPOON[k])
+                put(x0 + j, y0 + k, ch, GOLD if ch == "▪" else (HEAD if k < 3 else MID))
 
 
 clear(2, 2, W - 3, 2)
-bent_logo(3, "MOBASCAPE")
-plaque(5, 3)
-spoon(W - 24, 3)
-text(5, 2, "▐ kITCHEN dOOR ▌", DIM)
-text(W - 25, 2, "▐ nO sPOON. nO rULE. ▌", DIM)
-center(2, "eNTERING: tHE oRACLE'S kITCHEN   [cOOKIES ▓▓▓▓▓▓▓▓▓▓ 100%]", MID)
+lx, lw = led_logo(3, "MOBASCAPE")
+phone(5, 3)
+clear(W - 15, 3, W - 3, 9)
+led_digit(W - 13, 3, "5", YELLOW)
+text(3, 2, "▐ hARDLINE ▌", DIM)
+text(W - 17, 2, "▐ sTARTING iN ▌", DIM)
+center(2, "iNCOMING oN tHE hARDLINE...   pICK uP.   tHE aRENA iS lOADING.", MID)
 fade_bar(1, 2, W - 3)
-center(11, "  ░▒▓  n O D E   1 3 :   t H E   o R A C L E   //   c A L L   y O U R   l A N E ,   b E N D   t H E   r U L E  ▓▒░  ", AMBER)
-center(12, "  " + elite("some rules can be bent. others can be broken. this one was never a rule.") + "  ", WHITE)
+clear(lx - 1, 10, lx + lw, 10)
+ticker = " ◄◄ ALL HEROES LOCKED IN ◄◄ GAME STARTING IN 5 ◄◄ LANE CALLS STILL OPEN ◄◄ NO LOBBY"
+run = (ticker * 3)[: lw]
+for i, ch in enumerate(run):
+    put(lx + i, 10, ch, ORANGE if ch == "◄" else AMBER)
+center(11, "  ░▒▓  n O D E   1 4 :   w A K E   u P   //   t H E R E   i S   n O   l O B B Y  ▓▒░  ", AMBER)
+center(12, "  " + elite("all heroes locked in. game starting in 5. knock, knock.") + "  ", WHITE)
 fade_bar(13, 2, W - 3)
 
 # --- release info -------------------------------------------------------------
 header(14, elite("release info"))
 clear(4, 15, W - 5, 18)
 info = [
-    ("rELEASE dATE", "2026-11-24", "cOMMIT", "a5bb14e  ->  sam/main"),
-    ("tYPE", "hERO sELECT: tHE lANE pICKER", "tESTS", "427 pass // clippy clean"),
-    ("wAS", "BOTS IN FIXED SLOTS, NO WAY TO SAY", "nOW", "5 lane calls, bots fill the gaps"),
-    ("wAS", "TIMER NOTE OVER THE STATS AT 720P", "nOW", "it bows out where it can't fit"),
+    ("rELEASE dATE", "2026-11-24", "cOMMIT", "92ae4f0  ->  sam/main"),
+    ("tYPE", "hERO sELECT: tHE lOCKED-iN cOUNT", "tESTS", "429 pass // clippy clean"),
+    ("wAS", "A FLAT 5V5 CARD LOBBY, AN 8 S WAIT", "nOW", "the reference's own screen, 5 s"),
+    ("wAS", "BLUE/RED SLABS, A LOADING BUTTON", "nOW", "438 lines out, 289 in, 0 new screens"),
 ]
 for i, (k1, v1, k2, v2) in enumerate(info):
     yy = 15 + i
@@ -279,9 +253,10 @@ for i, (k1, v1, k2, v2) in enumerate(info):
     text(76, yy, f"{k2:.<12}", DIM)
     text(89, yy, v2, HEAD)
 
-# --- left: the lane bar, in stone ------------------------------------------------
-box(4, 20, 74, 45, elite("kitchen.prg // the lane picker"))
-IW = 60
+# --- left: the terminal ------------------------------------------------------------
+box(4, 20, 74, 45, elite("terminal // knock, knock"))
+LX = 6
+IW = 56
 
 
 def wall(left, middle, right, fill="═"):
@@ -295,145 +270,141 @@ def row(inner):
     return " ║ " + inner.ljust(IW) + " ║ "
 
 
-def tab(lane, mine):
-    short = {"Top": "Top", "Jungle": "Jng", "Mid": "Mid", "Carry": "Cry", "Support": "Sup"}[lane]
-    return ("«▣" + short + "»") if mine else ("[▣" + short + "]")
-
-
-mine = "Jungle"
-bar = "Your lane: " + "".join(tab(lane, lane == mine) for lane in LANES) + "  Show: All ▣ ▣ ▣"
-blue = [("You", "Awowogei", mine)] + [(f"Bot {k + 1}", hero, lane) for k, (hero, lane) in enumerate(
-    zip(["Kree'arra", "Wise O.M.", "Cmdr Zil", "Big Frog"], bot_lanes(mine)))]
-red = [(f"Bot {k + 1}", hero, lane) for k, (hero, lane) in enumerate(
-    zip(["Kalph. Q", "A. Wyvern", "Vorkath", "Callisto", "Venenatis"], RED_LANES))]
-CW = 27
-
-
-def column_row(name, hero, lane):
-    return "│" + f"▣ {name:<6}{hero:<10}◆ {lane:<7}"[:CW].ljust(CW) + "│"
-
-
-mock = [
+bar = [
     wall("╔═[958]", "[954 x n]", "[959]═╗"),
-    row(bar),
-    row(""),
-    row("┌─ Blue team " + "─" * (CW - 12) + "┐ ┌─ Red team " + "─" * (CW - 11) + "┐"),
+    row("Game mode         " + "All heroes locked in".ljust(IW - 18 - 7) + "[Leave]"),
+    row("Bot match - 5v5    Game starting in 5"),
+    wall("╚═[960]", "[956 x n]", "[961]═╝"),
 ]
-for (bn, bh, bl), (rn, rh, rl) in zip(blue, red):
-    mock.append(row(column_row(bn, bh, bl) + " " + column_row(rn, rh, rl)))
-mock.append(row("└" + "─" * CW + "┘ └" + "─" * CW + "┘"))
-mock.append(wall("╚═[960]", "[956 x n]", "[961]═╝"))
-assert len({len(line) for line in mock}) == 1, [len(line) for line in mock]
-legend = [
-    "",
-    " icons, cache index 8:  199 defence  TOP     220 hunter  JNG",
-    "                        215 runecraft MID    208 fletch  CRY",
-    "                        205 herblore SUP",
-    "",
-    " click your lane again: the call is withdrawn.",
-    " nobody calls for you. your call rides into the next draft.",
-    " lobby cards: name / class / stats / lane (portrait shrinks)",
-    " --lane jungle   sets a call from the shell, for screenshots",
-]
-for i, line in enumerate(mock + legend):
-    assert len(line) <= 68, (len(line), line)
-    in_mock = i < len(mock)
+for k, line in enumerate(bar):
     for j, ch in enumerate(line):
         if ch == " ":
             continue
-        if in_mock:
-            if ch in "╔╗╚╝═║":
-                col = STONE
-            elif ch in "┌┐└┘─│":
-                col = STONE_DIM
-            elif ch == "▣":
-                col = GOLD
-            elif ch in "«»":
-                col = WHITE
-            elif ch == "◆":
-                col = ORANGE
-            elif i in (0, len(mock) - 1):
-                col = DIM
-            elif i == 1:
-                col = ORANGE if j < 14 or j > 46 else HEAD
-            else:
-                col = MID
+        if ch in "╔╗╚╝═║":
+            col = STONE
+        elif k in (0, 3):
+            col = DIM
+        elif 19 <= j < 44:
+            col = ORANGE
+        elif ch in "[]" or line[j - 1:j + 6].startswith("Leave") or "Leave" in line[max(0, j - 5):j + 1]:
+            col = ORANGE
         else:
-            col = MID if i - len(mock) < 5 else HEAD
-            if ch.isdigit():
-                col = AMBER
-        put(6 + j, 22 + i, ch, col)
-# Colour the lane names in the mock by lane (and the called tab white-hot).
-for i, line in enumerate(mock):
-    for lane in LANES:
-        for short in ({"Jungle": "Jng", "Carry": "Cry", "Support": "Sup"}.get(lane, lane), lane):
-            k = line.find(short)
-            while k != -1:
-                hot = i == 1 and line[k - 2:k] == "«▣"
-                text(6 + k, 22 + i, short, WHITE if hot else LANE_COL[lane])
-                k = line.find(short, k + 1)
+            col = (190, 176, 150) if k == 1 else (255, 214, 120)
+        put(LX + j, 22 + k, ch, col)
+put(LX + bar[2].index("in 5") + 3, 24, "5", YELLOW)
 
-# --- right: the matrix of calls ---------------------------------------------------
-box(76, 20, W - 5, 45, elite("oracle.dat // the matrix of calls"))
-RX = 79
-text(RX, 22, "YOU CALL", HEAD)
-for k in range(4):
-    text(RX + 12 + k * 10, 22, f"BOT {k + 1}", HEAD)
-text(RX + 52, 22, "NOTE", HEAD)
-text(RX, 23, "─" * 64, FAINT)
-for k, call in enumerate([None] + LANES):
-    yy = 24 + k
-    text(RX, yy, call or "(nothing)", LANE_COL[call] if call else DIM)
-    if call:
-        put(RX - 2, yy, "►", WHITE)
-    for j, lane in enumerate(bot_lanes(call)):
-        text(RX + 12 + j * 10, yy, lane, LANE_COL[lane])
-    short = {"Jungle": "jng", "Carry": "cry", "Support": "sup"}.get(call, (call or "").lower())
-    note = "mid open" if call is None else "default" if call == "Mid" else f"bot: {short}>mid"
-    assert len(note) <= 12, note
-    text(RX + 52, yy, note, DIM)
-text(RX, 30, "─" * 64, FAINT)
-text(RX, 31, "red, every draft:", DIM)
-for j, lane in enumerate(RED_LANES):
-    text(RX + 18 + j * 9, 31, lane, LANE_COL[lane])
+text(LX + 1, 27, "STATE", HEAD)
+text(LX + 7, 27, "// hero_select.locked: Option<f32>", DIM)
+s28 = "picking ──Lock in / 0:00──► locked 5.0 ──tick──► 0.0 ──► match"
+pp, pl, pm = s28.index("picking") + 2, s28.index("locked") + 2, s28.index("match") + 2
+s29 = [" "] * (pm + 1)
+s29[pp], s29[pl], s29[pm] = "│", "│", "▲"
+s30 = [" "] * (pm + 1)
+for i, ch in enumerate("└─ Leave ─► menu"):
+    s30[pp + i] = ch
+for i, ch in enumerate("└─ Enter: cut to 1e-3 "):
+    s30[pl + i] = ch
+for i in range(pl + len("└─ Enter: cut to 1e-3 "), pm):
+    s30[i] = "─"
+s30[pm] = "┘"
+for k, line in enumerate([s28, "".join(s29), "".join(s30)]):
+    for j, ch in enumerate(line):
+        if ch == " ":
+            continue
+        col = DIM if ch in "─│└┘►▲" else CYAN
+        if line is s28 and (ch.isdigit() or ch in ".:/") :
+            col = AMBER
+        put(LX + 2 + j, 28 + k, ch, col)
+text(LX + 2 + pl + 1, 29, " lanes: still open", MID)
 
-text(RX, 33, "SOME RULES CAN BE BENT", HEAD)
-text(RX + 23, 33, "// morpheus, the construct, 1999", DIM)
-rules = [
-    ("BENT", "your call", "optional. click it again to take it back."),
-    ("BENT", "two calls", "two humans may call one lane. fine."),
-    ("KEPT", "bot calls", "bots spawn in the lane they called."),
-    ("KEPT", "no call", "old roles: top, bot x2, jungle; mid's yours."),
-    ("NONE", "in match", "nothing checks a call. ever."),
+text(LX + 1, 32, "THE LAST FIVE SECONDS", HEAD)
+text(LX + 23, 32, "// one tick per second, then a drawn frame", DIM)
+for k, n in enumerate([5, 4, 3, 2, 1]):
+    x = LX + 2 + k * 7
+    text(x, 33, str(n), YELLOW if k == 0 else AMBER)
+    text(x, 34, "█" * n, BRIGHT if k < 2 else MID if k < 4 else DIM)
+text(LX + 37, 33, "0", AMBER)
+text(LX + 37, 34, "Loading the arena...", ORANGE)
+text(LX + 58, 33, "next", DIM)
+text(LX + 58, 34, "load", HEAD)
+
+term = [
+    ("> ", "wake up, rift..."),
+    ("> ", "the lobby is gone."),
+    ("> ", "follow the countdown: lock in."),
+    ("> ", "knock, knock."),
 ]
-for k, (verdict, what, why) in enumerate(rules):
-    assert RX + 19 + len(why) < W - 6, why
-    yy = 34 + k
-    text(RX + 2, yy, verdict, {"BENT": AMBER, "KEPT": BRIGHT, "NONE": RED}[verdict])
-    text(RX + 8, yy, what, CYAN)
-    text(RX + 19, yy, why, MID)
+for k, (prompt, line) in enumerate(term):
+    yy = 36 + k
+    text(LX + 1, yy, prompt, DIM)
+    text(LX + 3, yy, line, BRIGHT if k < 3 else HEAD)
+put(LX + 3 + len(term[-1][1]) + 1, 39, "█", BRIGHT)
+notes = [
+    "roster dims around your pick  //  Locked in: grey 293, inert",
+    "lane calls stay open: a note to the team, never a pick",
+    "--lock-in   opens on the count, for screenshots",
+]
+for k, line in enumerate(notes):
+    assert len(line) <= 66, line
+    text(LX + 1, 41 + k, line, MID)
 
-text(RX, 40, "ROLE MAP", HEAD)
-text(RX + 10, 40, "top Lane(0)  mid Lane(1)  cry+sup Lane(2)  jng Jungle", MID)
-text(RX, 42, "RIGIDITY", HEAD)
-text(RX + 10, 42, "[", DIM)
-text(RX + 11, 42, "░" * 20, FAINT)
-text(RX + 31, 42, "]   0%", HEAD)
-text(RX + 39, 42, "// a note to the team", DIM)
-text(RX, 43, "+6 TESTS", HEAD)
-text(RX + 10, 43, "fills, toggles, defaults, tabs at 1024/1280/1920", MID)
+# --- right: reconciled with the reference ---------------------------------------------
+box(76, 20, W - 5, 45, elite("diff.dat // the reference @ 0:11"))
+RX = 79
+text(RX, 22, "REFERENCE", HEAD)
+text(RX + 24, 22, "OURS", HEAD)
+text(RX + 60, 22, "OK", HEAD)
+text(RX, 23, "─" * 64, FAINT)
+pairs = [
+    ("All heroes locked in", "same: b12 x2, orange"),
+    ("Game starting in 5", "same: the 5 in yellow"),
+    ("roster dimmed", "55%, your pick outlined"),
+    ("Locked in, grey", "sprite 293, inert"),
+    ("final pick per row", "green names, pulse stops"),
+    ("lane tabs", "still open: notes, not picks"),
+    ("no lobby", "no lobby"),
+]
+for k, (ref, ours) in enumerate(pairs):
+    yy = 24 + k
+    text(RX, yy, ref, WHITE)
+    text(RX + 24, yy, ours, BRIGHT)
+    text(RX + 60, yy, "ok", HEAD)
+text(RX, 31, "─" * 64, FAINT)
+text(RX, 32, "DELETED", RED)
+text(RX + 34, 32, "ADDED", BRIGHT)
+gone = ["build_lobby  (-221 lines)", "lobby_teams, lobby_card_rects", "lobby_side_tabs, button_*",
+        "lobby_open, lobby_deadline", "tick_lobby, \"Rift - Lobby\""]
+new = ["LOCKED_SECONDS = 5.0", "lock_in, tick_locked", "starting_in, skip_countdown",
+       "ready_to_load", "starting_line, --lock-in"]
+for k, (g, n) in enumerate(zip(gone, new)):
+    yy = 33 + k
+    assert len(g) + 2 < 34 and RX + 34 + len(n) + 2 < W - 6, (g, n)
+    text(RX, yy, "- " + g, (200, 90, 80))
+    text(RX + 34, yy, "+ " + n, MID)
+text(RX, 39, "DIFF", HEAD)
+text(RX + 6, 39, "+289", BRIGHT)
+text(RX + 11, 39, "▓" * 13, BRIGHT)
+text(RX + 26, 39, "-438", RED)
+text(RX + 31, 39, "▓" * 19, RED)
+text(RX + 52, 39, "net -149", DIM)
+text(RX, 41, "TESTS", HEAD)
+text(RX + 7, 41, "429 pass  +2: the count to a drawn frame, the skip", MID)
+text(RX, 42, "SEEN", HEAD)
+text(RX + 7, 42, "1920x1080 + 1280x720, then on into the match", MID)
+text(RX, 43, "BOTS", HEAD)
+text(RX + 7, 43, "jungle called -> blue bots top, mid, bottom x2", MID)
 
 # --- sysop's note ------------------------------------------------------------
-header(47, elite("sysop's note // don't worry about the vase"))
+header(47, elite("sysop's note // there is no lobby"))
 clear(4, 48, W - 5, 49)
-center(48, "sTILL oPEN: bATTLE sPELLS (p4.3), pASSIVE rOW (p4.4), tHE lOBBY iN sTONE (p4.7), cLIFFS + bRIDGES + gOD sTATUES (p5), gRASS hUE 100 vS 111.", HEAD)
-center(49, "hero_select::Lane // bot_lanes // RED_LANES // lane_rects // tabs_hold_labels // icon_tab // bot_lineup(lanes) // --lane", DIM)
+center(48, "sTILL oPEN: bATTLE sPELLS (p4.3), pASSIVE rOW + pOPULAR bUILD (p4.4-5), mUSIC tOGGLE (p4.6), cLIFFS + bRIDGES + gOD sTATUES (p5).", HEAD)
+center(49, "hero_select::LOCKED_SECONDS // lock_in // tick_locked // starting_in // skip_countdown // ready_to_load // starting_line", DIM)
 
 # --- roadmap -------------------------------------------------------------------
 header(51, elite("roadmap // docs/ROADMAPPLAN.md"))
 clear(4, 52, W - 5, 56)
 phases = [
-    ("P1 LIGHT", 5), ("P2 MINIMAP", 6), ("P3 SHOP", 7), ("P4 SELECT", 5),
+    ("P1 LIGHT", 5), ("P2 MINIMAP", 6), ("P3 SHOP", 7), ("P4 SELECT", 6),
     ("P5 ARENA", 1), ("P6 HUD", 4), ("P7 POST", 0),
 ]
 for i, (name, done) in enumerate(phases):
@@ -444,16 +415,16 @@ for i, (name, done) in enumerate(phases):
     for j in range(10):
         put(x + 12 + j, yy, "▓" if j < done else "░", BRIGHT if j < done else FAINT)
     text(x + 22, yy, f"] {done * 10:>3}%", HEAD if done else FAINT)
-text(8, 56, ">> next: battle spells (P4.3), the lobby in the stone kit (P4.7), cliffs/bridges/statues from cache objects (P5)", MID)
+text(8, 56, ">> next: battle spells (P4.3), passive row + popular build (P4.4-5), cliffs/bridges/statues from cache objects (P5)", MID)
 
 fade_bar(57, 2, W - 3)
 clear(10, 58, W - 11, 61)
-greetz = "gREETZ: sPRITE 199 (dEFENCE, tOP) * 220 (hUNTER, jUNGLE) * 215 (rUNECRAFT, mID) * 208 (fLETCHING, cARRY) * 205 (hERBLORE)"
+greetz = "gREETZ: tHE rEFERENCE aT 0:11 (nO lOBBY, jUST a cOUNT) * sPRITE 293 (tHE gREY bUTTON) * b12 aT x2 (tHE bIG 5)"
 assert len(greetz) <= 128, len(greetz)
 center(58, greetz, MID)
 center(59, "nOT AFFILIATED WITH JAGEX. cACHE ASSETS STAY OUT OF GIT. aLWAYS.", DIM)
-center(60, "  n o   o n e   c a n   t e l l   y o u   y o u r   l a n e .   y o u   j u s t   k n o w   i t .  ", HEAD)
-center(61, "-=[ mObAsCaPe // 2026 // nODE 13: tHE oRACLE // 57.6k // sYSoP: rIFT // 1 cOMMIT, 5 lANES, 0 rULES ]=-", AMBER)
+center(60, "  k n o c k ,   k n o c k .   a l l   h e r o e s   l o c k e d   i n .   g a m e   s t a r t i n g   i n   5 .  ", HEAD)
+center(61, "-=[ mObAsCaPe // 2026 // nODE 14: wAKE uP // 57.6k // sYSoP: rIFT // 1 cOMMIT, 0 lOBBIES, 5 sECONDS ]=-", AMBER)
 
 # --- outputs ------------------------------------------------------------------
 with open(out + ".txt", "w") as f:
@@ -492,6 +463,11 @@ for y, row in enumerate(grid):
                 (px + boxes[0] * cw, py + boxes[1] * ch_h, px + boxes[2] * cw - 1, py + boxes[3] * ch_h - 1),
                 fill=fg,
             )
+        elif c in "●•":
+            # LED dots as real discs, nearly the two-column dot pitch wide.
+            r = cw * (0.78 if c == "●" else 0.3)
+            cx, cy = px + cw / 2, py + ch_h / 2
+            d.ellipse((cx - r, cy - r, cx + r, cy + r), fill=fg)
         elif c in "░▒▓":
             density = {"░": 0.25, "▒": 0.5, "▓": 0.75}[c]
             for sy in range(0, ch_h, 2):
