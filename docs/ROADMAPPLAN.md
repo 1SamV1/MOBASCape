@@ -154,6 +154,9 @@ with a commit and a push to `sam main`.
    champion data.
 5. **Popular build row** from the Recommended shop data.
 6. Music toggle in the title bar.
+7. **The lobby in the stone kit.** The 5v5 loading lobby still uses the old
+   flat panels and blue/red slabs; rebuild it from the stone windows,
+   parchment and item slots hero select uses, keeping the lane line.
 
 ### Phase 5: Arena set dressing
 
