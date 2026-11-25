@@ -1,6 +1,34 @@
 # Status
 
-Last updated: Phase 5 bases (fountains, god colours), 2026-11-25.
+Last updated: Vampire Swamp dressing; ground mist removed, 2026-11-25.
+
+## 2026-11-25 — Ground mist removed; the Vampire Swamp dressed
+
+- **Mist removed** at the user's request (revert of 48df811). Roadmap 5.7
+  is open again; the fog-of-war darkening and height fog are unchanged.
+- **Biome dressing.** `props.scatter` takes `biome: "<pocket id>"` to drop
+  only inside that pocket (rect optional), and `place` takes `plaza` (the
+  clear radius other props keep, default 6) so railings and lamps can sit
+  close. MAP_FORMAT.md documents both.
+- **Vampire Swamp** (`dire_vampire`, Mort Myre region 54,52), every piece
+  a cache object picked from contact sheets:
+  - a plaza with the Vampyre statue (object 18045, model 17643, x2.6) ringed
+    by ten Darkmeyer spiked railings with red gems (40294 / 40295), open
+    to the lane side, and four Swampy lamps (32611);
+  - the Pool of blood (35712), two Vampyre tombs (6350, 6357), a Raised
+    coffin (39808), the Blood Stinktree (33670), a Darkmeyer spire (17763)
+    and two red-glass gothic windows (40438);
+  - scattered through the pocket: swamp-bubble pools (2259), Mort Myre
+    reeds (3549-3553) and swamp grass (3605-3607), huge mushrooms
+    (4092-4094), rotting logs, branches and roots (3595, 3592, 2172),
+    rotting trees (3597, 3602), graves (46700, 1363, 36358, 30519) and three
+    blood crystals (30685);
+  - dry grass layer and a greyer tint on the pocket floor.
+- Verified with `--shots` over the plaza (top, low and wide). Tests: the
+  new schema fields and the shipped pocket's plaza and dressing; every
+  model id decodes from the pinned cache.
+- Not yet: the other seven pockets (Dark Magic, Ogre Ruins, Goblin Camp,
+  Human City and Keep, Elven Lands, Gnome Stronghold).
 
 ## 2026-11-25 — Phase 5: fountains and god-coloured castles
 
