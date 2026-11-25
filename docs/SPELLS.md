@@ -78,6 +78,10 @@ frame shows; "Use" is where MobaScape puts it.
 | 747 | purple teleport shape | Lunar teleport | (spare) |
 | 750 | blue beam | Lunar spell | teleport scroll destination marker |
 | 1290 | purple swirl portal | Arceuus teleport | (spare) |
+| 1568 / 1569 | black fly cloud (two loops) | Pestilent Bloat's flies | Bloat W: 1568 held on the Bloat, 1569 on each enemy bitten |
+| 1574 | thrown limb (no clip) | Theatre of Blood | `bloat_hook` projectile (Bloat Q) |
+| 1576 | red blood splat | Theatre of Blood | `bloat_hook` impact, Bloat R hit |
+| 1579 | blood pool, 6 s | Theatre of Blood | Bloat E cast |
 
 ## Part A: spell visual language
 

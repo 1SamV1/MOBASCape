@@ -1,6 +1,34 @@
 # Status
 
-Last updated: magic (spell graphics, teleport scroll, battle spells, Chaos Elemental), 2026-11-25.
+Last updated: Pestilent Bloat and the NPC opcode 99 fix, 2026-11-25.
+
+## 2026-11-25 — Pestilent Bloat; NPC opcode 99 fixed
+
+- **NPC decoder:** opcode 99 (render priority) is a flag with no payload,
+  but the decoder read a byte for it and stopped on a bogus opcode (the
+  "opcode 6 / 44 / 65 / 84" failures). Pestilent Bloat, Ahrim, the
+  Alchemical Hydra, the Nightmare, Skotizo and the Barrows brothers now
+  decode. Regression test
+  from the Bloat's opening bytes.
+- **Pestilent Bloat** (npc 8359, `data/champions/pestilent_bloat.json`), a
+  MELEE "flesh hooker" with a kit after Dota 2's Pudge: models 35404 +
+  50070, idle 8080, walk 8081, stomp 8085 as its attack.
+  - Passive **Flesh heap**: every enemy dying within 450 adds 2 maximum
+    health for good, 25 for a hero (new `Passive::FleshHeap`).
+  - Q **Flesh Hook**: a thrown limb (1574, blood splat 1576) that pulls the
+    first enemy hit back to the Bloat (`pull` already stops 110 short).
+  - W **Swarm**: its flies (1568/1569) ride on it for 5 s, biting and
+    slowing everything within 260 and costing it 4 health a tick. New zone
+    fields `follow` and `self_damage`.
+  - E **Bloated Hide**: 140 shield and 20% damage reduction for 4 s (1579).
+  - R **Devour**: a 2.4 s channel that stuns and chews what is in front
+    of it every 0.4 s, healing 15 per bite.
+- Icons 228 / 298 / 141 / 248. Balance report regenerated; after a trim
+  (Q 80, swarm 9 a tick, Devour 25 a bite) nothing is flagged.
+- Verified with `--demo-abilities --champion pestilent_bloat` (hook drags
+  the camp monster in, swarm ticks, shield 136 after damage) and hero select
+  at 1280x720. Bots cast it from the rank tables (ADR-055), so a bot Bloat's
+  hook hits but does not pull.
 
 ## 2026-11-25 — Magic: spell graphics, teleport scrolls, battle spells
 

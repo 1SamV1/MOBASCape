@@ -27,7 +27,7 @@ Ability damage is multiplied by `(1 + ability_power / 100) * (1 + 0.05 * (level 
 |---|---|---|
 | `projectile` | Straight skillshot; `count` > 1 fans over `spread` degrees | `speed`, `range`, `damage`, `width`, `pierce`, `explode`, `visual`, `on_hit` |
 | `area` | Circle or cone after `delay`; can `repeat` with `scatter` | `at`, `radius`, `arc`, `damage`, `range`, `interval`, `heal_per_hit`, `on_hit` |
-| `zone` | Lingering pool that ticks; `count`/`spacing` lay a line | `radius`, `duration`, `damage`, `tick`, `grow`, `heal_caster`, `on_tick` |
+| `zone` | Lingering pool that ticks; `count`/`spacing` lay a line; `follow` makes it an aura that rides on the caster (its `land` graphic is held on the caster), and `self_damage` costs the caster that much health per tick (never below 1) | `radius`, `duration`, `damage`, `tick`, `grow`, `heal_caster`, `follow`, `self_damage`, `on_tick` |
 | `dash` | Moves the caster, hitting what it passes; `land` actions make leaps | `distance`, `speed`, `to_cursor`, `backwards`, `untargetable`, `land` |
 | `buff` | Heal, shield and timed buffs | `heal`, `heal_missing`, `shield`, `duration`, `damage_reduction`, `reflect`, `attack_speed`, `move_speed`, `untargetable`, `rooted` |
 | `summon` | Cache NPCs that fight for `duration`; `npcs` gives each one a model | `npc`, `npcs`, `count`, `health`, `damage`, `range`, `interval`, `speed`, `scale` |
@@ -189,7 +189,9 @@ Structures take damage but ignore crowd control.
 `splash {radius, pct}`, `scholar {xp}`, `frost_bite {pct, duration}`,
 `chaos {every, statuses}` (every `every`th ability hit, counted across all
 targets, also lands one of `statuses` at random, with the Discord ring 558;
-basic attacks do not count).
+basic attacks do not count), `flesh_heap {radius, minion, hero}` (each enemy
+that dies within `radius` adds `minion` maximum and current health for the
+rest of the match, `hero` for a hero; items and respawns keep it).
 
 ## Testing a kit
 

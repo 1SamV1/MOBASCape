@@ -1,0 +1,160 @@
+{
+  "name": "Pestilent Bloat",
+  "role": "FLESH HOOKER",
+  "class": "MELEE",
+  "tagline": "The Theatre of Blood's stitched-up horror: one hook, and you are dinner.",
+  "model": 35404,
+  "attachments": [
+    50070
+  ],
+  "idle": 8080,
+  "walk": 8081,
+  "attack_anim": 8085,
+  "attack_hit": 0.45,
+  "scale": 0.5,
+  "health": 700,
+  "mana": 280,
+  "damage": 22,
+  "armor": 32.0,
+  "attack_range": 170,
+  "attack_interval": 1.5,
+  "speed": 330,
+  "ranged_auto": false,
+  "weight": 95,
+  "attack_windup": 0.35,
+  "abilities": [
+    {
+      "key": "Q",
+      "name": "FLESH HOOK",
+      "description": "Hurls a severed limb on a hook. The first enemy it hits is dragged back to the Bloat.",
+      "ranks": [
+        { "damage": 80, "range": 1100, "cooldown": 13 },
+        { "damage": 115, "range": 1150, "cooldown": 12 },
+        { "damage": 150, "range": 1200, "cooldown": 11 },
+        { "damage": 185, "range": 1250, "cooldown": 10 }
+      ]
+    },
+    {
+      "key": "W",
+      "name": "SWARM",
+      "description": "Its flies boil out for five seconds, biting and slowing everything close. They bite the Bloat too.",
+      "ranks": [
+        { "damage": 90, "range": 0, "cooldown": 14 },
+        { "damage": 130, "range": 0, "cooldown": 13 },
+        { "damage": 170, "range": 0, "cooldown": 12 },
+        { "damage": 210, "range": 0, "cooldown": 11 }
+      ]
+    },
+    {
+      "key": "E",
+      "name": "BLOATED HIDE",
+      "description": "Swells with rot: a shield, and a fifth of all damage shrugged off for four seconds.",
+      "damage_label": "Shield",
+      "ranks": [
+        { "damage": 140, "range": 0, "cooldown": 16 },
+        { "damage": 190, "range": 0, "cooldown": 15 },
+        { "damage": 240, "range": 0, "cooldown": 14 },
+        { "damage": 290, "range": 0, "cooldown": 13 }
+      ]
+    },
+    {
+      "key": "R",
+      "name": "DEVOUR",
+      "description": "Holds still and chews on whatever is in front of it, stunning it and healing the Bloat.",
+      "ranks": [
+        { "damage": 150, "range": 180, "cooldown": 70 },
+        { "damage": 205, "range": 180, "cooldown": 60 },
+        { "damage": 260, "range": 180, "cooldown": 50 }
+      ]
+    }
+  ],
+  "ability_icons": [
+    228,
+    298,
+    141,
+    248
+  ],
+  "kit": {
+    "passive_name": "Flesh heap",
+    "passive": { "type": "flesh_heap", "radius": 450, "minion": 2, "hero": 25 },
+    "abilities": [
+      {
+        "cost": 70,
+        "cooldown": 13,
+        "color": [170, 40, 30],
+        "actions": [
+          {
+            "type": "projectile",
+            "visual": "bloat_hook",
+            "speed": 1500,
+            "range": 1100,
+            "damage": 80,
+            "width": 80,
+            "on_hit": [
+              { "type": "pull", "distance": 1250 }
+            ]
+          }
+        ]
+      },
+      {
+        "cost": 60,
+        "cooldown": 14,
+        "color": [90, 110, 40],
+        "actions": [
+          {
+            "type": "zone",
+            "at": "caster",
+            "follow": true,
+            "radius": 260,
+            "duration": 5,
+            "tick": 0.5,
+            "damage": 9,
+            "self_damage": 4,
+            "gfx": { "land": 1568, "hit": 1569 },
+            "on_tick": [
+              { "type": "slow", "pct": 0.25, "duration": 0.6 }
+            ]
+          }
+        ]
+      },
+      {
+        "cost": 50,
+        "cooldown": 16,
+        "color": [150, 30, 30],
+        "actions": [
+          {
+            "type": "buff",
+            "shield": 140,
+            "damage_reduction": 0.2,
+            "duration": 4,
+            "gfx": { "cast": 1579 }
+          }
+        ]
+      },
+      {
+        "cost": 100,
+        "cooldown": 70,
+        "color": [190, 20, 20],
+        "actions": [
+          {
+            "type": "channel",
+            "duration": 2.4,
+            "interval": 0.4,
+            "action": {
+              "type": "area",
+              "at": "front",
+              "radius": 150,
+              "damage": 25,
+              "heal_per_hit": 15,
+              "gfx": { "hit": 1576 },
+              "on_hit": [
+                { "type": "stun", "duration": 0.5 }
+              ]
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "source_npc": 8359
+}

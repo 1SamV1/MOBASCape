@@ -105,6 +105,8 @@ struct Zone {
     timer: f32,
     damage: f32,
     heal_caster: f32,
+    follow: bool,
+    self_damage: f32,
     on_tick: Vec<Status>,
     color: [u8; 3],
     gfx: Gfx,
@@ -183,6 +185,8 @@ pub struct KitRuntime {
     rooted_timer: f32,
     /// Ability hits counted for the Chaos passive.
     chaos_hits: u32,
+    /// Maximum health the Flesh heap passive has added this match.
+    pub(super) flesh_heap: f32,
 }
 
 impl KitRuntime {
@@ -386,6 +390,40 @@ impl AnimatedScene {
             };
             self.land_statuses(index, &[pick], from, &gfx, false, pi);
         }
+    }
+
+    /// The Flesh heap passive: an enemy of the player died at `index`.
+    pub(super) fn kit_flesh_heap(&mut self, index: usize) {
+        let Some(Passive::FleshHeap {
+            radius,
+            minion,
+            hero,
+        }) = self.kit.as_ref().and_then(|kit| kit.passive.clone())
+        else {
+            return;
+        };
+        let pi = self.player_index;
+        if index == pi || self.units[pi].health <= 0.0 {
+            return;
+        }
+        let victim = &self.units[index];
+        let enemy = victim.team != self.units[pi].team
+            && !victim.kind.is_structure()
+            && victim.kind != UnitKind::Ambient;
+        if !enemy || victim.pos.distance(self.units[pi].pos) > radius {
+            return;
+        }
+        let gain = if victim.kind.is_champion() {
+            hero
+        } else {
+            minion
+        };
+        let player = &mut self.units[pi];
+        player.max_health += gain;
+        player.health = (player.health + gain).min(player.max_health);
+        self.kit_rt.flesh_heap += gain;
+        let chest = self.unit_chest(pi);
+        self.emit_burst(chest, [170, 40, 30], 6, 120.0, 9.0, 0.5);
     }
 
     /// A status from `caster` (who a taunt makes the target attack).
@@ -766,15 +804,26 @@ impl AnimatedScene {
                 spacing,
                 grow,
                 heal_caster,
+                follow,
+                self_damage,
                 on_tick,
                 gfx,
             } => {
                 let center = self.anchor_point(*at, *range * ctx.reach, ctx);
                 for i in 0..(*count).max(1) {
                     let pos = center + ctx.dir * (spacing * i as f32);
-                    self.add_decal(pos, *radius, dim(ctx.color), *duration);
-                    if let Some(id) = gfx.land {
-                        self.gfx_at(id, pos, gfx.scale);
+                    if *follow {
+                        // An aura: no ground stain, the graphic rides along.
+                        let pi = self.player_index;
+                        if let Some(id) = gfx.land {
+                            let size = gfx.scale * self.gfx_size(pi);
+                            self.gfx_hold(id, pi, *duration, size);
+                        }
+                    } else {
+                        self.add_decal(pos, *radius, dim(ctx.color), *duration);
+                        if let Some(id) = gfx.land {
+                            self.gfx_at(id, pos, gfx.scale);
+                        }
                     }
                     self.kit_rt.zones.push(Zone {
                         pos,
@@ -785,6 +834,8 @@ impl AnimatedScene {
                         timer: 0.0,
                         damage: damage * ctx.mult,
                         heal_caster: *heal_caster,
+                        follow: *follow,
+                        self_damage: *self_damage,
                         on_tick: on_tick.clone(),
                         color: ctx.color,
                         gfx: gfx.clone(),
@@ -1654,6 +1705,12 @@ impl AnimatedScene {
         let mut alive = Vec::with_capacity(zones.len());
         let pi = self.player_index;
         for mut zone in zones {
+            if zone.follow {
+                if self.units[pi].health <= 0.0 {
+                    continue;
+                }
+                zone.pos = self.units[pi].pos;
+            }
             zone.remaining -= dt;
             zone.radius += zone.grow * dt;
             zone.timer -= dt;
@@ -1661,6 +1718,10 @@ impl AnimatedScene {
                 zone.timer += zone.tick;
                 for index in self.kit_enemies_in(zone.pos, zone.radius, Vec3::Z, 360.0) {
                     self.kit_hit(index, zone.damage, &zone.on_tick, zone.pos, &zone.gfx);
+                }
+                if zone.self_damage > 0.0 {
+                    let player = &mut self.units[pi];
+                    player.health = (player.health - zone.self_damage).max(1.0);
                 }
                 if zone.heal_caster > 0.0 {
                     let player = &mut self.units[pi];

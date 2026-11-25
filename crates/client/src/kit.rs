@@ -119,7 +119,7 @@ pub mod spot {
     pub const VERIFIED: &[u32] = &[
         76, 77, 78, 80, 85, 111, 177, 178, 342, 343, 344, 345, 359, 360, 361, 362, 363, 368, 369,
         372, 374, 377, 392, 550, 551, 552, 553, 554, 555, 556, 557, 558, 559, 678, 725, 726, 744,
-        745, 747, 750, 1290,
+        745, 747, 750, 1290, 1568, 1569, 1574, 1576, 1579,
     ];
 }
 
@@ -204,6 +204,15 @@ pub enum Action {
         /// Heal the caster per tick while standing inside.
         #[serde(default)]
         heal_caster: f32,
+        /// The zone rides on the caster instead of staying where it was laid
+        /// (an aura such as the Bloat's fly swarm). Its `land` graphic is
+        /// held on the caster for the duration.
+        #[serde(default)]
+        follow: bool,
+        /// Health the caster loses per tick (never below 1), the price of a
+        /// rotting aura.
+        #[serde(default)]
+        self_damage: f32,
         #[serde(default)]
         on_tick: Vec<Status>,
         #[serde(default)]
@@ -526,6 +535,9 @@ pub enum Passive {
     FrostBite { pct: f32, duration: f32 },
     /// Every `every`th ability hit also lands one of `statuses`, at random.
     Chaos { every: u32, statuses: Vec<Status> },
+    /// Each enemy that dies within `radius` grows the caster's maximum (and
+    /// current) health for good: `minion` for anything, `hero` for a hero.
+    FleshHeap { radius: f32, minion: f32, hero: f32 },
 }
 
 /// Crowd control and summon state carried by every unit.
@@ -873,6 +885,14 @@ impl Passive {
                 pct(*p),
                 secs(*duration)
             ),
+            Passive::FleshHeap {
+                radius,
+                minion,
+                hero,
+            } => format!(
+                "Every enemy that dies within {radius:.0} adds {minion:.0} maximum health \
+                 for good ({hero:.0} for a hero)."
+            ),
             Passive::Chaos { every, statuses } => format!(
                 "Every {} ability hit also lands one of: {}.",
                 ordinal(*every),
@@ -955,6 +975,33 @@ mod tests {
         want.extend(spot::ALL);
         want.sort_unstable();
         assert_eq!(kit.spotanims(), want);
+    }
+
+    #[test]
+    fn flesh_heap_and_following_zones_parse() {
+        let passive: Passive = serde_json::from_str(
+            r#"{ "type": "flesh_heap", "radius": 450, "minion": 2, "hero": 25 }"#,
+        )
+        .unwrap();
+        assert_eq!(
+            passive.describe(),
+            "Every enemy that dies within 450 adds 2 maximum health for good (25 for a hero)."
+        );
+        let zone: Action = serde_json::from_str(
+            r#"{ "type": "zone", "at": "caster", "follow": true, "radius": 260,
+                 "duration": 5, "damage": 12, "self_damage": 4 }"#,
+        )
+        .unwrap();
+        let Action::Zone {
+            follow,
+            self_damage,
+            ..
+        } = zone
+        else {
+            panic!("a zone");
+        };
+        assert!(follow);
+        assert_eq!(self_damage, 4.0);
     }
 
     #[test]

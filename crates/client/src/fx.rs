@@ -668,6 +668,27 @@ pub const LOOKS: &[ProjectileLook] = &[
         light_radius: 340.0,
         ..ProjectileLook::base("madness")
     },
+    // Pestilent Bloat's Flesh Hook: a thrown limb (1574) that lands in a
+    // blood splat (1576), trailing gore.
+    ProjectileLook {
+        spotanim: Some(1574),
+        hit_spotanim: Some(1576),
+        model_scale: 1.6,
+        glow: [150, 40, 30],
+        glow_size: 40.0,
+        glow_intensity: 0.6,
+        trail: [120, 20, 15],
+        trail_width: 14.0,
+        trail_points: 16,
+        embers: 30.0,
+        ember_color: [140, 20, 10],
+        impact_radius: 140.0,
+        impact_sparks: 14,
+        impact_color: [170, 30, 20],
+        light: [0.6, 0.15, 0.1],
+        light_radius: 200.0,
+        ..ProjectileLook::base("bloat_hook")
+    },
 ];
 
 /// Resolve a look by name. Unknown names fall back to the default orb so a

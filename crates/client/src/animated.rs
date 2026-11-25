@@ -4834,6 +4834,7 @@ impl AnimatedScene {
             self.bot_reward(bot, target_kind);
         }
         self.share_xp(index, target_kind, attacker_team, aggressor);
+        self.kit_flesh_heap(index);
         if reaches_feed(target_kind, hero_aggressor) {
             let victim = short_unit_name(target_kind);
             let killer = aggressor
