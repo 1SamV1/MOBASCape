@@ -1,6 +1,28 @@
 # Status
 
-Last updated: Vampire Swamp and Dark Magic dressing; mist removed, 2026-11-25.
+Last updated: all four dire pockets dressed from cache objects, 2026-11-25.
+
+## 2026-11-25 — Ogre Ruins and Goblin Camp dressed
+
+Same method as the Vampire Swamp: pieces picked from contact sheets,
+checked again as bare models (props are placed by model id, so an
+object's recolours would be lost; none of these depend on one).
+
+- **Ogre Ruins** (`dire_ogre`): a war camp south of the jungle camp. The
+  bone-ring ogre fire pit (6794, x1.8) with the spit-roast (3453), two
+  ogre drums (6792), a bench (723), four skull standards (6800), an ogre
+  coffin (6786) and chest (3450), a totem pole (1759) and a serpent totem
+  (39439), and a row of five spiked skull barricades (6788) facing the
+  lane. Scattered boulders (15626, 6880, 685), skulls (1733, 13474, 2171),
+  wrecked campfires and a ruined pillar (20055, 871).
+- **Goblin Camp** (`dire_goblin`): the Bandos altar (27752, x1.5) in a
+  ring of seven shabby and little tents (26482, 7738), four red goblin
+  standards (17039), a campfire (20040), a spit roast (4328) and crates
+  (26908); scattered skulls, crates, wrecked campfires and rocks.
+- Verified with `--shots` (top and low) over both. The pocket test now
+  checks all four dire set pieces.
+- Not yet: the four radiant pockets (Human City, Human Keep, Elven Lands,
+  Gnome Stronghold).
 
 ## 2026-11-25 — Ground mist removed; the Vampire Swamp and Dark Magic dressed
 

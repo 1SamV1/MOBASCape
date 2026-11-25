@@ -687,12 +687,18 @@ mod tests {
         // Dark Magic: the Arceuus dark altar in its ring of candle stands.
         assert!(props.place.iter().any(|p| p.model == 30837));
         assert!(props.place.iter().filter(|p| p.model == 22936).count() >= 6);
-        assert!(
-            props
-                .scatter
-                .iter()
-                .any(|s| s.biome.as_deref() == Some("dire_dark_magic"))
-        );
+        // Ogre war camp round its bone fire pit; goblins round the Bandos altar.
+        assert!(props.place.iter().any(|p| p.model == 6794));
+        assert!(props.place.iter().any(|p| p.model == 27752));
+        for pocket in ["dire_dark_magic", "dire_ogre", "dire_goblin"] {
+            assert!(
+                props
+                    .scatter
+                    .iter()
+                    .any(|s| s.biome.as_deref() == Some(pocket)),
+                "{pocket}"
+            );
+        }
     }
 
     #[test]
