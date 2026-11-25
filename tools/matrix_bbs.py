@@ -26,6 +26,8 @@ CYAN = (110, 255, 210)
 BLACK = (0, 0, 0)
 
 grid = [[(" ", FAINT) for _ in range(W)] for _ in range(H)]
+# Optional per-cell background colours (.ans and .png; .txt has none).
+bg = {}
 
 
 def put(x, y, ch, fg):
@@ -46,6 +48,15 @@ def clear(x0, y0, x1, y1):
     for y in range(y0, y1 + 1):
         for x in range(x0, x1 + 1):
             put(x, y, " ", BLACK)
+            bg.pop((x, y), None)
+
+
+def shade(x0, y0, x1, y1, colour):
+    """Give cells a background colour."""
+    for y in range(y0, y1 + 1):
+        for x in range(x0, x1 + 1):
+            if 0 <= x < W and 0 <= y < H:
+                bg[(x, y)] = colour
 
 
 # --- digital rain -----------------------------------------------------------
@@ -147,114 +158,133 @@ def logo(y, word):
 
 
 # ============================================================================
-GOLD = (255, 210, 90)
 STONE = (206, 192, 156)
-STONE_DIM = (128, 116, 92)
 ORANGE = (255, 152, 31)
 YELLOW = (255, 255, 0)
-LED_OFF = (0, 44, 12)
-LED_GRAD = [WHITE, HEAD, (120, 255, 150), BRIGHT, BRIGHT, MID, (0, 160, 40)]
-
-# A 5x7 dot-matrix font, the scoreboard kind.
-DOTS = {
-    "M": ["#...#", "##.##", "#.#.#", "#.#.#", "#...#", "#...#", "#...#"],
-    "O": [".###.", "#...#", "#...#", "#...#", "#...#", "#...#", ".###."],
-    "B": ["####.", "#...#", "#...#", "####.", "#...#", "#...#", "####."],
-    "A": [".###.", "#...#", "#...#", "#####", "#...#", "#...#", "#...#"],
-    "S": [".####", "#....", "#....", ".###.", "....#", "....#", "####."],
-    "C": [".###.", "#...#", "#....", "#....", "#....", "#...#", ".###."],
-    "P": ["####.", "#...#", "#...#", "####.", "#....", "#....", "#...."],
-    "E": ["#####", "#....", "#....", "####.", "#....", "#....", "#####"],
-    "5": ["#####", "#....", "####.", "....#", "....#", "#...#", ".###."],
-}
+TIP = (255, 255, 160)
+INK_RED = (190, 40, 30)
+PARCH = (150, 128, 96)
+CODE_GRAD = [WHITE, WHITE, HEAD, HEAD, BRIGHT, BRIGHT, BRIGHT, BRIGHT, MID, MID, (0, 160, 40), (0, 160, 40)]
+CODE_BG = [(0, 84 - 5 * r, 22 - r) for r in range(12)]
+DENSE = "#@$%&8BWM0QXZ"
+SPARSE = ".:'`,-"
 
 
-def led_logo(y, word):
-    """The logo on an LED board: every dot of the panel is there, dark or
-    lit, two columns apart, with one dark column between letters and a dark
-    margin. Lit dots take a top-down gradient; where two lit dots sit side
-    by side the gap between them glows faintly, like LED bleed."""
-    cols = len(word) * 6 - 1 + 2
-    x0 = (W - cols * 2) // 2
-    lit = set()
+def code_logo(y, word):
+    """The word written in the rain itself (Cypher: "I don't even see the
+    code"): dense glyphs inside the letters, sparse ones outside, so it
+    reads in plain text too. Every column is a falling stream whose head
+    whitens what it passes. Each block-font row is two mask rows, ▀ the top
+    half and ▄ the bottom."""
+    width = len(word) * 10 - 1
+    x0 = (W - width) // 2
+    rows = LOGO_ROWS * 2
+    mask = set()
     for i, letter in enumerate(word):
-        for r, line in enumerate(DOTS[letter]):
-            for c, px in enumerate(line):
-                if px == "#":
-                    lit.add((1 + i * 6 + c, r))
-    clear(x0 - 1, y, x0 + cols * 2, y + 6)
-    for r in range(7):
-        for c in range(cols):
-            x = x0 + c * 2
-            if (c, r) in lit:
-                put(x, y + r, "●", LED_GRAD[r])
-                if (c + 1, r) in lit:
-                    put(x + 1, y + r, "•", MID if r > 3 else BRIGHT)
-            else:
-                put(x, y + r, "·", LED_OFF)
-    return x0, cols * 2
+        for r in range(LOGO_ROWS):
+            for c, px in enumerate(LOGO[letter][r]):
+                x = x0 + i * 10 + c
+                if px in "█▀":
+                    mask.add((x, 2 * r))
+                if px in "█▄":
+                    mask.add((x, 2 * r + 1))
+    clear(x0 - 3, y, x0 + width + 2, y + rows - 1)
+    lrng = random.Random(15)
+    for x in range(x0 - 3, x0 + width + 3):
+        head = lrng.randrange(-4, rows + 8)
+        length = lrng.randrange(4, 12)
+        for r in range(rows):
+            k = head - r
+            streak = 0 <= k < length
+            if (x, r) in mask:
+                col = WHITE if k == 0 else HEAD if streak and k < 3 else CODE_GRAD[r]
+                put(x, y + r, lrng.choice(DENSE), col)
+                shade(x, y + r, x, y + r, (0, 120, 30) if k == 0 else CODE_BG[r])
+            elif 0 <= k < 3:
+                # Outside the letters only the stream's head shows.
+                put(x, y + r, ":" if k == 0 else lrng.choice(SPARSE), MID if k == 0 else DIM)
+            elif lrng.random() < 0.03:
+                put(x, y + r, ".", FAINT)
+    return x0, width
 
 
-def led_digit(x0, y0, ch, colour):
-    for r, line in enumerate(DOTS[ch]):
-        for c, px in enumerate(line):
-            put(x0 + c * 2, y0 + r, "●" if px == "#" else "·", colour if px == "#" else LED_OFF)
+def operator_crt(x0, y0):
+    """Tank's console loading the popular build: Cerberus's Tank list,
+    bars by price (torva 6500 ... guardian boots 3000)."""
+    clear(x0 - 1, y0, x0 + 21, y0 + 11)
+    for j in range(20):
+        put(x0 + j, y0, "▄", MID)
+        put(x0 + j, y0 + 8, "▄", MID)
+    for k in range(1, 9):
+        put(x0, y0 + k, "█", DIM)
+        put(x0 + 19, y0 + k, "█", DIM)
+    text(x0 + 2, y0 + 1, "> load ", DIM)
+    text(x0 + 9, y0 + 1, "TANK", AMBER)
+    build = [("torva", 9), ("bandos", 6), ("dragon", 5), ("guard.", 4), ("ring", 5)]
+    for k, (name, n) in enumerate(build):
+        text(x0 + 2, y0 + 2 + k, f"{name:<7}", CYAN)
+        text(x0 + 9, y0 + 2 + k, "▓" * n, BRIGHT if k == 0 else MID)
+    text(x0 + 2, y0 + 7, "> 5 items. ok.", HEAD)
+    text(x0 + 6, y0 + 9, "▄▄█████▄▄", DIM)
+    text(x0 + 1, y0 + 10, "▄" * 18, MID)
+    text(x0 + 1, y0 + 11, "▀" + "▪" * 16 + "▀", DIM)
+    for j in range(16):
+        put(x0 + 2 + j, y0 + 11, "▪", GOLD if j % 5 == 2 else DIM)
 
 
-def phone(x0, y0):
-    """The hardline: a desk phone, handset on its cradle."""
-    art = [
-        "▄▄▄▄▄▄▄▄▄▄▄▄",
-        "█▀▀▀▀▀▀▀▀▀▀█",
-        "▀▀█▄▄▄▄▄▄█▀▀",
-        "  █ ▪ ▪ ▪ █",
-        "  █ ▪ ▪ ▪ █",
-        "  █ ▪ ▪ ▪ █",
-        " ▀▀▀▀▀▀▀▀▀▀",
-    ]
-    clear(x0 - 1, y0, x0 + 13, y0 + len(art) - 1)
-    for k, line in enumerate(art):
-        for j, ch in enumerate(line):
-            if ch != " ":
-                put(x0 + j, y0 + k, ch, GOLD if ch == "▪" else (HEAD if k < 3 else MID))
+GOLD = (255, 210, 90)
+PASSIVES = [
+    "frozen breath", "sticky tongue", "thick hide", "three heads", "bandos' war cry",
+    "second form", "shapeshifter", "demonic poison", "venom fangs", "dragonfire splash",
+    "old wisdom", "swift blessing",
+]
+
+
+def programs(x0, y0):
+    """The twelve kit passives, loaded like training programs."""
+    clear(x0 - 1, y0, x0 + 22, y0 + len(PASSIVES) - 1)
+    for k, name in enumerate(PASSIVES):
+        yy = y0 + k
+        hot = name == "three heads"
+        text(x0, yy, name, WHITE if hot else CYAN)
+        text(x0 + len(name), yy, "." * (18 - len(name)), FAINT)
+        text(x0 + 19, yy, "ok", HEAD if hot else MID)
 
 
 clear(2, 2, W - 3, 2)
-lx, lw = led_logo(3, "MOBASCAPE")
-phone(5, 3)
-clear(W - 15, 3, W - 3, 9)
-led_digit(W - 13, 3, "5", YELLOW)
-text(3, 2, "▐ hARDLINE ▌", DIM)
-text(W - 17, 2, "▐ sTARTING iN ▌", DIM)
-center(2, "iNCOMING oN tHE hARDLINE...   pICK uP.   tHE aRENA iS lOADING.", MID)
+lx, lw = code_logo(3, "MOBASCAPE")
+operator_crt(4, 3)
+programs(125, 3)
+text(3, 2, "▐ oPERATOR ▌", DIM)
+text(W - 17, 2, "▐ pROGRAMS ▌", DIM)
+center(2, "  oPERATOR, i nEED a bUILD fOR a hELLHOUND tANK.   lOADING...   dONE.  ", MID)
 fade_bar(1, 2, W - 3)
-clear(lx - 1, 10, lx + lw, 10)
-ticker = " ◄◄ ALL HEROES LOCKED IN ◄◄ GAME STARTING IN 5 ◄◄ LANE CALLS STILL OPEN ◄◄ NO LOBBY"
+clear(lx - 3, 15, lx + lw + 2, 15)
+ticker = " ◄◄ POPULAR BUILD ◄◄ PASSIVE ◄◄ Q W E R ◄◄ THE PALE YELLOW BOX ◄◄ 1024x600 FITS"
 run = (ticker * 3)[: lw]
 for i, ch in enumerate(run):
-    put(lx + i, 10, ch, ORANGE if ch == "◄" else AMBER)
-center(11, "  ░▒▓  n O D E   1 4 :   w A K E   u P   //   t H E R E   i S   n O   l O B B Y  ▓▒░  ", AMBER)
-center(12, "  " + elite("all heroes locked in. game starting in 5. knock, knock.") + "  ", WHITE)
-fade_bar(13, 2, W - 3)
+    put(lx + i, 15, ch, ORANGE if ch == "◄" else AMBER)
+center(16, "  ░▒▓  n O D E   1 5 :   t H E   o P E R A T O R   //   t A N K ,   l O A D   t H E   b U I L D  ▓▒░  ", AMBER)
+center(17, "  " + elite("i know three heads.") + "   " + elite("show me.") + "  ", WHITE)
+fade_bar(18, 2, W - 3)
 
 # --- release info -------------------------------------------------------------
-header(14, elite("release info"))
-clear(4, 15, W - 5, 18)
+header(19, elite("release info"))
+clear(4, 20, W - 5, 22)
 info = [
-    ("rELEASE dATE", "2026-11-24", "cOMMIT", "92ae4f0  ->  sam/main"),
-    ("tYPE", "hERO sELECT: tHE lOCKED-iN cOUNT", "tESTS", "429 pass // clippy clean"),
-    ("wAS", "A FLAT 5V5 CARD LOBBY, AN 8 S WAIT", "nOW", "the reference's own screen, 5 s"),
-    ("wAS", "BLUE/RED SLABS, A LOADING BUTTON", "nOW", "438 lines out, 289 in, 0 new screens"),
+    ("rELEASE dATE", "2026-11-24", "cOMMIT", "f079e93  ->  sam/main"),
+    ("tYPE", "hERO sELECT: pASSIVE rOW + pOPULAR bUILD", "tESTS", "433 pass // clippy clean"),
+    ("wAS", "1024x600: rOSTER, tAGS aND r oFF tHE pANEL", "nOW", "rows give way; the hover box keeps the rest"),
 ]
 for i, (k1, v1, k2, v2) in enumerate(info):
-    yy = 15 + i
+    yy = 20 + i
     text(8, yy, f"{k1:.<16}", DIM)
     text(25, yy, v1, RED if k1 == "wAS" else BRIGHT)
     text(76, yy, f"{k2:.<12}", DIM)
     text(89, yy, v2, HEAD)
 
-# --- left: the terminal ------------------------------------------------------------
-box(4, 20, 74, 45, elite("terminal // knock, knock"))
+# --- left: the parchment --------------------------------------------------------
+box(4, 24, 74, 46, elite("parchment.dat // 1280x720"))
 LX = 6
 IW = 56
 
@@ -270,141 +300,157 @@ def row(inner):
     return " ║ " + inner.ljust(IW) + " ║ "
 
 
-bar = [
-    wall("╔═[958]", "[954 x n]", "[959]═╗"),
-    row("Game mode         " + "All heroes locked in".ljust(IW - 18 - 7) + "[Leave]"),
-    row("Bot match - 5v5    Game starting in 5"),
-    wall("╚═[960]", "[956 x n]", "[961]═╝"),
-]
-for k, line in enumerate(bar):
-    for j, ch in enumerate(line):
-        if ch == " ":
-            continue
-        if ch in "╔╗╚╝═║":
-            col = STONE
-        elif k in (0, 3):
-            col = DIM
-        elif 19 <= j < 44:
-            col = ORANGE
-        elif ch in "[]" or line[j - 1:j + 6].startswith("Leave") or "Leave" in line[max(0, j - 5):j + 1]:
-            col = ORANGE
-        else:
-            col = (190, 176, 150) if k == 1 else (255, 214, 120)
-        put(LX + j, 22 + k, ch, col)
-put(LX + bar[2].index("in 5") + 3, 24, "5", YELLOW)
+P_BG = (210, 190, 150)
+P_INK = (62, 46, 30)
+P_RED = (150, 28, 18)
+P_BLUE = (40, 60, 150)
+P_RULE = (120, 96, 60)
+CHIP_BG = (26, 22, 18)
+CHIP_FG = (236, 226, 200)
+for j, ch in enumerate(wall("╔═", "[1017 parchment]", "═╗")):
+    if ch != " ":
+        put(LX + j, 26, ch, STONE if ch in "╔╗═" else DIM)
+for j, ch in enumerate(wall("╚═", "", "═╝")):
+    if ch != " ":
+        put(LX + j, 39, ch, STONE)
+PX = LX + 3
+for k in range(1, 13):
+    put(LX + 1, 26 + k, "║", STONE)
+    put(LX + IW + 4, 26 + k, "║", STONE)
+shade(LX + 2, 27, LX + IW + 3, 38, P_BG)
 
-text(LX + 1, 27, "STATE", HEAD)
-text(LX + 7, 27, "// hero_select.locked: Option<f32>", DIM)
-s28 = "picking ──Lock in / 0:00──► locked 5.0 ──tick──► 0.0 ──► match"
-pp, pl, pm = s28.index("picking") + 2, s28.index("locked") + 2, s28.index("match") + 2
-s29 = [" "] * (pm + 1)
-s29[pp], s29[pl], s29[pm] = "│", "│", "▲"
-s30 = [" "] * (pm + 1)
-for i, ch in enumerate("└─ Leave ─► menu"):
-    s30[pp + i] = ch
-for i, ch in enumerate("└─ Enter: cut to 1e-3 "):
-    s30[pl + i] = ch
-for i in range(pl + len("└─ Enter: cut to 1e-3 "), pm):
-    s30[i] = "─"
-s30[pm] = "┘"
-for k, line in enumerate([s28, "".join(s29), "".join(s30)]):
-    for j, ch in enumerate(line):
-        if ch == " ":
-            continue
-        col = DIM if ch in "─│└┘►▲" else CYAN
-        if line is s28 and (ch.isdigit() or ch in ".:/") :
-            col = AMBER
-        put(LX + 2 + j, 28 + k, ch, col)
-text(LX + 2 + pl + 1, 29, " lanes: still open", MID)
 
-text(LX + 1, 32, "THE LAST FIVE SECONDS", HEAD)
-text(LX + 23, 32, "// one tick per second, then a drawn frame", DIM)
-for k, n in enumerate([5, 4, 3, 2, 1]):
-    x = LX + 2 + k * 7
-    text(x, 33, str(n), YELLOW if k == 0 else AMBER)
-    text(x, 34, "█" * n, BRIGHT if k < 2 else MID if k < 4 else DIM)
-text(LX + 37, 33, "0", AMBER)
-text(LX + 37, 34, "Loading the arena...", ORANGE)
-text(LX + 58, 33, "next", DIM)
-text(LX + 58, 34, "load", HEAD)
+def chip(x, y, label):
+    text(x, y, label, CHIP_FG)
+    shade(x, y, x + len(label) - 1, y, CHIP_BG)
+
+
+def ability(y, key, name, cooldowns, line):
+    chip(PX, y, f"  {key}  ")
+    put(PX + 6, y, "✶", (200, 90, 20))
+    text(PX + 10, y, name, P_RED)
+    text(PX + 26, y, cooldowns, P_BLUE)
+    if line:
+        text(PX + 10, y + 1, line, P_INK)
+
+
+text(PX, 27, "Popular build", P_RED)
+text(PX + 15, 27, "Tank", P_BLUE)
+for i, colour in enumerate([(110, 110, 125), (120, 90, 50), (170, 30, 25), (70, 60, 50), (200, 60, 40)]):
+    text(PX + 22 + i * 4, 27, "[", P_RULE)
+    put(PX + 23 + i * 4, 27, "■", colour)
+    text(PX + 24 + i * 4, 27, "]", P_RULE)
+text(PX, 28, "─" * IW, P_RULE)
+chip(PX, 29, " Passive ")
+text(PX + 10, 29, "Three heads", P_RED)
+put(PX + 22, 29, "↖", (20, 20, 20))
+text(PX + 10, 30, "Every third basic attack also hits...", P_INK)
+ability(31, "Q", "Triple Bite", "6 / 5.5 / 5 / 4.5 s", "Three quick bites in front; the last...")
+ability(33, "W", "Lava Pools", "10 / 9.5 / 9 / 8.5 s", "Spits three pools of lava that burn...")
+ability(35, "E", "Summoned Souls", "12 / 11 / 10 / 9 s", "A ranger, mage and warrior soul fly...")
+ability(37, "R", "Hellhound Howl", "65 / 58 / 50 s", "Every nearby enemy flees in fear.")
+
+# The hover box, drawn last over whatever is under it: pale yellow, black
+# edge and text, as the client draws it.
+tip = ["Every third basic attack also hits", "enemies within 260 of the target", "for 70% damage."]
+tx, ty, tw = PX + 14, 30, 38
+shade(tx - 1, ty, tx + tw, ty + len(tip) + 1, TIP)
+for j in range(tw):
+    put(tx + j, ty, "─", BLACK)
+    put(tx + j, ty + len(tip) + 1, "─", BLACK)
+for k in range(len(tip) + 2):
+    put(tx - 1, ty + k, "│" if 0 < k < len(tip) + 1 else ("┌" if k == 0 else "└"), BLACK)
+    put(tx + tw, ty + k, "│" if 0 < k < len(tip) + 1 else ("┐" if k == 0 else "┘"), BLACK)
+for k, line in enumerate(tip):
+    text(tx, ty + 1 + k, " " + line.ljust(tw - 1), BLACK)
+
+text(LX + 1, 40, "THE SENTENCE", HEAD)
+text(LX + 14, 40, "// Passive::describe, from the numbers", DIM)
+src = '{"type":"nth_attack","n":3,"radius":260,"damage":0.7}'
+text(LX + 2, 41, src, CYAN)
+for i, ch in enumerate(src):
+    if ch.isdigit() or ch == ".":
+        put(LX + 2 + i, 41, ch, AMBER)
+text(LX + 2, 42, "└─describe()─►", DIM)
+text(LX + 17, 42, '"Every third ... within 260 ... for 70%."', BRIGHT)
 
 term = [
-    ("> ", "wake up, rift..."),
-    ("> ", "the lobby is gone."),
-    ("> ", "follow the countdown: lock in."),
-    ("> ", "knock, knock."),
+    ("> ", "tank, load the build."),
+    ("> ", "i know three heads."),
+    ("> ", "show me."),
 ]
 for k, (prompt, line) in enumerate(term):
-    yy = 36 + k
+    yy = 43 + k
     text(LX + 1, yy, prompt, DIM)
-    text(LX + 3, yy, line, BRIGHT if k < 3 else HEAD)
-put(LX + 3 + len(term[-1][1]) + 1, 39, "█", BRIGHT)
-notes = [
-    "roster dims around your pick  //  Locked in: grey 293, inert",
-    "lane calls stay open: a note to the team, never a pick",
-    "--lock-in   opens on the count, for screenshots",
-]
-for k, line in enumerate(notes):
-    assert len(line) <= 66, line
-    text(LX + 1, 41 + k, line, MID)
+    text(LX + 3, yy, line, BRIGHT if k < 2 else HEAD)
+put(LX + 3 + len(term[-1][1]) + 1, 45, "█", BRIGHT)
+text(LX + 30, 43, "12 kit passives named", MID)
+text(LX + 30, 44, "Status::describe for on-hit", MID)
+text(LX + 30, 45, '"..." when a row cuts it short', MID)
 
-# --- right: reconciled with the reference ---------------------------------------------
-box(76, 20, W - 5, 45, elite("diff.dat // the reference @ 0:11"))
+# --- right: the short windows ---------------------------------------------------
+box(76, 24, W - 5, 46, elite("give_way.dat // short windows"))
 RX = 79
-text(RX, 22, "REFERENCE", HEAD)
-text(RX + 24, 22, "OURS", HEAD)
-text(RX + 60, 22, "OK", HEAD)
-text(RX, 23, "─" * 64, FAINT)
-pairs = [
-    ("All heroes locked in", "same: b12 x2, orange"),
-    ("Game starting in 5", "same: the 5 in yellow"),
-    ("roster dimmed", "55%, your pick outlined"),
-    ("Locked in, grey", "sprite 293, inert"),
-    ("final pick per row", "green names, pulse stops"),
-    ("lane tabs", "still open: notes, not picks"),
-    ("no lobby", "no lobby"),
+cols = [0, 12, 30, 40, 54]
+for c, h in zip(cols, ["WINDOW", "ROWS", "ICONS", "ROSTER", "STATS"]):
+    text(RX + c, 26, h, HEAD)
+text(RX, 27, "─" * 64, FAINT)
+table = [
+    ["1920x1080", "3 lines", "stacked", "2x8, named", "labelled"],
+    ["1280x720", "1 line + ...", "beside", "2x8, named", "labelled"],
+    ["1024x600", "name + hover", "beside", "2x8, hover", "icon + n"],
 ]
-for k, (ref, ours) in enumerate(pairs):
-    yy = 24 + k
-    text(RX, yy, ref, WHITE)
-    text(RX + 24, yy, ours, BRIGHT)
-    text(RX + 60, yy, "ok", HEAD)
+for k, cells in enumerate(table):
+    for c, cell in zip(cols, cells):
+        text(RX + c, 28 + k, cell, WHITE if c == 0 else BRIGHT if k < 2 else AMBER)
 text(RX, 31, "─" * 64, FAINT)
-text(RX, 32, "DELETED", RED)
-text(RX + 34, 32, "ADDED", BRIGHT)
-gone = ["build_lobby  (-221 lines)", "lobby_teams, lobby_card_rects", "lobby_side_tabs, button_*",
-        "lobby_open, lobby_deadline", "tick_lobby, \"Rift - Lobby\""]
-new = ["LOCKED_SECONDS = 5.0", "lock_in, tick_locked", "starting_in, skip_countdown",
-       "ready_to_load", "starting_line, --lock-in"]
-for k, (g, n) in enumerate(zip(gone, new)):
-    yy = 33 + k
-    assert len(g) + 2 < 34 and RX + 34 + len(n) + 2 < W - 6, (g, n)
-    text(RX, yy, "- " + g, (200, 90, 80))
-    text(RX + 34, yy, "+ " + n, MID)
-text(RX, 39, "DIFF", HEAD)
-text(RX + 6, 39, "+289", BRIGHT)
-text(RX + 11, 39, "▓" * 13, BRIGHT)
-text(RX + 26, 39, "-438", RED)
-text(RX + 31, 39, "▓" * 19, RED)
-text(RX + 52, 39, "net -149", DIM)
-text(RX, 41, "TESTS", HEAD)
-text(RX + 7, 41, "429 pass  +2: the count to a drawn frame, the skip", MID)
-text(RX, 42, "SEEN", HEAD)
-text(RX + 7, 42, "1920x1080 + 1280x720, then on into the match", MID)
-text(RX, 43, "BOTS", HEAD)
-text(RX + 7, 43, "jungle called -> blue bots top, mid, bottom x2", MID)
+text(RX, 32, "GIVE WAY", HEAD)
+text(RX + 9, 32, "// first to go on the left", DIM)
+chain = [("tagline", 7), ("weapon", 6), ("descriptions", 12), ("build", 5)]
+x = RX + 6
+spans = []
+for i, (word, n) in enumerate(chain):
+    text(x, 33, word, CYAN)
+    spans.append((x, n))
+    if i < len(chain) - 1:
+        text(x + n + 1, 33, "──►", DIM)
+    x += n + 5
+alive = {"1080": [1, 1, 1, 1], "720": [0, 0, 1, 1], "600": [0, 0, 0, 1]}
+for k, (res, keep) in enumerate(alive.items()):
+    text(RX, 34 + k, res, WHITE)
+    for (sx, n), on in zip(spans, keep):
+        text(sx, 34 + k, ("▓" if on else "░") * n, BRIGHT if on else FAINT)
+text(RX + 53, 35, "1 line each", MID)
+text(RX + 53, 36, "on hover", MID)
+text(RX, 37, "─" * 64, FAINT)
+text(RX, 38, "AT 1024x600, WAS", RED)
+text(RX + 33, 38, "NOW", BRIGHT)
+fixes = [
+    ("roster ran past its panel", "2 rows of 8, no name line"),
+    ("tags fell off the parchment", "the left column widens"),
+    ("R row fell off the bottom", "one-line rows, hover text"),
+    ("Damage under the Armour icon", "icon + number, label on hover"),
+]
+for k, (was, now) in enumerate(fixes):
+    assert RX + 33 + len(now) + 2 < W - 6, now
+    text(RX, 39 + k, "- " + was, (200, 90, 80))
+    text(RX + 33, 39 + k, "+ " + now, MID)
+text(RX, 44, "TESTS", HEAD)
+text(RX + 7, 44, "433 pass  +5: sentences, names, clip, build, roster", MID)
+text(RX, 45, "FLAG", HEAD)
+text(RX + 7, 45, "--cursor X Y   puts the cursor down for hover shots", MID)
 
 # --- sysop's note ------------------------------------------------------------
-header(47, elite("sysop's note // there is no lobby"))
-clear(4, 48, W - 5, 49)
-center(48, "sTILL oPEN: bATTLE sPELLS (p4.3), pASSIVE rOW + pOPULAR bUILD (p4.4-5), mUSIC tOGGLE (p4.6), cLIFFS + bRIDGES + gOD sTATUES (p5).", HEAD)
-center(49, "hero_select::LOCKED_SECONDS // lock_in // tick_locked // starting_in // skip_countdown // ready_to_load // starting_line", DIM)
+header(48, elite("sysop's note // the operator"))
+clear(4, 49, W - 5, 50)
+center(49, "sTILL oPEN: bATTLE sPELLS (p4.3), mUSIC tOGGLE (p4.6), cLIFFS + bRIDGES + gOD sTATUES (p5), iTEM sETS iN tHE sHOP (p3).", HEAD)
+center(50, "Passive::describe // Status::describe // ItemShop::popular_build // hero_select::clip_lines // Hud::tooltip // --cursor", DIM)
 
 # --- roadmap -------------------------------------------------------------------
 header(51, elite("roadmap // docs/ROADMAPPLAN.md"))
 clear(4, 52, W - 5, 56)
 phases = [
-    ("P1 LIGHT", 5), ("P2 MINIMAP", 6), ("P3 SHOP", 7), ("P4 SELECT", 6),
+    ("P1 LIGHT", 5), ("P2 MINIMAP", 6), ("P3 SHOP", 7), ("P4 SELECT", 8),
     ("P5 ARENA", 1), ("P6 HUD", 4), ("P7 POST", 0),
 ]
 for i, (name, done) in enumerate(phases):
@@ -415,16 +461,16 @@ for i, (name, done) in enumerate(phases):
     for j in range(10):
         put(x + 12 + j, yy, "▓" if j < done else "░", BRIGHT if j < done else FAINT)
     text(x + 22, yy, f"] {done * 10:>3}%", HEAD if done else FAINT)
-text(8, 56, ">> next: battle spells (P4.3), passive row + popular build (P4.4-5), cliffs/bridges/statues from cache objects (P5)", MID)
+text(8, 56, ">> next: battle spells (P4.3: D/F slots, OSRS spell sprites, gameplay), the music toggle (P4.6), cliffs from cache objects (P5)", MID)
 
 fade_bar(57, 2, W - 3)
 clear(10, 58, W - 11, 61)
-greetz = "gREETZ: tHE rEFERENCE aT 0:11 (nO lOBBY, jUST a cOUNT) * sPRITE 293 (tHE gREY bUTTON) * b12 aT x2 (tHE bIG 5)"
+greetz = "gREETZ: tANK (tHE oPERATOR aND tHE bUILD) * pARCHMENT 1017 * tHE pALE yELLOW bOX * 1024x600, wHICH fITS nOW"
 assert len(greetz) <= 128, len(greetz)
 center(58, greetz, MID)
 center(59, "nOT AFFILIATED WITH JAGEX. cACHE ASSETS STAY OUT OF GIT. aLWAYS.", DIM)
-center(60, "  k n o c k ,   k n o c k .   a l l   h e r o e s   l o c k e d   i n .   g a m e   s t a r t i n g   i n   5 .  ", HEAD)
-center(61, "-=[ mObAsCaPe // 2026 // nODE 14: wAKE uP // 57.6k // sYSoP: rIFT // 1 cOMMIT, 0 lOBBIES, 5 sECONDS ]=-", AMBER)
+center(60, "  t a n k ,   l o a d   t h e   b u i l d .   i   k n o w   t h r e e   h e a d s .   s h o w   m e .  ", HEAD)
+center(61, "-=[ mObAsCaPe // 2026 // nODE 15: tHE oPERATOR // 57.6k // sYSoP: rIFT // 12 pASSIVES, 5 iTEMS, 1 pALE yELLOW bOX ]=-", AMBER)
 
 # --- outputs ------------------------------------------------------------------
 with open(out + ".txt", "w") as f:
@@ -432,13 +478,15 @@ with open(out + ".txt", "w") as f:
         f.write("".join(c for c, _ in row).rstrip() + "\n")
 
 with open(out + ".ans", "w") as f:
-    for row in grid:
+    for y, row in enumerate(grid):
         last = None
         line = []
-        for ch, fg in row:
-            if fg != last:
+        for x, (ch, fg) in enumerate(row):
+            back = bg.get((x, y))
+            if (fg, back) != last:
                 line.append(f"\x1b[38;2;{fg[0]};{fg[1]};{fg[2]}m")
-                last = fg
+                line.append(f"\x1b[48;2;{back[0]};{back[1]};{back[2]}m" if back else "\x1b[49m")
+                last = (fg, back)
             line.append(ch)
         f.write("".join(line) + "\x1b[0m\n")
 
@@ -450,9 +498,11 @@ img = Image.new("RGB", (W * cw + 16, H * ch_h + 16), BLACK)
 d = ImageDraw.Draw(img)
 for y, row in enumerate(grid):
     for x, (c, fg) in enumerate(row):
+        px, py = 8 + x * cw, 8 + y * ch_h
+        if (x, y) in bg:
+            d.rectangle((px, py, px + cw - 1, py + ch_h - 1), fill=bg[(x, y)])
         if c == " ":
             continue
-        px, py = 8 + x * cw, 8 + y * ch_h
         # Draw block elements as rectangles so they tile without gaps.
         if c in "█▀▄▌▐■":
             boxes = {

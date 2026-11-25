@@ -1,62 +1,62 @@
    Z        4  ^8 :? : ~TQ  9T    -k7 ~ X  @           AA +     .     7  -D -  A    $B         |  97 7 :             6           X     $       ~ :.
   ░▒▓▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▓▒░
-   ▐ hARDLINE ▌                             iNCOMING oN tHE hARDLINE...   pICK uP.   tHE aRENA iS lOADING.                           ▐ sTARTING iN ▌
-     ▄▄▄▄▄▄▄▄▄▄▄▄   · ● · · · ● · · ●•●•● · · ●•●•●•● · · · ●•●•● · · · ●•●•●•● · · ●•●•● · · · ●•●•● · · ●•●•●•● · · ●•●•●•●•● ·        ● ● ● ● ●
-     █▀▀▀▀▀▀▀▀▀▀█   · ●•● · ●•● · ● · · · ● · ● · · · ● · ● · · · ● · ● · · · · · ● · · · ● · ● · · · ● · ● · · · ● · ● · · · · ·        ● · · · ·
-     ▀▀█▄▄▄▄▄▄█▀▀   · ● · ● · ● · ● · · · ● · ● · · · ● · ● · · · ● · ● · · · · · ● · · · · · ● · · · ● · ● · · · ● · ● · · · · ·        ● ● ● ● ·
-       █ ▪ ▪ ▪ █    · ● · ● · ● · ● · · · ● · ●•●•●•● · · ●•●•●•●•● · · ●•●•● · · ● · · · · · ●•●•●•●•● · ●•●•●•● · · ●•●•●•● · ·        · · · · ●
-       █ ▪ ▪ ▪ █    · ● · · · ● · ● · · · ● · ● · · · ● · ● · · · ● · · · · · ● · ● · · · · · ● · · · ● · ● · · · · · ● · · · · ·        · · · · ●
-       █ ▪ ▪ ▪ █    · ● · · · ● · ● · · · ● · ● · · · ● · ● · · · ● · · · · · ● · ● · · · ● · ● · · · ● · ● · · · · · ● · · · · ·        ● · · · ●
-      ▀▀▀▀▀▀▀▀▀▀    · ● · · · ● · · ●•●•● · · ●•●•●•● · · ● · · · ● · ●•●•●•● · · · ●•●•● · · ● · · · ● · ● · · · · · ●•●•●•●•● ·        · ● ● ● ·
-    0 J  A     3     ◄◄ ALL HEROES LOCKED IN ◄◄ GAME STARTING IN 5 ◄◄ LANE CALLS STILL OPEN ◄◄ NO LOBBY ◄◄ ALL HEROES LOCKED IN ◄◄          8
-    < 8  ?     *  Q@ ~!==Z2  %    ░▒▓  n O D E   1 4 :   w A K E   u P   //   t H E R E   i S   n O   l O B B Y  ▓▒░     .   3  $%2         Z
-    7 J  0     2  0^ 65^B.B  k  .  6    J ^T   aLL HeRoeS LoCKeD iN. GaMe STaRTiNG iN 5. KNoCK, KNoCK.    2 C     1      B   2  J:=  D      8
-  ░▒▓▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▓▒░
-    ■─────────────────────────────────────────────────────────  -=[ ReLeaSe iNFo ]=-  ───────────────────────────────────────────────────────────■ 2
-        rELEASE dATE.... 2026-11-24                                         cOMMIT...... 92ae4f0  ->  sam/main                                     F
-        tYPE............ hERO sELECT: tHE lOCKED-iN cOUNT                   tESTS....... 429 pass // clippy clean                                  Q
-        wAS............. A FLAT 5V5 CARD LOBBY, AN 8 S WAIT                 nOW......... the reference's own screen, 5 s                           J5
-        wAS............. BLUE/RED SLABS, A LOADING BUTTON                   nOW......... 438 lines out, 289 in, 0 new screens                      $E
-    * @  <J       4  +66    5   :   A     ?       <-    C  ~      ?$       Q+   4 E #&          -  !        E     +1         >  5 :  6      8 :    #.
-    ▄▀▀▐ TeRMiNaL // KNoCK, KNoCK ▌▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▄|▄▀▀▐ DiFF.DaT // THe ReFeReNCe @ 0:11 ▌▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▄ 3&
-    █                                                                     █A█                                                                    █ B1
-    █  ╔═[958]══════════════════[954 x n]═══════════════════[959]═╗       █4█  REFERENCE               OURS                                OK    █ <Q
-    █  ║ Game mode         All heroes locked in           [Leave] ║       █1█  ────────────────────────────────────────────────────────────────  █ +&
-    █  ║ Bot match - 5v5    Game starting in 5                    ║       █5█  All heroes locked in    same: b12 x2, orange                ok    █ ~T
-    █  ╚═[960]══════════════════[956 x n]═══════════════════[961]═╝       █.█  Game starting in 5      same: the 5 in yellow               ok    █  ?
-    █                                                                     █&█  roster dimmed           55%, your pick outlined             ok    █  $
-    █  STATE // hero_select.locked: Option<f32>                           █5█  Locked in, grey         sprite 293, inert                   ok    █  T
-    █   picking ──Lock in / 0:00──► locked 5.0 ──tick──► 0.0 ──► match    █5█  final pick per row      green names, pulse stops            ok    █ 1%
-    █     │                           │ lanes: still open          ▲      █D█  lane tabs               still open: notes, not picks        ok    █ #D
-    █     └─ Leave ─► menu            └─ Enter: cut to 1e-3 ───────┘      █T█  no lobby                no lobby                            ok    █ !-
-    █                                                                     █>█  ────────────────────────────────────────────────────────────────  █ <+
-    █  THE LAST FIVE SECONDS // one tick per second, then a drawn frame   █4█  DELETED                           ADDED                           █ |X
-    █   5      4      3      2      1      0                    next      █^█  - build_lobby  (-221 lines)       + LOCKED_SECONDS = 5.0          █ D-
-    █   █████  ████   ███    ██     █      Loading the arena... load      █Z█  - lobby_teams, lobby_card_rects   + lock_in, tick_locked          █ ~F
-    █                                                                     █ █  - lobby_side_tabs, button_*       + starting_in, skip_countdown   █ 4k
-    █  > wake up, rift...                                                 █ █  - lobby_open, lobby_deadline      + ready_to_load                 █ 4
-    █  > the lobby is gone.                                               █ █  - tick_lobby, "Rift - Lobby"      + starting_line, --lock-in      █ 6
-    █  > follow the countdown: lock in.                                   █ █                                                                    █ @
-  ? █  > knock, knock. █                                                  █ █  DIFF  +289 ▓▓▓▓▓▓▓▓▓▓▓▓▓  -438 ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓  net -149      █ J
-  > █                                                                     █ █                                                                    █ :
-  B █  roster dims around your pick  //  Locked in: grey 293, inert       █ █  TESTS  429 pass  +2: the count to a drawn frame, the skip         █ -
-  3 █  lane calls stay open: a note to the team, never a pick             █ █  SEEN   1920x1080 + 1280x720, then on into the match               █ B
-  . █  --lock-in   opens on the count, for screenshots                    █ █  BOTS   jungle called -> blue bots top, mid, bottom x2             █ J
-  9 █                                                                     █ █                                                                    █ C
-  3 █▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄█ █▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄█ 2
-  k        & 8   k     F  #!  17 -  =3 >    3       9  % 08      +   ^  7 5   B  ^T    9 ?  J *  =%  - *   7  !E+     7 ^    ! +      #   *     &  C
-    ■───────────────────────────────────────────────  -=[ SYSoP'S NoTe // THeRe iS No LoBBY ]=-  ────────────────────────────────────────────────■ D
-          sTILL oPEN: bATTLE sPELLS (p4.3), pASSIVE rOW + pOPULAR bUILD (p4.4-5), mUSIC tOGGLE (p4.6), cLIFFS + bRIDGES + gOD sTATUES (p5).        4
-               hero_select::LOCKED_SECONDS // lock_in // tick_locked // starting_in // skip_countdown // ready_to_load // starting_line            E
-           J *   7     J  DD  %J - 4 $ $    2            D@      !   B  . Z  ^C  $     + J  58@  &         %  87      6 E    | Q      +   +     %  B
+   ▐ oPERATOR ▌                          oPERATOR, i nEED a bUILD fOR a hELLHOUND tANK.   lOADING...   dONE.                         ▐ pROGRAMS ▌
+    ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄  +,  $B :   WX   X8@0Q   80$08X8     MXQ@$     $0M0@&    $%$$0W    #%&W$   &##QMM$  :#@Z$X&&&Q      frozen breath..... ok
+    █ > load TANK      █  8-  M#&   B80  00BBQ8Q  8Q%@8@$0`  $QQZB@Z   8@Z%QX&W  ZM$@W@QB .ZZQ&XMB  $XQ%8B&% :%$#&BZX#&  ,   sticky tongue..... ok
+    █ torva  ▓▓▓▓▓▓▓▓▓ █  E:  $@&   ##B QQ     8& B@`  - W8 X%   : Z& Q@     ,  %@        W#    :W@ 8M ,   X8:Q$    ::   .   thick hide........ ok
+    █ bandos ▓▓▓▓▓▓    █  ?   0W$# ZQ08 MB     8$ 8$'  : ZQ #$     #B-ZQ     , ,QZ        M$     @M Q# '   W8 80         :   three heads....... ok
+    █ dragon ▓▓▓▓▓     █  &   ZX &@Q 8$ Q#     WW QX$ZQ$@W  X0#Q@#W$8: &%#$$X: :&$        0#0Z@W0WM @0W0XWQ$  WM&QM0%        bandos' war cry... ok
+    █ guard. ▓▓▓▓      █  =   XM  0  X8 @&     &Q 8MM#BB$   W&Z8$X8WM:. X$@MWX::MQ        M$0%@WM&# 8X$B$MZ   W&@Q%0%        second form....... ok
+    █ ring   ▓▓▓▓▓     █  :   X&     %@ M8     $M @X     $Z 0B ,   &W     : '%Z QX- .     QW     ## &%   :    $#             shapeshifter...... ok
+    █ > 5 items. ok.   █  >   #B    .88 X$     &% Z&     QZ.8$ :   &Q       :Z% WZ-  ,   '0W     0M %@  .  :  BW        '    demonic poison.... ok
+    █▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄█  2 ,.&M     #8 WZ     B$ $&     $M $0     MB       :WM Q%:  '   ,#%     Z# XQ     .  &B        :    venom fangs....... ok
+          ▄▄█████▄▄       B ``M%  `  $W 0&     @W W%     M$ $W     &&.       88 B0   :.  :#@     BZ %&     :  0@  :     :    dragonfire splash. ok
+     ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄   k ::W$' -  QX  8%W#QM&  %%000XM0  %%     8M #%0M%Z$W   8Z@#@W%8 WM     @& B8        Z@MQW&MB0      old wisdom........ ok
+     ▀▪▪▪▪▪▪▪▪▪▪▪▪▪▪▪▪▀   +   $M` :  M0,  80QMB   QWZQQ0#   @X     8$  0#Z&$&     W$#@Z%  Q0     8&.$X        &WBQZ0MQ8      swift blessing.... ok
+    % *  ^>       @7 0.$E>     ◄◄ POPULAR BUILD ◄◄ PASSIVE ◄◄ Q W E R ◄◄ THE PALE YELLOW BOX ◄◄ 1024x600 FITS ◄◄ POPULA      6  ? X  .      ~ B    F
+    % &  @F       06 ~2.  ░▒▓  n O D E   1 5 :   t H E   o P E R A T O R   //   t A N K ,   l O A D   t H E   b U I L D  ▓▒░    < 5  B      7 %    Q
+    7 4  2=       T2 Q?^ D  3   -  :      70      T%    Q   i KNoW THRee HeaDS.   SHoW Me.      k  ^        7     =C         @  6 <  6      X !    J5
+  ░▒▓▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▓▒░E
+    ■─────────────────────────────────────────────────────────  -=[ ReLeaSe iNFo ]=-  ───────────────────────────────────────────────────────────■ #.
+        rELEASE dATE.... 2026-11-24                                         cOMMIT...... f079e93  ->  sam/main                                     3&
+        tYPE............ hERO sELECT: pASSIVE rOW + pOPULAR bUILD           tESTS....... 433 pass // clippy clean                                  B1
+        wAS............. 1024x600: rOSTER, tAGS aND r oFF tHE pANEL         nOW......... rows give way; the hover box keeps the rest               <Q
+    $ T   =       1  *56    #   B   2    %@       > J  %^  3      <        1&4  E Z ^           =  |        B      9         1  1 &  B        8    +&
+    ▄▀▀▐ PaRCHMeNT.DaT // 1280X720 ▌▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▄5▄▀▀▐ GiVe_WaY.DaT // SHoRT WiNDoWS ▌▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▄ ~T
+    █                                                                     █.█                                                                    █  ?
+    █  ╔═════════════════════[1017 parchment]═════════════════════╗       █&█  WINDOW      ROWS              ICONS     ROSTER        STATS       █  $
+    █  ║ Popular build  Tank   [■] [■] [■] [■] [■]                ║       █5█  ────────────────────────────────────────────────────────────────  █  T
+    █  ║ ──────────────────────────────────────────────────────── ║       █5█  1920x1080   3 lines           stacked   2x8, named    labelled    █ 1%
+    █  ║  Passive  Three heads ↖                                  ║       █D█  1280x720    1 line + ...      beside    2x8, named    labelled    █ #D
+    █  ║           Eve┌──────────────────────────────────────┐    ║       █T█  1024x600    name + hover      beside    2x8, hover    icon + n    █ !-
+    █  ║   Q   ✶   Tri│ Every third basic attack also hits   │    ║       █>█  ────────────────────────────────────────────────────────────────  █ <+
+    █  ║           Thr│ enemies within 260 of the target     │    ║       █4█  GIVE WAY // first to go on the left                               █ |X
+    █  ║   W   ✶   Lav│ for 70% damage.                      │    ║       █^█        tagline ──► weapon ──► descriptions ──► build               █ D-
+    █  ║           Spi└──────────────────────────────────────┘    ║       █Z█  1080  ▓▓▓▓▓▓▓     ▓▓▓▓▓▓     ▓▓▓▓▓▓▓▓▓▓▓▓     ▓▓▓▓▓               █ ~F
+    █  ║   E   ✶   Summoned Souls  12 / 11 / 10 / 9 s             ║       █ █  720   ░░░░░░░     ░░░░░░     ▓▓▓▓▓▓▓▓▓▓▓▓     ▓▓▓▓▓  1 line each  █ 4k
+    █  ║           A ranger, mage and warrior soul fly...         ║       █ █  600   ░░░░░░░     ░░░░░░     ░░░░░░░░░░░░     ▓▓▓▓▓  on hover     █ 4
+    █  ║   R   ✶   Hellhound Howl  65 / 58 / 50 s                 ║       █ █  ────────────────────────────────────────────────────────────────  █ 6
+    █  ║           Every nearby enemy flees in fear.              ║       █ █  AT 1024x600, WAS                 NOW                              █ @
+  ? █  ╚══════════════════════════════════════════════════════════╝       █ █  - roster ran past its panel      + 2 rows of 8, no name line      █ J
+  > █  THE SENTENCE // Passive::describe, from the numbers                █ █  - tags fell off the parchment    + the left column widens         █ :
+  B █   {"type":"nth_attack","n":3,"radius":260,"damage":0.7}             █ █  - R row fell off the bottom      + one-line rows, hover text      █ -
+  3 █   └─describe()─► "Every third ... within 260 ... for 70%."          █ █  - Damage under the Armour icon   + icon + number, label on hover  █ B
+  . █  > tank, load the build.      12 kit passives named                 █ █                                                                    █ J
+  9 █  > i know three heads.        Status::describe for on-hit           █ █  TESTS  433 pass  +5: sentences, names, clip, build, roster        █ C
+  3 █  > show me. █                 "..." when a row cuts it short        █ █  FLAG   --cursor X Y   puts the cursor down for hover shots        █ 2
+  k █▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄█ █▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄█ C
+           - k   -     ~  .0  #: ~  Q| T    -       k    ?6      <   ?  D @  4   :X    ! D  9=2  T>  A :   *  +J*     X *    8 6      k   &     7  D
+    ■─────────────────────────────────────────────────  -=[ SYSoP'S NoTe // THe oPeRaToR ]=-  ───────────────────────────────────────────────────■ 4
+               sTILL oPEN: bATTLE sPELLS (p4.3), mUSIC tOGGLE (p4.6), cLIFFS + bRIDGES + gOD sTATUES (p5), iTEM sETS iN tHE sHOP (p3).             E
+               Passive::describe // Status::describe // ItemShop::popular_build // hero_select::clip_lines // Hud::tooltip // --cursor             B
     ■────────────────────────────────────────────────  -=[ RoaDMaP // DoCS/RoaDMaPPLaN.MD ]=-  ──────────────────────────────────────────────────■ 1
-        P1 LIGHT   [▓▓▓▓▓░░░░░]  50%       P2 MINIMAP [▓▓▓▓▓▓░░░░]  60%       P3 SHOP    [▓▓▓▓▓▓▓░░░]  70%       P4 SELECT  [▓▓▓▓▓▓░░░░]  60%     3k
+        P1 LIGHT   [▓▓▓▓▓░░░░░]  50%       P2 MINIMAP [▓▓▓▓▓▓░░░░]  60%       P3 SHOP    [▓▓▓▓▓▓▓░░░]  70%       P4 SELECT  [▓▓▓▓▓▓▓▓░░]  80%     3k
                                                                                                                                                   BB
         P5 ARENA   [▓░░░░░░░░░]  10%       P6 HUD     [▓▓▓▓░░░░░░]  40%       P7 POST    [░░░░░░░░░░]   0%                                        @
                                                                                                                                                   7
-        >> next: battle spells (P4.3), passive row + popular build (P4.4-5), cliffs/bridges/statues from cache objects (P5)                       1
+        >> next: battle spells (P4.3: D/F slots, OSRS spell sprites, gameplay), the music toggle (P4.6), cliffs from cache objects (P5)           1
   ░▒▓▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▓▒░
-  3      B          gREETZ: tHE rEFERENCE aT 0:11 (nO lOBBY, jUST a cOUNT) * sPRITE 293 (tHE gREY bUTTON) * b12 aT x2 (tHE bIG 5)               E @  &
+  3      B           gREETZ: tANK (tHE oPERATOR aND tHE bUILD) * pARCHMENT 1017 * tHE pALE yELLOW bOX * 1024x600, wHICH fITS nOW                E @  &
   D      %                                 nOT AFFILIATED WITH JAGEX. cACHE ASSETS STAY OUT OF GIT. aLWAYS.                                     -    E
-  7      %          k n o c k ,   k n o c k .   a l l   h e r o e s   l o c k e d   i n .   g a m e   s t a r t i n g   i n   5 .               .    >
-  A      0             -=[ mObAsCaPe // 2026 // nODE 14: wAKE uP // 57.6k // sYSoP: rIFT // 1 cOMMIT, 0 lOBBIES, 5 sECONDS ]=-                  T    &
+  7      %               t a n k ,   l o a d   t h e   b u i l d .   i   k n o w   t h r e e   h e a d s .   s h o w   m e .                    .    >
+  A      0      -=[ mObAsCaPe // 2026 // nODE 15: tHE oPERATOR // 57.6k // sYSoP: rIFT // 12 pASSIVES, 5 iTEMS, 1 pALE yELLOW bOX ]=-           T    &
