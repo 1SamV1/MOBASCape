@@ -7,6 +7,7 @@ use glam::{Mat3, Vec3};
 use rift_cache::{AnimationClip, AnimationScratch, Cache, Model, model::hsl_to_rgb};
 
 pub mod awowogei;
+mod battle;
 pub mod bot_cast;
 pub mod bots;
 mod kit_runtime;
@@ -216,6 +217,10 @@ pub struct AnimatedUnit {
     pub cc: crate::kit::Afflictions,
     /// The teleport scroll every hero carries (unused by other units).
     pub scroll: crate::scroll::ScrollState,
+    /// A magic hero's two battle spells (empty for everyone else).
+    pub spells: crate::spells::Loadout,
+    /// Vengeance waiting for an enemy hero's hit.
+    pub vengeance: Option<crate::spells::Vengeance>,
     /// One-shot clips for basic attacks and ability casts.
     pub attack_clip: Option<Arc<AnimationClip>>,
     pub cast_clip: Option<Arc<AnimationClip>>,
@@ -735,6 +740,8 @@ pub struct Projectile {
     pub venom: f32,
     /// Extra damage against targets under the execute threshold.
     pub execute: f32,
+    /// A battle spell bolt's statuses and graphics, landed on its target.
+    pub spell: Option<Box<battle::SpellHit>>,
 }
 
 impl Projectile {
@@ -767,6 +774,7 @@ impl Projectile {
             hit: Vec::new(),
             venom: 0.0,
             execute: 0.0,
+            spell: None,
         }
     }
 
@@ -888,6 +896,12 @@ pub struct AnimatedScene {
     pub scroll_config: crate::scroll::ScrollConfig,
     /// Teleport destinations on the minimap: point, team, seconds left.
     pub scroll_pings: Vec<(Vec3, u8, f32)>,
+    /// The battle spells magic heroes pick from
+    /// (`data/spells/battle_spells.json`).
+    pub spell_book: crate::spells::SpellBook,
+    /// True while Vengeance's own damage is being dealt, so it cannot set
+    /// off another.
+    reflecting: bool,
     pub wave_timer: f32,
     /// Monotonic wave counter used to stagger formation jitter deterministically.
     pub wave_serial: u32,
@@ -1340,6 +1354,7 @@ impl AnimatedScene {
         // animation only costs that look its model; the glow still draws.
         let mut spot_models = HashMap::new();
         let scroll_config = crate::scroll::ScrollConfig::load();
+        let spell_book = crate::spells::SpellBook::load();
         let kit_spots = champion.kit.as_ref().map(|kit| kit.spotanims());
         for id in kit_spots.iter().flatten() {
             if !crate::kit::spot::VERIFIED.contains(id) {
@@ -1353,6 +1368,7 @@ impl AnimatedScene {
             .into_iter()
             .chain(crate::kit::spot::ALL)
             .chain(scroll_config.spotanims())
+            .chain(spell_book.spotanims())
             .chain(kit_spots.into_iter().flatten());
         for id in wanted {
             if spot_models.contains_key(&id) {
@@ -1412,6 +1428,8 @@ impl AnimatedScene {
             ping: None,
             scroll_config,
             scroll_pings: Vec::new(),
+            spell_book,
+            reflecting: false,
             wave_timer: 0.0,
             wave_serial: 0,
             kills: [0, 0],
@@ -3874,6 +3892,7 @@ impl AnimatedScene {
         self.update_player(dt, height, collision);
         self.update_kit(dt, height, collision);
         self.update_scrolls(dt);
+        self.update_spells(dt);
         self.update_delivery(dt, height);
 
         let unit_count = self.units.len();
@@ -4772,6 +4791,9 @@ impl AnimatedScene {
             // Ping the target on the minimap, like the reference client.
             self.ping = Some((self.units[index].pos, 6.0));
         }
+        if !killed && amount > 0.0 && !self.reflecting {
+            self.vengeance_check(index, aggressor, amount);
+        }
         if !killed {
             // A camp turns on the hero who hit it (the player or a bot).
             let striker = aggressor.filter(|&a| {
@@ -5317,7 +5339,14 @@ impl AnimatedScene {
         } else {
             damage
         };
+        let splashed = damage > 0.0 && self.units[index].shield > 0.0;
         self.damage_unit_by(index, damage, projectile.team, projectile.attacker);
+        if let Some(hit) = projectile.spell.as_deref()
+            && self.units[index].health > 0.0
+        {
+            let caster = projectile.attacker.unwrap_or(self.player_index);
+            self.land_spell(index, hit, splashed, caster);
+        }
     }
 
     /// Flash, shock ring, sparks, light and the look's impact model.
@@ -5588,6 +5617,8 @@ impl AnimatedScene {
                 lock_range: 0.0,
                 cc: Default::default(),
                 scroll: Default::default(),
+                spells: Default::default(),
+                vengeance: None,
                 attack_clip: template.attack.clone(),
                 cast_clip: None,
                 attack_hit: 0.5,
@@ -6968,6 +6999,8 @@ fn build_unit(
         lock_range: 0.0,
         cc: Default::default(),
         scroll: Default::default(),
+        spells: Default::default(),
+        vengeance: None,
         attack_clip: None,
         cast_clip: None,
         attack_hit: 0.5,

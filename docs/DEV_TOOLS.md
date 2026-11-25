@@ -80,6 +80,17 @@ beside the hero, looping, so spell graphics can be checked by eye. Add
 `--distance 1500` to bring the camera in. A label ending in `?` failed to
 load. The verified ids are listed in [SPELLS.md](SPELLS.md).
 
+`--spells ice_barrage,vengeance` picks a magic hero's battle spells (D then
+F) by id; without it the lane call's pair is used, and non-magic heroes get
+none. `--demo-spells` casts D one second in and F at three seconds, at the
+nearest enemy hero. Pair it with `--demo-duel` so there is one beside you:
+
+```sh
+target/release/rift-client --ui-live --champion kolodion --distance 1100 \
+    --demo-duel --spells vengeance,heal_group --demo-spells \
+    --screenshot out.png --screenshot-after 330
+```
+
 `--demo-scroll` reads the teleport scroll (T) toward the middle of the map
 half a second in, and logs the channel and the arrival. Take a screenshot
 around frame 400 to see the channel, and after frame 760 to see the arrival.

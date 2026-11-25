@@ -135,7 +135,7 @@ pub fn arrival(structure: Vec3, home: Vec3, reach: f32) -> Vec3 {
     structure + dir * reach
 }
 
-/// True when crowd control stops a channel this frame: a stun or knock-up
+/// True when crowd control stops an action this frame: a stun or knock-up
 /// (`stun_timer`), fear, taunt or forced movement. A root does not: as in
 /// Dota 2, a rooted hero may still scroll out.
 pub fn disabled(stun_timer: f32, cc: &Afflictions) -> bool {
@@ -144,6 +144,12 @@ pub fn disabled(stun_timer: f32, cc: &Afflictions) -> bool {
         || cc.taunt_timer > 0.0
         || cc.displace_timer > 0.0
         || cc.lift_timer > 0.0
+}
+
+/// True when the scroll cannot be read or kept channelling: crowd control,
+/// or Tele Block.
+pub fn blocked(stun_timer: f32, cc: &Afflictions) -> bool {
+    disabled(stun_timer, cc) || cc.no_mobility_timer > 0.0
 }
 
 /// Whether a scroll may start now, before a destination is looked for.
@@ -159,7 +165,7 @@ pub fn can_start(
         Err(Refusal::AlreadyChannelling)
     } else if state.cooldown > 0.0 {
         Err(Refusal::Cooldown)
-    } else if disabled(stun_timer, cc) {
+    } else if blocked(stun_timer, cc) {
         Err(Refusal::Disabled)
     } else {
         Ok(())
@@ -181,7 +187,7 @@ pub enum Tick {
 pub fn tick(state: &mut ScrollState, dt: f32, stun_timer: f32, cc: &Afflictions) -> Option<Tick> {
     state.cooldown = (state.cooldown - dt).max(0.0);
     let channel = state.channel.as_mut()?;
-    if disabled(stun_timer, cc) {
+    if blocked(stun_timer, cc) {
         state.channel = None;
         return Some(Tick::Broken);
     }
@@ -326,6 +332,13 @@ mod tests {
         };
         let mut state = channel(2.0);
         assert_eq!(tick(&mut state, 0.1, 0.0, &pushed), Some(Tick::Broken));
+        // Tele Block breaks a scroll being read.
+        let blocked = Afflictions {
+            no_mobility_timer: 4.0,
+            ..Default::default()
+        };
+        let mut state = channel(2.0);
+        assert_eq!(tick(&mut state, 0.1, 0.0, &blocked), Some(Tick::Broken));
         // A slow does not break it.
         let slowed = Afflictions {
             slow_pct: 0.5,

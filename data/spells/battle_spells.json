@@ -1,0 +1,79 @@
+{
+  "spells": [
+    {
+      "id": "ancient_teleport",
+      "name": "ANCIENT TELEPORT",
+      "book": "Ancient",
+      "icon": 341,
+      "cooldown": 110.0,
+      "effect": { "type": "blink", "range": 450.0 },
+      "gfx": { "cast": 392, "land": 392 }
+    },
+    {
+      "id": "heal_group",
+      "name": "HEAL GROUP",
+      "book": "Lunar",
+      "icon": 565,
+      "cooldown": 100.0,
+      "effect": { "type": "heal_group", "own": 0.15, "allies": 0.10, "radius": 600.0 },
+      "gfx": { "cast": 744, "hit": 745 }
+    },
+    {
+      "id": "vengeance",
+      "name": "VENGEANCE",
+      "book": "Lunar",
+      "icon": 564,
+      "cooldown": 60.0,
+      "effect": { "type": "vengeance", "reflect": 0.75, "duration": 6.0, "say": "Taste vengeance!" },
+      "gfx": { "cast": 726 }
+    },
+    {
+      "id": "ice_barrage",
+      "name": "ICE BARRAGE",
+      "book": "Ancient",
+      "icon": 328,
+      "cooldown": 90.0,
+      "effect": {
+        "type": "bolt",
+        "range": 700.0,
+        "damage": 90.0,
+        "speed": 1100.0,
+        "visual": "ice_barrage",
+        "on_hit": [ { "type": "root", "duration": 1.5 } ]
+      },
+      "gfx": { "hold": 369 }
+    },
+    {
+      "id": "entangle",
+      "name": "ENTANGLE",
+      "book": "Standard",
+      "icon": 321,
+      "cooldown": 90.0,
+      "effect": {
+        "type": "nova",
+        "radius": 320.0,
+        "on_hit": [ { "type": "root", "duration": 1.25 } ]
+      },
+      "gfx": { "cast": 177, "hold": 177 }
+    },
+    {
+      "id": "tele_block",
+      "name": "TELE BLOCK",
+      "book": "Standard",
+      "icon": 352,
+      "cooldown": 90.0,
+      "effect": {
+        "type": "bolt",
+        "range": 700.0,
+        "damage": 0.0,
+        "speed": 1000.0,
+        "visual": "tele_block",
+        "on_hit": [
+          { "type": "no_mobility", "duration": 4.0 },
+          { "type": "heal_cut", "duration": 4.0 }
+        ]
+      },
+      "gfx": { "cast": 343 }
+    }
+  ]
+}

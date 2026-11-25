@@ -243,6 +243,10 @@ Put `keys.json` next to `main_file_cache.dat2`, or pass `--keys`.
 - **W**: blink/dash toward the cursor (8 s)
 - **E**: heal + shield (12 s)
 - **R**: meteor AoE at the cursor (45 s); King Awowogei starts **Trial by Combat** on an enemy champion (90 s)
+- **D / F**: battle spells, magic heroes only (Ancient Teleport, Heal Group,
+  Vengeance, Ice Barrage, Entangle, Tele Block; see `docs/SPELLS.md`)
+- **T**: teleport scroll, a 3 s channel to the allied structure nearest the
+  cursor or minimap point (every hero, 80 s)
 - **B**: toggle the Fountain Shop
 - **Click a category**: filter shop items
 - **Click an item card**: select it; use **Buy** or **Sell** in the detail pane
@@ -252,7 +256,7 @@ Put `keys.json` next to `main_file_cache.dat2`, or pass `--keys`.
 - **Z / X**: rotate camera
 - **Space**: recenter/follow
 - `Ctrl` + wheel: zoom (plain wheel is ignored to avoid accidental zoom)
-- `F`: toggle camera follow
+- `Y`: toggle camera follow
 - `Esc`: close the shop, or quit
 
 ## Design north star

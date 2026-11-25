@@ -577,6 +577,44 @@ pub const LOOKS: &[ProjectileLook] = &[
         light_radius: 300.0,
         ..ProjectileLook::base("tongue")
     },
+    // Ice Barrage battle spell: the Ice Blitz flecks (368) in a pale
+    // frost glow; the target's ice block (369) is played by the spell.
+    ProjectileLook {
+        spotanim: Some(368),
+        model_scale: 1.2,
+        glow: [190, 235, 255],
+        glow_size: 70.0,
+        glow_intensity: 1.2,
+        trail: [140, 200, 255],
+        trail_width: 26.0,
+        trail_points: 10,
+        embers: 40.0,
+        ember_color: [230, 248, 255],
+        impact_radius: 150.0,
+        impact_sparks: 14,
+        impact_color: [190, 235, 255],
+        light: [0.6, 0.85, 1.0],
+        light_radius: 380.0,
+        ..ProjectileLook::base("ice_barrage")
+    },
+    // Tele Block battle spell: the dark streaks (344) landing in purple
+    // flecks (345); the target holds the purple bars (342).
+    ProjectileLook {
+        spotanim: Some(344),
+        hit_spotanim: Some(345),
+        glow: [170, 110, 255],
+        glow_size: 56.0,
+        glow_intensity: 1.0,
+        trail: [110, 60, 200],
+        trail_width: 20.0,
+        trail_points: 10,
+        impact_radius: 140.0,
+        impact_sparks: 12,
+        impact_color: [190, 140, 255],
+        light: [0.6, 0.4, 1.0],
+        light_radius: 320.0,
+        ..ProjectileLook::base("tele_block")
+    },
 ];
 
 /// Resolve a look by name. Unknown names fall back to the default orb so a

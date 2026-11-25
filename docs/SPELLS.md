@@ -151,6 +151,31 @@ The lane call pre-fills the two slots:
 
 Camera follow moves from F to Y to free F.
 
+### How it is built
+
+- `data/spells/battle_spells.json` holds the spells. Each has an `effect`
+  (`blink`, `heal_group`, `vengeance`, `bolt` or `nova`), a cooldown, an
+  OSRS spellbook icon sprite and a `gfx` block like a kit action's. Bolt and
+  nova effects carry ordinary kit statuses (`on_hit`). The client also
+  builds the file in, so a missing copy never empties the book.
+- `crate::spells` is pure and tested: loadouts, refusals, targeting,
+  Vengeance. `animated/battle.rs` runs them for any caster, so bots cast the
+  same spells as the player. The kit runtime is player-only, which is why
+  battle spells don't run through it.
+- Tele Block is a new status, `no_mobility`. It stops kit dashes and blinks,
+  refuses the teleport scroll, and breaks a scroll being read. Its held
+  graphic is 342.
+- Bolts are homing projectiles with two new looks: `ice_barrage` (368) and
+  `tele_block` (344, landing 345). They pick the enemy hero nearest the cursor
+  within range, and within 450 of the cursor.
+- Vengeance fires on the first damage from an enemy hero. It sends the share
+  back as pure damage, and that damage can't set off another Vengeance.
+- Icons are cache sprites: 341 Ancient Teleport, 565 Heal Group,
+  564 Vengeance, 328 Ice Barrage, 321 Entangle, 352 Tele Block. They are
+  baked as `icon.spell.<id>` for both HUDs.
+- Hovering D, F or T in the assembled interface explains the spell or the
+  scroll. Non-magic heroes see greyed D and F slots ("Magic heroes only").
+
 ### First wave
 
 | Spell | Book | Effect | Cooldown | Graphics |

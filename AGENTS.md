@@ -316,7 +316,12 @@ Cache location: `.cache/osrs-235/cache` by default. Pass `--cache` and
   HUD is rendered after post so text/icons stay crisp.
 - LZMA groups are implemented but not exercised by the pinned cache.
 - Config archives use real file IDs from the reference table; keep it that way.
-- The viewer follows the player by default. Arrow keys pan; `F` toggles follow.
+- The viewer follows the player by default. Arrow keys pan; `Y` toggles follow
+  (`F` is the second battle spell, `D` the first, `T` the teleport scroll).
+- Battle spells are for MAGIC-class heroes only; every hero carries the
+  teleport scroll (ADR-056, docs/SPELLS.md). Battle spells run for any caster
+  in `animated/battle.rs` (player and bots); keep them out of the
+  player-only kit runtime.
 - Use ASCII in window/UI strings until fonts are wired.
 - 117HD Core is still a 3x3 region block; the distant ground plane and fog hide
   the edge from the default camera, but low pitch views still show the block

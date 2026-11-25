@@ -283,6 +283,24 @@ impl AnimatedScene {
         if self.units[index].health <= 0.0 {
             return;
         }
+        self.land_statuses(index, statuses, from, gfx, splashed, pi);
+    }
+
+    /// After a hit's damage: its `hit` graphic (a splash instead when a
+    /// shield soaked it), its statuses from `caster`, and a held graphic for
+    /// as long as its crowd control lasts. Kits and battle spells share it.
+    pub(super) fn land_statuses(
+        &mut self,
+        index: usize,
+        statuses: &[Status],
+        from: Vec3,
+        gfx: &Gfx,
+        splashed: bool,
+        caster: usize,
+    ) {
+        if self.units[index].health <= 0.0 {
+            return;
+        }
         let size = gfx.scale * self.gfx_size(index);
         if splashed {
             self.gfx_on(kit::spot::SPLASH, index, size);
@@ -290,7 +308,7 @@ impl AnimatedScene {
             self.gfx_on(id, index, size);
         }
         for status in statuses {
-            self.apply_status(index, status, from);
+            self.apply_status_from(index, status, from, caster);
         }
         if self.units[index].kind.is_structure() {
             return;
@@ -308,14 +326,21 @@ impl AnimatedScene {
 
     /// Spell graphics are authored for a player-sized body; bigger units
     /// (camps, bosses) get somewhat bigger ones, short of hiding them.
-    fn gfx_size(&self, index: usize) -> f32 {
+    pub(super) fn gfx_size(&self, index: usize) -> f32 {
         (self.units[index].body_radius / 65.0)
             .sqrt()
             .clamp(0.8, 1.6)
     }
 
-    pub(super) fn apply_status(&mut self, index: usize, status: &Status, from: Vec3) {
-        let pi = self.player_index;
+    /// A status from `caster` (who a taunt makes the target attack).
+    pub(super) fn apply_status_from(
+        &mut self,
+        index: usize,
+        status: &Status,
+        from: Vec3,
+        caster: usize,
+    ) {
+        let pi = caster;
         let structure = self.units[index].kind.is_structure();
         let unit = &mut self.units[index];
         match *status {
@@ -357,6 +382,9 @@ impl AnimatedScene {
                 }
             }
             Status::Root { duration } => unit.cc.root_timer = unit.cc.root_timer.max(duration),
+            Status::NoMobility { duration } => {
+                unit.cc.no_mobility_timer = unit.cc.no_mobility_timer.max(duration);
+            }
             Status::Stun { duration } => unit.stun_timer = unit.stun_timer.max(duration),
             Status::Knockup { duration } => {
                 unit.stun_timer = unit.stun_timer.max(duration);
@@ -437,11 +465,17 @@ impl AnimatedScene {
         let pi = self.player_index;
         {
             let player = &self.units[pi];
+            // Tele Block grounds abilities that dash.
+            let dashes = ability
+                .actions
+                .iter()
+                .any(|action| matches!(action, Action::Dash { .. }));
             if player.health <= 0.0
                 || player.stun_timer > 0.0
                 || player.mana < ability.cost
                 || self.kit_rt.dash.is_some()
                 || self.kit_rt.channel.is_some()
+                || (dashes && player.cc.no_mobility_timer > 0.0)
             {
                 return false;
             }

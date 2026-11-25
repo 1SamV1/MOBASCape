@@ -21,6 +21,7 @@ mod portraits;
 mod renderer;
 mod scene;
 mod scroll;
+mod spells;
 mod spotlight;
 mod stone;
 mod terrain_textures;
@@ -177,6 +178,15 @@ struct Cli {
     /// second in, logging the channel and the arrival.
     #[arg(long)]
     demo_scroll: bool,
+    /// Battle spells for a magic hero, D then F, by id (comma separated,
+    /// for example `ice_barrage,vengeance`). Without it the lane call's
+    /// defaults are used. Ignored for non-magic heroes.
+    #[arg(long, value_delimiter = ',')]
+    spells: Vec<String>,
+    /// Demo: cast D one second in and F at three seconds, at the nearest
+    /// enemy hero (pair with `--demo-duel`), logging each cast.
+    #[arg(long)]
+    demo_spells: bool,
     /// Demo: stand beside a jungle camp and basic-attack it, to check
     /// attack animations, reach and projectiles.
     #[arg(long)]
@@ -382,14 +392,14 @@ fn main() -> Result<()> {
         phase.elapsed().as_secs_f32() * 1000.0
     );
     let phase = Instant::now();
-    let animated = AnimatedScene::new(&cache, &scene, &champion)?;
+    let mut animated = AnimatedScene::new(&cache, &scene, &champion)?;
+    App::give_player_spells(&mut animated, &champion.class, &cli.spells, None);
     tracing::info!(
         "startup: animated scene {:.0} ms",
         phase.elapsed().as_secs_f32() * 1000.0
     );
     let height = scene.height.clone();
     let collision = scene.collision.clone();
-    let mut animated = animated;
     if let Some(spawn) = cli.spawn.as_ref().filter(|v| v.len() == 2) {
         let x = (spawn[0] + 0.5) * 128.0;
         let z = (spawn[1] + 0.5) * 128.0;
@@ -494,6 +504,18 @@ fn main() -> Result<()> {
             }
         }
     }
+    // The battle spells' OSRS spellbook icons, for the D and F slots and
+    // the hero select picker.
+    let spell_icons: Vec<(String, u32)> = spells::SpellBook::load()
+        .spells
+        .iter()
+        .map(|spell| (spells::icon_role(&spell.id), spell.icon))
+        .collect();
+    for (key, sprite) in &spell_icons {
+        if let Err(err) = ui_atlas.add_cache_ui_sprite(&cache, *sprite, key) {
+            tracing::warn!("spell icon {key} ({sprite}): {err:#}");
+        }
+    }
     let mut live_portrait = None;
     if hero_select_open {
         for champion in &champions {
@@ -554,6 +576,7 @@ fn main() -> Result<()> {
                     )
                 })
         })
+        .chain(spell_icons.iter().cloned())
         .collect();
     let live_theme_inputs = cli.ui_live.then(|| LiveThemeInputs {
         path: cli.ui_theme.clone(),
@@ -687,6 +710,12 @@ fn main() -> Result<()> {
         demo_gfx_timer: 0.0,
         demo_gfx_loaded: false,
         demo_scroll: cli.demo_scroll.then_some(0.5),
+        demo_spells: if cli.demo_spells {
+            vec![(1.0, 0), (3.0, 1)]
+        } else {
+            Vec::new()
+        },
+        spell_choice: cli.spells.clone(),
         demo_attack: cli.demo_attack,
         demo_attack_stage: 0,
         demo_ranks: cli.demo_ranks,
@@ -857,6 +886,11 @@ struct App {
     demo_gfx: Vec<u32>,
     /// Seconds until `--demo-scroll` reads the scroll.
     demo_scroll: Option<f32>,
+    /// `--demo-spells`: (seconds left, slot) casts still to make.
+    demo_spells: Vec<(f32, usize)>,
+    /// `--spells`: the player's battle spells by id, D then F (empty for
+    /// the lane call's defaults).
+    spell_choice: Vec<String>,
     /// Seconds until the `--demo-gfx` grid plays again.
     demo_gfx_timer: f32,
     demo_gfx_loaded: bool,
@@ -1326,9 +1360,13 @@ impl ApplicationHandler for App {
                         self.cycle_spectator(1);
                     } else if self.spectator.is_some() {
                         // Spectator is view-only: gameplay keys stay asleep.
-                    } else if code == KeyCode::KeyF {
+                    } else if code == KeyCode::KeyY {
                         self.follow = !self.follow;
                         println!("follow={}", self.follow);
+                    } else if code == KeyCode::KeyD {
+                        self.cast_spell(0);
+                    } else if code == KeyCode::KeyF {
+                        self.cast_spell(1);
                     } else if code == KeyCode::KeyQ {
                         self.cast_q();
                     } else if code == KeyCode::KeyW {
@@ -2052,6 +2090,25 @@ impl App {
                     self.demo_watchtower = false;
                 }
             }
+            for (timer, _) in &mut self.demo_spells {
+                *timer -= dt;
+            }
+            let due: Vec<usize> = self
+                .demo_spells
+                .iter()
+                .filter(|(timer, _)| *timer <= 0.0)
+                .map(|&(_, slot)| slot)
+                .collect();
+            self.demo_spells.retain(|(timer, _)| *timer > 0.0);
+            for slot in due {
+                let player = animated.player_index;
+                let aim = animated
+                    .nearest_enemy_hero(player)
+                    .and_then(|enemy| animated.unit_pos(enemy))
+                    .unwrap_or(animated.player_pos() + Vec3::new(300.0, 0.0, 0.0));
+                let result = animated.cast_player_spell(slot, aim, collision, height);
+                tracing::info!("demo spells: slot {slot} {result:?}");
+            }
             if let Some(timer) = self.demo_scroll.as_mut() {
                 *timer -= dt;
                 if *timer <= 0.0 {
@@ -2693,7 +2750,17 @@ impl App {
             };
             let (scroll_cooldown, scroll_max, scroll_channel) = animated.player_scroll();
             let player_hud = PlayerHud {
-                spells: Default::default(),
+                spells: animated.player_spells().map(|spell| match spell {
+                    Some(spell) => crate::hud::SpellHud {
+                        icon: Some(spells::icon_role(&spell.id)),
+                        item_icon: None,
+                        cooldown: spell.cooldown,
+                        max_cooldown: spell.max,
+                        channel: None,
+                        usable: true,
+                    },
+                    None => crate::hud::SpellHud::default(),
+                }),
                 scroll: crate::hud::SpellHud {
                     icon: Some(format!("icon.item.{}", crate::scroll::ICON_KEY)),
                     item_icon: Some(crate::scroll::ICON_KEY.to_string()),
@@ -3318,6 +3385,8 @@ impl App {
         let builds = bot_builds(&self.shop, &lineup);
         let count = animated.spawn_bots(&self.cache, &lineup, &builds, &scene.height);
         tracing::info!("bots: {count} bot heroes in the match");
+        let lane = blue_lanes.first().copied().flatten();
+        Self::give_player_spells(&mut animated, &champion.class, &self.spell_choice, lane);
 
         self.audio.preload(&self.cache, animated.sound_ids());
         self.animated = Some(animated);
@@ -3812,9 +3881,40 @@ impl App {
         println!("Q cast={cast}");
     }
 
-    /// D and F: the hero's battle spells (magic heroes only).
+    /// D and F: the hero's battle spells (magic heroes only), aimed at the
+    /// ground under the cursor.
     fn cast_spell(&mut self, slot: usize) {
-        tracing::info!("battle spell {slot}: none picked");
+        let (Some(renderer), Some(height), Some(collision), Some(animated)) = (
+            self.renderer.as_ref(),
+            self.height.as_ref(),
+            self.collision.as_ref(),
+            self.animated.as_mut(),
+        ) else {
+            return;
+        };
+        let aim = renderer
+            .pick_ground(self.mouse_pos.0, self.mouse_pos.1, height)
+            .unwrap_or(animated.player_pos());
+        match animated.cast_player_spell(slot, aim, collision, height) {
+            Ok(()) => println!("{} cast", ["D", "F"][slot.min(1)]),
+            Err(refusal) => tracing::info!("battle spell {slot}: {refusal:?}"),
+        }
+    }
+
+    /// The player's battle spells for a new match: `--spells` when given,
+    /// else the lane call's pair. Non-magic heroes get none.
+    fn give_player_spells(
+        animated: &mut AnimatedScene,
+        class: &str,
+        choice: &[String],
+        lane: Option<hero_select::Lane>,
+    ) {
+        let player = animated.player_index;
+        if choice.is_empty() {
+            animated.set_spells(player, class, &spells::lane_defaults(lane));
+        } else {
+            animated.set_spells(player, class, choice);
+        }
     }
 
     /// T: the teleport scroll, toward the allied structure nearest the
@@ -4143,6 +4243,17 @@ fn draw_ui_overlay(
             let anchor = (area.x + (92 + slot as i32 * 42 + 20) * scale, area.y);
             state.ability_tooltip = crate::ui_live::ability_tooltip(animated, slot, anchor);
         }
+        // Hovering D, F or T explains the spell or the scroll.
+        if live
+            && state.death.is_none()
+            && state.tooltip.is_none()
+            && let (Some(animated), Some(area)) =
+                (animated, placed.get(rift_ui::hud::Piece::Ability))
+            && let Some(slot) =
+                rift_ui::hud::ability_bar::spell_at(area, placed.scale as i32, mouse)
+        {
+            state.tooltip = crate::ui_live::spell_tooltip(animated, slot, mouse);
+        }
         let detail = format!(
             "requested {:?}, drawn {}, usual {:.1}%, steps {:?}, conflicts {:?}",
             placed.requested,
@@ -4307,7 +4418,7 @@ fn bot_lineup(
     blue: &[usize],
     red: &[usize],
     lanes: (&[Option<hero_select::Lane>], &[Option<hero_select::Lane>]),
-) -> Vec<(ChampionConfig, u8, animated::bots::BotRole)> {
+) -> Vec<animated::bots::BotPick> {
     let mut out = Vec::new();
     let blue_calls = lanes.0.get(1..).unwrap_or(&[]);
     for (team, picks, calls) in [
@@ -4316,14 +4427,14 @@ fn bot_lineup(
     ] {
         let roles = animated::bots::roles_for(team, picks.len());
         for (row, (&pick, fallback)) in picks.iter().zip(roles).enumerate() {
-            let role = calls
-                .get(row)
-                .copied()
-                .flatten()
-                .map(hero_select::Lane::bot_role)
-                .unwrap_or(fallback);
+            let call = calls.get(row).copied().flatten();
+            let role = call.map(hero_select::Lane::bot_role).unwrap_or(fallback);
+            // A magic bot takes its lane's default battle spells; a row with
+            // no call that plays mid counts as the mid call.
+            let lane = call
+                .or((role == animated::bots::BotRole::Lane(1)).then_some(hero_select::Lane::Mid));
             if let Some(champion) = champions.get(pick) {
-                out.push((champion.clone(), team, role));
+                out.push((champion.clone(), team, role, lane));
             }
         }
     }
@@ -4331,13 +4442,10 @@ fn bot_lineup(
 }
 
 /// Each bot's item build, from the shop's recommended lists.
-fn bot_builds(
-    shop: &ItemShop,
-    lineup: &[(ChampionConfig, u8, animated::bots::BotRole)],
-) -> Vec<Vec<items::ItemConfig>> {
+fn bot_builds(shop: &ItemShop, lineup: &[animated::bots::BotPick]) -> Vec<Vec<items::ItemConfig>> {
     lineup
         .iter()
-        .map(|(c, _, _)| shop.build_for(&c.id, &c.role, &c.class))
+        .map(|(c, ..)| shop.build_for(&c.id, &c.role, &c.class))
         .collect()
 }
 
@@ -4377,7 +4485,7 @@ mod tests {
             .collect();
         let red_calls = hero_select::RED_LANES.map(Some);
         let lineup = bot_lineup(&champions, &blue, &red, (&blue_calls, &red_calls));
-        let roles: Vec<(u8, BotRole)> = lineup.iter().map(|(_, t, r)| (*t, *r)).collect();
+        let roles: Vec<(u8, BotRole)> = lineup.iter().map(|(_, t, r, _)| (*t, *r)).collect();
         assert_eq!(
             &roles[..4],
             &[
@@ -4393,7 +4501,7 @@ mod tests {
         );
         // A row with no call falls back to its draft-order role.
         let lineup = bot_lineup(&champions, &blue, &red, (&[], &[]));
-        let fallback: Vec<BotRole> = lineup.iter().skip(4).map(|(_, _, r)| *r).collect();
+        let fallback: Vec<BotRole> = lineup.iter().skip(4).map(|(_, _, r, _)| *r).collect();
         assert_eq!(fallback, animated::bots::roles_for(1, 5));
     }
 }

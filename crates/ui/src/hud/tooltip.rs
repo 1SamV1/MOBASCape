@@ -68,15 +68,18 @@ pub fn draw(theme: &Theme, list: &mut DrawList, tooltip: &TooltipState) {
     if let Some(font) = title_font {
         let baseline = area.y + (cursor + font.ascent) * s;
         list.text(font, &tooltip.title, x, baseline, yellow);
-        let price = tooltip.price.to_string();
-        let width = font.width(&price) * s;
-        list.text(
-            font,
-            &price,
-            area.right() - PADDING * s - width,
-            baseline,
-            yellow,
-        );
+        // Spells and the scroll cost nothing; only items show a price.
+        if tooltip.price > 0 {
+            let price = tooltip.price.to_string();
+            let width = font.width(&price) * s;
+            list.text(
+                font,
+                &price,
+                area.right() - PADDING * s - width,
+                baseline,
+                yellow,
+            );
+        }
     }
     cursor += m.title_lh;
 

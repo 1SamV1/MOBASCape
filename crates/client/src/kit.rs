@@ -103,8 +103,10 @@ pub mod spot {
     pub const SPLASH: u32 = 85;
     /// The Ice Barrage block around a frozen unit (three chills).
     pub const ICE_BLOCK: u32 = 369;
+    /// Purple bars over a tele blocked unit.
+    pub const TELE_BLOCK: u32 = 342;
     /// Every graphic above.
-    pub const ALL: [u32; 3] = [STUN, SPLASH, ICE_BLOCK];
+    pub const ALL: [u32; 4] = [STUN, SPLASH, ICE_BLOCK, TELE_BLOCK];
 
     /// Spot animations someone has watched play and named in
     /// docs/SPELLS.md. Kits may only use these, so a typo cannot ship a
@@ -440,6 +442,11 @@ pub enum Status {
         pct: f32,
         duration: f32,
     },
+    /// Tele Block: no dashes, blinks or teleport scroll for `duration`, and
+    /// a scroll being read breaks.
+    NoMobility {
+        duration: f32,
+    },
 }
 
 impl Status {
@@ -454,6 +461,7 @@ impl Status {
             Status::Root { duration } | Status::Fear { duration } | Status::Taunt { duration } => {
                 Some((None, duration))
             }
+            Status::NoMobility { duration } => Some((Some(spot::TELE_BLOCK), duration)),
             _ => None,
         }
     }
@@ -513,6 +521,8 @@ pub struct Afflictions {
     pub chill_stacks: u32,
     pub chill_timer: f32,
     pub heal_cut_timer: f32,
+    /// Tele Block: no dashes, blinks or scroll.
+    pub no_mobility_timer: f32,
     /// Forced movement (knockback or pull), world units per second.
     pub displace: glam::Vec3,
     pub displace_timer: f32,
@@ -543,6 +553,7 @@ impl Afflictions {
         self.fear_timer = (self.fear_timer - dt).max(0.0);
         self.taunt_timer = (self.taunt_timer - dt).max(0.0);
         self.heal_cut_timer = (self.heal_cut_timer - dt).max(0.0);
+        self.no_mobility_timer = (self.no_mobility_timer - dt).max(0.0);
         self.lift_timer = (self.lift_timer - dt).max(0.0);
         self.chill_timer = (self.chill_timer - dt).max(0.0);
         if self.chill_timer <= 0.0 {
@@ -674,10 +685,11 @@ fn pct(share: f32) -> String {
     format!("{:.0}", share * 100.0)
 }
 
-/// Seconds without a trailing ".0": 2.5 -> "2.5", 6.0 -> "6".
+/// Seconds without trailing zeros: 2.5 -> "2.5", 6.0 -> "6", 1.25 ->
+/// "1.25".
 fn secs(seconds: f32) -> String {
-    let text = format!("{seconds:.1}");
-    text.strip_suffix(".0").unwrap_or(&text).to_string()
+    let text = format!("{seconds:.2}");
+    text.trim_end_matches('0').trim_end_matches('.').to_string()
 }
 
 fn ordinal(n: u32) -> String {
@@ -733,6 +745,12 @@ impl Status {
             Status::CurrentHealth { pct: p } => format!("deal {}% of current health", pct(*p)),
             Status::Chill { pct: p, duration } => {
                 format!("chill, slowing by {}% for {} s", pct(*p), secs(*duration))
+            }
+            Status::NoMobility { duration } => {
+                format!(
+                    "block dashes, blinks and teleports for {} s",
+                    secs(*duration)
+                )
             }
         }
     }

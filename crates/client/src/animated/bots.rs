@@ -65,6 +65,14 @@ const REPATH: f32 = 1.0;
 /// teleport scroll instead of the walk.
 const SCROLL_WALK: f32 = 4500.0;
 
+/// One drafted bot: its champion, team, role and lane call.
+pub type BotPick = (
+    ChampionConfig,
+    u8,
+    BotRole,
+    Option<crate::hero_select::Lane>,
+);
+
 /// What a bot is assigned to in the draft.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BotRole {
@@ -178,17 +186,18 @@ impl AnimatedScene {
         }
     }
 
-    /// Spawn the draft's bots: `(champion, team, role)` each, with the item
-    /// build their class buys. Returns how many spawned.
+    /// Spawn the draft's bots: `(champion, team, role, lane call)` each,
+    /// with the item build their class buys and, for magic heroes, the
+    /// lane call's battle spells. Returns how many spawned.
     pub fn spawn_bots(
         &mut self,
         cache: &Cache,
-        bots: &[(ChampionConfig, u8, BotRole)],
+        bots: &[BotPick],
         builds: &[Vec<ItemConfig>],
         height: &HeightGrid,
     ) -> usize {
         let mut spawned = 0;
-        for (n, (champion, team, role)) in bots.iter().enumerate() {
+        for (n, (champion, team, role, lane)) in bots.iter().enumerate() {
             let home = self.team_home(*team);
             // A loose ring around the fountain so they do not stack.
             let angle = n as f32 * 1.3;
@@ -202,6 +211,7 @@ impl AnimatedScene {
                 }
             };
             self.units[index].home = home;
+            self.set_spells(index, &champion.class, &crate::spells::lane_defaults(*lane));
             let mode = match role {
                 BotRole::Jungle => BotMode::Jungle,
                 BotRole::Lane(_) => BotMode::Lane,
@@ -234,6 +244,15 @@ impl AnimatedScene {
             spawned += 1;
         }
         spawned
+    }
+
+    /// Drop a bot's planned walk after it was moved (a blink), so it plans
+    /// again from where it stands.
+    pub(super) fn bot_forget_path(&mut self, unit: usize) {
+        if let Some(bot) = self.bots.iter_mut().find(|bot| bot.unit == unit) {
+            bot.path.clear();
+            bot.repath = 0.0;
+        }
     }
 
     /// The brain driving `unit`, if it is a bot.

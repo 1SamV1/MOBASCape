@@ -895,6 +895,57 @@ pub fn ability_ranks(state: &mut AbilityState, animated: &AnimatedScene) {
     state.time = animated.hud_time;
 }
 
+/// The tooltip for a hovered battle spell (0 for D, 1 for F) or the
+/// teleport scroll (2, T).
+pub fn spell_tooltip(
+    animated: &AnimatedScene,
+    slot: usize,
+    mouse: (i32, i32),
+) -> Option<TooltipState> {
+    if slot >= 2 {
+        let scroll = &animated.scroll_config;
+        return Some(TooltipState {
+            title: title_case(&scroll.name),
+            price: 0,
+            stats: vec![
+                "Hotkey T".to_string(),
+                format!("Channel {:.0} s", scroll.channel),
+                format!("Cooldown {:.0} s", scroll.cooldown),
+            ],
+            passive: None,
+            text: "Arrive beside the allied tower, inhibitor or nexus nearest the cursor \
+                   or minimap point. Crowd control and Tele Block break the channel; \
+                   moving or casting cancels it."
+                .to_string(),
+            at: mouse,
+        });
+    }
+    let key = ["D", "F"][slot];
+    let player = animated.units.get(animated.player_index)?;
+    let Some(spell) = player.spells.picks[slot].and_then(|n| animated.spell_book.get(n)) else {
+        return Some(TooltipState {
+            title: "Battle spell".to_string(),
+            price: 0,
+            stats: vec![format!("Hotkey {key}")],
+            passive: None,
+            text: "Magic heroes only.".to_string(),
+            at: mouse,
+        });
+    };
+    Some(TooltipState {
+        title: title_case(&spell.name),
+        price: 0,
+        stats: vec![
+            format!("Hotkey {key}"),
+            format!("Cooldown {:.0} s", spell.cooldown),
+            format!("{} spellbook", spell.book),
+        ],
+        passive: None,
+        text: spell.describe(),
+        at: mouse,
+    })
+}
+
 /// The tooltip for a hovered ability slot.
 pub fn ability_tooltip(
     animated: &AnimatedScene,
