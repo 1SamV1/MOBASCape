@@ -147,70 +147,74 @@ def logo(y, word):
 
 
 # ============================================================================
-import math
+import colorsys
 
-VIOLET = (190, 140, 255)
 GOLD = (255, 210, 90)
 ICE = (170, 230, 255)
+STONE = (206, 192, 156)
+STONE_DIM = (128, 116, 92)
+ORANGE = (255, 152, 31)
+CHROME = [WHITE, (214, 255, 222), (120, 196, 140), (0, 128, 36), (0, 205, 64), (176, 255, 196)]
 
 
-def jump_logo(y, word, streak_x0):
-    """Motion-blur logo mid-dash: solid letters whose strokes smear to ▓
-    on their trailing edge, ▒ and ░ afterimages three and six cells
-    behind, and speed streaks running back from every row in ░▒═━."""
+def construct_logo(y, word):
+    """Split-chrome logo standing in the Construct's white room: a light
+    top, a dark band, a bright lip, a one-pixel slit cut through the fourth
+    row, and the floor's reflection of the bottom two rows underneath."""
     width = len(word) * 10 - 1
-    x0 = (W - width) // 2 + 4
-    clear(streak_x0, y - 1, x0 + width + 2, y + LOGO_ROWS)
-    cells = set()
+    x0 = (W - width) // 2
+    clear(x0 - 2, y, x0 + width + 2, y + LOGO_ROWS + 1)
     for i, letter in enumerate(word):
         for r in range(LOGO_ROWS):
             for c, px in enumerate(LOGO[letter][r]):
-                if px != " ":
-                    cells.add((x0 + i * 10 + c, y + r))
-    # Speed streaks: from each row's leftmost cell back to streak_x0.
-    for r in range(LOGO_ROWS):
-        row = [x for (x, yy) in cells if yy == y + r]
-        if not row:
-            continue
-        left = min(row)
-        for x in range(streak_x0, left - 1):
-            f = (x - streak_x0) / max(1, left - 1 - streak_x0)
-            if (x + r * 3) % 7 == 0 and f < 0.5:
-                continue
-            ch = "░" if f < 0.3 else "▒" if f < 0.55 else "═" if f < 0.85 else "━"
-            col = (0, int(50 + 150 * f), int(15 + 50 * f))
-            put(x, y + r, ch, col)
-    # Afterimages three and six cells behind, only on empty ground.
-    for (back, ch, col) in ((6, "░", (0, 60, 18)), (3, "▒", (0, 105, 30))):
-        for (x, yy) in cells:
-            tx = x - back
-            inside = x0 <= tx < x0 + width and (tx - x0) % 10 != 9
-            if (tx, yy) not in cells and not inside:
-                put(tx, yy, ch, col)
-    # Face: solid, with each stroke's trailing (left) edge smeared to ▓.
-    for (x, yy) in cells:
-        px = LOGO[word[(x - x0) // 10]][yy - y][(x - x0) % 10]
-        trailing = (x - 1, yy) not in cells and px not in "▀▄"
-        put(x, yy, "▓" if trailing else (px if px in "▀▄" else "█"), LOGO_GRAD[yy - y])
+                if px == " ":
+                    continue
+                x = x0 + i * 10 + c
+                # The slit: full blocks on row 3 keep only their lower half.
+                ch = "▄" if (r == 3 and px == "█") else px
+                put(x, y + r, ch, CHROME[r])
+                # The floor: rows 5 and 4 mirrored, fading out.
+                if r in (5, 4):
+                    ry = y + LOGO_ROWS + (5 - r)
+                    put(x, ry, "▒" if r == 5 else "░", (70, 110, 82) if r == 5 else (38, 62, 46))
+    return x0, width
 
 
-jump_logo(3, "MOBASCAPE", 3)
-# A comet over the logo's right shoulder.
-for i, (ch, col) in enumerate([("✈", WHITE), ("═", ICE), ("─", (90, 160, 200)), ("·", (50, 90, 120))]):
-    text(W - 12 + i * 2, 2, ch, col)
+def rack(x0, y0, rows, colour):
+    """A loading-program rack: three shelves of three-letter item codes."""
+    clear(x0 - 1, y0, x0 + 21, y0 + 6)
+    text(x0, y0, "╓───┬───┬───┬───┬───╖", ICE)
+    for k, items in enumerate(rows):
+        yy = y0 + 1 + k * 2
+        text(x0, yy, "║", ICE)
+        for j, item in enumerate(items):
+            text(x0 + 1 + j * 4, yy, item, colour if (j + k) % 2 == 0 else WHITE)
+            text(x0 + 4 + j * 4, yy, "│" if j < 4 else "║", ICE)
+        if k < len(rows) - 1:
+            text(x0, yy + 1, "╟───┼───┼───┼───┼───╢", (90, 150, 170))
+    text(x0, y0 + 6, "╙───┴───┴───┴───┴───╜", ICE)
+
+
+clear(2, 2, W - 3, 2)
+construct_logo(3, "MOBASCAPE")
+rack(5, 3, [["AGS", "DDS", "WHP", "TBW", "SCY"], ["GMA", "DCB", "KOD", "SNG", "BP "], ["RAP", "SPR", "ZCB", "MSB", "TRI"]], GOLD)
+rack(W - 26, 3, [["TRV", "BCP", "TAS", "PEG", "PRI"], ["FRY", "ANG", "TRT", "ROS", "ULT"], ["GLY", "MAG", "ETR", "FTO", "DPB"]], CYAN)
+text(5, 2, "▐ rACK 01 // wEAPONS ▌", DIM)
+text(W - 26, 2, "▐ rACK 02 // gEAR    ▌", DIM)
+center(2, "lOADING pROGRAM: cONSTRUCT  [▓▓▓▓▓▓▓▓▓▓] 100%", MID)
 fade_bar(1, 2, W - 3)
-center(10, "  ░▒▓  n O D E   1 1 :   t H E   j U M P   p R O G R A M   //   b O T S   d A S H   ,   b O T S   f L E E  ▓▒░  ", AMBER)
-center(11, "  " + elite("everybody falls the first time. callisto didn't. two kills.") + "  ", WHITE)
-fade_bar(12, 2, W - 3)
+center(11, "  ░▒▓  n O D E   1 2 :   t H E   c O N S T R U C T   //   l O A D   t H E   s T O N E ,   p A I N T   t H E   m A P  ▓▒░  ", AMBER)
+center(12, "  " + elite("this is the construct. it's our loading program. we loaded the grand exchange.") + "  ", WHITE)
+fade_bar(13, 2, W - 3)
 
 # --- release info -------------------------------------------------------------
 header(14, elite("release info"))
 clear(4, 15, W - 5, 18)
 info = [
-    ("rELEASE dATE", "2026-11-24", "cOMMIT", "4cbdf07  ->  sam/main"),
-    ("tYPE", "bOT dASHES + lEAPS", "tESTS", "411 pass // clippy clean"),
-    ("wAS", "CHARGES FIRED AS BOLTS", "nOW", "hurl, land, splash 170"),
-    ("wAS", "LEAPS CAST AS HEALS (!)", "nOW", "chase, or jump for home"),
+    ("rELEASE dATE", "2026-11-24", "cOMMIT", "c2237b4  ->  sam/main"),
+    ("tYPE", "fRONT eND + sHOP + mAP lOOK", "tESTS", "421 pass // clippy clean"),
+    ("wAS", "FLAT DARK PANELS, A TEXT-LIST SHOP", "nOW", "cache stone kit, grand exchange"),
+    ("wAS", "OLIVE HUE 73, BARK CONES, DEBUG TEXT", "nOW", "hue 86-100, trees in leaf, clean hud"),
 ]
 for i, (k1, v1, k2, v2) in enumerate(info):
     yy = 15 + i
@@ -219,95 +223,165 @@ for i, (k1, v1, k2, v2) in enumerate(info):
     text(76, yy, f"{k2:.<12}", DIM)
     text(89, yy, v2, HEAD)
 
-# --- left: the trajectory ------------------------------------------------------
-box(4, 20, 74, 45, elite("jump.prg // trajectory"))
-traj = [
-    "                                                                 ",
-    "   DASH  (damage)                 ✸ landing: splash 170          ",
-    "                   ╭──────────╮   ▼                              ",
-    "            ╭──────╯  1700/s  ╰────►  m  X  m                    ",
-    "   @ ░▒▓════╯                       ░▒▓█▓▒░                      ",
-    "   ▲ bot                         stops 110 short                 ",
-    "                                                                 ",
-    "   LEAP  (no damage)                                             ",
-    "                                        ▓▓                       ",
-    "   home ◄═════════════════════════╗     ▓▓ WALL                  ",
-    "    ▲         ╭───────────────╮   ║     ▓▓                       ",
-    "    │    ◄────╯   escape      ╰───@ ──► ▓▓ ✗ clamped at the      ",
-    "    │      hp < 30%, home > 1500  ▲     ▓▓   first unwalkable    ",
-    "    └─ fountain heal        retreating  ▓▓   tile (32u steps)    ",
-    "                                                                 ",
-    "   matched by verb in the NAME or first 3 words:                 ",
-    "   charge leap dash jump lunge pounce swing burrow               ",
-    "   rush dive teleport blink hop                                  ",
-    "                                                                 ",
-    "   'kalphite workers burst out and charge' -> stays a bolt       ",
-    "    (the verb is the workers', not the queen's)                  ",
+# --- left: the stone kit, loaded ----------------------------------------------
+box(4, 20, 74, 45, elite("construct.prg // the stone kit"))
+IW = 56  # the mock window's inner width
+LW, RW_ = 12, 13
+MW = IW - LW - RW_ - 2
+left_col = ["Categories", "►Recommend", " All", " Melee", " Ranged"]
+mid_col = [" Starter   ▣   ▣   ▣", " Core      ▣   ▣   ▣", " Upgrades  ▣ > ▣ > ▣",
+           " Recipes   ▣ + ▣ > ▣", "           ▣ owned (green)"]
+right_col = ["▣ Bronze sw", "  300 coins", "Builds into", " ▣ Iron sw", "[Buy][Sell]"]
+
+
+def wall(left, middle, right, fill="═"):
+    run = IW + 4 - len(left) - len(middle) - len(right)
+    half = run // 2
+    return " " + left + fill * half + middle + fill * (run - half) + right + " "
+
+
+def row(inner):
+    assert len(inner) <= IW, inner
+    return " ║ " + inner.ljust(IW) + " ║ "
+
+
+title = "G r a n d   E x c h a n g e"
+ge = [
+    wall("╔═[958]", "[954 x n]", "[959]═╗"),
+    row(title.center(IW - 4) + "[X]"),
+    row("┌" + "─" * (LW - 2) + "┐ ┌" + "─" * (MW - 2) + "┐ ┌" + "─" * (RW_ - 2) + "┐"),
 ]
-for i, line in enumerate(traj):
+for l, m, r in zip(left_col, mid_col, right_col):
+    ge.append(row("│" + l.ljust(LW - 2) + "│ │" + m.ljust(MW - 2) + "│ │" + r.ljust(RW_ - 2) + "│"))
+ge.append(row("└" + "─" * (LW - 2) + "┘ └" + "─" * (MW - 2) + "┘ └" + "─" * (RW_ - 2) + "┘"))
+bag = "Your items  ▣210 ▣210 ▣245 ▣385"
+ge.append(row(bag + "[Undo]  $ 6521".rjust(IW - len(bag))))
+ge.append(wall("╚═[960]", "[956 x n]", "[961]═╝"))
+assert len({len(line) for line in ge}) == 1, [len(line) for line in ge]
+legend = [
+    "",
+    " tile 297 ░ under all    inset: 962/967 + 972-975 at 62%",
+    " buttons 293/294 notched   parchment 1017   slot 1077",
+    " fonts p11 494  p12 495  b12 496  q8 497   one kit, two UIs",
+    "",
+    " hero select: title bar + leave, both team columns, role",
+    " tabs, best-fit roster with PICKED, 3d spotlight kept",
+    " main menu:   the same stone tablet, notched buttons",
+    "",
+    " click a bag slot -> select it -> sell. undo refunds.",
+]
+for i, line in enumerate(ge + legend):
+    assert len(line) <= 68, (len(line), line)
     for j, ch in enumerate(line):
         if ch == " ":
             continue
-        if ch in "╭╮╯╰─═╗║►◄":
-            col = ICE
-        elif ch in "░▒▓█":
-            col = (110, 80, 60) if "WALL" in line or (i in (8, 10, 11, 12, 13) and 38 <= j <= 42) else (120, 200, 255)
-        elif ch in "✸✗X":
-            col = RED
-        elif ch == "@":
-            col = WHITE
-        elif ch == "m":
-            col = (255, 140, 120)
-        elif line.strip().startswith(("DASH", "LEAP")) and j < 10:
-            col = GOLD
-        elif i >= 15:
-            col = MID if i < 19 else DIM
+        if i < len(ge):
+            if ch in "╔╗╚╝═║":
+                col = STONE
+            elif ch in "┌┐└┘─│":
+                col = STONE_DIM
+            elif ch == "▣":
+                col = GOLD
+            elif ch in "><+":
+                col = ORANGE
+            elif ch.isdigit() or ch == "$":
+                col = (120, 255, 120) if i == len(ge) - 2 and j < 40 else AMBER
+            elif i == 1 and ch != "X":
+                col = ORANGE
+            elif "[" in line[max(0, j - 6):j + 1] and ch.isdigit():
+                col = DIM
+            else:
+                col = HEAD if i in (1, len(ge) - 2) else MID
+            if i in (0, len(ge) - 1) and (ch.isdigit() or ch in "[]xn"):
+                col = DIM
         else:
-            col = HEAD
+            col = DIM if ch in "░" else (MID if i - len(ge) < 4 else HEAD)
+            if ch.isdigit():
+                col = AMBER
         put(6 + j, 22 + i, ch, col)
 
-# --- right: who moves ---------------------------------------------------------
-box(76, 20, W - 5, 45, elite("movers.dat // the roster in flight"))
-movers = [
-    ("DASH", "Callisto", "W", "CHARGE", "800"),
-    ("DASH", "General Graardor", "R", "BANDOS' WRATH", "900"),
-    ("DASH", "K'ril Tsutsaroth", "W", "DEMONIC CHARGE", "650"),
-    ("DASH", "Venenatis", "W", "POUNCE", "700"),
-    ("DASH", "Commander Zilyana", "W", "BLESSED DASH", "480"),
-    ("LEAP", "JalRek-Jad", "W", "TELEPORT", "640"),
-    ("LEAP", "Kree'arra Jr.", "W", "KREE'S LEAP", "896"),
-    ("LEAP", "King Awowogei", "W", "VINE SWING", "900"),
-    ("LEAP", "Blowpipe Ranger", "E", "RANGER'S FOOTWORK", "512"),
+# --- right: the grade, measured -------------------------------------------------
+box(76, 20, W - 5, 45, elite("grade.dat // measured, not guessed"))
+RX = 79
+text(RX, 22, "HUE OF LIT GRASS", HEAD)
+ruler_x = RX + 20
+HUE_LO, HUE_HI, RW = 60, 140, 32
+for hue in range(HUE_LO, HUE_HI + 1, 20):
+    x = ruler_x + (hue - HUE_LO) * RW // (HUE_HI - HUE_LO)
+    label = str(hue)
+    text(x - (len(label) - 1) // 2, 22, label, DIM)
+text(ruler_x, 23, "├" + "─" * (RW - 1) + "┤", FAINT)
+for k in range(1, 4):
+    put(ruler_x + k * RW // 4, 23, "┼", FAINT)
+
+
+def hue_bar(yy, label, lo, hi, note, col):
+    text(RX + 2, yy, label, col)
+    a = ruler_x + round((lo - HUE_LO) / (HUE_HI - HUE_LO) * RW)
+    b = ruler_x + round((hi - HUE_LO) / (HUE_HI - HUE_LO) * RW)
+    for x in range(a, max(a + 1, b)):
+        hue = HUE_LO + (x - ruler_x) / RW * (HUE_HI - HUE_LO)
+        r, g, bl = colorsys.hsv_to_rgb(hue / 360, 0.62, 0.78)
+        put(x, yy, "█", (int(r * 255), int(g * 255), int(bl * 255)))
+    text(ruler_x + RW + 3, yy, note.strip(), DIM)
+
+
+hue_bar(24, "reference", 111, 114, "111-114", WHITE)
+hue_bar(25, "was 11-23", 71, 83, " 71-83", RED)
+hue_bar(26, "now 11-24", 86, 100, " 86-100", BRIGHT)
+text(RX, 28, "SATURATION", HEAD)
+for x0, label, n, val, col in ((RX + 12, "ref", 6, "0.6", WHITE), (RX + 30, "was", 7, "0.7*", RED), (RX + 48, "now", 6, "0.6", BRIGHT)):
+    text(x0, 28, label, DIM)
+    text(x0 + 4, 28, "▮" * n, col)
+    text(x0 + 5 + n, 28, val, col)
+text(RX + 2, 29, "* blue clipped to zero in the dark: chroma that wasn't", DIM)
+text(RX, 31, "VALUE p10..p90", HEAD)
+for k, (label, lo, hi, col) in enumerate((("ref", 0.17, 0.76, WHITE), ("was", 0.22, 0.39, RED), ("now", 0.19, 0.49, BRIGHT))):
+    yy = 31 + k
+    text(RX + 16, yy, label, DIM)
+    a, b = RX + 20 + round(lo * 32), RX + 20 + round(hi * 32)
+    text(RX + 20, yy, "·" * 32, FAINT)
+    for x in range(a, b):
+        put(x, yy, "▓" if a < x < b - 1 else "░", col)
+    text(RX + 55, yy, f"{lo:.2f}-{hi:.2f}", DIM)
+text(RX, 35, "CAUSES", HEAD)
+causes = [
+    ("sun  ", "0.92 .82 .63", "0.96 .93 .82", "yellow key"),
+    ("haze ", "0.40 .42 .35", "0.33 .41 .38", "olive fog"),
+    ("grade", "rgb contrast", "luma in sqrt", "sat x1.12"),
 ]
-for x, label in ((79, "TYPE"), (87, "HERO"), (106, "KEY"), (111, "ABILITY"), (130, "RANGE")):
-    text(x, 22, label, DIM)
-for x, n in ((79, 6), (87, 17), (106, 3), (111, 17), (130, 14)):
-    text(x, 23, "─" * n, FAINT)
-for i, (kind, who, key, name, rng) in enumerate(movers):
-    yy = 24 + i * 2
-    col = (255, 150, 90) if kind == "DASH" else ICE
-    text(79, yy, ("► " if kind == "DASH" else "↷ ") + kind, col)
-    text(87, yy, f"{who:<17}", CYAN if i % 2 == 0 else (90, 210, 180))
-    text(106, yy, f"[{key}]", WHITE)
-    text(111, yy, f"{name:<17}", HEAD)
-    bar = int(int(rng) / 900 * 8)
-    text(130, yy, "▮" * bar, col)
-    text(139, yy, rng, DIM)
-text(79, 42, "6:00 SIM  bolt 47  strike 43  nova 1  dash 1  escape 19", AMBER)
-text(79, 43, "          escapes: jad 10, kree 9 // callisto's charge: 2 kills", DIM)
+for k, (what, was, now, why) in enumerate(causes):
+    yy = 36 + k
+    text(RX + 2, yy, what, CYAN)
+    text(RX + 8, yy, was, RED)
+    text(RX + 22, yy, "->", DIM)
+    text(RX + 25, yy, now, BRIGHT)
+    text(RX + 40, yy, f"({why})", DIM)
+text(RX, 40, "MINIMAP", HEAD)
+text(RX + 8, 40, "// residual self image: the map as the shader sees it", DIM)
+text(RX + 2, 41, "grass 129 203 18 197 195 205  soil 32  stone 10  water 1", MID)
+text(RX + 2, 42, "ref", DIM)
+text(RX + 6, 42, "████", (39, 48, 30))
+text(RX + 11, 42, "(39,48,30)", DIM)
+text(RX + 24, 42, "ours", DIM)
+text(RX + 29, 42, "████", (41, 50, 26))
+text(RX + 34, 42, "(41,50,26)", DIM)
+text(RX + 47, 42, "was ████ grey", DIM)
+text(RX + 51, 42, "████", (92, 88, 70))
+text(RX + 2, 43, "veil follows ally sight in real time, soft edge, walls cast", MID)
 
 # --- sysop's note ------------------------------------------------------------
-header(47, elite("sysop's note // free your legs"))
+header(47, elite("sysop's note // there is no spoon, only sprite 297"))
 clear(4, 48, W - 5, 49)
-center(48, "sTILL aN aPPROXIMATION: sUMMONS aND zONES rEAD aS bOLTS oR sTRIKES.  tHE rEAL kITS nEED a cASTER-gENERIC rUNTIME.", HEAD)
-center(49, "animated::bot_cast  //  SpellShape::{Care,Nova,Strike,Bolt,Dash,Leap}  //  bot_hurl  //  bot_try_escape", DIM)
+center(48, "sTILL oPEN: lANE pICKER + bATTLE sPELLS, cLIFFS + bRIDGES + gOD sTATUES (tHE rEFERENCE jUNGLE iS wALLED), gRASS hUE 100 vS 111.", HEAD)
+center(49, "stone.rs // hud/kit.rs // shop::layout // minimap::Palette // post.wgsl grade // place_tree // sketch::pieces_without", DIM)
 
 # --- roadmap -------------------------------------------------------------------
-header(51, elite("roadmap // the oracle says"))
+header(51, elite("roadmap // docs/ROADMAPPLAN.md"))
 clear(4, 52, W - 5, 56)
 phases = [
-    ("P1 LIGHT", 9), ("P2 MINIMAP", 5), ("P3 SHOP", 8), ("P4 SELECT", 5),
-    ("P5 ARENA", 2), ("P6 HUD", 0), ("P7 POST", 0),
+    ("P1 LIGHT", 5), ("P2 MINIMAP", 6), ("P3 SHOP", 7), ("P4 SELECT", 4),
+    ("P5 ARENA", 1), ("P6 HUD", 4), ("P7 POST", 0),
 ]
 for i, (name, done) in enumerate(phases):
     x = 8 + (i % 4) * 35
@@ -317,14 +391,14 @@ for i, (name, done) in enumerate(phases):
     for j in range(10):
         put(x + 12 + j, yy, "▓" if j < done else "░", BRIGHT if j < done else FAINT)
     text(x + 22, yy, f"] {done * 10:>3}%", HEAD if done else FAINT)
-text(8, 56, ">> next: caster-generic kit runtime (bots cast real kits), summons/zones, lane picker", MID)
+text(8, 56, ">> next: lane picker + battle spells (P4), cliffs/bridges/statues from cache objects (P5), cache floor colours (P1.3)", MID)
 
 fade_bar(57, 2, W - 3)
 clear(10, 58, W - 11, 61)
-center(58, "gREETZ: cALLISTO (oNE cHARGE, tWO kILLS) * jALREK-jAD (tEN tELEPORTS hOME) * tHE wALL tHAT sAID nO", MID)
+center(58, "gREETZ: sPRITE 297 (tHE sTONE uNDER eVERYTHING) * tEXTURE 32 (eVERY lANE) * tHE dIRE tREES (iN lEAF, aT lAST)", MID)
 center(59, "nOT AFFILIATED WITH JAGEX. cACHE ASSETS STAY OUT OF GIT. aLWAYS.", DIM)
-center(60, "  y o u   h a v e   t o   l e t   i t   a l l   g o .   f e a r ,   d o u b t ,   c o o l d o w n s .  ", HEAD)
-center(61, "-=[ mObAsCaPe // 2026 // nODE 11: tHE jUMP pROGRAM // 57.6k // sYSoP: rIFT // 1 cHARGE, 19 jUMPS ]=-", AMBER)
+center(60, "  w e   c a n   l o a d   a n y t h i n g .   s t o n e ,   c o i n s ,   a   w h o l e   m a p .  ", HEAD)
+center(61, "-=[ mObAsCaPe // 2026 // nODE 12: tHE cONSTRUCT // 57.6k // sYSoP: rIFT // 8 cOMMITS, 1 pAINTED mAP ]=-", AMBER)
 
 # --- outputs ------------------------------------------------------------------
 with open(out + ".txt", "w") as f:
