@@ -6,8 +6,39 @@
 
 use super::{Hud, OSRS_YELLOW, UiVertex};
 use crate::hero_select::{self, HeroSelect};
+use crate::items::ItemShop;
 use crate::menu::{self, BUTTONS, MainMenu, MenuAction};
 use crate::scene::srgb_to_linear;
+
+/// The least height a passive or ability row gets on the detail
+/// parchment: its key chip and one line of text.
+const ROW_MIN: f32 = 38.0;
+
+/// Ability icon size on the detail parchment.
+const ICON: f32 = 28.0;
+
+/// The least row height that fits the key chip with the icon under it.
+const STACKED_ROW: f32 = 25.0 + ICON + 3.0;
+
+/// A one-line row (key chip, small icon, name and cooldowns) for windows
+/// too short to give every row a line of description.
+const ROW_TIGHT: f32 = 24.0;
+
+/// The popular build row: item icons, the rule under them and a gap.
+const BUILD_H: f32 = ICON + 9.0;
+
+/// A hover box: the rect it belongs to and its lines.
+type Tooltip = ((f32, f32, f32, f32), Vec<String>);
+
+/// One row on the detail parchment: the passive or an ability.
+struct DetailRow {
+    key: String,
+    icon: Option<[f32; 4]>,
+    name: String,
+    /// Per-rank cooldowns ("6 / 5.5 / 5 / 4.5 s"); none for the passive.
+    cooldowns: Option<String>,
+    description: String,
+}
 
 const GOLD: [u8; 3] = [245, 214, 137];
 
@@ -347,6 +378,7 @@ impl Hud {
         width: f32,
         height: f32,
         select: &HeroSelect,
+        shop: &ItemShop,
         mouse: (f64, f64),
     ) {
         use super::kit::{ORANGE, STONE_QUIET, STONE_TEXT};
@@ -499,6 +531,7 @@ impl Hud {
         self.stone_frame(width, height, roster);
         let classes = select.visible_classes();
         let (cards, _) = hero_select::roster_layout(width, height, &classes);
+        let mut roster_tip: Option<Tooltip> = None;
         for (slot, &(x, y, cw, ch)) in cards.iter().enumerate() {
             let Some(&index) = select.visible.get(slot) else {
                 continue;
@@ -547,6 +580,13 @@ impl Hud {
                     [255, 60, 40],
                 );
             }
+            if ch - side < hero_select::CARD_LABEL * 0.5 {
+                // Short window: no name line, the cursor names the card.
+                if point_in((x, y, cw, ch), mouse) {
+                    roster_tip = Some(((x, y, cw, ch), vec![champion.name.clone()]));
+                }
+                continue;
+            }
             let chars = ((cw / 6.2) as usize).max(4);
             let name = clip_name(&champion.name, chars);
             self.label_in(
@@ -565,8 +605,12 @@ impl Hud {
                 },
             );
         }
+        if let Some((anchor, text)) = roster_tip {
+            let bounds = hero_select::roster_column(width, height);
+            self.tooltip(width, height, anchor, bounds, &text);
+        }
 
-        self.hero_detail(width, height, select);
+        self.hero_detail(width, height, select, shop, mouse);
 
         // Bottom bar: the hero's numbers, the note and Lock in.
         let bottom = hero_select::bottom_rect(width, height);
@@ -595,9 +639,20 @@ impl Hud {
             let (cx, _, _, _) = hero_select::confirm_rect(width, height);
             let room = (cx - bx - 30.0).max(200.0);
             let cell = (room / stats.len() as f32).min(110.0);
+            // Too narrow for the words (1024 wide): icon and number only,
+            // and the cursor names the stat.
+            let widest = stats
+                .iter()
+                .map(|(_, label, _)| self.text_width_named("p11", label, 1.0))
+                .fold(0.0, f32::max);
+            let labelled = cell >= 32.0 + widest + 6.0;
+            let mut stat_tip: Option<Tooltip> = None;
             for (i, (icon, label, value)) in stats.iter().enumerate() {
                 let x = bx + 20.0 + i as f32 * cell;
                 let y = by + (bh - 40.0) * 0.5;
+                if !labelled && point_in((x, y, cell, 40.0), mouse) {
+                    stat_tip = Some(((x, y, cell, 40.0), vec![label.to_string()]));
+                }
                 if let (Some(uv), Some((iw, ih))) =
                     (self.atlas.ui_uv(icon), self.atlas.ui_size(icon))
                 {
@@ -614,17 +669,22 @@ impl Hud {
                         1.0,
                     );
                 }
-                self.text_named("p11", width, height, x + 32.0, y, 1.0, label, STONE_QUIET);
+                if labelled {
+                    self.text_named("p11", width, height, x + 32.0, y, 1.0, label, STONE_QUIET);
+                }
                 self.text_named(
                     "p12",
                     width,
                     height,
                     x + 32.0,
-                    y + 16.0,
+                    if labelled { y + 16.0 } else { y + 9.0 },
                     1.0,
                     value,
                     STONE_TEXT,
                 );
+            }
+            if let Some((anchor, text)) = stat_tip {
+                self.tooltip(width, height, anchor, (0.0, 0.0, width, height), &text);
             }
         }
         let confirm = hero_select::confirm_rect(width, height);
@@ -981,7 +1041,14 @@ impl Hud {
     /// The parchment: the animated hero in a recess with its name, class
     /// and role tags under it; then the tagline and the four abilities with
     /// their per-rank cooldowns.
-    fn hero_detail(&mut self, width: f32, height: f32, select: &HeroSelect) {
+    fn hero_detail(
+        &mut self,
+        width: f32,
+        height: f32,
+        select: &HeroSelect,
+        shop: &ItemShop,
+        mouse: (f64, f64),
+    ) {
         use super::kit::{INK, INK_RED};
         let detail = hero_select::detail_rect(width, height);
         self.parchment(width, height, detail);
@@ -990,6 +1057,21 @@ impl Hud {
         };
         let (dx, dy, dw, dh) = detail;
         let (sx, sy, sw, sh) = hero_select::spotlight_rect(width, height);
+        let tags = [
+            sentence_case(&champion.class),
+            sentence_case(&champion.role),
+        ];
+        let tag_ws: Vec<f32> = tags
+            .iter()
+            .map(|tag| self.text_width_named("p11", tag, 1.0) + 16.0)
+            .collect();
+        let tag_w = tag_ws.iter().sum::<f32>() + 6.0 * (tag_ws.len() as f32 - 1.0);
+        // The left column fits both the recess and the tag row. On short
+        // windows the recess is narrower than "Melee  Hellhound tank", so
+        // the column widens and the art centres in it.
+        let left = sx;
+        let column = sw.max(tag_w);
+        let sx = left + (column - sw) * 0.5;
         // The recess and the live spotlight render inside it.
         self.quad(
             width,
@@ -1023,8 +1105,8 @@ impl Hud {
             1.0,
         );
         let name_y = sy + sh + 10.0;
-        let centre = (sx - 10.0, name_y, sw + 20.0, 24.0);
-        let name_scale = if self.text_width_named("q8", &champion.name, 2.0) > sw + 16.0 {
+        let centre = (left - 10.0, name_y, column + 20.0, 24.0);
+        let name_scale = if self.text_width_named("q8", &champion.name, 2.0) > column + 16.0 {
             1.0
         } else {
             2.0
@@ -1038,17 +1120,8 @@ impl Hud {
             &champion.name,
             INK_RED,
         );
-        let tags = [
-            sentence_case(&champion.class),
-            sentence_case(&champion.role),
-        ];
-        let mut tag_w = 0.0;
-        for tag in &tags {
-            tag_w += self.text_width_named("p11", tag, 1.0) + 16.0 + 6.0;
-        }
-        let mut tag_x = sx + sw * 0.5 - (tag_w - 6.0) * 0.5;
-        for tag in &tags {
-            let w = self.text_width_named("p11", tag, 1.0) + 16.0;
+        let mut tag_x = left + (column - tag_w) * 0.5;
+        for (tag, &w) in tags.iter().zip(&tag_ws) {
             let rect = (tag_x, name_y + 34.0, w, 20.0);
             self.rect_outline(
                 width,
@@ -1065,20 +1138,212 @@ impl Hud {
             tag_x += w + 6.0;
         }
 
-        // Right side: tagline then the abilities.
-        let x = sx + sw + 28.0;
+        // Right side, as in the reference: the popular build, the tagline,
+        // then the passive and the four abilities.
+        let x = left + column + 28.0;
         let right = dx + dw - 22.0;
-        let mut y = dy + 20.0;
-        let columns = ((right - x) / 6.2).max(20.0) as usize;
-        for line in hero_select::wrap_text(&champion.tagline, columns)
-            .into_iter()
-            .take(2)
+        let bottom = dy + dh - 14.0;
+        let mut y = dy + 16.0;
+        let build = shop.popular_build(&champion.id, &champion.role, &champion.class, 5);
+        let mut rows: Vec<DetailRow> = Vec::new();
+        if let Some(kit) = champion.kit.as_ref()
+            && let Some(passive) = kit.passive.as_ref()
         {
-            self.text_named_raw("p12", width, height, x, y, 1.0, &line, [70, 52, 30], 1.0);
+            rows.push(DetailRow {
+                key: "Passive".to_string(),
+                icon: None,
+                name: kit
+                    .passive_name
+                    .clone()
+                    .unwrap_or_else(|| "Passive".to_string()),
+                cooldowns: None,
+                description: passive.describe(),
+            });
+        }
+        for (slot, ability) in champion.abilities.iter().enumerate() {
+            let role = crate::ui_live::ability_icon_role(&champion.name, slot);
+            let cooldowns: Vec<String> = ability
+                .ranks
+                .iter()
+                .map(|rank| format_seconds(rank.cooldown))
+                .collect();
+            rows.push(DetailRow {
+                key: ability.key.clone(),
+                icon: self.atlas.ui_uv(&role),
+                name: crate::ui_live::title_case(&ability.name),
+                cooldowns: (!cooldowns.is_empty()).then(|| format!("{} s", cooldowns.join(" / "))),
+                description: ability.description.clone(),
+            });
+        }
+        let columns = ((right - x) / 6.2).max(20.0) as usize;
+        let tagline = hero_select::wrap_text(&champion.tagline, columns);
+        // Every row keeps its key chip and name. The flavour gives way
+        // first (tagline, then the weapon), then the descriptions (rows
+        // drop to one line and the text moves to a hover tooltip), and the
+        // build last.
+        // With no flavour left, the build row's own rule heads the rows.
+        let flavour = |tag: usize, wields: bool, build: bool| tag > 0 || wields || !build;
+        let header = |tag: usize, wields: bool, build: bool| {
+            let top = if build { BUILD_H } else { 4.0 };
+            if flavour(tag, wields, build) {
+                top + tag as f32 * 17.0 + 8.0 + if wields { 18.0 } else { 0.0 } + 8.0
+            } else {
+                top
+            }
+        };
+        let mut tag_lines = tagline.len().min(2);
+        let mut wields = champion.weapon.is_some();
+        let mut described = true;
+        let mut show_build = build.is_some();
+        loop {
+            let row_h = if described { ROW_MIN } else { ROW_TIGHT };
+            if header(tag_lines, wields, show_build) + rows.len() as f32 * row_h <= bottom - y {
+                break;
+            }
+            if tag_lines > 1 {
+                tag_lines -= 1;
+            } else if wields {
+                wields = false;
+            } else if tag_lines > 0 {
+                tag_lines -= 1;
+            } else if described {
+                described = false;
+            } else if show_build {
+                show_build = false;
+            } else {
+                break;
+            }
+        }
+        let bounds = (dx, dy, dw, dh);
+        let mut tooltip = None;
+        if let Some((key, items)) = build.as_ref().filter(|_| show_build) {
+            let (below, hovered) =
+                self.popular_build_row(width, height, (x, y, right), key, items, mouse);
+            y = below;
+            tooltip = hovered;
+        }
+        if flavour(tag_lines, wields, show_build) {
+            y = self.detail_flavour(
+                width,
+                height,
+                (x, y, right),
+                champion,
+                &tagline[..tag_lines],
+                wields,
+            );
+        }
+        let row_min = if described { ROW_MIN } else { ROW_TIGHT };
+        let room = ((bottom - y) / rows.len().max(1) as f32).max(row_min);
+        let lines = if described {
+            (((room - 20.0) / 15.0).floor() as usize).clamp(1, 3)
+        } else {
+            0
+        };
+        let key_w = (self.text_width_named("b12", "Passive", 1.0) + 14.0).max(54.0);
+        // Tall rows stack the ability icon under its key chip; short ones
+        // (720p with a build and a passive) set it beside the chip so it
+        // never reaches the next row. Every row shares one text column.
+        let stacked = room >= STACKED_ROW;
+        let icon = if stacked {
+            ICON
+        } else {
+            (room - 8.0).min(ICON)
+        };
+        let tx = if stacked {
+            x + key_w + 12.0
+        } else {
+            x + key_w + 8.0 + icon + 10.0
+        };
+        let columns = ((right - tx) / 6.0).max(18.0) as usize;
+        for row in &rows {
+            self.key_chip(width, height, (x, y + 1.0, key_w, 20.0), &row.key);
+            if let Some(uv) = row.icon {
+                let (ix, iy) = if stacked {
+                    (x + (key_w - icon) * 0.5, y + 25.0)
+                } else {
+                    (x + key_w + 8.0, y + 1.0)
+                };
+                self.sprite(width, height, ix, iy, icon, icon, uv, [255, 255, 255], 1.0);
+            }
+            self.text_named_raw(
+                "b12",
+                width,
+                height,
+                tx,
+                y + 3.0,
+                1.0,
+                &row.name,
+                INK_RED,
+                1.0,
+            );
+            if let Some(cooldowns) = &row.cooldowns {
+                let nx = tx + self.text_width_named("b12", &row.name, 1.0) + 10.0;
+                if nx + self.text_width_named("p11", cooldowns, 1.0) <= right {
+                    self.text_named_raw(
+                        "p11",
+                        width,
+                        height,
+                        nx,
+                        y + 5.0,
+                        1.0,
+                        cooldowns,
+                        [40, 60, 140],
+                        1.0,
+                    );
+                }
+            }
+            let (shown, clipped) = hero_select::clip_lines(&row.description, columns, lines);
+            for (line, text) in shown.iter().enumerate() {
+                self.text_named_raw(
+                    "p12",
+                    width,
+                    height,
+                    tx,
+                    y + 22.0 + line as f32 * 15.0,
+                    1.0,
+                    text,
+                    INK,
+                    1.0,
+                );
+            }
+            // The full text on hover when the row cut it short.
+            if clipped && point_in((x, y, right - x, room), mouse) {
+                let wrap = ((right - tx) / 6.0).clamp(24.0, 60.0) as usize;
+                let text = hero_select::wrap_text(&row.description, wrap);
+                tooltip = Some(((tx, y, right - tx, room.min(22.0)), text));
+            }
+            y += room;
+        }
+        if let Some((anchor, text)) = tooltip {
+            self.tooltip(width, height, anchor, bounds, &text);
+        }
+    }
+
+    /// The dark key chip on the parchment ("Q", "Passive").
+    fn key_chip(&mut self, width: f32, height: f32, rect: (f32, f32, f32, f32), label: &str) {
+        let (x, y, w, h) = rect;
+        self.quad(width, height, x, y, w, h, [26, 22, 18]);
+        self.rect_outline(width, height, x, y, w, h, 1.0, [90, 76, 56], 1.0);
+        self.label_in(width, height, rect, "b12", 1.0, label, [236, 226, 200]);
+    }
+
+    /// The tagline, the cosmetic weapon and the rule over the rows.
+    /// Returns the y under the rule.
+    fn detail_flavour(
+        &mut self,
+        width: f32,
+        height: f32,
+        (x, mut y, right): (f32, f32, f32),
+        champion: &crate::champion::ChampionConfig,
+        tagline: &[String],
+        wields: bool,
+    ) -> f32 {
+        for line in tagline {
+            self.text_named_raw("p12", width, height, x, y, 1.0, line, [70, 52, 30], 1.0);
             y += 17.0;
         }
         y += 8.0;
-        if let Some(weapon) = champion.weapon.as_deref() {
+        if let Some(weapon) = champion.weapon.as_deref().filter(|_| wields) {
             let label = sentence_case(&weapon.replace('_', " "));
             self.text_named_raw(
                 "p11",
@@ -1094,101 +1359,105 @@ impl Hud {
             y += 18.0;
         }
         self.quad_alpha(width, height, x, y, right - x, 1.0, [120, 96, 60], 0.7);
-        y += 8.0;
-        let count = champion.abilities.len().max(1) as f32;
-        let room = ((dy + dh - 14.0 - y) / count).max(36.0);
-        let lines = (((room - 20.0) / 15.0).floor() as usize).clamp(1, 3);
-        let key_w = 54.0;
-        for (slot, ability) in champion.abilities.iter().enumerate() {
-            // Key chip, then the cache ability icon.
-            self.quad(width, height, x, y + 1.0, key_w, 20.0, [26, 22, 18]);
-            self.rect_outline(
-                width,
-                height,
-                x,
-                y + 1.0,
-                key_w,
-                20.0,
-                1.0,
-                [90, 76, 56],
-                1.0,
-            );
-            self.label_in(
-                width,
-                height,
-                (x, y + 1.0, key_w, 20.0),
-                "b12",
-                1.0,
-                &ability.key,
-                [236, 226, 200],
-            );
-            let role = crate::ui_live::ability_icon_role(&champion.name, slot);
-            if let Some(uv) = self.atlas.ui_uv(&role) {
-                self.sprite(
-                    width,
-                    height,
-                    x + 13.0,
-                    y + 25.0,
-                    28.0,
-                    28.0,
-                    uv,
-                    [255, 255, 255],
-                    1.0,
-                );
-            }
-            let tx = x + key_w + 12.0;
-            let ability_name = crate::ui_live::title_case(&ability.name);
+        y + 8.0
+    }
+
+    /// The OSRS hover box: pale yellow, black edge and text. It opens under
+    /// `anchor`, or over it when there is no room below inside `bounds`.
+    fn tooltip(
+        &mut self,
+        width: f32,
+        height: f32,
+        anchor: (f32, f32, f32, f32),
+        bounds: (f32, f32, f32, f32),
+        lines: &[String],
+    ) {
+        let (ax, ay, _, ah) = anchor;
+        let (bx0, by0, bw, bh) = bounds;
+        let tw = lines
+            .iter()
+            .map(|line| self.text_width_named("p11", line, 1.0))
+            .fold(0.0, f32::max)
+            + 10.0;
+        let th = lines.len() as f32 * 14.0 + 6.0;
+        let bx = ax.min(bx0 + bw - tw - 4.0).max(bx0 + 4.0);
+        let by = if ay + ah + 2.0 + th <= by0 + bh - 4.0 {
+            ay + ah + 2.0
+        } else {
+            (ay - 2.0 - th).max(by0 + 4.0)
+        };
+        self.quad(width, height, bx, by, tw, th, [255, 255, 160]);
+        self.rect_outline(width, height, bx, by, tw, th, 1.0, [0, 0, 0], 1.0);
+        for (k, line) in lines.iter().enumerate() {
+            let ly = by + 3.0 + k as f32 * 14.0;
             self.text_named_raw(
-                "b12",
+                "p11",
                 width,
                 height,
-                tx,
-                y + 3.0,
+                bx + 5.0,
+                ly,
                 1.0,
-                &ability_name,
-                INK_RED,
+                line,
+                [0, 0, 0],
                 1.0,
             );
-            let cooldowns: Vec<String> = ability
-                .ranks
-                .iter()
-                .map(|rank| format_seconds(rank.cooldown))
-                .collect();
-            if !cooldowns.is_empty() {
-                let nx = tx + self.text_width_named("b12", &ability_name, 1.0) + 10.0;
-                let text = format!("{} s", cooldowns.join(" / "));
-                self.text_named_raw(
-                    "p11",
-                    width,
-                    height,
-                    nx,
-                    y + 5.0,
-                    1.0,
-                    &text,
-                    [40, 60, 140],
-                    1.0,
-                );
-            }
-            let columns = ((right - tx) / 6.0).max(18.0) as usize;
-            for (line, text) in hero_select::wrap_text(&ability.description, columns)
-                .into_iter()
-                .take(lines)
-                .enumerate()
-            {
-                self.text_named_raw(
-                    "p12",
-                    width,
-                    height,
-                    tx,
-                    y + 22.0 + line as f32 * 15.0,
-                    1.0,
-                    &text,
-                    INK,
-                    1.0,
-                );
-            }
-            y += room;
         }
+    }
+
+    /// "Popular build", the list it came from ("Melee", "Tank") and the
+    /// finished items as cache icons. Returns the y under the row and, for
+    /// the item under the cursor, its tooltip (name and price), which the
+    /// caller draws last so later text cannot cover it.
+    #[allow(clippy::too_many_arguments)]
+    fn popular_build_row(
+        &mut self,
+        width: f32,
+        height: f32,
+        (x, y, right): (f32, f32, f32),
+        key: &str,
+        items: &[crate::items::ItemConfig],
+        mouse: (f64, f64),
+    ) -> (f32, Option<Tooltip>) {
+        use super::kit::INK_RED;
+        let label = "Popular build";
+        self.text_named_raw("b12", width, height, x, y + 7.0, 1.0, label, INK_RED, 1.0);
+        let mut ix = x + self.text_width_named("b12", label, 1.0) + 10.0;
+        let list = sentence_case(&key.replace('_', " "));
+        self.text_named_raw(
+            "p11",
+            width,
+            height,
+            ix,
+            y + 9.0,
+            1.0,
+            &list,
+            [40, 60, 140],
+            1.0,
+        );
+        ix += self.text_width_named("p11", &list, 1.0) + 12.0;
+        let mut hovered = None;
+        for item in items {
+            if ix + ICON > right {
+                break;
+            }
+            self.draw_item_icon(width, height, ix, y, ICON, item, 1.0);
+            let rect = (ix, y, ICON, ICON);
+            if point_in(rect, mouse) {
+                hovered = Some((rect, vec![format!("{}: {} coins", item.name, item.cost)]));
+            }
+            ix += ICON + 6.0;
+        }
+        self.quad_alpha(
+            width,
+            height,
+            x,
+            y + ICON + 3.0,
+            right - x,
+            1.0,
+            [120, 96, 60],
+            0.5,
+        );
+        (y + BUILD_H, hovered)
     }
 
     /// Centre unshadowed text (ink on parchment) in `rect`.

@@ -240,8 +240,9 @@ Cache location: `.cache/osrs-235/cache` by default. Pass `--cache` and
   never enforced; blue's bots call and play the lanes the player leaves
   open (`hero_select::Lane`, `bot_lanes`).
   `--start-select bot|public|private [--champion id] [--lane mid]
-  [--lock-in]` skips the menu for screenshots (`--lock-in` opens straight
-  on the locked-in countdown).
+  [--lock-in] [--cursor X Y]` skips the menu for screenshots (`--lock-in`
+  opens straight on the locked-in countdown; `--cursor` places the cursor
+  for hover states).
 - **Wielded weapons** (`wield.rs`): heroes on the player skeleton
   (framemap 0: Kolodion, Wise Old Man, the Ranger) hold the first weapon in
   their inventory, else their champion file's cosmetic `weapon`. The item's
@@ -256,7 +257,9 @@ Cache location: `.cache/osrs-235/cache` by default. Pass `--cache` and
   Swing (W), Banana Peel (E) and Greegree (R)
   (`crates/client/src/animated/awowogei.rs`); the Blowpipe Ranger uses Toxic Dart, Dart Volley, Footwork and
   Deadshot; Jad and Kree keep the shared Q bolt and R meteor. Kree has ranged
-  auto-attacks. No passives yet. Champion files also carry a real `armor` stat
+  auto-attacks. These four have no passives; the twelve kit champions do
+  (`kit::Passive`), shown on hero select by their `passive_name` with a
+  sentence from `Passive::describe`. Champion files also carry a real `armor` stat
   and movement weight:
   `weight`, optional `turn_time` / `accel_time` / `stop_time`, `stride`, and
   `bounce`. The player turns and accelerates with weight, coasts to a stop,

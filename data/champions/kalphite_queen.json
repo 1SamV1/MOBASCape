@@ -76,6 +76,7 @@
     20
   ],
   "kit": {
+    "passive_name": "Second form",
     "passive": {
       "type": "second_form",
       "threshold": 0.3,

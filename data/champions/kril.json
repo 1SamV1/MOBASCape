@@ -78,6 +78,7 @@
     34
   ],
   "kit": {
+    "passive_name": "Demonic poison",
     "passive": {
       "type": "on_hit",
       "statuses": [

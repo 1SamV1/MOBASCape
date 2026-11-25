@@ -85,6 +85,7 @@
     25
   ],
   "kit": {
+    "passive_name": "Old wisdom",
     "passive": {
       "type": "scholar",
       "xp": 0.2

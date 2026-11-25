@@ -71,6 +71,10 @@ jungle_ao   2830   3080   view=ao
 `--screenshot PATH` now also exits once the frame is written (it used to keep
 running until it was killed).
 
+`--cursor X Y` starts with the cursor at that window pixel, for screenshots
+of hover states (tooltips, hot buttons). A real mouse over the window
+overrides it on its first move.
+
 ## Shader hot reload
 
 - `--hot-shaders` watches `crates/client/src/scene.wgsl` and recompiles it

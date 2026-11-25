@@ -75,6 +75,7 @@
     36
   ],
   "kit": {
+    "passive_name": "Dragonfire splash",
     "passive": {
       "type": "splash",
       "radius": 180,

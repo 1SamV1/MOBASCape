@@ -1,6 +1,26 @@
 # Status
 
-Last updated: hero select lane picker and locked-in countdown, 2026-11-24.
+Last updated: hero select passive row and popular build, 2026-11-24.
+
+## 2026-11-24 — Hero select: passive row, popular build, short windows
+
+- The detail parchment now reads like the reference: "Popular build" with
+  the hero's Recommended list key and five cache item icons (best weapon,
+  armour, boots and jewellery, then the next dearest), the tagline, then a
+  "Passive" row over Q/W/E/R. The twelve kit passives are named in their
+  champion files (`passive_name`); the sentence comes from the numbers
+  (`Passive::describe`, `Status::describe`).
+- Short windows: rows give way in order (tagline, weapon, descriptions,
+  build) instead of overflowing; icons move beside the key chip when a row
+  is too short to stack them; cut text ends in "..." and the full text is
+  in an OSRS hover box (pale yellow, black edge), drawn last so nothing
+  covers it. At 1024x600 the roster drops the name line for two rows of
+  bigger portraits (the cursor names them), the left column widens to fit
+  the tags, and the stat cells show icon and number with the label on
+  hover. Before this, 1024x600 ran the roster past its panel, the tags off
+  the parchment and the R row off the bottom.
+- Dev: `--cursor X Y` starts with the cursor at a window pixel, for
+  screenshots of hover states (a real mouse over the window overrides it).
 
 ## 2026-11-24 — Hero select: lane calls, locked-in countdown
 

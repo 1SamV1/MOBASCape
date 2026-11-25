@@ -114,6 +114,10 @@ struct Cli {
     /// "All heroes locked in" countdown (use with `--start-select`).
     #[arg(long)]
     lock_in: bool,
+    /// Dev: start with the cursor at this window pixel (x y), for
+    /// screenshots of hover states such as tooltips.
+    #[arg(long, num_args = 2, value_names = ["X", "Y"])]
+    cursor: Option<Vec<f64>>,
     /// Demo: walk to this tile coordinate after one second (x y).
     #[arg(long, num_args = 2, value_names = ["X", "Y"])]
     demo_target: Option<Vec<f32>>,
@@ -626,7 +630,10 @@ fn main() -> Result<()> {
         held: HashSet::new(),
         focused: false,
         follow: true,
-        mouse_pos: (640.0, 360.0),
+        mouse_pos: match cli.cursor.as_deref() {
+            Some(&[x, y]) => (x, y),
+            _ => (640.0, 360.0),
+        },
         lmb_down: false,
         rmb_down: false,
         lmb_press: None,
@@ -2981,7 +2988,7 @@ impl App {
         }
 
         self.hud
-            .build_hero_select(w, h, &self.hero_select, self.mouse_pos);
+            .build_hero_select(w, h, &self.hero_select, &self.shop, self.mouse_pos);
         if let Some(renderer) = self.renderer.as_mut() {
             renderer.set_hud_mesh(&self.hud.vertices, &self.hud.indices);
         }

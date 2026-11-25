@@ -75,6 +75,7 @@
     45
   ],
   "kit": {
+    "passive_name": "Venom fangs",
     "passive": {
       "type": "on_hit",
       "statuses": [

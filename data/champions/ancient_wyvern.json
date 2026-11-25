@@ -74,6 +74,7 @@
     35
   ],
   "kit": {
+    "passive_name": "Frozen breath",
     "passive": {
       "type": "frost_bite",
       "pct": 0.15,

@@ -75,6 +75,7 @@
     332
   ],
   "kit": {
+    "passive_name": "Sticky tongue",
     "passive": {
       "type": "on_hit",
       "statuses": [

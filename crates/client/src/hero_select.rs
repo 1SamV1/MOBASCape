@@ -514,6 +514,10 @@ const PAD: f32 = 14.0;
 const CARD_GAP: f32 = 6.0;
 /// Widest a roster card grows.
 const CARD_MAX: f32 = 96.0;
+/// The name line under a roster portrait.
+pub const CARD_LABEL: f32 = 18.0;
+/// Named cards smaller than this give up their names for bigger portraits.
+const NAMELESS_BELOW: f32 = 40.0;
 /// The roster window takes this share of the centre column's free height;
 /// the parchment detail takes the rest.
 const ROSTER_SHARE: f32 = 0.38;
@@ -682,19 +686,33 @@ pub fn roster_layout(width: f32, height: f32, classes: &[&str]) -> (Vec<Rect>, V
     let inner_h = rh - PAD * 2.0;
     let count = classes.len().max(1);
     // The column count that gives the largest cards that still fit every
-    // row in the window; the name takes 18px under each portrait.
-    let mut best = (4usize, 0.0f32);
-    for columns in 4..=16usize {
-        let rows = count.div_ceil(columns);
-        let by_w = (inner_w - CARD_GAP * (columns as f32 - 1.0)) / columns as f32;
-        let by_h = (inner_h - CARD_GAP * (rows as f32 - 1.0)) / rows as f32 - 18.0;
-        let size = by_w.min(by_h).min(CARD_MAX);
-        if size > best.1 + 0.5 {
-            best = (columns, size);
+    // row in the window, with `label` px for the name under each portrait.
+    let fit = |label: f32| {
+        let mut best = (4usize, 0.0f32);
+        for columns in 4..=16usize {
+            let rows = count.div_ceil(columns);
+            let by_w = (inner_w - CARD_GAP * (columns as f32 - 1.0)) / columns as f32;
+            let by_h = (inner_h - CARD_GAP * (rows as f32 - 1.0)) / rows as f32 - label;
+            let size = by_w.min(by_h).min(CARD_MAX);
+            if size > best.1 + 0.5 {
+                best = (columns, size);
+            }
         }
-    }
-    let (columns, card_w) = (best.0, best.1.max(36.0));
-    let card_h = card_w + 18.0;
+        best
+    };
+    // Names cost a row of text per card row. On short windows that leaves
+    // thumbnail portraits, so the names go (the cursor shows them) and the
+    // portraits grow.
+    let named = fit(CARD_LABEL);
+    let nameless = fit(0.0);
+    let (best, label) = if named.1 < NAMELESS_BELOW && nameless.1 > named.1 {
+        (nameless, 0.0)
+    } else {
+        (named, CARD_LABEL)
+    };
+    // The best size already fits; the floor only guards absurd windows.
+    let (columns, card_w) = (best.0, best.1.max(20.0));
+    let card_h = card_w + label;
     let used = columns as f32 * card_w + CARD_GAP * (columns as f32 - 1.0);
     let x0 = rx + PAD + ((inner_w - used) * 0.5).max(0.0);
     let cards = (0..classes.len())
@@ -754,6 +772,31 @@ pub fn team_slot_rects(width: f32, height: f32, team: Team) -> Vec<Rect> {
     (0..5)
         .map(|i| (x + 10.0, top + i as f32 * (row_h + gap), w - 20.0, row_h))
         .collect()
+}
+
+/// At most `max_lines` of `text` wrapped to `columns`; when that cuts it
+/// short, the last line ends in "..." and the flag is set. `max_lines` 0
+/// shows nothing and reports a clip for any text.
+pub fn clip_lines(text: &str, columns: usize, max_lines: usize) -> (Vec<String>, bool) {
+    let mut lines = wrap_text(text, columns);
+    if lines.len() <= max_lines {
+        return (lines, false);
+    }
+    lines.truncate(max_lines);
+    if let Some(last) = lines.last_mut() {
+        while last.chars().count() + 3 > columns.max(4) {
+            match last.rfind(' ') {
+                Some(cut) => last.truncate(cut),
+                None => {
+                    let keep = columns.saturating_sub(3).max(1);
+                    *last = last.chars().take(keep).collect();
+                    break;
+                }
+            }
+        }
+        last.push_str("...");
+    }
+    (lines, true)
 }
 
 /// Wrap a description into fixed-width lines for the detail panel.
@@ -871,12 +914,12 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn sixteen_heroes_fit_the_roster_column_at_720p() {
+    fn sixteen_heroes_fit_the_roster_column() {
         let classes: Vec<&str> = std::iter::repeat_n("MELEE", 9)
             .chain(std::iter::repeat_n("RANGED", 3))
             .chain(std::iter::repeat_n("MAGIC", 4))
             .collect();
-        for (w, h) in [(1280.0, 720.0), (1920.0, 1080.0)] {
+        for (w, h) in [(1024.0, 600.0), (1280.0, 720.0), (1920.0, 1080.0)] {
             let (cx, cy, cw, ch) = roster_column(w, h);
             let (cards, _) = roster_layout(w, h, &classes);
             for &(x, y, cwid, chgt) in &cards {
@@ -884,6 +927,13 @@ pub(crate) mod tests {
                 assert!(y >= cy && y + chgt <= cy + ch + 0.5, "{w}x{h} y {y}");
             }
         }
+        // 720p keeps the names; 1024x600 trades them for portraits at
+        // least as big as the named 720p ones would be there.
+        let (cards, _) = roster_layout(1280.0, 720.0, &classes);
+        assert_eq!(cards[0].3 - cards[0].2, CARD_LABEL);
+        let (cards, _) = roster_layout(1024.0, 600.0, &classes);
+        assert_eq!(cards[0].3, cards[0].2, "no name line");
+        assert!(cards[0].2 >= NAMELESS_BELOW, "portraits {}", cards[0].2);
     }
 
     #[test]
@@ -1151,6 +1201,30 @@ pub(crate) mod tests {
                 "{w}x{h} leave in the title bar"
             );
         }
+    }
+
+    #[test]
+    fn clipped_descriptions_end_in_an_ellipsis() {
+        let text = "Every third basic attack also hits enemies within 260 of the target";
+        let (lines, clipped) = clip_lines(text, 20, 2);
+        assert!(clipped);
+        assert_eq!(lines.len(), 2);
+        assert!(lines[1].ends_with("..."), "{lines:?}");
+        assert!(
+            lines.iter().all(|line| line.chars().count() <= 20),
+            "{lines:?}"
+        );
+        assert_eq!(
+            clip_lines("short", 20, 1),
+            (vec!["short".to_string()], false)
+        );
+        let (lines, clipped) = clip_lines("anything at all", 20, 0);
+        assert!(
+            lines.is_empty() && clipped,
+            "no lines: all of it is in the tooltip"
+        );
+        let (lines, _) = clip_lines("Supercalifragilistic expialidocious", 10, 1);
+        assert_eq!(lines, vec!["Superca...".to_string()]);
     }
 
     #[test]

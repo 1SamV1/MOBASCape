@@ -74,6 +74,7 @@
     64
   ],
   "kit": {
+    "passive_name": "Three heads",
     "passive": {
       "type": "nth_attack",
       "n": 3,

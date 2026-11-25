@@ -15,6 +15,10 @@ use serde::Deserialize;
 pub struct Kit {
     #[serde(default)]
     pub passive: Option<Passive>,
+    /// The passive's name on hero select ("Three heads"); its description
+    /// is written from the numbers by [`Passive::describe`].
+    #[serde(default)]
+    pub passive_name: Option<String>,
     pub abilities: [Ability; 4],
 }
 
@@ -529,6 +533,158 @@ fn default_colour() -> [u8; 3] {
     [255, 200, 120]
 }
 
+/// A share as a whole percentage: 0.15 -> "15".
+fn pct(share: f32) -> String {
+    format!("{:.0}", share * 100.0)
+}
+
+/// Seconds without a trailing ".0": 2.5 -> "2.5", 6.0 -> "6".
+fn secs(seconds: f32) -> String {
+    let text = format!("{seconds:.1}");
+    text.strip_suffix(".0").unwrap_or(&text).to_string()
+}
+
+fn ordinal(n: u32) -> String {
+    match n {
+        2 => "second".to_string(),
+        3 => "third".to_string(),
+        4 => "fourth".to_string(),
+        5 => "fifth".to_string(),
+        n => {
+            let suffix = match (n % 10, n % 100) {
+                (1, x) if x != 11 => "st",
+                (2, x) if x != 12 => "nd",
+                (3, x) if x != 13 => "rd",
+                _ => "th",
+            };
+            format!("{n}{suffix}")
+        }
+    }
+}
+
+impl Status {
+    /// What the status does to whoever it lands on, as a verb phrase
+    /// ("slow by 15% for 1 s").
+    pub fn describe(&self) -> String {
+        match self {
+            Status::Slow { pct: p, duration } => {
+                format!("slow by {}% for {} s", pct(*p), secs(*duration))
+            }
+            Status::Root { duration } => format!("root for {} s", secs(*duration)),
+            Status::Stun { duration } => format!("stun for {} s", secs(*duration)),
+            Status::Knockup { duration } => format!("knock up for {} s", secs(*duration)),
+            Status::Fear { duration } => format!("fear for {} s", secs(*duration)),
+            Status::Taunt { duration } => format!("taunt for {} s", secs(*duration)),
+            Status::Knockback { distance } => format!("knock back {distance:.0}"),
+            Status::Pull { distance } => format!("pull in {distance:.0}"),
+            Status::Venom { damage, duration } => {
+                format!(
+                    "envenom for {damage:.0} damage a second over {} s",
+                    secs(*duration)
+                )
+            }
+            Status::Bleed { damage, duration } => {
+                format!(
+                    "bleed for {damage:.0} damage a second over {} s",
+                    secs(*duration)
+                )
+            }
+            Status::HealCut { duration } => format!("halve healing for {} s", secs(*duration)),
+            Status::ManaDrain { amount } => format!("drain {amount:.0} mana"),
+            Status::ArmorShred { amount, duration } => {
+                format!("shred {amount:.0} armour for {} s", secs(*duration))
+            }
+            Status::CurrentHealth { pct: p } => format!("deal {}% of current health", pct(*p)),
+            Status::Chill { pct: p, duration } => {
+                format!("chill, slowing by {}% for {} s", pct(*p), secs(*duration))
+            }
+        }
+    }
+}
+
+impl Passive {
+    /// The passive in a sentence, written from its numbers so hero select
+    /// never disagrees with the match.
+    pub fn describe(&self) -> String {
+        match self {
+            Passive::MinionAura { radius, damage } => format!(
+                "Allied minions within {radius:.0} range deal {}% more damage.",
+                pct(*damage)
+            ),
+            Passive::NthAttack { n, radius, damage } => format!(
+                "Every {} basic attack also hits enemies within {radius:.0} of the target for {}% damage.",
+                ordinal(*n),
+                pct(*damage)
+            ),
+            Passive::SecondForm {
+                threshold,
+                heal,
+                duration,
+                range,
+                damage,
+                ..
+            } => {
+                let mut extras = Vec::new();
+                if *damage > 0.0 {
+                    extras.push(format!("{}% more attack damage", pct(*damage)));
+                }
+                if *range > 0.0 {
+                    extras.push(format!("{range:.0} more attack range"));
+                }
+                let with = if extras.is_empty() {
+                    String::new()
+                } else {
+                    format!(", with {}", extras.join(" and "))
+                };
+                format!(
+                    "Once per life, falling below {}% health heals {}% of max health and transforms for {} s{with}.",
+                    pct(*threshold),
+                    pct(*heal),
+                    secs(*duration)
+                )
+            }
+            Passive::OnHit { statuses } => {
+                let effects: Vec<String> = statuses.iter().map(Status::describe).collect();
+                format!("Basic attacks {}.", effects.join(" and "))
+            }
+            Passive::ThickHide { reduction } => {
+                format!("Takes {}% less damage from projectiles.", pct(*reduction))
+            }
+            Passive::Swift {
+                move_speed,
+                dash_bonus,
+            } => format!(
+                "Moves {}% faster. A dash empowers the next basic attack with {dash_bonus:.0} bonus damage.",
+                pct(*move_speed)
+            ),
+            Passive::SpellCombo {
+                per_stack,
+                max,
+                window,
+            } => format!(
+                "Each ability unlike the last adds {}% ability damage, stacking {max} times; the stacks fade after {} s.",
+                pct(*per_stack),
+                secs(*window)
+            ),
+            Passive::Splash { radius, pct: p } => format!(
+                "Basic attacks splash {}% damage onto enemies within {radius:.0} of the target.",
+                pct(*p)
+            ),
+            Passive::Scholar { xp } => {
+                format!(
+                    "Earns {}% more experience from kills and assists.",
+                    pct(*xp)
+                )
+            }
+            Passive::FrostBite { pct: p, duration } => format!(
+                "Basic attacks chill, slowing by {}% for {} s; three chills freeze.",
+                pct(*p),
+                secs(*duration)
+            ),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -542,6 +698,67 @@ mod tests {
             Action::Channel { action, .. } => collect_sounds(action, out),
             _ => {}
         }
+    }
+
+    #[test]
+    fn passives_describe_themselves_from_their_numbers() {
+        let passive = |json: &str| -> Passive { serde_json::from_str(json).unwrap() };
+        assert_eq!(
+            passive(r#"{"type": "nth_attack", "n": 3, "radius": 260, "damage": 0.7}"#).describe(),
+            "Every third basic attack also hits enemies within 260 of the target for 70% damage."
+        );
+        assert_eq!(
+            passive(r#"{"type": "on_hit", "statuses": [{"type": "slow", "pct": 0.15, "duration": 1.0}]}"#)
+                .describe(),
+            "Basic attacks slow by 15% for 1 s."
+        );
+        assert_eq!(
+            passive(
+                r#"{"type": "second_form", "threshold": 0.3, "heal": 0.25, "npc": 965,
+                    "duration": 8, "range": 250, "damage": 0.3}"#
+            )
+            .describe(),
+            "Once per life, falling below 30% health heals 25% of max health and transforms \
+             for 8 s, with 30% more attack damage and 250 more attack range."
+        );
+        assert_eq!(
+            passive(r#"{"type": "frost_bite", "pct": 0.15, "duration": 2.5}"#).describe(),
+            "Basic attacks chill, slowing by 15% for 2.5 s; three chills freeze."
+        );
+        assert_eq!(ordinal(21), "21st");
+        assert_eq!(ordinal(12), "12th");
+    }
+
+    #[test]
+    fn every_shipped_passive_has_a_name_and_a_sentence() {
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data/champions");
+        let mut passives = 0;
+        for entry in std::fs::read_dir(dir).unwrap() {
+            let path = entry.unwrap().path();
+            let config: serde_json::Value =
+                serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+            let Some(kit) = config.get("kit") else {
+                continue;
+            };
+            let kit: Kit = serde_json::from_value(kit.clone()).unwrap();
+            let Some(passive) = &kit.passive else {
+                continue;
+            };
+            passives += 1;
+            let name = kit.passive_name.as_deref().unwrap_or_default();
+            assert!(
+                !name.trim().is_empty(),
+                "{} names its passive",
+                path.display()
+            );
+            let text = passive.describe();
+            assert!(
+                text.ends_with('.') && !text.contains("NaN") && !text.contains("inf"),
+                "{}: {text}",
+                path.display()
+            );
+        }
+        assert!(passives >= 12, "the twelve kit passives, found {passives}");
     }
 
     #[test]

@@ -84,6 +84,7 @@
     24
   ],
   "kit": {
+    "passive_name": "Shapeshifter",
     "passive": {
       "type": "spell_combo",
       "per_stack": 0.1,

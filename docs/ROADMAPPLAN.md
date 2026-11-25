@@ -53,7 +53,7 @@ parchment (`hud/kit.rs`).
 | Area | Reference | MobaScape now | Remaining gap |
 |---|---|---|---|
 | Main menu | Stone window over the arena, mode buttons | Stone tablet with the notched buttons over the orbiting arena | Mode menu entries for Practice and Spectate; a confirm dialog on Quit |
-| Hero select | Stone title bar with mode and timer; both teams' columns with name, pick, lane and two battle spells; roster with *Picked* overlays; detail with passive, Q/W/E/R per-rank cooldowns and tags; Lock in; Leave | Stone windows throughout: title bar with Leave, both team columns with portraits and staggered bot picks, role tabs and filters, best-fit roster grid with *Picked*, detail with abilities and tags, 3D spotlight, timer and Confirm | **Lane picker**, **battle spells**, passive row, per-rank cooldown numbers, popular build row, music toggle |
+| Hero select | Stone title bar with mode and timer; both teams' columns with name, pick, lane and two battle spells; roster with *Picked* overlays; detail with passive, Q/W/E/R per-rank cooldowns and tags; Lock in; Leave | Stone windows throughout: title bar with Leave, both team columns with portraits and staggered bot picks, role tabs and filters, best-fit roster grid with *Picked*, detail with abilities and tags, 3D spotlight, timer and Confirm | **Battle spells**, music toggle (lane picker, passive row, per-rank cooldowns and popular build are done) |
 | Shop | "Grand Exchange" window: nav, search, tier sections of icons with prices, recipe rows `A + B > C`, detail with Builds into, Buy/Sell, bag with sell-back, Undo, coins | The same: stone frame and insets, tier sections, upgrade ladders as `a > b > c` rows, two-part recipes as `a + b > c`, owned items outlined green, Builds from / into with icons, bag row with sell prices (click to select, then Sell), Undo, coins | Item sets ("Add to set"), slot-based nav (head, body, legs ...), cache arrow sprites in place of the `>` glyph, a hover tooltip with full stats |
 | Minimap | Painted map: dark green jungle masses, wide beige lanes, blue river; **soft lit circles where allies see**; team squares for towers, larger for bases; hero portraits in team rings; camera trapezoid | Ground painted from the same cache textures the world uses; live team vision as a dark veil with a soft edge, following wall shadows; jungle darkened by blocked-tile density; wide lanes; team squares with a white core; player portrait in a gold ring; trapezoid | Jungle walls (needs the phase 5 cliffs); portraits for bot heroes; camp icons from the cache `mapfunction` sprites; pings; ward circles |
 | World light and colour | Lit grass hue 111-114, saturation ~0.6, value p10-p90 about 0.2-0.7; dark but coloured fog of war | Hue 86-100, saturation 0.55-0.66, value p10-p90 0.19-0.49 (after the 2026-11-24 retune) | Slightly more green on the darkest jungle; brighter highlights on lit lanes (the reference's sunlit stone reaches 0.7) |
@@ -150,9 +150,14 @@ with a commit and a push to `sam main`.
 3. **Battle spells.** Two spells per player from OSRS spell sprites
    (Teleport, Heal Other, Vengeance, a Smite-like jungle spell), shown in the
    team rows and cast from the D/F slots in match. Needs gameplay work.
-4. **Passive row and per-rank cooldowns** in the detail panel, from the
-   champion data.
-5. **Popular build row** from the Recommended shop data.
+4. ~~**Passive row and per-rank cooldowns.**~~ Done: a "Passive" key
+   chip over Q/W/E/R with the passive's name (`passive_name` in the
+   champion file) and a sentence written from its numbers
+   (`Passive::describe`), so the screen never disagrees with the match.
+   Q/W/E/R already showed per-rank cooldowns.
+5. ~~**Popular build row.**~~ Done: the best weapon, armour, boots and
+   jewellery from the hero's Recommended list, filled to five by price,
+   as cache item icons; hovering one names it and its price.
 6. Music toggle in the title bar.
 7. ~~**The lobby.**~~ Done the reference's way: it has no lobby. Lock in
    (or the timer) turns hero select itself into "All heroes locked in /
@@ -234,3 +239,8 @@ All objects from the cache, placed through the map format
   on the same bar; the timer note hides where it would cover the stats.
 - 2026-11-24: phase 4.7 done: the locked-in countdown on hero select
   replaces the separate lobby (reference still at 0:11).
+- 2026-11-24: phases 4.4 and 4.5 done: passive row and popular build on
+  the detail parchment. Short windows now fit: the rows give way in order
+  (tagline, weapon, descriptions, build), cut text ends in "..." with the
+  rest in an OSRS hover box, and at 1024x600 the roster drops its name
+  line for bigger portraits and the stats drop their labels.

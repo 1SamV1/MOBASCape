@@ -235,6 +235,52 @@ impl ItemShop {
         Vec::new()
     }
 
+    /// Hero select's "Popular build": the finished items of this hero's
+    /// recommended list, not its starters. The best weapon, armour, boots
+    /// and piece of jewellery, filled up to `count` with the next most
+    /// expensive items, shown weapon first. Also returns the list's key
+    /// (`MELEE`, `TANK`, a champion id, ...).
+    pub fn popular_build(
+        &self,
+        id: &str,
+        role: &str,
+        class: &str,
+        count: usize,
+    ) -> Option<(String, Vec<ItemConfig>)> {
+        let keys = std::iter::once(id.to_uppercase())
+            .chain(role.split_whitespace().map(str::to_uppercase))
+            .chain(std::iter::once(class.to_uppercase()));
+        let key = keys
+            .into_iter()
+            .find(|key| self.recommendations.contains_key(key))?;
+        let mut pool = self.build_for(id, role, class);
+        // Dearest first, so each slot keeps its finished item.
+        pool.sort_by_key(|item| std::cmp::Reverse((item.tier(), item.cost)));
+        let slot = |item: &ItemConfig| match item.category.as_str() {
+            "melee" | "ranged" | "magic" => 0,
+            "armour" => 1,
+            "boots" => 2,
+            _ => 3,
+        };
+        let mut picked: Vec<ItemConfig> = Vec::new();
+        for wanted in 0..4 {
+            if let Some(item) = pool.iter().find(|item| slot(item) == wanted) {
+                picked.push(item.clone());
+            }
+        }
+        for item in &pool {
+            if picked.len() >= count {
+                break;
+            }
+            if !picked.iter().any(|p| p.id == item.id) {
+                picked.push(item.clone());
+            }
+        }
+        picked.truncate(count);
+        picked.sort_by_key(|item| (slot(item), std::cmp::Reverse(item.cost)));
+        Some((key, picked))
+    }
+
     pub fn is_owned(&self, index: usize) -> bool {
         self.owned.iter().flatten().any(|&i| i == index)
     }
@@ -705,6 +751,55 @@ mod tests {
         for class in ["MELEE", "RANGED", "MAGIC"] {
             assert!(lists.get(class).is_some_and(|l| l.len() >= 8), "{class}");
         }
+    }
+
+    #[test]
+    fn the_popular_build_keeps_each_slot_s_finished_item_weapon_first() {
+        let kit = |id: &str, cost: u32, category: &str| ItemConfig {
+            category: category.to_string(),
+            ..item(id, cost, &[])
+        };
+        let items = vec![
+            kit("bronze_sword", 300, "melee"),
+            kit("rune_scimitar", 2600, "melee"),
+            kit("rune_platebody", 2400, "armour"),
+            kit("boots", 400, "boots"),
+            kit("amulet_of_power", 1500, "misc"),
+            kit("ring", 900, "misc"),
+            kit("leather", 200, "armour"),
+        ];
+        let text = r#"{"MELEE": ["bronze_sword", "leather", "ring", "boots",
+                       "amulet_of_power", "rune_platebody", "rune_scimitar"]}"#;
+        let shop = ItemShop {
+            recommendations: parse_recommendations(text, &items).expect("parse"),
+            items,
+            owned: [None; 6],
+            undo: Vec::new(),
+            recommended: Vec::new(),
+            open: false,
+            selected: None,
+            category: 1,
+            scroll: 0,
+            query: String::new(),
+            typing: false,
+        };
+        let (key, build) = shop
+            .popular_build("kril", "DEMON BRUISER", "Melee", 5)
+            .expect("melee list");
+        assert_eq!(key, "MELEE");
+        let ids: Vec<&str> = build.iter().map(|item| item.id.as_str()).collect();
+        assert_eq!(
+            ids,
+            [
+                "rune_scimitar",
+                "rune_platebody",
+                "boots",
+                "amulet_of_power",
+                "ring"
+            ],
+            "the dearest of each slot, the next dearest to fill, no starters"
+        );
+        assert!(shop.popular_build("x", "", "CHEF", 5).is_none());
     }
 
     #[test]

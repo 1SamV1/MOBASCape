@@ -77,6 +77,7 @@
     131
   ],
   "kit": {
+    "passive_name": "Bandos' war cry",
     "passive": {
       "type": "minion_aura",
       "radius": 900,
