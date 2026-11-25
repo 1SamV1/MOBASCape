@@ -69,6 +69,14 @@ pub enum UnitKind {
     DeliveryGuard,
 }
 
+/// Whether a kill of `kind` reaches the kill feed and the centre
+/// announcements: heroes and structures always, the practice dummy only
+/// when a hero (`by_hero`) landed it. Minion and camp kills would bury them
+/// (the reference feed shows neither).
+fn reaches_feed(kind: UnitKind, by_hero: bool) -> bool {
+    kind.is_champion() || kind.is_structure() || (kind == UnitKind::Dummy && by_hero)
+}
+
 /// Short display name used by kill announcements and the kill feed.
 fn short_unit_name(kind: UnitKind) -> &'static str {
     match kind {
@@ -4525,7 +4533,7 @@ impl AnimatedScene {
             self.bot_reward(bot, target_kind);
         }
         self.share_xp(index, target_kind, attacker_team, aggressor);
-        if target_kind != UnitKind::Camp {
+        if reaches_feed(target_kind, hero_aggressor) {
             let victim = short_unit_name(target_kind);
             let killer = aggressor
                 .filter(|&a| a != index)
@@ -7246,6 +7254,32 @@ fn append_quad(scene: &mut AnimatedScene, center: Vec3, right: Vec3, up: Vec3, c
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn only_hero_structure_and_dummy_kills_reach_the_feed() {
+        for kind in [
+            UnitKind::Player,
+            UnitKind::BotChampion,
+            UnitKind::Tower,
+            UnitKind::Inhibitor,
+            UnitKind::Nexus,
+        ] {
+            assert!(reaches_feed(kind, false), "{kind:?}");
+        }
+        assert!(reaches_feed(UnitKind::Dummy, true));
+        assert!(
+            !reaches_feed(UnitKind::Dummy, false),
+            "a minion's dummy kill"
+        );
+        for kind in [
+            UnitKind::MeleeMinion,
+            UnitKind::RangedMinion,
+            UnitKind::Camp,
+            UnitKind::Ambient,
+        ] {
+            assert!(!reaches_feed(kind, true), "{kind:?}");
+        }
+    }
 
     #[test]
     fn hitmark_kinds_map_to_distinct_osrs_sprites() {

@@ -17,10 +17,18 @@ pub fn build(theme: &Theme, layout: &Layout) -> DrawList {
 /// The same screen, but with no label or border behind components that are
 /// already drawn for real.
 pub fn build_without(theme: &Theme, layout: &Layout, live: &[Piece]) -> DrawList {
+    let mut list = pieces_without(theme, layout, live);
+    header(theme, layout, &mut list);
+    list
+}
+
+/// The labelled rectangles alone, without the header line. The live HUD
+/// starts from this: over a match the header was a debug line in the top
+/// left corner. Layout clashes still reach the log.
+pub fn pieces_without(theme: &Theme, layout: &Layout, live: &[Piece]) -> DrawList {
     let mut list = DrawList::new(layout.window, layout.scale, &theme.atlas);
     let s = list.scale();
     let text = theme.colour("text");
-    let quiet = theme.colour("text.quiet");
     let font = theme.font("font.small");
     let fill: Colour = [0.04, 0.06, 0.10, 0.58];
     let border = |piece: Piece| -> Colour {
@@ -54,9 +62,16 @@ pub fn build_without(theme: &Theme, layout: &Layout, live: &[Piece]) -> DrawList
         }
     }
 
-    // The header names the scale and what the collapse gave way. A requested
-    // scale that had to be lowered says so, and the log says it too.
-    if let Some(font) = font {
+    list
+}
+
+/// The header names the scale and what the collapse gave way. A requested
+/// scale that had to be lowered says so, and the log says it too.
+fn header(theme: &Theme, layout: &Layout, list: &mut DrawList) {
+    let s = list.scale();
+    let text = theme.colour("text");
+    let quiet = theme.colour("text.quiet");
+    if let Some(font) = theme.font("font.small") {
         list.set_layer(WRITING);
         let mut line = format!(
             "layout {} x {}  scale {}",
@@ -95,6 +110,4 @@ pub fn build_without(theme: &Theme, layout: &Layout, live: &[Piece]) -> DrawList
             );
         }
     }
-
-    list
 }

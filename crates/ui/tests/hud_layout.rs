@@ -364,3 +364,30 @@ fn the_usual_state_is_within_the_quarter_at_the_supported_sizes() {
         );
     }
 }
+
+#[test]
+fn only_the_sketch_screen_carries_the_header_line() {
+    use rift_ui::atlas::Image;
+    use rift_ui::hud::sketch;
+    use rift_ui::theme::{GlyphSource, ThemeBuilder};
+    let glyphs = (32u8..127)
+        .map(|code| GlyphSource {
+            character: code as char,
+            image: (code != b' ').then(|| Image::filled(3, 6, [0, 0, 0, 255])),
+            left: 1,
+            top: 2,
+            advance: 5,
+        })
+        .collect();
+    let mut builder = ThemeBuilder::new();
+    builder.font("font.small", glyphs, 8, 10);
+    builder.colour("text", [1.0; 4]);
+    builder.colour("text.quiet", [1.0; 4]);
+    let theme = builder.build();
+    let layout = place(&sample::state(), (1920, 1080), None);
+    let every: Vec<Piece> = layout.pieces.keys().copied().collect();
+    // With every component live, the live HUD's base draws nothing at all:
+    // no "layout 1920 x 1080 scale ..." line over the match.
+    assert!(sketch::pieces_without(&theme, &layout, &every).is_empty());
+    assert!(!sketch::build_without(&theme, &layout, &every).is_empty());
+}

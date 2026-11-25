@@ -172,10 +172,11 @@ All objects from the cache, placed through the map format
 
 ### Phase 6: HUD polish
 
-1. **Remove the debug line** ("layout 1920 x 1008 scale 1 ...") from normal
-   runs; keep it behind a flag.
-2. **Kill feed:** hero kills, towers and objectives only; minion kills go to
-   the chat at most.
+1. ~~Remove the debug line~~ Done 2026-11-24: the live HUD starts from
+   the sketch's rectangles without its header; the dev sketch keeps it.
+2. ~~Kill feed~~ Done 2026-11-24: heroes and structures only (the practice
+   dummy when a hero kills it); the same rule gates the centre
+   announcements, so last hits no longer flash "YOU HAVE SLAIN A MINION!".
 3. **Objectives panel:** named objectives with respawn timers and per-lane
    tower states, not one row per camp.
 4. Slimmer action bar with round portrait, skill-point "+" over abilities,
@@ -215,3 +216,6 @@ All objects from the cache, placed through the map format
   colours (which showed the brown floors the shader paints over).
 - 2026-11-24: phase 5.6 done: the dire tree line's bark cones and bark
   blobs were a `wood_only` flag on full-canopy models.
+- 2026-11-24: phase 6.1 and 6.2 done: no debug line over the match; the
+  kill feed and announcements carry hero, structure and hero-landed dummy
+  kills only.

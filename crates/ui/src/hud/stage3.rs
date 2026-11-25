@@ -12,7 +12,7 @@ use crate::hud::{
 use crate::theme::Theme;
 
 pub fn build(theme: &Theme, layout: &Layout, state: &HudState) -> DrawList {
-    let mut list = sketch::build_without(
+    let mut list = sketch::pieces_without(
         theme,
         layout,
         &[
