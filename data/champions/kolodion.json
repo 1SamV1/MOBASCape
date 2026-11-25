@@ -103,6 +103,7 @@
         "actions": [
           {
             "type": "area",
+            "gfx": { "land": 77, "hit": 77 },
             "radius": 200,
             "range": 900,
             "delay": 0.7,
@@ -128,6 +129,7 @@
         "actions": [
           {
             "type": "area",
+            "gfx": { "land": 78 },
             "radius": 170,
             "range": 900,
             "delay": 0.35,
@@ -154,6 +156,7 @@
         "actions": [
           {
             "type": "projectile",
+            "gfx": { "hit": 76 },
             "visual": "trident",
             "speed": 1700,
             "range": 950,

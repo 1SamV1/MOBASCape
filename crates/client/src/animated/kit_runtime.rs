@@ -15,7 +15,7 @@ use super::{
     planar_delta, turn_toward,
 };
 use crate::fx;
-use crate::kit::{self, Action, Anchor, Passive, Status};
+use crate::kit::{self, Action, Anchor, Gfx, Passive, Status};
 use crate::scene::{HeightGrid, WorldCollision};
 
 /// A cache NPC's merged model and clips, loaded up front for summons and
@@ -70,6 +70,9 @@ struct KitShot {
     ember_timer: f32,
     /// Homing basic attack: steers onto this unit and hits only it.
     target: Option<usize>,
+    gfx: Gfx,
+    /// The `land` graphic has played (at the first strike).
+    landed: bool,
 }
 
 struct PendingArea {
@@ -85,6 +88,7 @@ struct PendingArea {
     from: Vec3,
     /// Thud with the shared `kit_area` sound on landing.
     sound: bool,
+    gfx: Gfx,
 }
 
 struct Zone {
@@ -98,6 +102,7 @@ struct Zone {
     heal_caster: f32,
     on_tick: Vec<Status>,
     color: [u8; 3],
+    gfx: Gfx,
 }
 
 struct DashState {
@@ -109,6 +114,7 @@ struct DashState {
     hit: Vec<usize>,
     land: Vec<Action>,
     ctx: CastCtx,
+    gfx: Gfx,
 }
 
 struct ChannelState {
@@ -126,6 +132,7 @@ struct EmpowerState {
     missing_health: f32,
     reset_on_kill: Option<usize>,
     on_hit: Vec<Status>,
+    gfx: Gfx,
 }
 
 struct TransformState {
@@ -258,8 +265,11 @@ impl AnimatedScene {
             .collect()
     }
 
-    /// Damage plus statuses on one enemy.
-    fn kit_hit(&mut self, index: usize, damage: f32, statuses: &[Status], from: Vec3) {
+    /// Damage plus statuses on one enemy, with the action's graphics: its
+    /// `hit` on the unit (a splash instead when a shield soaks the spell)
+    /// and a held graphic for as long as its crowd control lasts.
+    fn kit_hit(&mut self, index: usize, damage: f32, statuses: &[Status], from: Vec3, gfx: &Gfx) {
+        let splashed = damage > 0.0 && self.units[index].shield > 0.0;
         let mut pure = 0.0;
         for status in statuses {
             if let Status::CurrentHealth { pct } = status {
@@ -273,9 +283,35 @@ impl AnimatedScene {
         if self.units[index].health <= 0.0 {
             return;
         }
+        let size = gfx.scale * self.gfx_size(index);
+        if splashed {
+            self.gfx_on(kit::spot::SPLASH, index, size);
+        } else if let Some(id) = gfx.hit {
+            self.gfx_on(id, index, size);
+        }
         for status in statuses {
             self.apply_status(index, status, from);
         }
+        if self.units[index].kind.is_structure() {
+            return;
+        }
+        let hold = statuses
+            .iter()
+            .filter_map(Status::hold)
+            .max_by(|a, b| a.1.total_cmp(&b.1));
+        if let Some((own, seconds)) = hold
+            && let Some(id) = gfx.hold.or(own)
+        {
+            self.gfx_hold(id, index, seconds, size);
+        }
+    }
+
+    /// Spell graphics are authored for a player-sized body; bigger units
+    /// (camps, bosses) get somewhat bigger ones, short of hiding them.
+    fn gfx_size(&self, index: usize) -> f32 {
+        (self.units[index].body_radius / 65.0)
+            .sqrt()
+            .clamp(0.8, 1.6)
     }
 
     pub(super) fn apply_status(&mut self, index: usize, status: &Status, from: Vec3) {
@@ -316,6 +352,8 @@ impl AnimatedScene {
                     let pos = unit.pos;
                     self.emit_burst(pos + Vec3::Y * 40.0, [170, 230, 255], 16, 220.0, 14.0, 0.7);
                     self.add_decal(pos, 110.0, [120, 180, 220], 1.4);
+                    let size = self.gfx_size(index);
+                    self.gfx_hold(kit::spot::ICE_BLOCK, index, 1.2, size);
                 }
             }
             Status::Root { duration } => unit.cc.root_timer = unit.cc.root_timer.max(duration),
@@ -495,6 +533,13 @@ impl AnimatedScene {
             let pos = self.units[pi].pos;
             self.play_sound(name, pos);
         }
+        // A channel's repeated action plays its own cast each time.
+        if !matches!(action, Action::Channel { .. })
+            && let Some(id) = action.gfx().cast
+        {
+            let size = action.gfx().scale * self.gfx_size(pi);
+            self.gfx_on(id, pi, size);
+        }
         match action {
             Action::Projectile {
                 speed,
@@ -507,6 +552,7 @@ impl AnimatedScene {
                 explode,
                 visual,
                 on_hit,
+                gfx,
             } => {
                 let count = (*count).max(1);
                 let (look, tint) = match visual {
@@ -543,6 +589,8 @@ impl AnimatedScene {
                         age: 0.0,
                         ember_timer: 0.0,
                         target: None,
+                        gfx: gfx.clone(),
+                        landed: false,
                     });
                 }
             }
@@ -558,6 +606,7 @@ impl AnimatedScene {
                 scatter,
                 heal_per_hit,
                 on_hit,
+                gfx,
             } => {
                 let center = self.anchor_point(*at, *range * ctx.reach, ctx);
                 for r in 0..(*repeat).max(1) {
@@ -585,6 +634,7 @@ impl AnimatedScene {
                         color: ctx.color,
                         from: ctx.origin,
                         sound: ctx.shared_sounds,
+                        gfx: gfx.clone(),
                     });
                 }
             }
@@ -600,11 +650,15 @@ impl AnimatedScene {
                 grow,
                 heal_caster,
                 on_tick,
+                gfx,
             } => {
                 let center = self.anchor_point(*at, *range * ctx.reach, ctx);
                 for i in 0..(*count).max(1) {
                     let pos = center + ctx.dir * (spacing * i as f32);
                     self.add_decal(pos, *radius, dim(ctx.color), *duration);
+                    if let Some(id) = gfx.land {
+                        self.gfx_at(id, pos, gfx.scale);
+                    }
                     self.kit_rt.zones.push(Zone {
                         pos,
                         radius: *radius,
@@ -616,6 +670,7 @@ impl AnimatedScene {
                         heal_caster: *heal_caster,
                         on_tick: on_tick.clone(),
                         color: ctx.color,
+                        gfx: gfx.clone(),
                     });
                 }
             }
@@ -628,6 +683,7 @@ impl AnimatedScene {
                 untargetable,
                 on_hit,
                 land,
+                gfx,
             } => {
                 let dir = if *backwards { -ctx.dir } else { ctx.dir };
                 let mut distance = *distance * ctx.reach;
@@ -651,6 +707,7 @@ impl AnimatedScene {
                     hit: Vec::new(),
                     land: land.clone(),
                     ctx: ctx.clone(),
+                    gfx: gfx.clone(),
                 });
                 if let Some(Passive::Swift { dash_bonus, .. }) =
                     self.kit.as_ref().and_then(|kit| kit.passive.as_ref())
@@ -663,6 +720,7 @@ impl AnimatedScene {
                         missing_health: 0.0,
                         reset_on_kill: None,
                         on_hit: Vec::new(),
+                        gfx: Gfx::default(),
                     });
                 }
             }
@@ -677,6 +735,7 @@ impl AnimatedScene {
                 move_speed,
                 untargetable,
                 rooted,
+                gfx: _,
             } => {
                 let mult = ctx.mult;
                 let player = &mut self.units[pi];
@@ -726,8 +785,12 @@ impl AnimatedScene {
                 scale,
                 at,
                 npcs,
+                gfx,
             } => {
                 let center = self.anchor_point(*at, 700.0, ctx);
+                if let Some(id) = gfx.land {
+                    self.gfx_at(id, center, gfx.scale);
+                }
                 for i in 0..(*count).max(1) {
                     let id = npcs.get(i as usize).copied().unwrap_or(*npc);
                     let Some(asset) = self.kit_rt.npc_assets.get(&id) else {
@@ -784,6 +847,7 @@ impl AnimatedScene {
                 missing_health,
                 reset_on_kill,
                 on_hit,
+                gfx,
             } => {
                 self.kit_rt.empower = Some(EmpowerState {
                     remaining: *duration,
@@ -792,6 +856,7 @@ impl AnimatedScene {
                     missing_health: *missing_health,
                     reset_on_kill: *reset_on_kill,
                     on_hit: on_hit.clone(),
+                    gfx: gfx.clone(),
                 });
                 self.emit_burst(ctx.origin + Vec3::Y * 90.0, ctx.color, 12, 160.0, 12.0, 0.5);
             }
@@ -803,6 +868,7 @@ impl AnimatedScene {
                 range,
                 move_speed,
                 heal,
+                gfx: _,
             } => {
                 self.kit_transform(*npc, *duration, *scale, *damage, *range, *move_speed);
                 let player = &mut self.units[pi];
@@ -1035,7 +1101,9 @@ impl AnimatedScene {
             _ => {}
         }
         let mut reset_slot = None;
+        let mut gfx = Gfx::default();
         if let Some(empower) = self.kit_rt.empower.as_mut() {
+            gfx = empower.gfx.clone();
             damage += empower.bonus;
             let target_unit = &self.units[target];
             damage += (target_unit.max_health - target_unit.health) * empower.missing_health;
@@ -1083,12 +1151,14 @@ impl AnimatedScene {
                 age: 0.0,
                 ember_timer: 0.0,
                 target: Some(target),
+                gfx,
+                landed: false,
             });
             self.muzzle_flash(from, look);
             return;
         }
         self.melee_slash(pi, target, [255, 235, 200]);
-        self.kit_hit(target, damage, &statuses, self.units[pi].pos);
+        self.kit_hit(target, damage, &statuses, self.units[pi].pos, &gfx);
         let killed = self.units[target].health <= 0.0;
         if killed {
             self.units[pi].attack_target = None;
@@ -1118,7 +1188,7 @@ impl AnimatedScene {
         if let Some((radius, pct)) = aoe {
             for other in self.kit_enemies_in(target_pos, radius, Vec3::Z, 360.0) {
                 if other != target {
-                    self.kit_hit(other, damage * pct, &[], target_pos);
+                    self.kit_hit(other, damage * pct, &[], target_pos, &Gfx::default());
                 }
             }
         }
@@ -1236,7 +1306,7 @@ impl AnimatedScene {
             for index in self.kit_enemies_in(pos, 130.0, Vec3::Z, 360.0) {
                 if !dash.hit.contains(&index) {
                     dash.hit.push(index);
-                    self.kit_hit(index, dash.damage, &dash.on_hit, pos);
+                    self.kit_hit(index, dash.damage, &dash.on_hit, pos, &dash.gfx);
                 }
             }
         }
@@ -1332,7 +1402,18 @@ impl AnimatedScene {
             }
             for &index in &hits {
                 shot.hit.push(index);
-                self.kit_hit(index, shot.damage, &shot.on_hit, shot.from);
+                if !shot.landed {
+                    shot.landed = true;
+                    if let Some(id) = shot.gfx.land {
+                        let ground = Vec3::new(
+                            shot.pos.x,
+                            height.height_at(shot.pos.x, shot.pos.z),
+                            shot.pos.z,
+                        );
+                        self.gfx_at(id, ground, shot.gfx.scale);
+                    }
+                }
+                self.kit_hit(index, shot.damage, &shot.on_hit, shot.from, &shot.gfx);
                 self.impact_burst(shot.pos, &look);
                 if shot.explode > 0.0 {
                     let center = shot.pos;
@@ -1353,7 +1434,13 @@ impl AnimatedScene {
                     };
                     for other in self.kit_enemies_in(center, shot.explode, Vec3::Z, 360.0) {
                         if other != index {
-                            self.kit_hit(other, shot.damage * splash, &shot.on_hit, center);
+                            self.kit_hit(
+                                other,
+                                shot.damage * splash,
+                                &shot.on_hit,
+                                center,
+                                &shot.gfx,
+                            );
                         }
                     }
                 }
@@ -1413,10 +1500,13 @@ impl AnimatedScene {
             if area.sound {
                 self.play_sound("kit_area", area.pos);
             }
+            if let Some(id) = area.gfx.land {
+                self.gfx_at(id, area.pos, area.gfx.scale);
+            }
             let hits = self.kit_enemies_in(area.pos, area.radius, area.facing, area.arc);
             let count = hits.len();
             for index in hits {
-                self.kit_hit(index, area.damage, &area.on_hit, area.from);
+                self.kit_hit(index, area.damage, &area.on_hit, area.from, &area.gfx);
             }
             if area.heal_per_hit > 0.0 && count > 0 {
                 let pi = self.player_index;
@@ -1448,7 +1538,7 @@ impl AnimatedScene {
             if zone.timer <= 0.0 {
                 zone.timer += zone.tick;
                 for index in self.kit_enemies_in(zone.pos, zone.radius, Vec3::Z, 360.0) {
-                    self.kit_hit(index, zone.damage, &zone.on_tick, zone.pos);
+                    self.kit_hit(index, zone.damage, &zone.on_tick, zone.pos, &zone.gfx);
                 }
                 if zone.heal_caster > 0.0 {
                     let player = &mut self.units[pi];

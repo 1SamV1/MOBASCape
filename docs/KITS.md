@@ -41,6 +41,43 @@ Ability damage is multiplied by `(1 + ability_power / 100) * (1 + 0.05 * (level 
 example `fire_wave`, `dragonfire`, `trident`, `crystal`, `tongue`). Without
 one the shot is a glowing orb in the ability's `color`.
 
+## Spell graphics (`gfx`)
+
+Any action except `channel` can carry a `gfx` block of cache spot
+animations. A channel uses its repeated action's block.
+
+```json
+{"type": "area", "radius": 200, "delay": 0.7, "damage": 75,
+ "gfx": {"land": 77, "hit": 77}}
+```
+
+| Field | Plays |
+|---|---|
+| `cast` | Once on the caster as the action starts |
+| `land` | Once where an area lands, where a zone or summon is laid, or where a projectile first strikes |
+| `hit` | Once on every unit hit. On a zone it plays on every tick |
+| `hold` | Looping on a unit for as long as the action's crowd control lasts, in place of the status's own graphic |
+| `scale` | A size multiplier for the block (default 1) |
+
+How the graphics are drawn:
+
+- They are drawn solid and flat-shaded, standing on the ground at the height
+  the cache authored them. The ones on a unit ride along with it.
+- On a unit, they grow a little with its size, up to 1.6x.
+- A hit on a unit with a shield plays the OSRS splash (85) instead of `hit`.
+
+Some statuses hold a graphic of their own:
+
+- Stun and knock-up hold the circling stars (80).
+- Chill's freeze holds the Ice Barrage block (369).
+- A root holds nothing unless the action names a `hold`, because both ice
+  and vines root.
+
+Only ids listed in `kit::spot::VERIFIED` may ship: a test fails otherwise,
+and the client warns at load. To add one, watch it play with
+`--demo-gfx <id>`, then add it to that list and to the table in
+[SPELLS.md](SPELLS.md).
+
 ## Attack and cast animations, projectiles
 
 Every champion file (kit or not) may also carry:

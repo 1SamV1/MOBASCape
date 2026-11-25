@@ -51,6 +51,71 @@ pub enum Anchor {
     Front,
 }
 
+/// Cache spot animations an action plays (docs/SPELLS.md). Every field is
+/// optional; an action without a block keeps its tinted rings and glows.
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+pub struct Gfx {
+    /// Plays on the caster as the action starts.
+    #[serde(default)]
+    pub cast: Option<u32>,
+    /// Plays where an area lands, where a zone is laid, or where a
+    /// projectile first strikes.
+    #[serde(default)]
+    pub land: Option<u32>,
+    /// Plays on every unit the action hits.
+    #[serde(default)]
+    pub hit: Option<u32>,
+    /// Stays on a unit while the action's crowd control lasts, in place of
+    /// the status's own graphic (an ice block instead of no graphic on a
+    /// root).
+    #[serde(default)]
+    pub hold: Option<u32>,
+    /// Size multiplier for every graphic in the block.
+    #[serde(default = "one")]
+    pub scale: f32,
+}
+
+impl Default for Gfx {
+    fn default() -> Self {
+        Self {
+            cast: None,
+            land: None,
+            hit: None,
+            hold: None,
+            scale: 1.0,
+        }
+    }
+}
+
+impl Gfx {
+    fn ids(&self) -> impl Iterator<Item = u32> + '_ {
+        [self.cast, self.land, self.hit, self.hold]
+            .into_iter()
+            .flatten()
+    }
+}
+
+/// Spot animations the runtime plays without a kit naming them.
+pub mod spot {
+    /// Circling stars over a stunned or knocked-up unit.
+    pub const STUN: u32 = 80;
+    /// A spell striking a shield or an untargetable unit.
+    pub const SPLASH: u32 = 85;
+    /// The Ice Barrage block around a frozen unit (three chills).
+    pub const ICE_BLOCK: u32 = 369;
+    /// Every graphic above.
+    pub const ALL: [u32; 3] = [STUN, SPLASH, ICE_BLOCK];
+
+    /// Spot animations someone has watched play and named in
+    /// docs/SPELLS.md. Kits may only use these, so a typo cannot ship a
+    /// random cache graphic.
+    pub const VERIFIED: &[u32] = &[
+        76, 77, 78, 80, 85, 111, 177, 178, 342, 343, 344, 345, 359, 360, 361, 362, 363, 368, 369,
+        372, 374, 377, 392, 550, 551, 552, 553, 554, 555, 556, 557, 558, 559, 678, 725, 726, 744,
+        745, 747, 750, 1290,
+    ];
+}
+
 #[derive(Debug, Clone, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Action {
@@ -76,6 +141,8 @@ pub enum Action {
         visual: Option<String>,
         #[serde(default)]
         on_hit: Vec<Status>,
+        #[serde(default)]
+        gfx: Gfx,
     },
     /// A circle or cone that lands after `delay`, optionally repeating.
     Area {
@@ -103,6 +170,8 @@ pub enum Action {
         heal_per_hit: f32,
         #[serde(default)]
         on_hit: Vec<Status>,
+        #[serde(default)]
+        gfx: Gfx,
     },
     /// A lingering ground effect that ticks on enemies inside it.
     Zone {
@@ -130,6 +199,8 @@ pub enum Action {
         heal_caster: f32,
         #[serde(default)]
         on_tick: Vec<Status>,
+        #[serde(default)]
+        gfx: Gfx,
     },
     /// Move the caster quickly along the ground, hitting what it passes.
     /// `to_cursor` stops at the cursor (up to `distance`). `land` runs at
@@ -150,6 +221,8 @@ pub enum Action {
         on_hit: Vec<Status>,
         #[serde(default)]
         land: Vec<Action>,
+        #[serde(default)]
+        gfx: Gfx,
     },
     /// Self heal, shield and timed buffs.
     Buff {
@@ -180,6 +253,8 @@ pub enum Action {
         /// still for `duration` (a channelled heal).
         #[serde(default)]
         rooted: bool,
+        #[serde(default)]
+        gfx: Gfx,
     },
     /// Allied creatures that hunt nearby enemies for `duration`.
     Summon {
@@ -202,6 +277,8 @@ pub enum Action {
         /// Optional variant NPCs; summon `i` uses `npcs[i]` when present.
         #[serde(default)]
         npcs: Vec<u32>,
+        #[serde(default)]
+        gfx: Gfx,
     },
     /// Repeat an action every `interval` while the caster stands still.
     Channel {
@@ -225,6 +302,8 @@ pub enum Action {
         reset_on_kill: Option<usize>,
         #[serde(default)]
         on_hit: Vec<Status>,
+        #[serde(default)]
+        gfx: Gfx,
     },
     /// Take another NPC's model for a while, with stat bonuses.
     Transform {
@@ -241,10 +320,27 @@ pub enum Action {
         move_speed: f32,
         #[serde(default)]
         heal: f32,
+        #[serde(default)]
+        gfx: Gfx,
     },
 }
 
 impl Action {
+    /// The action's graphics block; a channel uses its repeated action's.
+    pub fn gfx(&self) -> &Gfx {
+        match self {
+            Action::Projectile { gfx, .. }
+            | Action::Area { gfx, .. }
+            | Action::Zone { gfx, .. }
+            | Action::Dash { gfx, .. }
+            | Action::Buff { gfx, .. }
+            | Action::Summon { gfx, .. }
+            | Action::Empower { gfx, .. }
+            | Action::Transform { gfx, .. } => gfx,
+            Action::Channel { action, .. } => action.gfx(),
+        }
+    }
+
     /// The shared sound (`data/sounds.json`) this action makes when it
     /// starts. Buffs are scored by their strongest effect: a heal chimes
     /// like Rapid Heal, a shield like Steel Skin, a haste like Incredible
@@ -344,6 +440,23 @@ pub enum Status {
         pct: f32,
         duration: f32,
     },
+}
+
+impl Status {
+    /// Crowd control that can carry a held graphic: the status's own
+    /// graphic, if it has one, and how long it holds. Chill's freeze plays
+    /// its ice block when the third stack lands, not here.
+    pub fn hold(&self) -> Option<(Option<u32>, f32)> {
+        match *self {
+            Status::Stun { duration } | Status::Knockup { duration } => {
+                Some((Some(spot::STUN), duration))
+            }
+            Status::Root { duration } | Status::Fear { duration } | Status::Taunt { duration } => {
+                Some((None, duration))
+            }
+            _ => None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -465,6 +578,29 @@ impl Kit {
         out.sort_unstable();
         out.dedup();
         out
+    }
+}
+
+impl Kit {
+    /// Every spot animation the kit may play, plus the runtime's own status
+    /// graphics, so the scene can load them with the match.
+    pub fn spotanims(&self) -> Vec<u32> {
+        let mut out = spot::ALL.to_vec();
+        for ability in &self.abilities {
+            for action in &ability.actions {
+                collect_spotanims(action, &mut out);
+            }
+        }
+        out.sort_unstable();
+        out.dedup();
+        out
+    }
+}
+
+fn collect_spotanims(action: &Action, out: &mut Vec<u32>) {
+    out.extend(action.gfx().ids());
+    if let Action::Dash { land, .. } = action {
+        land.iter().for_each(|a| collect_spotanims(a, out));
     }
 }
 
@@ -727,6 +863,83 @@ mod tests {
         );
         assert_eq!(ordinal(21), "21st");
         assert_eq!(ordinal(12), "12th");
+    }
+
+    #[test]
+    fn a_gfx_block_parses_with_defaults_and_its_ids_are_collected() {
+        let kit: Kit = serde_json::from_str(
+            r#"{"abilities": [
+                {"cost": 0, "cooldown": 1, "actions": [
+                    {"type": "area", "radius": 100, "gfx": {"land": 77, "hit": 77}}]},
+                {"cost": 0, "cooldown": 1, "actions": [
+                    {"type": "dash", "distance": 300, "land": [
+                        {"type": "area", "radius": 100, "gfx": {"hit": 363, "scale": 1.5}}]}]},
+                {"cost": 0, "cooldown": 1, "actions": [
+                    {"type": "channel", "duration": 1, "interval": 0.5, "action":
+                        {"type": "projectile", "speed": 1, "range": 1, "damage": 1,
+                         "gfx": {"cast": 744}}}]},
+                {"cost": 0, "cooldown": 1, "actions": [{"type": "buff", "heal": 10}]}
+            ]}"#,
+        )
+        .unwrap();
+        let plain = kit.abilities[3].actions[0].gfx();
+        assert_eq!(plain, &Gfx::default());
+        // An action with no block and one with an empty block agree.
+        assert_eq!(plain.scale, 1.0);
+        let area = kit.abilities[0].actions[0].gfx();
+        assert_eq!((area.land, area.hit, area.scale), (Some(77), Some(77), 1.0));
+        // A channel answers with its repeated action's block.
+        assert_eq!(kit.abilities[2].actions[0].gfx().cast, Some(744));
+        let mut want = vec![77, 363, 744];
+        want.extend(spot::ALL);
+        want.sort_unstable();
+        assert_eq!(kit.spotanims(), want);
+    }
+
+    #[test]
+    fn crowd_control_holds_its_own_graphic_or_leaves_room_for_one() {
+        let stun = Status::Stun { duration: 1.5 };
+        assert_eq!(stun.hold(), Some((Some(spot::STUN), 1.5)));
+        assert_eq!(
+            Status::Knockup { duration: 0.75 }.hold(),
+            Some((Some(spot::STUN), 0.75))
+        );
+        // A root has no graphic of its own: ice and vines both root.
+        assert_eq!(Status::Root { duration: 1.25 }.hold(), Some((None, 1.25)));
+        assert_eq!(Status::ManaDrain { amount: 10.0 }.hold(), None);
+        assert_eq!(
+            Status::Chill {
+                pct: 0.3,
+                duration: 2.0
+            }
+            .hold(),
+            None,
+            "the freeze plays its ice block on the third stack"
+        );
+    }
+
+    #[test]
+    fn shipped_kits_only_use_verified_graphics() {
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data/champions");
+        let mut used = 0;
+        for entry in std::fs::read_dir(dir).unwrap() {
+            let path = entry.unwrap().path();
+            let config: serde_json::Value =
+                serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+            let Some(kit) = config.get("kit") else {
+                continue;
+            };
+            let kit: Kit = serde_json::from_value(kit.clone()).unwrap();
+            for id in kit.spotanims() {
+                assert!(
+                    spot::VERIFIED.contains(&id),
+                    "{} uses spot animation {id}, which docs/SPELLS.md has not verified",
+                    path.display()
+                );
+                used += 1;
+            }
+        }
+        assert!(used > 0);
     }
 
     #[test]

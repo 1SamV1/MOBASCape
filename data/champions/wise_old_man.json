@@ -131,6 +131,7 @@
         "actions": [
           {
             "type": "area",
+            "gfx": { "hit": 111 },
             "at": "caster",
             "radius": 360,
             "damage": 30,
@@ -154,6 +155,7 @@
         "actions": [
           {
             "type": "buff",
+            "gfx": { "cast": 744 },
             "shield": 130,
             "heal": 40,
             "duration": 4

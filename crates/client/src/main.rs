@@ -2072,6 +2072,9 @@ impl App {
                             height.height_at(spot.x, spot.z),
                             spot.z,
                         ));
+                        // The camp outlives all four abilities, so each one
+                        // (and its graphics) lands on a live target.
+                        animated.debug_sturdy(camp, 20_000.0);
                         tracing::info!("demo abilities: beside camp {camp}");
                     }
                     animated.debug_grant_gold(0);

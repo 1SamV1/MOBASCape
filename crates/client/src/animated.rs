@@ -372,22 +372,51 @@ impl SpotModel {
 }
 
 /// How a spot animation model is drawn.
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum SpotDraw {
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SpotDraw {
     /// A projectile: looping clip, solid faces lit with the scene.
     Flying,
     /// An impact splash: plays once, every face added to the glow pass.
     Burst,
+    /// A spell graphic (cast, land or hit): plays once with solid faces,
+    /// standing on the ground the way the cache authored it.
+    Spell,
+    /// A status graphic held on a unit (stun stars, an ice block): loops
+    /// with solid faces, standing on the unit's feet.
+    Held,
 }
 
-/// A spot animation played once in the world (an impact splash).
+impl SpotDraw {
+    fn looping(self) -> bool {
+        matches!(self, SpotDraw::Flying | SpotDraw::Held)
+    }
+
+    /// Spell graphics are authored from the ground up (cache y <= 0 is
+    /// above the ground), so they keep their origin; projectiles and impact
+    /// splashes are centred on their position.
+    fn grounded(self) -> bool {
+        matches!(self, SpotDraw::Spell | SpotDraw::Held)
+    }
+}
+
+/// A spot animation played in the world: an impact splash, a spell graphic
+/// or a held status graphic.
 pub struct SpotBurst {
     pub spotanim: u32,
+    /// World position, or the offset from the followed unit's feet.
     pub pos: Vec3,
     pub yaw: f32,
     pub time_ms: f32,
     pub scale: f32,
+    pub mode: SpotDraw,
+    /// Ride on this unit; `pos` is then an offset from its feet.
+    pub follow: Option<usize>,
+    /// Seconds a held graphic has left. Unused by the other modes.
+    pub hold: f32,
 }
+
+/// At most this many spot animations play at once; more are dropped.
+const MAX_SPOT_BURSTS: usize = 64;
 
 /// A bright arc streak across a target struck in melee.
 pub struct Slash {
@@ -1283,7 +1312,23 @@ impl AnimatedScene {
         // Projectile and impact models for every look. A missing spot
         // animation only costs that look its model; the glow still draws.
         let mut spot_models = HashMap::new();
-        for id in fx::spotanim_ids() {
+        let kit_spots = champion.kit.as_ref().map(|kit| kit.spotanims());
+        for id in kit_spots.iter().flatten() {
+            if !crate::kit::spot::VERIFIED.contains(id) {
+                tracing::warn!(
+                    "kit: {} plays spot animation {id}, not yet verified in docs/SPELLS.md",
+                    champion.name
+                );
+            }
+        }
+        let wanted = fx::spotanim_ids()
+            .into_iter()
+            .chain(crate::kit::spot::ALL)
+            .chain(kit_spots.into_iter().flatten());
+        for id in wanted {
+            if spot_models.contains_key(&id) {
+                continue;
+            }
             match SpotModel::load(cache, id) {
                 Ok(spot) => {
                     spot_models.insert(id, Arc::new(spot));
@@ -1634,6 +1679,15 @@ impl AnimatedScene {
     pub fn debug_refill_mana(&mut self) {
         let unit = &mut self.units[self.player_index];
         unit.mana = unit.max_mana;
+    }
+
+    /// Dev: give a unit this much health (current and maximum), so a demo
+    /// target survives every ability aimed at it.
+    pub fn debug_sturdy(&mut self, index: usize, health: f32) {
+        if let Some(unit) = self.units.get_mut(index) {
+            unit.max_health = health;
+            unit.health = health;
+        }
     }
 
     /// One line on what the kit did: hurt and crowd-controlled enemies,
@@ -3186,6 +3240,59 @@ impl AnimatedScene {
         });
     }
 
+    /// Play a spell graphic once riding `unit` (a cast on the caster, a hit
+    /// on a target). Ids that did not load are skipped.
+    pub(crate) fn gfx_on(&mut self, id: u32, unit: usize, scale: f32) {
+        self.push_spot(id, Vec3::ZERO, Some(unit), SpotDraw::Spell, 0.0, scale);
+    }
+
+    /// Play a spell graphic once standing at `pos` (an area landing).
+    pub(crate) fn gfx_at(&mut self, id: u32, pos: Vec3, scale: f32) {
+        self.push_spot(id, pos, None, SpotDraw::Spell, 0.0, scale);
+    }
+
+    /// Hold a looping status graphic on `unit` for `seconds`. The same
+    /// graphic already on that unit is extended instead of stacked.
+    pub(crate) fn gfx_hold(&mut self, id: u32, unit: usize, seconds: f32, scale: f32) {
+        if seconds <= 0.0 {
+            return;
+        }
+        if let Some(held) = self.spot_bursts.iter_mut().find(|burst| {
+            burst.mode == SpotDraw::Held && burst.follow == Some(unit) && burst.spotanim == id
+        }) {
+            held.hold = held.hold.max(seconds);
+            return;
+        }
+        self.push_spot(id, Vec3::ZERO, Some(unit), SpotDraw::Held, seconds, scale);
+    }
+
+    fn push_spot(
+        &mut self,
+        id: u32,
+        pos: Vec3,
+        follow: Option<usize>,
+        mode: SpotDraw,
+        hold: f32,
+        scale: f32,
+    ) {
+        if !self.spot_models.contains_key(&id) || self.spot_bursts.len() >= MAX_SPOT_BURSTS {
+            return;
+        }
+        let yaw = follow
+            .and_then(|index| self.units.get(index))
+            .map_or(0.0, |unit| unit.yaw);
+        self.spot_bursts.push(SpotBurst {
+            spotanim: id,
+            pos,
+            yaw,
+            time_ms: 0.0,
+            scale,
+            mode,
+            follow,
+            hold,
+        });
+    }
+
     /// Load spot animations that no projectile look names, so a demo or a
     /// spell can play them. Ids already loaded are skipped.
     pub fn preload_spotanims(&mut self, cache: &Cache, ids: &[u32]) {
@@ -3220,12 +3327,17 @@ impl AnimatedScene {
         {
             let ground = Vec3::new(spot.x, height.height_at(spot.x, spot.z), spot.z);
             if length.is_some() {
+                // Drawn the way spells draw them: solid, standing on the
+                // ground at their authored height.
                 self.spot_bursts.push(SpotBurst {
                     spotanim: id,
-                    pos: ground + Vec3::Y * 60.0,
+                    pos: ground,
                     yaw: 0.0,
                     time_ms: 0.0,
                     scale: 1.0,
+                    mode: SpotDraw::Spell,
+                    follow: None,
+                    hold: 0.0,
                 });
             }
             // A missing id keeps its label, marked, so the sheet shows it.
@@ -3527,8 +3639,19 @@ impl AnimatedScene {
         }
         self.slashes.retain(|slash| slash.remaining > 0.0);
         let spot_models = &self.spot_models;
+        let units = &self.units;
         self.spot_bursts.retain_mut(|burst| {
             burst.time_ms += dt * 1000.0;
+            // A graphic riding a unit goes with it when it dies.
+            if let Some(index) = burst.follow
+                && units.get(index).is_none_or(|unit| unit.health <= 0.0)
+            {
+                return false;
+            }
+            if burst.mode == SpotDraw::Held {
+                burst.hold -= dt;
+                return burst.hold > 0.0;
+            }
             spot_models
                 .get(&burst.spotanim)
                 .is_some_and(|spot| burst.time_ms < spot.length_ms)
@@ -5187,6 +5310,9 @@ impl AnimatedScene {
                 yaw,
                 time_ms: 0.0,
                 scale: look.model_scale,
+                mode: SpotDraw::Burst,
+                follow: None,
+                hold: 0.0,
             });
         }
     }
@@ -5607,7 +5733,7 @@ impl AnimatedScene {
         glow: f32,
         mode: SpotDraw,
     ) {
-        let looping = mode == SpotDraw::Flying;
+        let looping = mode.looping();
         let time = if looping {
             time_ms.rem_euclid(spot.length_ms.max(1.0))
         } else {
@@ -5619,7 +5745,11 @@ impl AnimatedScene {
                 .model
                 .animated_positions(&AnimationClip::default(), 0.0),
         };
-        let [cx, cy, cz] = spot.center;
+        let [cx, cy, cz] = if mode.grounded() {
+            [0.0; 3]
+        } else {
+            spot.center
+        };
         let sxz = spot.scale_xz * scale;
         let sy = spot.scale_y * scale;
         let place = |i: u32| -> Vec3 {
@@ -5642,15 +5772,31 @@ impl AnimatedScene {
                 continue;
             }
             let normal = (pb - pa).cross(pc - pa).normalize_or_zero();
-            // Spell models read as light sources, so their solid faces are
-            // drawn unlit and slightly boosted.
-            let lifted = rgb.map(|c| (c as f32 * 1.12).min(255.0) as u8);
-            let mut va = SceneVertex::unlit(pa, lifted);
-            let mut vb = SceneVertex::unlit(pb, lifted);
-            let mut vc = SceneVertex::unlit(pc, lifted);
-            for v in [&mut va, &mut vb, &mut vc] {
-                v.normal = normal.to_array();
-            }
+            let (va, vb, vc) = if mode.grounded() {
+                // Spell and status graphics stand in the world (claws, a
+                // pillar of fire, an ice block): flat-shaded per face with
+                // the scene, the way the cache draws them, so a solid shape
+                // keeps its form instead of reading as a flat cut-out.
+                // Faces are wound either way, so light whichever side
+                // faces up.
+                let lit = if normal.y < 0.0 { -normal } else { normal };
+                (
+                    SceneVertex::new(pa, lit, rgb),
+                    SceneVertex::new(pb, lit, rgb),
+                    SceneVertex::new(pc, lit, rgb),
+                )
+            } else {
+                // Projectiles read as light sources, so their solid faces
+                // are drawn unlit and slightly boosted.
+                let lifted = rgb.map(|c| (c as f32 * 1.12).min(255.0) as u8);
+                let mut va = SceneVertex::unlit(pa, lifted);
+                let mut vb = SceneVertex::unlit(pb, lifted);
+                let mut vc = SceneVertex::unlit(pc, lifted);
+                for v in [&mut va, &mut vb, &mut vc] {
+                    v.normal = normal.to_array();
+                }
+                (va, vb, vc)
+            };
             let base = self.vertices.len() as u32;
             self.vertices.extend_from_slice(&[va, vb, vc]);
             self.indices.extend_from_slice(&[base, base + 1, base + 2]);
@@ -6102,31 +6248,51 @@ impl AnimatedScene {
                 .glow(pos, size * 0.35, color, 0.9 * fade, camera_right, camera_up);
         }
 
-        // One-shot impact models.
+        // Impact splashes, spell graphics and held status graphics.
         let bursts = self
             .spot_bursts
             .iter()
-            .filter(|burst| self.in_team_vision(burst.pos))
             .filter_map(|burst| {
+                let pos = match burst.follow {
+                    Some(index) => {
+                        let unit = self.units.get(index)?;
+                        if !unit.visible {
+                            return None;
+                        }
+                        unit.pos + burst.pos
+                    }
+                    None => burst.pos,
+                };
+                if !self.in_team_vision(pos) {
+                    return None;
+                }
                 let spot = self.spot_models.get(&burst.spotanim)?.clone();
-                Some((spot, burst.pos, burst.yaw, burst.time_ms, burst.scale))
+                Some((spot, pos, burst))
+            })
+            .map(|(spot, pos, burst)| {
+                (spot, pos, burst.yaw, burst.time_ms, burst.scale, burst.mode)
             })
             .collect::<Vec<_>>();
-        for (spot, pos, yaw, time_ms, scale) in bursts {
-            let fade = (1.0 - time_ms / spot.length_ms.max(1.0)).clamp(0.0, 1.0);
+        for (spot, pos, yaw, time_ms, scale, mode) in bursts {
             let basis = Mat3::from_rotation_y(yaw);
-            // Impact models are drawn entirely as light: their solid faces
-            // read as flat cardboard once the splash grows past the target.
-            let grow = 0.7 + 0.5 * (time_ms / spot.length_ms.max(1.0)).min(1.0);
-            self.append_spot_model(
-                &spot,
-                time_ms,
-                pos,
-                basis,
-                scale * 0.75 * grow,
-                1.1 * fade,
-                SpotDraw::Burst,
-            );
+            if mode == SpotDraw::Burst {
+                let fade = (1.0 - time_ms / spot.length_ms.max(1.0)).clamp(0.0, 1.0);
+                // Impact models are drawn entirely as light: their solid
+                // faces read as flat cardboard once the splash grows past
+                // the target.
+                let grow = 0.7 + 0.5 * (time_ms / spot.length_ms.max(1.0)).min(1.0);
+                self.append_spot_model(
+                    &spot,
+                    time_ms,
+                    pos,
+                    basis,
+                    scale * 0.75 * grow,
+                    1.1 * fade,
+                    SpotDraw::Burst,
+                );
+            } else {
+                self.append_spot_model(&spot, time_ms, pos, basis, scale, 1.0, mode);
+            }
         }
 
         self.draw_awowogei(height, camera_right, camera_up);

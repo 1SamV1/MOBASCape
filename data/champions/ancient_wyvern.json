@@ -92,6 +92,7 @@
         "actions": [
           {
             "type": "area",
+            "gfx": { "hit": 363 },
             "at": "caster",
             "radius": 520,
             "arc": 60,
