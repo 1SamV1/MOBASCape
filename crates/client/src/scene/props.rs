@@ -661,7 +661,7 @@ mod tests {
     }
 
     #[test]
-    fn shipped_vampire_swamp_has_its_plaza_and_dressing() {
+    fn shipped_dire_pockets_have_their_set_pieces() {
         let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
         let text = std::fs::read_to_string(root.join("data/maps/karamja_rift/map.json"))
             .expect("map.json");
@@ -684,6 +684,15 @@ mod tests {
             .collect();
         assert!(pocket.len() >= 6);
         assert!(pocket.iter().all(|s| s.texture.as_deref() == Some("plain")));
+        // Dark Magic: the Arceuus dark altar in its ring of candle stands.
+        assert!(props.place.iter().any(|p| p.model == 30837));
+        assert!(props.place.iter().filter(|p| p.model == 22936).count() >= 6);
+        assert!(
+            props
+                .scatter
+                .iter()
+                .any(|s| s.biome.as_deref() == Some("dire_dark_magic"))
+        );
     }
 
     #[test]

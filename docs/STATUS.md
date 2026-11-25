@@ -1,8 +1,8 @@
 # Status
 
-Last updated: Vampire Swamp dressing; ground mist removed, 2026-11-25.
+Last updated: Vampire Swamp and Dark Magic dressing; mist removed, 2026-11-25.
 
-## 2026-11-25 — Ground mist removed; the Vampire Swamp dressed
+## 2026-11-25 — Ground mist removed; the Vampire Swamp and Dark Magic dressed
 
 - **Mist removed** at the user's request (revert of 48df811). Roadmap 5.7
   is open again; the fog-of-war darkening and height fog are unchanged.
@@ -27,8 +27,19 @@ Last updated: Vampire Swamp dressing; ground mist removed, 2026-11-25.
 - Verified with `--shots` over the plaza (top, low and wide). Tests: the
   new schema fields and the shipped pocket's plaza and dressing; every
   model id decodes from the pinned cache.
-- Not yet: the other seven pockets (Dark Magic, Ogre Ruins, Goblin Camp,
-  Human City and Keep, Elven Lands, Gnome Stronghold).
+- **Dark Magic** (`dire_dark_magic`, Draynor Manor region 48,52): a ritual
+  ground with the Arceuus Dark Altar (30837, x0.95) in a ring of eight
+  candle stands (22936), two Symbol of Zamorak banners (12580), the chaos
+  altar (1216), the spiked Zamorak altar (27778), an Altar of Zamorak
+  (35298), the crystal-ball table (1190), the great cauldron (46675) and
+  the ceremonial brazier ring (16677); scattered skull piles (2171,
+  13474), burning bones and a bone arch (3880, 6899), candles (14204,
+  17536), spooky and witch cauldrons (46789, 2241) and bone and ancient
+  braziers (16698, 41097). The transplanted Draynor scenery budget went
+  from 110 to 55 so its dead-tree canopy frames the ritual instead of
+  burying it. At x1.8 the altar dwarfed the pocket.
+- Not yet: the other six pockets (Ogre Ruins, Goblin Camp, Human City and
+  Keep, Elven Lands, Gnome Stronghold).
 
 ## 2026-11-25 — Phase 5: fountains and god-coloured castles
 
