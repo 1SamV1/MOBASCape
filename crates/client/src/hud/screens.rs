@@ -731,6 +731,8 @@ impl Hud {
                 STONE_QUIET,
             );
         }
+        // The spellbook picker opens over everything else.
+        self.spell_picker(width, height, select, mouse);
     }
 
     /// The pick timer under the title, pulsing red in the last five seconds.
@@ -1034,6 +1036,23 @@ impl Hud {
                         );
                     }
                 }
+                // The row's battle spells, or the scroll for a hero
+                // without them, in the top right corner.
+                let icon = 20.0;
+                let uvs: Vec<Option<[f32; 4]>> = match select.row_spells(team, row) {
+                    hero_select::RowSpells::Spells(ids) => ids
+                        .iter()
+                        .map(|id| self.atlas.ui_uv(&crate::spells::icon_role(id)))
+                        .collect(),
+                    hero_select::RowSpells::Scroll => {
+                        vec![self.atlas.item_uv(crate::scroll::ICON_KEY)]
+                    }
+                    hero_select::RowSpells::Nothing => Vec::new(),
+                };
+                for (k, uv) in uvs.iter().enumerate() {
+                    let ix = x + w - 6.0 - (uvs.len() - k) as f32 * (icon + 3.0) + 3.0;
+                    self.spell_icon(width, height, (ix, y + 5.0, icon, icon), *uv, false);
+                }
             }
         }
     }
@@ -1137,6 +1156,7 @@ impl Hud {
             self.text_named_centered_raw(width, height, rect, "p11", 1.0, tag, [40, 60, 140]);
             tag_x += w + 6.0;
         }
+        let spell_tip = self.spell_slots(width, height, select, mouse);
 
         // Right side, as in the reference: the popular build, the tagline,
         // then the passive and the four abilities.
@@ -1314,8 +1334,185 @@ impl Hud {
             }
             y += room;
         }
+        if tooltip.is_none() {
+            tooltip = spell_tip;
+        }
         if let Some((anchor, text)) = tooltip {
             self.tooltip(width, height, anchor, bounds, &text);
+        }
+    }
+
+    /// One battle spell (or the scroll) in a slot frame: the cache icon
+    /// inset, dimmed when `dim`.
+    fn spell_icon(
+        &mut self,
+        width: f32,
+        height: f32,
+        rect: (f32, f32, f32, f32),
+        uv: Option<[f32; 4]>,
+        dim: bool,
+    ) {
+        let tint = if dim {
+            [110, 110, 110]
+        } else {
+            [255, 255, 255]
+        };
+        self.item_slot(width, height, rect, tint);
+        if let Some(uv) = uv {
+            let (x, y, w, h) = rect;
+            let inset = (w * 0.14).round();
+            self.sprite(
+                width,
+                height,
+                x + inset,
+                y + inset,
+                w - inset * 2.0,
+                h - inset * 2.0,
+                uv,
+                tint,
+                if dim { 0.5 } else { 1.0 },
+            );
+        }
+    }
+
+    /// The tooltip lines for a battle spell: name, book and cooldown, then
+    /// what it does.
+    fn spell_lines(select: &HeroSelect, index: usize, extra: Option<&str>) -> Vec<String> {
+        let Some(spell) = select.spell_book.get(index) else {
+            return Vec::new();
+        };
+        let mut lines = vec![format!(
+            "{}  -  {} spellbook, {:.0} s",
+            crate::ui_live::title_case(&spell.name),
+            spell.book,
+            spell.cooldown
+        )];
+        lines.extend(hero_select::wrap_text(&spell.describe(), 52));
+        if let Some(extra) = extra {
+            lines.push(extra.to_string());
+        }
+        lines
+    }
+
+    /// The D and F battle spell slots under the hero's tags. A non-magic
+    /// hero's slots are greyed. Returns the tooltip for a hovered slot.
+    fn spell_slots(
+        &mut self,
+        width: f32,
+        height: f32,
+        select: &HeroSelect,
+        mouse: (f64, f64),
+    ) -> Option<Tooltip> {
+        let magic = select.selected_is_magic();
+        let mut tip = None;
+        for (slot, &rect) in hero_select::spell_slot_rects(width, height)
+            .iter()
+            .enumerate()
+        {
+            let key = ["D", "F"][slot];
+            let index = select.spell_book.index_of(&select.spell_picks[slot]);
+            let uv = index.filter(|_| magic).and_then(|i| {
+                self.atlas
+                    .ui_uv(&crate::spells::icon_role(&select.spell_book.spells[i].id))
+            });
+            self.spell_icon(width, height, rect, uv, !magic);
+            let (x, y, w, h) = rect;
+            if select.spell_picker == Some(slot) {
+                self.rect_outline(width, height, x, y, w, h, 2.0, OSRS_YELLOW, 1.0);
+            } else if magic && point_in(rect, mouse) && !select.is_locked() {
+                self.rect_outline(width, height, x, y, w, h, 1.0, [236, 226, 200], 0.9);
+            }
+            let ink = if magic {
+                [236, 226, 200]
+            } else {
+                [130, 122, 108]
+            };
+            self.text_named_raw("p11", width, height, x + 3.0, y + 1.0, 1.0, key, ink, 1.0);
+            if point_in(rect, mouse) && select.spell_picker.is_none() {
+                let lines = match index.filter(|_| magic) {
+                    Some(i) => Self::spell_lines(
+                        select,
+                        i,
+                        (!select.is_locked()).then_some("Click to choose another spell"),
+                    ),
+                    None => vec![
+                        format!("{key}: battle spell"),
+                        "Magic heroes only.".to_string(),
+                        "Every hero carries a teleport scroll (T).".to_string(),
+                    ],
+                };
+                tip = Some((rect, lines));
+            }
+        }
+        tip
+    }
+
+    /// The open spellbook picker over the parchment: the spells book by
+    /// book, the slot's current spell outlined, the other slot's marked.
+    fn spell_picker(&mut self, width: f32, height: f32, select: &HeroSelect, mouse: (f64, f64)) {
+        use super::kit::{ORANGE, STONE_QUIET};
+        let Some(slot) = select.spell_picker else {
+            return;
+        };
+        let order = select.picker_order();
+        let books: Vec<&str> = order
+            .iter()
+            .map(|&i| select.spell_book.spells[i].book.as_str())
+            .collect();
+        let (panel, cells, labels) = hero_select::spell_picker_layout(width, height, &books);
+        self.stone_frame(width, height, panel);
+        let (px, py, pw, _) = panel;
+        let title = format!("Choose a battle spell ({})", ["D", "F"][slot]);
+        self.label_in(
+            width,
+            height,
+            (px, py + 12.0, pw, 20.0),
+            "b12",
+            1.0,
+            &title,
+            ORANGE,
+        );
+        for (book, rect) in &labels {
+            self.label_in(width, height, *rect, "p11", 1.0, book, STONE_QUIET);
+        }
+        let mut tip = None;
+        for (&index, &rect) in order.iter().zip(&cells) {
+            let spell = &select.spell_book.spells[index];
+            let uv = self.atlas.ui_uv(&crate::spells::icon_role(&spell.id));
+            self.spell_icon(width, height, rect, uv, false);
+            let (x, y, w, h) = rect;
+            let hot = point_in(rect, mouse);
+            if select.spell_picks[slot] == spell.id {
+                self.rect_outline(width, height, x, y, w, h, 2.0, OSRS_YELLOW, 1.0);
+            } else if hot {
+                self.rect_outline(width, height, x, y, w, h, 1.0, [236, 226, 200], 0.9);
+            }
+            let other = 1 - slot;
+            if select.spell_picks[other] == spell.id {
+                let key = ["D", "F"][other];
+                self.text_named_raw(
+                    "p11",
+                    width,
+                    height,
+                    x + 3.0,
+                    y + 1.0,
+                    1.0,
+                    key,
+                    [236, 226, 200],
+                    1.0,
+                );
+            }
+            if hot {
+                let extra = if select.spell_picks[other] == spell.id {
+                    "In your other slot: picking it swaps them"
+                } else {
+                    "Click to pick"
+                };
+                tip = Some((rect, Self::spell_lines(select, index, Some(extra))));
+            }
+        }
+        if let Some((anchor, lines)) = tip {
+            self.tooltip(width, height, anchor, (0.0, 0.0, width, height), &lines);
         }
     }
 

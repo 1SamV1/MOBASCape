@@ -176,6 +176,22 @@ Camera follow moves from F to Y to free F.
 - Hovering D, F or T in the assembled interface explains the spell or the
   scroll. Non-magic heroes see greyed D and F slots ("Magic heroes only").
 
+### On hero select
+
+- The two slots sit under the hero's name and tags on the parchment. The
+  recess gave up 40 px for them. A magic hero's slot opens a stone picker
+  over the centre column, grouped Standard, Ancient, Lunar like the OSRS
+  spellbooks. Hovering a spell explains it.
+- Picking the spell already in the other slot swaps the two, so they never
+  match.
+- The lane call refills both slots until you pick one yourself. After that
+  your picks stay put.
+- Each team row shows its hero's two spells in the top right corner, or the
+  teleport scroll for a hero without them. Magic bots show their lane call's
+  pair, which is what they carry into the match.
+- `--spells` presets the picks; `--spell-picker 0|1` opens the picker for
+  screenshots.
+
 ### First wave
 
 | Spell | Book | Effect | Cooldown | Graphics |

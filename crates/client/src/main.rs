@@ -187,6 +187,10 @@ struct Cli {
     /// enemy hero (pair with `--demo-duel`), logging each cast.
     #[arg(long)]
     demo_spells: bool,
+    /// Hero select: open the battle spell picker for slot 0 (D) or 1 (F),
+    /// for screenshots.
+    #[arg(long)]
+    spell_picker: Option<usize>,
     /// Demo: stand beside a jungle camp and basic-attack it, to check
     /// attack animations, reach and projectiles.
     #[arg(long)]
@@ -646,6 +650,10 @@ fn main() -> Result<()> {
                 ),
                 None => {}
             }
+            select.preset_spells(&cli.spells);
+            if let Some(slot) = cli.spell_picker.filter(|_| select.open) {
+                select.toggle_spell_picker(slot);
+            }
             if cli.lock_in && select.open {
                 select.lock_in();
             }
@@ -715,7 +723,6 @@ fn main() -> Result<()> {
         } else {
             Vec::new()
         },
-        spell_choice: cli.spells.clone(),
         demo_attack: cli.demo_attack,
         demo_attack_stage: 0,
         demo_ranks: cli.demo_ranks,
@@ -888,9 +895,6 @@ struct App {
     demo_scroll: Option<f32>,
     /// `--demo-spells`: (seconds left, slot) casts still to make.
     demo_spells: Vec<(f32, usize)>,
-    /// `--spells`: the player's battle spells by id, D then F (empty for
-    /// the lane call's defaults).
-    spell_choice: Vec<String>,
     /// Seconds until the `--demo-gfx` grid plays again.
     demo_gfx_timer: f32,
     demo_gfx_loaded: bool,
@@ -1157,6 +1161,9 @@ impl ApplicationHandler for App {
                     return;
                 }
                 if self.hero_select.open {
+                    if state == ElementState::Pressed && self.spell_picker_click(w, h) {
+                        return;
+                    }
                     if state == ElementState::Pressed {
                         let card = hero_select::card_at(
                             w,
@@ -1290,6 +1297,9 @@ impl ApplicationHandler for App {
                 if self.hero_select.open {
                     if event.state == ElementState::Pressed {
                         match code {
+                            KeyCode::Escape if self.hero_select.spell_picker.is_some() => {
+                                self.hero_select.spell_picker = None;
+                            }
                             KeyCode::Escape => self.back_to_menu(),
                             KeyCode::ArrowLeft | KeyCode::KeyA => self.hero_select.cycle(-1),
                             KeyCode::ArrowRight | KeyCode::KeyD => self.hero_select.cycle(1),
@@ -3386,7 +3396,8 @@ impl App {
         let count = animated.spawn_bots(&self.cache, &lineup, &builds, &scene.height);
         tracing::info!("bots: {count} bot heroes in the match");
         let lane = blue_lanes.first().copied().flatten();
-        Self::give_player_spells(&mut animated, &champion.class, &self.spell_choice, lane);
+        let picks = self.hero_select.spell_picks.to_vec();
+        Self::give_player_spells(&mut animated, &champion.class, &picks, lane);
 
         self.audio.preload(&self.cache, animated.sound_ids());
         self.animated = Some(animated);
@@ -3879,6 +3890,36 @@ impl App {
             .unwrap_or(fallback);
         let cast = animated.cast_q(point);
         println!("Q cast={cast}");
+    }
+
+    /// Hero select: a click on a battle spell slot opens its spellbook
+    /// picker; with the picker open, a click picks a spell, switches slot,
+    /// or closes it. True when the click was used.
+    fn spell_picker_click(&mut self, w: f32, h: f32) -> bool {
+        let select = &mut self.hero_select;
+        let order = select.picker_order();
+        let books: Vec<String> = order
+            .iter()
+            .map(|&i| select.spell_book.spells[i].book.clone())
+            .collect();
+        let books: Vec<&str> = books.iter().map(String::as_str).collect();
+        let cursor = self.mouse_pos;
+        if let Some(slot) = select.spell_picker {
+            if let Some(cell) = hero_select::spell_cell_at(w, h, cursor, &books) {
+                select.choose_spell(slot, order[cell]);
+                tracing::info!("hero select: battle spells {:?}", select.spell_picks);
+            } else if let Some(other) = hero_select::spell_slot_at(w, h, cursor) {
+                select.toggle_spell_picker(other);
+            } else if !hero_select::spell_picker_at(w, h, cursor, &books) {
+                select.spell_picker = None;
+            }
+            return true;
+        }
+        if let Some(slot) = hero_select::spell_slot_at(w, h, cursor) {
+            select.toggle_spell_picker(slot);
+            return true;
+        }
+        false
     }
 
     /// D and F: the hero's battle spells (magic heroes only), aimed at the

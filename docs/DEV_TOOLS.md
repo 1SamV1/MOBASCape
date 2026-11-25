@@ -91,6 +91,9 @@ target/release/rift-client --ui-live --champion kolodion --distance 1100 \
     --screenshot out.png --screenshot-after 330
 ```
 
+On hero select (`--start-select bot`), `--spell-picker 0` or `1` opens the
+battle spell picker for D or F, so it can be screenshotted.
+
 `--demo-scroll` reads the teleport scroll (T) toward the middle of the map
 half a second in, and logs the channel and the arrival. Take a screenshot
 around frame 400 to see the channel, and after frame 760 to see the arrival.

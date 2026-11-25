@@ -164,6 +164,25 @@ pub struct HeroSelect {
     pub red: Vec<PickSlot>,
     /// Varies the bots' choices between matches.
     pub seed: u32,
+    /// The battle spells magic heroes pick from.
+    pub spell_book: crate::spells::SpellBook,
+    /// Your two battle spells by id, D then F. Lane calls refill them until
+    /// you choose one yourself.
+    pub spell_picks: [String; 2],
+    /// You picked a spell yourself, so lane calls leave them alone.
+    pub spells_chosen: bool,
+    /// The slot (0 for D, 1 for F) whose spellbook picker is open.
+    pub spell_picker: Option<usize>,
+}
+
+/// What a team row shows beside its hero: the two battle spells of a
+/// magic hero, the teleport scroll for anyone else, or nothing before a
+/// hero is shown.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RowSpells {
+    Spells([String; 2]),
+    Scroll,
+    Nothing,
 }
 
 impl HeroSelect {
@@ -183,6 +202,10 @@ impl HeroSelect {
             blue: Vec::new(),
             red: Vec::new(),
             seed: 0,
+            spell_book: crate::spells::SpellBook::load(),
+            spell_picks: crate::spells::lane_defaults(None).map(str::to_string),
+            spells_chosen: false,
+            spell_picker: None,
         };
         select.reset_picks(0);
         select.apply_filter();
@@ -230,6 +253,9 @@ impl HeroSelect {
     pub fn set_lane(&mut self, lane: Option<Lane>) {
         if let Some(you) = self.blue.first_mut() {
             you.lane = lane;
+        }
+        if !self.spells_chosen {
+            self.spell_picks = crate::spells::lane_defaults(lane).map(str::to_string);
         }
         for (slot, call) in self.blue.iter_mut().skip(1).zip(bot_lanes(lane)) {
             slot.lane = Some(call);
@@ -379,6 +405,7 @@ impl HeroSelect {
     /// from here; lane calls stay open, being notes, not picks.
     pub fn lock_in(&mut self) {
         if self.locked.is_none() {
+            self.spell_picker = None;
             self.fill_picks();
             self.locked = Some(LOCKED_SECONDS);
             self.hover = None;
@@ -469,6 +496,7 @@ impl HeroSelect {
             let index = self.visible[current as usize];
             if !self.is_picked(index) {
                 self.selected = index;
+                self.spell_picker = None;
                 return;
             }
         }
@@ -482,11 +510,95 @@ impl HeroSelect {
             && self.locked.is_none()
         {
             self.selected = index;
+            self.spell_picker = None;
         }
     }
 
     pub fn selected_champion(&self) -> Option<&ChampionConfig> {
         self.champions.get(self.selected)
+    }
+
+    /// True when the highlighted hero may carry battle spells.
+    pub fn selected_is_magic(&self) -> bool {
+        self.selected_champion()
+            .is_some_and(|champion| crate::spells::is_magic(&champion.class))
+    }
+
+    /// Open (or close) the spellbook picker for slot 0 (D) or 1 (F). Only
+    /// a magic hero has one, and not once everyone is locked in.
+    pub fn toggle_spell_picker(&mut self, slot: usize) {
+        if !self.selected_is_magic() || self.locked.is_some() || slot > 1 {
+            self.spell_picker = None;
+            return;
+        }
+        self.spell_picker = if self.spell_picker == Some(slot) {
+            None
+        } else {
+            Some(slot)
+        };
+    }
+
+    /// Put spell `index` (into the book) in `slot`. A spell already in the
+    /// other slot swaps over, so the two never match. Closes the picker.
+    pub fn choose_spell(&mut self, slot: usize, index: usize) {
+        let Some(spell) = self.spell_book.get(index) else {
+            return;
+        };
+        let id = spell.id.clone();
+        let slot = slot.min(1);
+        let other = 1 - slot;
+        if self.spell_picks[other] == id {
+            self.spell_picks[other] = self.spell_picks[slot].clone();
+        }
+        self.spell_picks[slot] = id;
+        self.spells_chosen = true;
+        self.spell_picker = None;
+    }
+
+    /// `--spells`: start with these picks, as if chosen.
+    pub fn preset_spells(&mut self, ids: &[String]) {
+        for (slot, id) in ids.iter().take(2).enumerate() {
+            if let Some(index) = self.spell_book.index_of(id) {
+                self.spell_picks[slot] = self.spell_book.spells[index].id.clone();
+                self.spells_chosen = true;
+            }
+        }
+    }
+
+    /// The spells in picker order: book by book ([`BOOKS`]), then file
+    /// order. Indices into the book.
+    pub fn picker_order(&self) -> Vec<usize> {
+        let mut order: Vec<usize> = (0..self.spell_book.spells.len()).collect();
+        order.sort_by_key(|&i| book_rank(&self.spell_book.spells[i].book));
+        order
+    }
+
+    /// What a team row shows beside its hero.
+    pub fn row_spells(&self, team: Team, row: usize) -> RowSpells {
+        let you = team == Team::Blue && row == 0;
+        let slots = match team {
+            Team::Blue => &self.blue,
+            Team::Red => &self.red,
+        };
+        let Some(slot) = slots.get(row) else {
+            return RowSpells::Nothing;
+        };
+        let shown = if you {
+            Some(self.selected)
+        } else {
+            slot.champion
+        };
+        let Some(champion) = shown.and_then(|i| self.champions.get(i)) else {
+            return RowSpells::Nothing;
+        };
+        if !crate::spells::is_magic(&champion.class) {
+            return RowSpells::Scroll;
+        }
+        if you {
+            RowSpells::Spells(self.spell_picks.clone())
+        } else {
+            RowSpells::Spells(crate::spells::lane_defaults(slot.lane).map(str::to_string))
+        }
     }
 
     /// The type of each visible slot, for the grouped roster layout.
@@ -603,12 +715,123 @@ pub fn bottom_rect(width: f32, height: f32) -> Rect {
 }
 
 /// The animated hero's recess on the parchment's left (3:4, like the
-/// spotlight render), leaving room under it for the name and tags.
+/// spotlight render), leaving room under it for the name, the tags and the
+/// battle spell slots.
 pub fn spotlight_rect(width: f32, height: f32) -> Rect {
     let (x, y, _, h) = detail_rect(width, height);
-    let ph = (h - 96.0).max(80.0);
+    let ph = (h - 96.0 - SPELL_ROW).max(64.0);
     let pw = ph * 0.75;
     (x + 22.0, y + 18.0, pw, ph)
+}
+
+/// Height the battle spell row takes under the tags.
+const SPELL_ROW: f32 = 40.0;
+/// A battle spell slot's side on the parchment.
+pub const SPELL_SLOT: f32 = 36.0;
+
+/// The two battle spell slots (D, F) under the hero's tags, centred under
+/// the recess.
+pub fn spell_slot_rects(width: f32, height: f32) -> [Rect; 2] {
+    let (sx, sy, sw, sh) = spotlight_rect(width, height);
+    let y = sy + sh + 68.0;
+    let gap = 10.0;
+    let x0 = sx + sw * 0.5 - SPELL_SLOT - gap * 0.5;
+    [
+        (x0, y, SPELL_SLOT, SPELL_SLOT),
+        (x0 + SPELL_SLOT + gap, y, SPELL_SLOT, SPELL_SLOT),
+    ]
+}
+
+pub fn spell_slot_at(width: f32, height: f32, cursor: (f64, f64)) -> Option<usize> {
+    spell_slot_rects(width, height)
+        .iter()
+        .position(|&rect| point_in_rect(rect, cursor))
+}
+
+/// The picker's spellbooks, in order.
+pub const BOOKS: [&str; 3] = ["Standard", "Ancient", "Lunar"];
+
+fn book_rank(book: &str) -> usize {
+    BOOKS
+        .iter()
+        .position(|b| b.eq_ignore_ascii_case(book))
+        .unwrap_or(BOOKS.len())
+}
+
+/// A spell cell in the picker, and the gaps between cells and books.
+pub const PICKER_CELL: f32 = 44.0;
+const PICKER_GAP: f32 = 8.0;
+const PICKER_BOOK_GAP: f32 = 22.0;
+/// Narrowest a book's column gets, so its name fits over one cell.
+const PICKER_BOOK_MIN: f32 = 72.0;
+/// The picker's title line and the book names under it.
+const PICKER_TITLE: f32 = 26.0;
+const PICKER_LABEL: f32 = 20.0;
+
+/// The open spellbook picker, opening upward from the spell slots: its
+/// panel, a cell per spell (`books[i]` is the book of the `i`th spell in
+/// picker order) and each book's name with the span it heads.
+pub fn spell_picker_layout(
+    width: f32,
+    height: f32,
+    books: &[&str],
+) -> (Rect, Vec<Rect>, Vec<(String, Rect)>) {
+    // Books in order of first appearance (picker order groups them).
+    let mut groups: Vec<(&str, usize)> = Vec::new();
+    for &book in books {
+        match groups.last_mut() {
+            Some((name, count)) if name.eq_ignore_ascii_case(book) => *count += 1,
+            _ => groups.push((book, 1)),
+        }
+    }
+    let span = |n: usize| n as f32 * PICKER_CELL + (n.max(1) - 1) as f32 * PICKER_GAP;
+    let group_w: Vec<f32> = groups
+        .iter()
+        .map(|&(_, n)| span(n).max(PICKER_BOOK_MIN))
+        .collect();
+    let inner = group_w.iter().sum::<f32>() + PICKER_BOOK_GAP * (groups.len().max(1) - 1) as f32;
+    let pw = inner + PAD * 2.0;
+    let ph = PAD * 2.0 + PICKER_TITLE + PICKER_LABEL + PICKER_CELL;
+    let slots = spell_slot_rects(width, height);
+    let centre = (slots[0].0 + slots[1].0 + slots[1].2) * 0.5;
+    // Kept over the centre column, clear of the team columns.
+    let (cx, _, cw, _) = detail_rect(width, height);
+    let x = (centre - pw * 0.5).clamp(cx, (cx + cw - pw).max(cx));
+    let y = (slots[0].1 - 8.0 - ph).max(MARGIN);
+    let panel = (x, y, pw, ph);
+
+    let mut cells = Vec::with_capacity(books.len());
+    let mut labels = Vec::with_capacity(groups.len());
+    let mut gx = x + PAD;
+    let label_y = y + PAD + PICKER_TITLE;
+    let cell_y = label_y + PICKER_LABEL;
+    for (&(book, n), &gw) in groups.iter().zip(&group_w) {
+        labels.push((book.to_string(), (gx, label_y, gw, PICKER_LABEL)));
+        let cx = gx + (gw - span(n)) * 0.5;
+        for k in 0..n {
+            cells.push((
+                cx + k as f32 * (PICKER_CELL + PICKER_GAP),
+                cell_y,
+                PICKER_CELL,
+                PICKER_CELL,
+            ));
+        }
+        gx += gw + PICKER_BOOK_GAP;
+    }
+    (panel, cells, labels)
+}
+
+/// Which picker cell (position in picker order) the cursor is over.
+pub fn spell_cell_at(width: f32, height: f32, cursor: (f64, f64), books: &[&str]) -> Option<usize> {
+    spell_picker_layout(width, height, books)
+        .1
+        .iter()
+        .position(|&rect| point_in_rect(rect, cursor))
+}
+
+/// True when the cursor is inside the open picker's panel.
+pub fn spell_picker_at(width: f32, height: f32, cursor: (f64, f64), books: &[&str]) -> bool {
+    point_in_rect(spell_picker_layout(width, height, books).0, cursor)
 }
 
 /// Width of the "Your lane:" label at the bar's left.
@@ -1232,5 +1455,111 @@ pub(crate) mod tests {
         let lines = wrap_text("one two three four five six seven eight", 12);
         assert!(lines.len() > 1);
         assert!(lines.iter().all(|line| line.chars().count() <= 12));
+    }
+
+    fn mage(id: &str) -> ChampionConfig {
+        let mut champion = champion(id);
+        champion.class = "MAGIC".to_string();
+        champion
+    }
+
+    #[test]
+    fn battle_spells_follow_the_lane_call_until_you_choose() {
+        let mut select = HeroSelect::new(vec![mage("m0"), champion("c1")], 0, true);
+        assert_eq!(select.spell_picks, ["ancient_teleport", "heal_group"]);
+        select.set_lane(Some(Lane::Mid));
+        assert_eq!(select.spell_picks, ["ancient_teleport", "ice_barrage"]);
+        select.set_lane(Some(Lane::Support));
+        assert_eq!(select.spell_picks, ["heal_group", "vengeance"]);
+        // Choosing one yourself stops the lane refilling them.
+        let entangle = select.spell_book.index_of("entangle").unwrap();
+        select.choose_spell(0, entangle);
+        assert_eq!(select.spell_picks, ["entangle", "vengeance"]);
+        select.set_lane(Some(Lane::Mid));
+        assert_eq!(select.spell_picks, ["entangle", "vengeance"]);
+        // Picking the other slot's spell swaps them.
+        let vengeance = select.spell_book.index_of("vengeance").unwrap();
+        select.choose_spell(0, vengeance);
+        assert_eq!(select.spell_picks, ["vengeance", "entangle"]);
+    }
+
+    #[test]
+    fn only_a_magic_hero_opens_the_spellbook() {
+        let mut select = HeroSelect::new(vec![mage("m0"), champion("c1")], 0, true);
+        select.toggle_spell_picker(1);
+        assert_eq!(select.spell_picker, Some(1));
+        select.toggle_spell_picker(1);
+        assert_eq!(select.spell_picker, None);
+        select.toggle_spell_picker(0);
+        // Highlighting another hero closes it; a melee hero cannot open it.
+        select.select_slot(select.visible.iter().position(|&i| i == 1).unwrap());
+        assert_eq!(select.spell_picker, None);
+        select.toggle_spell_picker(0);
+        assert_eq!(select.spell_picker, None);
+    }
+
+    #[test]
+    fn team_rows_show_spells_for_mages_and_the_scroll_for_everyone_else() {
+        let mut select = HeroSelect::new(vec![mage("m0"), champion("c1"), mage("m2")], 0, true);
+        select.set_lane(Some(Lane::Mid));
+        assert_eq!(
+            select.row_spells(Team::Blue, 0),
+            RowSpells::Spells(["ancient_teleport".into(), "ice_barrage".into()])
+        );
+        assert_eq!(select.row_spells(Team::Red, 0), RowSpells::Nothing);
+        select.red[0].champion = Some(1);
+        assert_eq!(select.row_spells(Team::Red, 0), RowSpells::Scroll);
+        // A magic bot shows its lane call's pair.
+        select.red[4].champion = Some(2);
+        select.red[4].lane = Some(Lane::Support);
+        assert_eq!(
+            select.row_spells(Team::Red, 4),
+            RowSpells::Spells(["heal_group".into(), "vengeance".into()])
+        );
+    }
+
+    #[test]
+    fn the_picker_groups_books_and_its_cells_are_hit_where_drawn() {
+        let select = HeroSelect::new(vec![mage("m0")], 0, true);
+        let order = select.picker_order();
+        let books: Vec<&str> = order
+            .iter()
+            .map(|&i| select.spell_book.spells[i].book.as_str())
+            .collect();
+        assert_eq!(
+            books,
+            [
+                "Standard", "Standard", "Ancient", "Ancient", "Lunar", "Lunar"
+            ]
+        );
+        for (w, h) in [(1920.0, 1080.0), (1280.0, 720.0), (1024.0, 600.0)] {
+            let (panel, cells, labels) = spell_picker_layout(w, h, &books);
+            assert_eq!(cells.len(), 6);
+            assert_eq!(labels.len(), 3);
+            let inside = |r: Rect, p: Rect| {
+                r.0 >= p.0 && r.1 >= p.1 && r.0 + r.2 <= p.0 + p.2 && r.1 + r.3 <= p.1 + p.3
+            };
+            assert!(
+                panel.0 >= 0.0 && panel.0 + panel.2 <= w,
+                "{w}x{h} panel on screen"
+            );
+            for (n, &cell) in cells.iter().enumerate() {
+                assert!(inside(cell, panel), "{w}x{h} cell {n} inside the panel");
+                let centre = ((cell.0 + 22.0) as f64, (cell.1 + 22.0) as f64);
+                assert_eq!(spell_cell_at(w, h, centre, &books), Some(n));
+            }
+            // The picker opens above the slots, which sit under the recess.
+            let slots = spell_slot_rects(w, h);
+            assert!(panel.1 + panel.3 <= slots[0].1);
+            let (_, sy, _, sh) = spotlight_rect(w, h);
+            assert!(slots[0].1 >= sy + sh, "{w}x{h} slots under the hero");
+            let detail = detail_rect(w, h);
+            assert!(
+                slots[0].1 + slots[0].3 <= detail.1 + detail.3,
+                "{w}x{h} slots on the parchment"
+            );
+            let centre = ((slots[1].0 + 5.0) as f64, (slots[1].1 + 5.0) as f64);
+            assert_eq!(spell_slot_at(w, h, centre), Some(1));
+        }
     }
 }
