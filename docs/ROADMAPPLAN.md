@@ -55,7 +55,7 @@ parchment (`hud/kit.rs`).
 | Main menu | Stone window over the arena, mode buttons | Stone tablet with the notched buttons over the orbiting arena | Mode menu entries for Practice and Spectate; a confirm dialog on Quit |
 | Hero select | Stone title bar with mode and timer; both teams' columns with name, pick, lane and two battle spells; roster with *Picked* overlays; detail with passive, Q/W/E/R per-rank cooldowns and tags; Lock in; Leave | Stone windows throughout: title bar with Leave, both team columns with portraits and staggered bot picks, role tabs and filters, best-fit roster grid with *Picked*, detail with abilities and tags, 3D spotlight, timer and Confirm | **Lane picker**, **battle spells**, passive row, per-rank cooldown numbers, popular build row, music toggle |
 | Shop | "Grand Exchange" window: nav, search, tier sections of icons with prices, recipe rows `A + B > C`, detail with Builds into, Buy/Sell, bag with sell-back, Undo, coins | The same: stone frame and insets, tier sections, upgrade ladders as `a > b > c` rows, two-part recipes as `a + b > c`, owned items outlined green, Builds from / into with icons, bag row with sell prices (click to select, then Sell), Undo, coins | Item sets ("Add to set"), slot-based nav (head, body, legs ...), cache arrow sprites in place of the `>` glyph, a hover tooltip with full stats |
-| Minimap | Painted map: dark green jungle masses, wide beige lanes, blue river; **soft lit circles where allies see**; team squares for towers, larger for bases; hero portraits in team rings; camera trapezoid | Live team vision as a dark green veil with a soft edge, following wall shadows; jungle darkened by blocked-tile density; wide lanes; team squares with a white core; player portrait in a gold ring; trapezoid | **Stylised bake** (below); portraits for bot heroes; camp icons from the cache `mapfunction` sprites; pings; ward circles |
+| Minimap | Painted map: dark green jungle masses, wide beige lanes, blue river; **soft lit circles where allies see**; team squares for towers, larger for bases; hero portraits in team rings; camera trapezoid | Ground painted from the same cache textures the world uses; live team vision as a dark veil with a soft edge, following wall shadows; jungle darkened by blocked-tile density; wide lanes; team squares with a white core; player portrait in a gold ring; trapezoid | Jungle walls (needs the phase 5 cliffs); portraits for bot heroes; camp icons from the cache `mapfunction` sprites; pings; ward circles |
 | World light and colour | Lit grass hue 111-114, saturation ~0.6, value p10-p90 about 0.2-0.7; dark but coloured fog of war | Hue 86-100, saturation 0.55-0.66, value p10-p90 0.19-0.49 (after the 2026-11-24 retune) | Slightly more green on the darkest jungle; brighter highlights on lit lanes (the reference's sunlit stone reaches 0.7) |
 | Arena dressing | Grey rock cliffs between lanes and jungle; plank bridges; Saradomin / Zamorak castles; god statues as towers; ice-blue fountain; ground mist in unseen areas | Castle walls, scattered trees, cube-like rocks, no cliffs or bridges | Phase 5 below |
 | HUD | Objectives with named camp timers; four ally frames; slim action bar with equipment grid; kill feed of hero kills only | Ally frames, objectives listing every camp, kill feed that includes minion kills, a debug line top left | Phase 6 below |
@@ -109,14 +109,14 @@ with a commit and a push to `sam main`.
    (2026-11-24).
 2. ~~Hero rings~~, ~~player portrait~~, ~~camera trapezoid~~, ~~team
    building squares~~.
-3. **Stylised bake.** Classify each tile (lane, grass, jungle wall or
-   blocked, water, base) from the map data and collision, then paint flat
-   colours sampled from the cache's world-map palette instead of averaging
-   scene vertex colours. The current bake shows the real brown jungle floor;
-   the reference paints the jungle a flat deep green with darker masses.
-   Bake at 512 px.
-   *Acceptance:* side by side with the reference crop, lanes, jungle and
-   river read at a glance; a test checks each class's colour.
+3. ~~Cache-texture bake.~~ Done 2026-11-24: each terrain vertex is
+   coloured as the world shader paints it (grass layer, lane soil, cache
+   overlay, rock on steep faces, water) from the mean colour of the same
+   cache textures (grass 129/203/18/197/195/205, soil 32, stone 10, water
+   1), with the grass muted to map paint. In-match minimap greens measure
+   median (41, 50, 26) against the reference's (39, 48, 30). The rest of
+   the difference is the arena itself: the reference jungle is walled by
+   cliffs (phase 5.1).
 4. **Bot hero portraits.** Bots need a champion id in the match state; then
    bake their portraits as the player's is baked.
 5. **Camp icons** from the cache `mapfunction` sprites; **pings**
@@ -209,3 +209,6 @@ All objects from the cache, placed through the map format
   rows, icon lists and the sell-back bag; minimap vision veil softened and
   turned green, jungle masses, team squares; lighting retuned against
   measured targets (sun, haze, grade, grass, fog of war).
+- 2026-11-24: phase 2.3 done: the minimap bake follows the world shader's
+  ground classes with cache texture colours instead of averaging floor
+  colours (which showed the brown floors the shader paints over).

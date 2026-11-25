@@ -485,7 +485,16 @@ fn main() -> Result<()> {
         }
     }
     // Bake a real terrain map for the minimap from the scene colours.
-    let minimap_image = minimap::render(&scene, animated.minimap_bounds, minimap::MINIMAP_SIZE);
+    // Coloured from the same cache textures the world shader paints with.
+    let palette = minimap::Palette::from_cache(&cache, &scene)
+        .inspect_err(|err| tracing::warn!("minimap palette: {err:#}; using floor colours"))
+        .ok();
+    let minimap_image = minimap::render(
+        &scene,
+        animated.minimap_bounds,
+        minimap::MINIMAP_SIZE,
+        palette.as_ref(),
+    );
     ui_atlas.add_minimap(&minimap_image);
     let ui_atlas = Arc::new(ui_atlas);
     // The stage 3 interface's theme, only when its dev screen was asked for.

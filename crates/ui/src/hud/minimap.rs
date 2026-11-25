@@ -18,9 +18,9 @@ const LAYER: i32 = 20;
 /// The veil over ground the team cannot see.
 /// Dark green, not navy: over the brown jungle floor a blue veil read
 /// grey, while the reference's unseen jungle stays a deep green.
-const VEIL: Colour = [0.01, 0.05, 0.02, 0.66];
+const VEIL: Colour = [0.03, 0.05, 0.04, 0.66];
 /// The lighter veil just outside the team's sight.
-const VEIL_EDGE: Colour = [0.01, 0.05, 0.02, 0.32];
+const VEIL_EDGE: Colour = [0.03, 0.05, 0.04, 0.32];
 
 /// Where a click lands on the map picture, as fractions of its width and
 /// height (0 at the top left, 1 at the bottom right). `None` outside the
