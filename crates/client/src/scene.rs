@@ -1149,6 +1149,18 @@ impl MapLayout {
         })
     }
 
+    /// The tile rectangle `[x0, y0, x1, y1]` a biome pocket covers.
+    pub fn biome_rect(&self, id: &str) -> Option<[f32; 4]> {
+        self.biomes.iter().find(|b| b.id == id).map(|b| {
+            [
+                b.origin.0 as f32,
+                b.origin.1 as f32,
+                (b.origin.0 + b.rect.2 as i32) as f32,
+                (b.origin.1 + b.rect.3 as i32) as f32,
+            ]
+        })
+    }
+
     /// True when a map tile falls inside one of the biome pockets.
     pub fn in_biome(&self, tile_x: i32, tile_y: i32) -> bool {
         self.biomes.iter().any(|biome| {

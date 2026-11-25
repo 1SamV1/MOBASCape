@@ -80,23 +80,30 @@ The playable map is `data/maps/karamja_rift/map.json`:
 - `props` (v1.8, Phase 5 set dressing, `scene/props.rs`): cache models
   only, by **model** id. Three shapes:
   - `place`: `{model, at: [x, y], yaw (degrees), scale, block, tint,
-    texture}`: one model on one tile. The god statues (Saradomin 9146,
-    Zamorak 1400) and banners (2065, 8655) at the base gates.
+    texture, plaza}`: one model on one tile. The god statues (Saradomin 9146,
+    Zamorak 1400) and banners (2065, 8655) at the base gates. `plaza`
+    (default 6) is the radius in tiles that lines and scatters leave open
+    around it; railings and lamps set it to 0.
   - `lines`: `{models, points | lane_offset, spacing, jitter, gaps, scale:
     [lo, hi], block, tint, texture, lane_clear, seed}`: models strung along
     a polyline, or along both sides of every lane `lane_offset` tiles out.
     `gaps` leaves runs of four slots open as jungle entrances. The grey
     cliff rocks (19997, 818, 819) at 8.5 tiles.
   - `scatter`: `{models, rect: [x0, y0, x1, y1], count, scale, block, tint,
-    texture, lane_clear, seed}`: ferns (12932, 1707, 1653, 1655) and stumps
-    (1685, 1629, 1695) across the arena.
+    texture, lane_clear, seed, biome}`: ferns (12932, 1707, 1653, 1655) and
+    stumps (1685, 1629, 1695) across the arena. With `biome: "<pocket id>"`
+    the scatter dresses that pocket instead: it drops only inside it, and
+    `rect` may be left out to use the pocket's bounds. Lane, structure and
+    camp clearances still apply.
   - `block` is a square footprint in tiles that blocks movement and sight
     (0 = walk-through). `texture` picks the pool for untextured faces:
     `stone` (default), `wood`, `leaves`, `flowers`, or `plain` to keep the
     cache face colours.
   - Lines and scatter are seeded and skip anything within `lane_clear`
-    tiles of a lane, 7 tiles of a structure, 5 of a camp, 6 of a `place`
-    landmark, inside a biome pocket or base courtyard, or in the river.
+    tiles of a lane, 7 tiles of a structure, 5 of a camp, a `place`
+    landmark's `plaza`, inside a biome pocket (unless the scatter names it)
+    or base courtyard, or in the river. `place` is not filtered: authored
+    positions are trusted.
 - `bridge_model`: `{model, yaw, scale, spacing, across}`: a cache bridge
   piece tiled over every river crossing, lined up with the lane, in place of
   the procedural boardwalk. The shipped map uses the plank bridge piece 699

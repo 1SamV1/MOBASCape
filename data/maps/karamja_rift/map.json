@@ -769,7 +769,7 @@
       "id": "dire_vampire",
       "side": "dire",
       "label": "VAMPIRE SWAMP",
-      "grass": 4,
+      "grass": 2,
       "region": [
         54,
         52
@@ -785,9 +785,9 @@
         2950
       ],
       "tint": [
-        0.52,
-        0.6,
-        0.46
+        0.35,
+        0.38,
+        0.32
       ],
       "budget": 100
     },
@@ -1197,6 +1197,282 @@
         "scale": 1.7,
         "block": 2,
         "texture": "plain"
+      },
+      {
+        "model": 17643,
+        "at": [
+          2915.0,
+          2961.0
+        ],
+        "yaw": 135,
+        "scale": 2.6,
+        "block": 2,
+        "texture": "plain",
+        "plaza": 4.5
+      },
+      {
+        "model": 32611,
+        "at": [
+          2910.0,
+          2956.0
+        ],
+        "yaw": 0,
+        "scale": 1.5,
+        "block": 1,
+        "texture": "plain",
+        "plaza": 0
+      },
+      {
+        "model": 32611,
+        "at": [
+          2920.0,
+          2956.0
+        ],
+        "yaw": 0,
+        "scale": 1.5,
+        "block": 1,
+        "texture": "plain",
+        "plaza": 0
+      },
+      {
+        "model": 32611,
+        "at": [
+          2910.0,
+          2966.0
+        ],
+        "yaw": 0,
+        "scale": 1.5,
+        "block": 1,
+        "texture": "plain",
+        "plaza": 0
+      },
+      {
+        "model": 32611,
+        "at": [
+          2920.0,
+          2966.0
+        ],
+        "yaw": 0,
+        "scale": 1.5,
+        "block": 1,
+        "texture": "plain",
+        "plaza": 0
+      },
+      {
+        "model": 35712,
+        "at": [
+          2926.0,
+          2955.0
+        ],
+        "yaw": 0,
+        "scale": 1.1,
+        "block": 0,
+        "texture": "plain",
+        "plaza": 3.5
+      },
+      {
+        "model": 6350,
+        "at": [
+          2908.0,
+          2971.0
+        ],
+        "yaw": 90,
+        "scale": 1.35,
+        "block": 3,
+        "texture": "plain",
+        "plaza": 2.5
+      },
+      {
+        "model": 6357,
+        "at": [
+          2914.0,
+          2973.0
+        ],
+        "yaw": 90,
+        "scale": 1.35,
+        "block": 3,
+        "texture": "plain",
+        "plaza": 2.5
+      },
+      {
+        "model": 39808,
+        "at": [
+          2908.0,
+          2952.0
+        ],
+        "yaw": 0,
+        "scale": 1.35,
+        "block": 3,
+        "texture": "plain",
+        "plaza": 2.5
+      },
+      {
+        "model": 33670,
+        "at": [
+          2928.0,
+          2963.0
+        ],
+        "yaw": 40,
+        "scale": 1.6,
+        "block": 2,
+        "texture": "plain",
+        "plaza": 2.5
+      },
+      {
+        "model": 17763,
+        "at": [
+          2906.0,
+          2959.0
+        ],
+        "yaw": 90,
+        "scale": 1.5,
+        "block": 1,
+        "texture": "plain",
+        "plaza": 1.0
+      },
+      {
+        "model": 40438,
+        "at": [
+          2931.0,
+          2951.0
+        ],
+        "yaw": 0,
+        "scale": 1.35,
+        "block": 1,
+        "texture": "plain",
+        "plaza": 1.0
+      },
+      {
+        "model": 40438,
+        "at": [
+          2933.0,
+          2951.0
+        ],
+        "yaw": 0,
+        "scale": 1.35,
+        "block": 1,
+        "texture": "plain",
+        "plaza": 1.0
+      },
+      {
+        "model": 40294,
+        "at": [
+          2919.0,
+          2961.0
+        ],
+        "yaw": 90,
+        "scale": 2.0,
+        "block": 1,
+        "texture": "plain",
+        "plaza": 0
+      },
+      {
+        "model": 40295,
+        "at": [
+          2915.0,
+          2965.0
+        ],
+        "yaw": 0,
+        "scale": 2.0,
+        "block": 1,
+        "texture": "plain",
+        "plaza": 0
+      },
+      {
+        "model": 40294,
+        "at": [
+          2913.0,
+          2964.5
+        ],
+        "yaw": 330,
+        "scale": 2.0,
+        "block": 1,
+        "texture": "plain",
+        "plaza": 0
+      },
+      {
+        "model": 40295,
+        "at": [
+          2911.5,
+          2963.0
+        ],
+        "yaw": 300,
+        "scale": 2.0,
+        "block": 1,
+        "texture": "plain",
+        "plaza": 0
+      },
+      {
+        "model": 40294,
+        "at": [
+          2911.0,
+          2961.0
+        ],
+        "yaw": 270,
+        "scale": 2.0,
+        "block": 1,
+        "texture": "plain",
+        "plaza": 0
+      },
+      {
+        "model": 40295,
+        "at": [
+          2911.5,
+          2959.0
+        ],
+        "yaw": 240,
+        "scale": 2.0,
+        "block": 1,
+        "texture": "plain",
+        "plaza": 0
+      },
+      {
+        "model": 40294,
+        "at": [
+          2913.0,
+          2957.5
+        ],
+        "yaw": 210,
+        "scale": 2.0,
+        "block": 1,
+        "texture": "plain",
+        "plaza": 0
+      },
+      {
+        "model": 40295,
+        "at": [
+          2915.0,
+          2957.0
+        ],
+        "yaw": 180,
+        "scale": 2.0,
+        "block": 1,
+        "texture": "plain",
+        "plaza": 0
+      },
+      {
+        "model": 40294,
+        "at": [
+          2917.0,
+          2957.5
+        ],
+        "yaw": 150,
+        "scale": 2.0,
+        "block": 1,
+        "texture": "plain",
+        "plaza": 0
+      },
+      {
+        "model": 40295,
+        "at": [
+          2918.5,
+          2959.0
+        ],
+        "yaw": 120,
+        "scale": 2.0,
+        "block": 1,
+        "texture": "plain",
+        "plaza": 0
       }
     ],
     "lines": [
@@ -1268,6 +1544,140 @@
         "texture": "plain",
         "lane_clear": 6.0,
         "seed": 23
+      },
+      {
+        "models": [
+          2259
+        ],
+        "biome": "dire_vampire",
+        "count": 28,
+        "scale": [
+          1.6,
+          2.6
+        ],
+        "block": 0,
+        "texture": "plain",
+        "lane_clear": 4.5,
+        "seed": 101
+      },
+      {
+        "models": [
+          3549,
+          3550,
+          3551,
+          3552,
+          3553
+        ],
+        "biome": "dire_vampire",
+        "count": 150,
+        "scale": [
+          0.8,
+          1.1
+        ],
+        "block": 0,
+        "texture": "plain",
+        "lane_clear": 5.5,
+        "seed": 102
+      },
+      {
+        "models": [
+          3605,
+          3606,
+          3607
+        ],
+        "biome": "dire_vampire",
+        "count": 120,
+        "scale": [
+          0.9,
+          1.2
+        ],
+        "block": 0,
+        "texture": "plain",
+        "lane_clear": 5.5,
+        "seed": 103
+      },
+      {
+        "models": [
+          4092,
+          4093,
+          4094
+        ],
+        "biome": "dire_vampire",
+        "count": 12,
+        "scale": [
+          1.3,
+          1.8
+        ],
+        "block": 1,
+        "texture": "plain",
+        "lane_clear": 5.5,
+        "seed": 104
+      },
+      {
+        "models": [
+          3595,
+          3592,
+          2172
+        ],
+        "biome": "dire_vampire",
+        "count": 26,
+        "scale": [
+          1.2,
+          1.5
+        ],
+        "block": 0,
+        "texture": "plain",
+        "lane_clear": 5.5,
+        "seed": 105
+      },
+      {
+        "models": [
+          3597,
+          3602
+        ],
+        "biome": "dire_vampire",
+        "count": 14,
+        "scale": [
+          1.3,
+          1.6
+        ],
+        "block": 1,
+        "texture": "plain",
+        "lane_clear": 5.5,
+        "seed": 106
+      },
+      {
+        "models": [
+          46700,
+          1363,
+          36358,
+          30519
+        ],
+        "biome": "dire_vampire",
+        "count": 14,
+        "scale": [
+          1.2,
+          1.4
+        ],
+        "block": 1,
+        "texture": "plain",
+        "lane_clear": 5.5,
+        "seed": 107
+      },
+      {
+        "models": [
+          30685
+        ],
+        "biome": "dire_vampire",
+        "count": 3,
+        "scale": [
+          0.8,
+          1.0
+        ],
+        "block": 2,
+        "texture": "plain",
+        "lane_clear": 5.5,
+        "seed": 108
       }
     ]
   },

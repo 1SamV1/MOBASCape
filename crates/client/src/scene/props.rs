@@ -53,6 +53,10 @@ pub struct PlaceJson {
     /// flowers, or plain to keep the cache colours.
     #[serde(default)]
     pub texture: Option<String>,
+    /// Tiles around this landmark that lines and scatters leave open.
+    /// Statues keep a 6-tile plaza; a railing or a lamp needs little or none.
+    #[serde(default = "default_plaza")]
+    pub plaza: f32,
 }
 
 /// Models strung along a path.
@@ -94,8 +98,15 @@ pub struct LineJson {
 #[derive(Debug, Clone, Deserialize)]
 pub struct ScatterJson {
     pub models: Vec<u32>,
-    /// World tiles `[x0, y0, x1, y1]`.
-    pub rect: [f32; 4],
+    /// World tiles `[x0, y0, x1, y1]`. May be left out when `biome` is set:
+    /// the pocket's own bounds are used.
+    #[serde(default)]
+    pub rect: Option<[f32; 4]>,
+    /// Dress a biome pocket: drop only inside the pocket with this id
+    /// (other scatters keep out of every pocket). Lane, camp and structure
+    /// clearances still apply.
+    #[serde(default)]
+    pub biome: Option<String>,
     pub count: usize,
     #[serde(default = "default_scale_range")]
     pub scale: [f32; 2],
@@ -125,6 +136,9 @@ fn default_scale_range() -> [f32; 2] {
 }
 fn default_lane_clear() -> f32 {
     5.5
+}
+fn default_plaza() -> f32 {
+    6.0
 }
 
 impl PropsJson {
@@ -230,19 +244,24 @@ pub fn place_props(
         .as_ref()
         .map(|c| c.keep_clear())
         .unwrap_or_default();
-    let landmarks: Vec<Vec2> = props
+    let landmarks: Vec<(Vec2, f32)> = props
         .place
         .iter()
-        .map(|p| Vec2::new((p.at[0] + 0.5) * 128.0, (p.at[1] + 0.5) * 128.0))
+        .map(|p| {
+            let at = Vec2::new((p.at[0] + 0.5) * 128.0, (p.at[1] + 0.5) * 128.0);
+            (at, p.plaza * 128.0)
+        })
         .collect();
-    let open = |pos: Vec3, lane_clear: f32| -> bool {
+    // `pocket`: Some(id) to keep inside that biome pocket, None to keep out
+    // of every pocket.
+    let open = |pos: Vec3, lane_clear: f32, pocket: Option<&str>| -> bool {
         if !world.height.contains(pos.x, pos.z) {
             return false;
         }
         // Authored landmarks (statues, banners) keep a clear plaza.
         if landmarks
             .iter()
-            .any(|l| l.distance(Vec2::new(pos.x, pos.z)) < 6.0 * 128.0)
+            .any(|(l, r)| l.distance(Vec2::new(pos.x, pos.z)) < *r)
         {
             return false;
         }
@@ -268,7 +287,14 @@ pub fn place_props(
         }
         let tx = (pos.x / 128.0).floor() as i32;
         let ty = (pos.z / 128.0).floor() as i32;
-        if world.map.in_biome(tx, ty) {
+        let in_pocket = match pocket {
+            Some(id) => world
+                .map
+                .biome_rect(id)
+                .is_some_and(|r| pos_in_rect(pos, r)),
+            None => !world.map.in_biome(tx, ty),
+        };
+        if !in_pocket {
             return false;
         }
         let (fx, fz) = (pos.x / 128.0, pos.z / 128.0);
@@ -346,7 +372,7 @@ pub fn place_props(
                     + perp * (hash01(seed ^ 0x51) - 0.5) * 2.0 * jitter
                     + dir * (hash01(seed ^ 0xA3) - 0.5) * jitter;
                 let pos = Vec3::new(p.x, 0.0, p.y);
-                if !open(pos, line.lane_clear) {
+                if !open(pos, line.lane_clear, None) {
                     continue;
                 }
                 let model = line.models
@@ -374,7 +400,14 @@ pub fn place_props(
         if scatter.models.is_empty() {
             continue;
         }
-        let [x0, y0, x1, y1] = scatter.rect;
+        let pocket = scatter.biome.as_deref();
+        let rect = scatter
+            .rect
+            .or_else(|| pocket.and_then(|id| world.map.biome_rect(id)));
+        let Some([x0, y0, x1, y1]) = rect else {
+            tracing::warn!("props: scatter {scatter_index} has no rect and no known biome");
+            continue;
+        };
         for i in 0..scatter.count {
             let seed = scatter
                 .seed
@@ -383,7 +416,7 @@ pub fn place_props(
             let tx = x0 + (x1 - x0) * hash01(seed ^ 0x11);
             let ty = y0 + (y1 - y0) * hash01(seed ^ 0x22);
             let pos = Vec3::new(tx * 128.0, 0.0, ty * 128.0);
-            if !open(pos, scatter.lane_clear) {
+            if !open(pos, scatter.lane_clear, pocket) {
                 continue;
             }
             let model = scatter.models[(hash01(seed ^ 0x33) * scatter.models.len() as f32)
@@ -407,6 +440,12 @@ pub fn place_props(
         }
     }
     counts
+}
+
+/// True when a world position lies in a tile rectangle `[x0, y0, x1, y1]`.
+fn pos_in_rect(pos: Vec3, r: [f32; 4]) -> bool {
+    let (tx, ty) = (pos.x / 128.0, pos.z / 128.0);
+    tx >= r[0] && tx < r[2] && ty >= r[1] && ty < r[3]
 }
 
 fn drop_prop(world: &PropWorld<'_>, sink: &mut PropSink<'_>, drop: Drop<'_>) -> bool {
@@ -603,6 +642,51 @@ mod tests {
     }
 
     #[test]
+    fn a_biome_scatter_needs_no_rect_and_a_landmark_can_waive_its_plaza() {
+        let props: PropsJson = serde_json::from_value(serde_json::json!({
+            "place": [
+                { "model": 17643, "at": [10, 10] },
+                { "model": 40294, "at": [12, 10], "plaza": 0 }
+            ],
+            "scatter": [{ "models": [3549], "biome": "dire_vampire", "count": 4 }]
+        }))
+        .expect("props");
+        assert_eq!(props.place[0].plaza, 6.0);
+        assert_eq!(props.place[1].plaza, 0.0);
+        assert!(props.scatter[0].rect.is_none());
+        assert_eq!(props.scatter[0].biome.as_deref(), Some("dire_vampire"));
+        let r = [10.0, 10.0, 20.0, 20.0];
+        assert!(pos_in_rect(Vec3::new(10.0 * 128.0, 0.0, 19.9 * 128.0), r));
+        assert!(!pos_in_rect(Vec3::new(20.0 * 128.0, 0.0, 15.0 * 128.0), r));
+    }
+
+    #[test]
+    fn shipped_vampire_swamp_has_its_plaza_and_dressing() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let text = std::fs::read_to_string(root.join("data/maps/karamja_rift/map.json"))
+            .expect("map.json");
+        let json: serde_json::Value = serde_json::from_str(&text).expect("map json");
+        let props: PropsJson = serde_json::from_value(json["props"].clone()).expect("props block");
+        // The vampyre statue, ringed by Darkmeyer railings.
+        assert!(props.place.iter().any(|p| p.model == 17643));
+        assert!(
+            props
+                .place
+                .iter()
+                .filter(|p| p.model == 40294 || p.model == 40295)
+                .count()
+                >= 8
+        );
+        let pocket: Vec<_> = props
+            .scatter
+            .iter()
+            .filter(|s| s.biome.as_deref() == Some("dire_vampire"))
+            .collect();
+        assert!(pocket.len() >= 6);
+        assert!(pocket.iter().all(|s| s.texture.as_deref() == Some("plain")));
+    }
+
+    #[test]
     fn shipped_map_dresses_bases_bridges_cliffs_and_jungle() {
         let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
         let text = std::fs::read_to_string(root.join("data/maps/karamja_rift/map.json"))
@@ -615,7 +699,13 @@ mod tests {
             assert!(props.place.iter().any(|p| p.model == statue), "{statue}");
         }
         assert!(props.lines.iter().all(|l| l.block > 0 && l.gaps > 0.0));
-        assert!(props.scatter.iter().all(|s| s.block == 0 && s.count > 0));
+        // Open-country flora never blocks; pocket dressing may (trees, graves).
+        assert!(
+            props
+                .scatter
+                .iter()
+                .all(|s| s.count > 0 && (s.biome.is_some() || s.block == 0))
+        );
         let bridge: crate::scene::BridgeModelJson =
             serde_json::from_value(json["bridge_model"].clone()).expect("bridge model");
         assert_eq!(bridge.model, 699);
