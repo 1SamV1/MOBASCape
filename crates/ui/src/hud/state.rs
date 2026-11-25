@@ -323,6 +323,15 @@ pub struct HitmarkState {
     pub tint: Option<[u8; 3]>,
 }
 
+/// One line of OSRS overhead chat, centred on `at` in window pixels.
+#[derive(Debug, Clone, PartialEq)]
+pub struct OverheadState {
+    pub at: (i32, i32),
+    pub text: String,
+    /// 0..1, used for the fade as the line expires.
+    pub alpha: f32,
+}
+
 /// One unit plate, already placed in window pixels by the client's
 /// projection. `at` is the unit's head; the plate is drawn above it. The
 /// interface draws a plate where it is told and never places one.
@@ -354,6 +363,8 @@ pub struct HudState {
     pub allies: Vec<AllyState>,
     pub plates: Vec<UnitPlate>,
     pub hitmarks: Vec<HitmarkState>,
+    /// Overhead chat ("Taste vengeance!") above units.
+    pub overhead: Vec<OverheadState>,
     pub target: Option<TargetState>,
     pub inventory: Vec<Option<InventoryItem>>,
     pub gold: u32,

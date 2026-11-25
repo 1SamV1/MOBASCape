@@ -6,8 +6,8 @@ use crate::draw::DrawList;
 use crate::hud::layout::{Layout, Piece};
 use crate::hud::{
     ability_bar, ability_tooltip, announcements, chat, death, hitmarks, inventory, kill_feed,
-    minimap, objectives, score_strip, shop, sketch, state::HudState, target_panel, team_frames,
-    tooltip, unit_plates,
+    minimap, objectives, overhead, score_strip, shop, sketch, state::HudState, target_panel,
+    team_frames, tooltip, unit_plates,
 };
 use crate::theme::Theme;
 
@@ -30,6 +30,7 @@ pub fn build(theme: &Theme, layout: &Layout, state: &HudState) -> DrawList {
     if state.death.is_none() {
         unit_plates::draw(theme, &mut list, &state.plates);
         hitmarks::draw(theme, &mut list, &state.hitmarks);
+        overhead::draw(theme, &mut list, &state.overhead);
     }
     if let Some(area) = layout.get(Piece::Score) {
         score_strip::draw(theme, &mut list, area, &state.score);

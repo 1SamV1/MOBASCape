@@ -75,6 +75,11 @@ running until it was killed).
 of hover states (tooltips, hot buttons). A real mouse over the window
 overrides it on its first move.
 
+`--demo-gfx 76,77,78` plays those cache spot animations in a labelled grid
+beside the hero, looping, so spell graphics can be checked by eye. Add
+`--distance 1500` to bring the camera in. A label ending in `?` failed to
+load. The verified ids are listed in [SPELLS.md](SPELLS.md).
+
 ## Shader hot reload
 
 - `--hot-shaders` watches `crates/client/src/scene.wgsl` and recompiles it

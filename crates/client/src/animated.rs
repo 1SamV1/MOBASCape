@@ -620,13 +620,22 @@ impl HitsplatKind {
     }
 }
 
-/// How a floating number is drawn: an OSRS hitmark, or a plain coloured
-/// label (gold pickups and developer text).
+/// How a floating number is drawn: an OSRS hitmark, a plain coloured
+/// label (gold pickups and developer text), or overhead chat.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum FloatStyle {
     Hitsplat(HitsplatKind),
     Label([u8; 3]),
+    /// OSRS overhead chat: yellow text with a black shadow that rides above
+    /// its unit's head (or stays put without one) and does not drift.
+    Say,
 }
+
+/// OSRS overhead chat yellow.
+pub const SAY_YELLOW: [u8; 3] = [255, 255, 0];
+/// How long overhead chat stays up, like the reference client's 150 ticks
+/// cut down to match pace.
+pub const SAY_SECONDS: f32 = 2.4;
 
 /// A number that pops over a unit when it is hit, like the reference client.
 pub struct FloatText {
@@ -3156,6 +3165,89 @@ impl AnimatedScene {
         Ok(self.units.len() - 1)
     }
 
+    /// OSRS overhead chat over a unit ("Taste vengeance!").
+    pub fn say(&mut self, unit: usize, text: &str) {
+        let Some(speaker) = self.units.get(unit) else {
+            return;
+        };
+        let pos = say_anchor(speaker);
+        // One line per speaker: a new line replaces the old one.
+        self.floats
+            .retain(|float| !(float.style == FloatStyle::Say && float.unit == Some(unit)));
+        self.floats.push(FloatText {
+            pos,
+            text: text.to_string(),
+            style: FloatStyle::Say,
+            life: SAY_SECONDS,
+            scale: 1.0,
+            stack: 0,
+            unit: Some(unit),
+            tint: None,
+        });
+    }
+
+    /// Load spot animations that no projectile look names, so a demo or a
+    /// spell can play them. Ids already loaded are skipped.
+    pub fn preload_spotanims(&mut self, cache: &Cache, ids: &[u32]) {
+        for &id in ids {
+            if self.spot_models.contains_key(&id) {
+                continue;
+            }
+            match SpotModel::load(cache, id) {
+                Ok(spot) => {
+                    self.spot_models.insert(id, Arc::new(spot));
+                }
+                Err(err) => tracing::warn!("fx: spotanim {id} unavailable: {err:#}"),
+            }
+        }
+    }
+
+    /// Developer preview (`--demo-gfx`): play each spot animation once in a
+    /// grid around `centre`, each labelled with its id. Returns how long the
+    /// longest one runs, in seconds, so the caller can loop the grid.
+    pub fn demo_gfx(&mut self, ids: &[u32], centre: Vec3, height: &HeightGrid) -> f32 {
+        let length_of = |id: &u32| {
+            self.spot_models
+                .get(id)
+                .map(|model| model.length_ms / 1000.0)
+        };
+        let longest = ids.iter().filter_map(length_of).fold(0.6f32, f32::max);
+        let lengths: Vec<Option<f32>> = ids.iter().map(length_of).collect();
+        for ((&id, length), spot) in
+            ids.iter()
+                .zip(lengths)
+                .zip(demo_grid(centre, ids.len(), 230.0))
+        {
+            let ground = Vec3::new(spot.x, height.height_at(spot.x, spot.z), spot.z);
+            if length.is_some() {
+                self.spot_bursts.push(SpotBurst {
+                    spotanim: id,
+                    pos: ground + Vec3::Y * 60.0,
+                    yaw: 0.0,
+                    time_ms: 0.0,
+                    scale: 1.0,
+                });
+            }
+            // A missing id keeps its label, marked, so the sheet shows it.
+            let label = if length.is_some() {
+                id.to_string()
+            } else {
+                format!("{id}?")
+            };
+            self.floats.push(FloatText {
+                pos: ground - Vec3::Y * 10.0,
+                text: label,
+                style: FloatStyle::Say,
+                life: longest + 0.4,
+                scale: 1.0,
+                stack: 0,
+                unit: None,
+                tint: None,
+            });
+        }
+        longest
+    }
+
     pub fn teleport_player(&mut self, pos: Vec3) {
         let unit = &mut self.units[self.player_index];
         unit.pos = pos;
@@ -3351,13 +3443,24 @@ impl AnimatedScene {
         self.hud_time += dt;
         // Floating numbers drift up and fade, announcements and the kill feed
         // time out, and the minimap ping decays.
+        let units = &self.units;
         self.floats.retain_mut(|float| {
             float.life -= dt;
             // Hitmarks hang a little longer than economy labels, like the
-            // reference client's one-to-two tick splats.
+            // reference client's one-to-two tick splats. Overhead chat
+            // follows its speaker instead of drifting.
             let drift = match float.style {
                 FloatStyle::Hitsplat(_) => 26.0,
                 FloatStyle::Label(_) => 46.0,
+                FloatStyle::Say => {
+                    if let Some(unit) = float.unit.and_then(|index| units.get(index)) {
+                        if unit.health <= 0.0 {
+                            return false;
+                        }
+                        float.pos = say_anchor(unit);
+                    }
+                    0.0
+                }
             };
             float.pos.y += dt * drift;
             float.life > 0.0
@@ -6306,6 +6409,30 @@ fn point_in_brush(brush: &[(f32, f32, f32, f32)], pos: Vec3) -> bool {
 }
 
 /// Sum damage entries by source, largest first, then by name.
+/// Where overhead chat is anchored: the unit's plate anchor. The HUD lifts
+/// the line above the name in screen space, so it clears the plate at any
+/// zoom.
+fn say_anchor(unit: &AnimatedUnit) -> Vec3 {
+    unit.pos + Vec3::Y * (unit.bar_height + 12.0)
+}
+
+/// Grid positions for `count` items centred on `centre`, `spacing` apart,
+/// in rows as close to square as the count allows.
+pub fn demo_grid(centre: Vec3, count: usize, spacing: f32) -> Vec<Vec3> {
+    if count == 0 {
+        return Vec::new();
+    }
+    let columns = (count as f32).sqrt().ceil() as usize;
+    let rows = count.div_ceil(columns);
+    (0..count)
+        .map(|index| {
+            let column = (index % columns) as f32 - (columns as f32 - 1.0) * 0.5;
+            let row = (index / columns) as f32 - (rows as f32 - 1.0) * 0.5;
+            centre + Vec3::new(column * spacing, 0.0, row * spacing)
+        })
+        .collect()
+}
+
 pub fn damage_totals(entries: &[(String, f32)]) -> Vec<(String, u32)> {
     let mut totals: Vec<(String, f32)> = Vec::new();
     for (name, amount) in entries {
@@ -7254,6 +7381,19 @@ fn append_quad(scene: &mut AnimatedScene, center: Vec3, right: Vec3, up: Vec3, c
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_demo_grid_is_square_ish_and_centred() {
+        assert!(demo_grid(Vec3::ZERO, 0, 100.0).is_empty());
+        let one = demo_grid(Vec3::new(5.0, 0.0, 7.0), 1, 100.0);
+        assert_eq!(one, vec![Vec3::new(5.0, 0.0, 7.0)]);
+        // Ten items: four columns, three rows, centred on the origin.
+        let ten = demo_grid(Vec3::ZERO, 10, 100.0);
+        assert_eq!(ten.len(), 10);
+        assert_eq!(ten[0], Vec3::new(-150.0, 0.0, -100.0));
+        assert_eq!(ten[3], Vec3::new(150.0, 0.0, -100.0));
+        assert_eq!(ten[9], Vec3::new(-50.0, 0.0, 100.0));
+    }
 
     #[test]
     fn only_hero_structure_and_dummy_kills_reach_the_feed() {

@@ -12,6 +12,7 @@ pub mod kill_feed;
 pub mod layout;
 pub mod minimap;
 pub mod objectives;
+pub mod overhead;
 pub mod sample;
 pub mod score_strip;
 pub mod shop;

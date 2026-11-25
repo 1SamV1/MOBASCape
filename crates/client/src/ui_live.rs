@@ -13,8 +13,8 @@ use rift_ui::hud::state::{
     AbilityNumbers, AbilityState, AbilityTooltipState, AbilityUpgrade, AllyState, BagItem,
     CampState, ChatKind, ChatLine, DamageSource, DeathState, HeroMark, HitmarkKind, HitmarkState,
     InventoryItem, ItemLink, KillFeedEntry, LaneState, MapPoint, MinimapState, NexusState,
-    ObjectivesState, PlateKind, ScoreState, ShopItem, ShopState, StructureMark, TargetStat,
-    TargetState, TooltipState, UnitPlate, VisionMask,
+    ObjectivesState, OverheadState, PlateKind, ScoreState, ShopItem, ShopState, StructureMark,
+    TargetStat, TargetState, TooltipState, UnitPlate, VisionMask,
 };
 
 pub fn score(player: &PlayerHud) -> ScoreState {
@@ -786,6 +786,19 @@ pub fn hitmarks(player: &PlayerHud) -> Vec<HitmarkState> {
             alpha: hit.alpha,
             stack: hit.stack,
             tint: hit.tint,
+        })
+        .collect()
+}
+
+/// Projected OSRS overhead chat as the assembled interface's plain state.
+pub fn overhead(player: &PlayerHud) -> Vec<OverheadState> {
+    player
+        .overhead
+        .iter()
+        .map(|(x, y, text, alpha)| OverheadState {
+            at: (x.round() as i32, y.round() as i32),
+            text: text.clone(),
+            alpha: *alpha,
         })
         .collect()
 }

@@ -237,6 +237,8 @@ pub struct PlayerHud {
     pub heroes: Vec<HeroMarker>,
     /// Screen-space floating labels: `(x, y, text, colour, scale)`.
     pub damage_numbers: Vec<(f32, f32, String, [u8; 3], f32)>,
+    /// Screen-space OSRS overhead chat: `(x, y, text, alpha)`, centred.
+    pub overhead: Vec<(f32, f32, String, f32)>,
     /// Screen-space OSRS hitmarks for combat damage, status ticks and heals.
     pub hitsplats: Vec<Hitsplat>,
     /// Screen-space name/health plates for champions, structures and camps.
@@ -1577,6 +1579,36 @@ impl Hud {
                 [12, 12, 16],
             );
             self.text(width, height, *x, *y, *scale, text, *color);
+        }
+
+        // OSRS overhead chat: bold yellow, centred, one-pixel black shadow.
+        for (x, y, text, alpha) in &player.overhead {
+            let w = self.text_width_named("b12", text, 1.0);
+            let left = (*x - w * 0.5).round();
+            // `y` is a baseline, like the assembled interface's text.
+            let top = (*y - 12.0).round();
+            self.text_named_raw(
+                "b12",
+                width,
+                height,
+                left + 1.0,
+                top + 1.0,
+                1.0,
+                text,
+                [0, 0, 0],
+                *alpha,
+            );
+            self.text_named_raw(
+                "b12",
+                width,
+                height,
+                left,
+                top,
+                1.0,
+                text,
+                crate::animated::SAY_YELLOW,
+                *alpha,
+            );
         }
 
         // Committed-attack cast bar above the bottom cluster.

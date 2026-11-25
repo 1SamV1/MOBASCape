@@ -167,6 +167,11 @@ struct Cli {
     /// champion's kit, logging what each did.
     #[arg(long)]
     demo_abilities: bool,
+    /// Demo: play these cache spot animations (comma separated ids) in a
+    /// labelled grid beside the hero, over and over, for checking spell
+    /// graphics by eye.
+    #[arg(long, value_delimiter = ',')]
+    demo_gfx: Vec<u32>,
     /// Demo: stand beside a jungle camp and basic-attack it, to check
     /// attack animations, reach and projectiles.
     #[arg(long)]
@@ -670,6 +675,9 @@ fn main() -> Result<()> {
         demo_abilities: cli.demo_abilities,
         demo_abilities_timer: 0.0,
         demo_abilities_stage: 0,
+        demo_gfx: cli.demo_gfx.clone(),
+        demo_gfx_timer: 0.0,
+        demo_gfx_loaded: false,
         demo_attack: cli.demo_attack,
         demo_attack_stage: 0,
         demo_ranks: cli.demo_ranks,
@@ -837,6 +845,10 @@ struct App {
     demo_abilities: bool,
     demo_abilities_timer: f32,
     demo_abilities_stage: u8,
+    demo_gfx: Vec<u32>,
+    /// Seconds until the `--demo-gfx` grid plays again.
+    demo_gfx_timer: f32,
+    demo_gfx_loaded: bool,
     demo_attack: bool,
     demo_attack_stage: u8,
     demo_ranks: Option<usize>,
@@ -2027,6 +2039,25 @@ impl App {
                     self.demo_watchtower = false;
                 }
             }
+            if !self.demo_gfx.is_empty() {
+                if !self.demo_gfx_loaded {
+                    animated.preload_spotanims(&self.cache, &self.demo_gfx);
+                    self.demo_gfx_loaded = true;
+                    self.demo_gfx_timer = 0.5;
+                }
+                self.demo_gfx_timer -= dt;
+                if self.demo_gfx_timer <= 0.0 {
+                    // Centred a little past the hero so the bottom row
+                    // stays clear of the ability bar.
+                    let centre = animated.player_pos() + Vec3::new(0.0, 0.0, -60.0);
+                    let longest = animated.demo_gfx(&self.demo_gfx, centre, height);
+                    self.demo_gfx_timer = longest + 0.6;
+                    // The hero calls the sheet out in overhead chat, which
+                    // also checks that a speaker's line follows them.
+                    let player = animated.player_index;
+                    animated.say(player, &format!("{} spot animations", self.demo_gfx.len()));
+                }
+            }
             if self.demo_abilities {
                 self.demo_abilities_timer += dt;
                 let t = self.demo_abilities_timer;
@@ -2499,6 +2530,7 @@ impl App {
             let aspect = hud_w / hud_h.max(1.0);
             let view_proj = renderer.camera.view_proj(aspect);
             let mut damage_numbers = Vec::new();
+            let mut overhead = Vec::new();
             let mut hitsplats = Vec::new();
             for float in &animated.floats {
                 let clip = view_proj * glam::Vec4::new(float.pos.x, float.pos.y, float.pos.z, 1.0);
@@ -2529,6 +2561,25 @@ impl App {
                         color,
                         float.scale,
                     )),
+                    FloatStyle::Say => {
+                        // A speaker's line sits above their plate: over the
+                        // 2x name, and over the skull and tag of an enemy
+                        // hero. A line with no speaker stays where it is.
+                        let lift = match float.unit.and_then(|index| animated.units.get(index)) {
+                            Some(unit) if unit.kind == UnitKind::BotChampion && unit.team == 1 => {
+                                108.0
+                            }
+                            Some(unit) if unit.is_champion => 46.0,
+                            Some(_) => 28.0,
+                            None => 0.0,
+                        };
+                        overhead.push((
+                            screen_x,
+                            screen_y - lift,
+                            float.text.clone(),
+                            (float.life / 0.3).clamp(0.0, 1.0),
+                        ))
+                    }
                 }
             }
             // Screen-space name/health plates. Minions keep their cheap
@@ -2656,6 +2707,7 @@ impl App {
                 heroes: heroes.clone(),
                 roster,
                 damage_numbers,
+                overhead,
                 hitsplats,
                 unit_frames,
                 cast_progress,
@@ -3939,6 +3991,7 @@ fn draw_ui_overlay(
                 state.ability = crate::ui_live::ability(player);
                 state.plates = crate::ui_live::plates(player);
                 state.hitmarks = crate::ui_live::hitmarks(player);
+                state.overhead = crate::ui_live::overhead(player);
                 state.chat = crate::ui_live::chat(player);
                 state.feed = crate::ui_live::feed(player);
                 state.announcement = crate::ui_live::announcement(player);

@@ -307,6 +307,7 @@ fn base() -> HudState {
         ],
         plates: Vec::new(),
         hitmarks: Vec::new(),
+        overhead: Vec::new(),
         target: Some(TargetState {
             name: "Top outer statue".to_string(),
             kind: "Structure".to_string(),
