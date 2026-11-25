@@ -545,6 +545,9 @@ struct CastlePiece {
     /// Footprint in tiles centred on `tile` (1 = 1x1, 2 = 2x2).
     footprint: f32,
     block: bool,
+    /// The team whose courtyard this piece encloses: it takes that god's
+    /// palette (`CastlePalette::for_team`). The open perimeter is `None`.
+    team: Option<u8>,
 }
 
 #[derive(Debug, Clone)]
@@ -677,6 +680,21 @@ pub struct MapLayout {
 }
 
 impl CastleSpec {
+    /// The team whose courtyard covers `tile`, its walls included: the
+    /// inner walls, gates, corner towers, the stretch of perimeter wall
+    /// that closes the courtyard, the dais and its statues.
+    fn team_at(&self, tile: [f32; 2]) -> Option<u8> {
+        let edge = 1.0;
+        self.bases.iter().find_map(|base| {
+            let (bx0, bz0, bx1, bz1) = self.base_rect(base);
+            let inside = tile[0] >= bx0 - edge
+                && tile[0] <= bx1 + edge
+                && tile[1] >= bz0 - edge
+                && tile[1] <= bz1 + edge;
+            inside.then_some(base.team)
+        })
+    }
+
     fn base_rect(&self, base: &CastleBase) -> (f32, f32, f32, f32) {
         let half = base.size * 0.5;
         (
@@ -826,6 +844,7 @@ impl CastleSpec {
                 texture: 46,
                 footprint: 1.0,
                 block: true,
+                team: None,
             });
         }
         for (x, z) in towers {
@@ -838,6 +857,7 @@ impl CastleSpec {
                 texture: 46,
                 footprint: 2.0,
                 block: true,
+                team: None,
             });
         }
         if self.gate_model != 0 {
@@ -851,6 +871,7 @@ impl CastleSpec {
                     texture: 47,
                     footprint: 2.0,
                     block: false,
+                    team: None,
                 });
             }
         }
@@ -865,6 +886,7 @@ impl CastleSpec {
                     texture: 44,
                     footprint: 1.0,
                     block: false,
+                    team: None,
                 });
             }
         }
@@ -879,8 +901,12 @@ impl CastleSpec {
                     texture: 46,
                     footprint: 1.0,
                     block: false,
+                    team: None,
                 });
             }
+        }
+        for piece in &mut pieces {
+            piece.team = self.team_at(piece.tile);
         }
         pieces
     }
@@ -4945,9 +4971,10 @@ fn append_castle_mesh(
             piece.model,
             piece.texture
         );
+        let pal = CastlePalette::for_team(piece.team);
         match piece.kind {
             CastlePieceKind::Wall => {
-                append_castle_wall(model_mesh, base, rot, piece.scale);
+                append_castle_wall(model_mesh, base, rot, piece.scale, &pal);
                 append_box(
                     shadow_caster_mesh,
                     rot,
@@ -4957,7 +4984,7 @@ fn append_castle_mesh(
                 );
             }
             CastlePieceKind::Tower => {
-                append_castle_tower(model_mesh, base, rot, piece.scale);
+                append_castle_tower(model_mesh, base, rot, piece.scale, &pal);
                 append_box(
                     shadow_caster_mesh,
                     rot,
@@ -4967,7 +4994,7 @@ fn append_castle_mesh(
                 );
             }
             CastlePieceKind::Gate => {
-                append_castle_gate(model_mesh, base, rot, piece.scale);
+                append_castle_gate(model_mesh, base, rot, piece.scale, &pal);
                 append_box(
                     shadow_caster_mesh,
                     rot,
@@ -4977,10 +5004,10 @@ fn append_castle_mesh(
                 );
             }
             CastlePieceKind::Platform => {
-                append_castle_platform(model_mesh, base, piece.scale);
+                append_castle_platform(model_mesh, base, piece.scale, &pal);
             }
             CastlePieceKind::Statue => {
-                append_castle_statue(model_mesh, base, rot, piece.scale);
+                append_castle_statue(model_mesh, base, rot, piece.scale, &pal);
             }
         }
         placed += 1;
@@ -4992,6 +5019,58 @@ const CASTLE_TOP: [u8; 3] = [234, 232, 223];
 const CASTLE_SIDE: [u8; 3] = [222, 219, 209];
 const CASTLE_DARK: [u8; 3] = [188, 185, 176];
 const CASTLE_BLUE: [u8; 3] = [92, 146, 214];
+
+/// Stone colours for one stretch of castle. The open perimeter is plain
+/// white; each courtyard wears its god's colours: Saradomin white with a
+/// blue walkway band and gold merlons, Zamorak dark stone with a blood-red
+/// band and a red dais pool.
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct CastlePalette {
+    top: [u8; 3],
+    side: [u8; 3],
+    dark: [u8; 3],
+    /// Walkway caps and gate lintels.
+    band: [u8; 3],
+    /// Crenellations.
+    merlon: [u8; 3],
+    /// The pool ring on the nexus dais.
+    pool: [u8; 3],
+}
+
+impl CastlePalette {
+    const NEUTRAL: Self = Self {
+        top: CASTLE_TOP,
+        side: CASTLE_SIDE,
+        dark: CASTLE_DARK,
+        band: CASTLE_TOP,
+        merlon: CASTLE_TOP,
+        pool: CASTLE_BLUE,
+    };
+    const SARADOMIN: Self = Self {
+        top: CASTLE_TOP,
+        side: CASTLE_SIDE,
+        dark: CASTLE_DARK,
+        band: [64, 104, 196],
+        merlon: [226, 184, 72],
+        pool: CASTLE_BLUE,
+    };
+    const ZAMORAK: Self = Self {
+        top: [104, 96, 98],
+        side: [86, 79, 82],
+        dark: [58, 53, 56],
+        band: [168, 34, 28],
+        merlon: [70, 62, 66],
+        pool: [150, 34, 30],
+    };
+
+    fn for_team(team: Option<u8>) -> Self {
+        match team {
+            Some(0) => Self::SARADOMIN,
+            Some(_) => Self::ZAMORAK,
+            None => Self::NEUTRAL,
+        }
+    }
+}
 
 fn push_stone_quad(mesh: &mut MeshData, a: Vec3, b: Vec3, c: Vec3, d: Vec3, color: [u8; 3]) {
     let base = mesh.vertices.len() as u32;
@@ -5078,7 +5157,7 @@ fn append_castle_box(
     );
 }
 
-fn append_castle_wall(mesh: &mut MeshData, base: Vec3, rot: Mat3, scale: f32) {
+fn append_castle_wall(mesh: &mut MeshData, base: Vec3, rot: Mat3, scale: f32, pal: &CastlePalette) {
     let s = scale;
     let half_w = 64.0 * s;
     let half_d = 42.0 * s;
@@ -5090,9 +5169,9 @@ fn append_castle_wall(mesh: &mut MeshData, base: Vec3, rot: Mat3, scale: f32) {
         rot,
         Vec3::new(0.0, 18.0 * s, 0.0),
         Vec3::new(half_w + 4.0 * s, 18.0 * s, half_d + 6.0 * s),
-        CASTLE_SIDE,
-        CASTLE_SIDE,
-        CASTLE_DARK,
+        pal.side,
+        pal.side,
+        pal.dark,
     );
     // Body.
     append_castle_box(
@@ -5101,9 +5180,9 @@ fn append_castle_wall(mesh: &mut MeshData, base: Vec3, rot: Mat3, scale: f32) {
         rot,
         Vec3::new(0.0, height * 0.5, 0.0),
         Vec3::new(half_w, height * 0.5, half_d),
-        CASTLE_TOP,
-        CASTLE_SIDE,
-        CASTLE_DARK,
+        pal.top,
+        pal.side,
+        pal.dark,
     );
     // Walkway cap.
     append_castle_box(
@@ -5112,9 +5191,9 @@ fn append_castle_wall(mesh: &mut MeshData, base: Vec3, rot: Mat3, scale: f32) {
         rot,
         Vec3::new(0.0, height + 5.0 * s, 0.0),
         Vec3::new(half_w + 5.0 * s, 5.0 * s, half_d + 5.0 * s),
-        CASTLE_TOP,
-        CASTLE_SIDE,
-        CASTLE_DARK,
+        pal.band,
+        pal.band,
+        pal.dark,
     );
     // Merlon.
     append_castle_box(
@@ -5123,13 +5202,19 @@ fn append_castle_wall(mesh: &mut MeshData, base: Vec3, rot: Mat3, scale: f32) {
         rot,
         Vec3::new(0.0, height + 10.0 * s + 26.0 * s, 0.0),
         Vec3::new(22.0 * s, 26.0 * s, half_d * 0.78),
-        CASTLE_TOP,
-        CASTLE_SIDE,
-        CASTLE_DARK,
+        pal.merlon,
+        pal.merlon,
+        pal.dark,
     );
 }
 
-fn append_castle_tower(mesh: &mut MeshData, base: Vec3, rot: Mat3, scale: f32) {
+fn append_castle_tower(
+    mesh: &mut MeshData,
+    base: Vec3,
+    rot: Mat3,
+    scale: f32,
+    pal: &CastlePalette,
+) {
     let s = scale;
     let height = 480.0 * s;
     append_castle_box(
@@ -5138,9 +5223,9 @@ fn append_castle_tower(mesh: &mut MeshData, base: Vec3, rot: Mat3, scale: f32) {
         rot,
         Vec3::new(0.0, 18.0 * s, 0.0),
         Vec3::new(110.0 * s, 18.0 * s, 110.0 * s),
-        CASTLE_SIDE,
-        CASTLE_SIDE,
-        CASTLE_DARK,
+        pal.side,
+        pal.side,
+        pal.dark,
     );
     append_castle_box(
         mesh,
@@ -5148,9 +5233,9 @@ fn append_castle_tower(mesh: &mut MeshData, base: Vec3, rot: Mat3, scale: f32) {
         rot,
         Vec3::new(0.0, height * 0.5, 0.0),
         Vec3::new(96.0 * s, height * 0.5, 96.0 * s),
-        CASTLE_TOP,
-        CASTLE_SIDE,
-        CASTLE_DARK,
+        pal.top,
+        pal.side,
+        pal.dark,
     );
     append_castle_box(
         mesh,
@@ -5158,9 +5243,9 @@ fn append_castle_tower(mesh: &mut MeshData, base: Vec3, rot: Mat3, scale: f32) {
         rot,
         Vec3::new(0.0, height + 8.0 * s, 0.0),
         Vec3::new(116.0 * s, 8.0 * s, 116.0 * s),
-        CASTLE_TOP,
-        CASTLE_SIDE,
-        CASTLE_DARK,
+        pal.band,
+        pal.band,
+        pal.dark,
     );
     for (x, z) in [(-82.0, -82.0), (82.0, -82.0), (-82.0, 82.0), (82.0, 82.0)] {
         append_castle_box(
@@ -5169,14 +5254,14 @@ fn append_castle_tower(mesh: &mut MeshData, base: Vec3, rot: Mat3, scale: f32) {
             rot,
             Vec3::new(x * s, height + 16.0 * s + 28.0 * s, z * s),
             Vec3::new(26.0 * s, 28.0 * s, 26.0 * s),
-            CASTLE_TOP,
-            CASTLE_SIDE,
-            CASTLE_DARK,
+            pal.merlon,
+            pal.merlon,
+            pal.dark,
         );
     }
 }
 
-fn append_castle_gate(mesh: &mut MeshData, base: Vec3, rot: Mat3, scale: f32) {
+fn append_castle_gate(mesh: &mut MeshData, base: Vec3, rot: Mat3, scale: f32, pal: &CastlePalette) {
     let s = scale;
     let span = 512.0 * s;
     let pillar_h = 380.0 * s;
@@ -5187,9 +5272,9 @@ fn append_castle_gate(mesh: &mut MeshData, base: Vec3, rot: Mat3, scale: f32) {
             rot,
             Vec3::new(side * (span + 30.0 * s), pillar_h * 0.5, 0.0),
             Vec3::new(34.0 * s, pillar_h * 0.5, 48.0 * s),
-            CASTLE_TOP,
-            CASTLE_SIDE,
-            CASTLE_DARK,
+            pal.top,
+            pal.side,
+            pal.dark,
         );
     }
     append_castle_box(
@@ -5198,9 +5283,9 @@ fn append_castle_gate(mesh: &mut MeshData, base: Vec3, rot: Mat3, scale: f32) {
         rot,
         Vec3::new(0.0, pillar_h + 30.0 * s, 0.0),
         Vec3::new(span + 64.0 * s, 30.0 * s, 48.0 * s),
-        CASTLE_TOP,
-        CASTLE_SIDE,
-        CASTLE_DARK,
+        pal.band,
+        pal.band,
+        pal.dark,
     );
     for x in [-span * 0.6, 0.0, span * 0.6] {
         append_castle_box(
@@ -5209,14 +5294,14 @@ fn append_castle_gate(mesh: &mut MeshData, base: Vec3, rot: Mat3, scale: f32) {
             rot,
             Vec3::new(x, pillar_h + 60.0 * s + 26.0 * s, 0.0),
             Vec3::new(30.0 * s, 26.0 * s, 40.0 * s),
-            CASTLE_TOP,
-            CASTLE_SIDE,
-            CASTLE_DARK,
+            pal.merlon,
+            pal.merlon,
+            pal.dark,
         );
     }
 }
 
-fn append_castle_platform(mesh: &mut MeshData, base: Vec3, scale: f32) {
+fn append_castle_platform(mesh: &mut MeshData, base: Vec3, scale: f32, pal: &CastlePalette) {
     let s = scale;
     let outer = 680.0 * s;
     let inner = 540.0 * s;
@@ -5231,16 +5316,22 @@ fn append_castle_platform(mesh: &mut MeshData, base: Vec3, scale: f32) {
         let outer_b = center + Vec3::new(b.cos() * outer, 0.0, b.sin() * outer);
         let inner_a = inner_center + Vec3::new(a.cos() * inner, 0.0, a.sin() * inner);
         let inner_b = inner_center + Vec3::new(b.cos() * inner, 0.0, b.sin() * inner);
-        push_stone_tri(mesh, center, outer_a, outer_b, CASTLE_TOP);
-        push_stone_tri(mesh, inner_center, inner_a, inner_b, CASTLE_BLUE);
+        push_stone_tri(mesh, center, outer_a, outer_b, pal.top);
+        push_stone_tri(mesh, inner_center, inner_a, inner_b, pal.pool);
         // Side skirt.
         let foot_a = base + Vec3::new(a.cos() * outer, 0.0, a.sin() * outer);
         let foot_b = base + Vec3::new(b.cos() * outer, 0.0, b.sin() * outer);
-        push_stone_quad(mesh, foot_a, outer_a, outer_b, foot_b, CASTLE_SIDE);
+        push_stone_quad(mesh, foot_a, outer_a, outer_b, foot_b, pal.side);
     }
 }
 
-fn append_castle_statue(mesh: &mut MeshData, base: Vec3, rot: Mat3, scale: f32) {
+fn append_castle_statue(
+    mesh: &mut MeshData,
+    base: Vec3,
+    rot: Mat3,
+    scale: f32,
+    pal: &CastlePalette,
+) {
     let s = scale;
     append_castle_box(
         mesh,
@@ -5248,9 +5339,9 @@ fn append_castle_statue(mesh: &mut MeshData, base: Vec3, rot: Mat3, scale: f32) 
         rot,
         Vec3::new(0.0, 20.0 * s, 0.0),
         Vec3::new(44.0 * s, 20.0 * s, 44.0 * s),
-        CASTLE_TOP,
-        CASTLE_SIDE,
-        CASTLE_DARK,
+        pal.top,
+        pal.side,
+        pal.dark,
     );
     append_castle_box(
         mesh,
@@ -5258,9 +5349,9 @@ fn append_castle_statue(mesh: &mut MeshData, base: Vec3, rot: Mat3, scale: f32) 
         rot,
         Vec3::new(0.0, 105.0 * s, 0.0),
         Vec3::new(24.0 * s, 85.0 * s, 24.0 * s),
-        CASTLE_TOP,
-        CASTLE_SIDE,
-        CASTLE_DARK,
+        pal.top,
+        pal.side,
+        pal.dark,
     );
     append_castle_box(
         mesh,
@@ -5268,9 +5359,9 @@ fn append_castle_statue(mesh: &mut MeshData, base: Vec3, rot: Mat3, scale: f32) 
         rot,
         Vec3::new(0.0, 205.0 * s, 0.0),
         Vec3::new(38.0 * s, 18.0 * s, 38.0 * s),
-        CASTLE_TOP,
-        CASTLE_SIDE,
-        CASTLE_DARK,
+        pal.top,
+        pal.side,
+        pal.dark,
     );
 }
 
@@ -5889,5 +5980,34 @@ mod tests {
                 "wall blocks gate at {x},{z}"
             );
         }
+
+        // Each courtyard wears its god's colours; the open perimeter does not.
+        for p in &pieces {
+            if matches!(p.kind, CastlePieceKind::Gate | CastlePieceKind::Platform) {
+                assert!(p.team.is_some(), "{:?} at {:?} has no team", p.kind, p.tile);
+            }
+        }
+        let team_of = |x: f32, z: f32| {
+            pieces
+                .iter()
+                .find(|p| (p.tile[0] - x).abs() < 0.1 && (p.tile[1] - z).abs() < 0.1)
+                .map(|p| p.team)
+        };
+        assert_eq!(team_of(60.0, 0.0), Some(None), "mid perimeter is neutral");
+        assert_eq!(
+            team_of(32.0, 95.0),
+            Some(Some(0)),
+            "blue courtyard's inner wall"
+        );
+        assert_eq!(
+            team_of(88.0, 10.0),
+            Some(Some(1)),
+            "red courtyard's inner wall"
+        );
+        assert_ne!(
+            CastlePalette::for_team(Some(0)),
+            CastlePalette::for_team(Some(1))
+        );
+        assert_eq!(CastlePalette::for_team(None), CastlePalette::NEUTRAL);
     }
 }

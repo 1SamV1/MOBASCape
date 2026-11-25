@@ -182,10 +182,13 @@ All objects from the cache, placed through the map format
    `props.lines`, MAP_FORMAT.md).
 2. ~~**Bridges.**~~ Done 2026-11-25: the cache plank bridge piece (699)
    tiled over each crossing (`bridge_model`).
-3. **Bases.** Done in part 2026-11-25: Saradomin statues (9146) and
-   banners (2065) at the blue gates, Zamorak statues (1400) and banners
-   (8655) at the red gates. Still to do: castle pieces in each god's
-   colours, and the fountain as a cache portal or pool.
+3. ~~**Bases.**~~ Done 2026-11-25: Saradomin statues (9146) and banners
+   (2065) at the blue gates, Zamorak statues (1400) and banners (8655) at
+   the red gates; the ice-blue cache Large fountain (object 6750, model
+   13149) beside each spawn; and each courtyard's walls, towers, gates and
+   dais in its god's colours (`CastlePalette`): Saradomin white with a
+   blue band and gold merlons, Zamorak dark stone with a blood-red band
+   and a red dais pool. The open perimeter stays white.
 4. ~~**Towers.**~~ Done 2026-11-25: the Obelisk of Earth (1761) fires the
    cache orb (1526 blue, 1528 red, 1527 watchtower), now verified, and each
    shot lands in the matching Surge splash (water 1460, fire 1466, earth

@@ -1,6 +1,26 @@
 # Status
 
-Last updated: Phase 5 tower shot graphics, 2026-11-25.
+Last updated: Phase 5 bases (fountains, god colours), 2026-11-25.
+
+## 2026-11-25 — Phase 5: fountains and god-coloured castles
+
+- **Fountain.** The cache "Large fountain" (object 6750, model 13149:
+  white stone and blue water, the reference's ice-blue fountain), picked
+  from a `model-sheet` of 24 cache fountains. One per team in
+  `props.place` at scale 1.7, plain texturing, 2x2 blocking, mirrored
+  through the map centre: blue (2713, 3165), red (2977, 2925). Each sits
+  inside its courtyard, within the 900-unit heal range, off the spawn
+  point and the gate path.
+- **God colours.** Castle pieces now carry the team whose courtyard they
+  enclose (`CastleSpec::team_at`: the base rectangle plus one tile, so the
+  inner walls, gates, corner towers, the perimeter run that closes the
+  courtyard, the dais and its statues). `CastlePalette` colours them:
+  Saradomin keeps white stone with a blue walkway band and gold merlons;
+  Zamorak gets dark stone, a blood-red band and a red dais pool. The open
+  perimeter stays white. The castle layout test checks the assignment.
+- Verified with `--shots` at both spawns, both courtyards and the north
+  perimeter.
+- Still open in Phase 5: ground mist (5.7).
 
 ## 2026-11-25 — Phase 5: tower shot graphics
 
