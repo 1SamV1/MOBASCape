@@ -189,7 +189,7 @@ def code_logo(y, word):
                 if px in "█▄":
                     mask.add((x, 2 * r + 1))
     clear(x0 - 3, y, x0 + width + 2, y + rows - 1)
-    lrng = random.Random(19)
+    lrng = random.Random(20)
     for x in range(x0 - 3, x0 + width + 3):
         head = lrng.randrange(-4, rows + 8)
         length = lrng.randrange(4, 12)
@@ -209,21 +209,22 @@ def code_logo(y, word):
 
 
 GOLD = (255, 210, 90)
-ICE = (150, 220, 255)
-WATER = (70, 150, 255)
-SARA = (235, 240, 255)
-ZAM = (255, 70, 50)
-MIST1 = (120, 135, 130)
-MIST2 = (170, 185, 180)
-MIST3 = (215, 225, 220)
-MIST_BG = (22, 30, 28)
-CLEAR_BG = (10, 38, 14)
+BLOOD = (200, 30, 40)
+BLOOD_BG = (50, 6, 10)
+VIOLET = (170, 90, 255)
+VIOLET_BG = (26, 8, 44)
+SWAMP = (90, 140, 70)
+SWAMP_BG = (10, 22, 12)
+STONE2 = (150, 145, 150)
+IRON = (120, 110, 115)
+LAMP = (120, 255, 140)
+CANDLE = (255, 220, 120)
 CHIP_BG = (26, 22, 18)
 CHIP_FG = (236, 226, 200)
 
 
-def radar(x0, y0):
-    """Team vision as a clear disc in the mist."""
+def chateau(x0, y0):
+    """The Merovingian's door: a gothic arch with red glass."""
     clear(x0 - 1, y0, x0 + 21, y0 + 11)
     for j in range(20):
         put(x0 + j, y0, "▄", MID)
@@ -231,35 +232,25 @@ def radar(x0, y0):
     for k in range(1, 9):
         put(x0, y0 + k, "█", DIM)
         put(x0 + 19, y0 + k, "█", DIM)
-    text(x0 + 2, y0 + 1, "> vision", DIM)
-    cx, cy = x0 + 9.5, y0 + 4.5
-    for yy in range(y0 + 2, y0 + 8):
-        for xx in range(x0 + 1, x0 + 19):
-            d = (((xx - cx) / 2.0) ** 2 + (yy - cy) ** 2) ** 0.5
-            if d < 1.6:
-                ch, col = " ", BRIGHT
-                shade(xx, yy, xx, yy, CLEAR_BG)
-            elif d < 2.4:
-                ch, col = "░", MIST1
-            elif d < 3.2:
-                ch, col = "▒", MIST2
-            else:
-                ch, col = "▓", MIST3
-            put(xx, yy, ch, col)
-    put(x0 + 9, y0 + 4, "@", CYAN)
-    put(x0 + 11, y0 + 5, "·", BRIGHT)
-    text(x0 + 2, y0 + 7, " 48 puffs ", HEAD)
+    text(x0 + 2, y0 + 1, "> chateau", DIM)
+    art = ["  ▲ ▲ ▲ ▲  ", " ▐█▀▀█▀▀█▌ ", " ▐▌▓▌ ▐▓▐▌ ", " ▐▌▓▌ ▐▓▐▌ ", " ▀▀▀▀▀▀▀▀▀ "]
+    for k, row in enumerate(art):
+        for j, ch in enumerate(row):
+            col = BLOOD if ch == "▓" else IRON if ch in "▲" else STONE2
+            if ch != " ":
+                put(x0 + 4 + j, y0 + 2 + k, ch, col)
+    text(x0 + 2, y0 + 7, "> enter. ok.", HEAD)
     text(x0 + 6, y0 + 9, "▄▄█████▄▄", DIM)
     text(x0 + 1, y0 + 10, "▄" * 18, MID)
     text(x0 + 1, y0 + 11, "▀" + "▪" * 16 + "▀", DIM)
     for j in range(16):
-        put(x0 + 2 + j, y0 + 11, "▪", MIST3 if j % 4 == 1 else DIM)
+        put(x0 + 2 + j, y0 + 11, "▪", BLOOD if j % 4 == 1 else VIOLET if j % 4 == 3 else DIM)
 
 
 LOADED = [
-    "5.1 cliffs", "5.2 bridges", "5.3 fountains", "5.3 god colours",
-    "5.4 surge splash", "5.5 flora", "5.6 tree fix", "5.7 mist",
-    "spot 354", "used_fraction", "smoothstep fade", "PHASE 5",
+    "vampyre statue", "darkmeyer rails", "swampy lamps", "pool of blood",
+    "vampyre tombs", "mort myre reeds", "dark altar", "candle ring",
+    "chaos altar", "crystal ball", "biome scatter", "mist: removed",
 ]
 
 
@@ -267,38 +258,39 @@ def loaded_list(x0, y0):
     clear(x0 - 1, y0, x0 + 22, y0 + len(LOADED) - 1)
     for k, name in enumerate(LOADED):
         yy = y0 + k
-        hot = name in ("5.7 mist", "PHASE 5")
-        text(x0, yy, name, WHITE if hot else CYAN)
+        gone = name.startswith("mist")
+        hot = name in ("vampyre statue", "dark altar")
+        text(x0, yy, name, RED if gone else WHITE if hot else CYAN)
         text(x0 + len(name), yy, "." * (18 - len(name)), FAINT)
-        text(x0 + 19, yy, "ok", HEAD if hot else MID)
+        text(x0 + 19, yy, "--" if gone else "ok", RED if gone else HEAD if hot else MID)
 
 
 clear(2, 2, W - 3, 2)
 lx, lw = code_logo(3, "MOBASCAPE")
-radar(4, 3)
+chateau(4, 3)
 loaded_list(125, 3)
-text(3, 2, "▐ vISION ▌", DIM)
-text(W - 18, 2, "▐ pHASE 5 ▌", DIM)
-top = "  wHAT yOU cAN'T sEE iS mIST.   wHAT yOUR tEAM sEES iS rEAL.   pHASE 5: dONE.  "
+text(3, 2, "▐ cHATEAU ▌", DIM)
+text(W - 18, 2, "▐ lOADED ▌", DIM)
+top = "  tHE mIST iS gONE.   tHE vAMPYRES sTAYED.   oNLY cACHE oBJECTS, eVERY oNE oF tHEM.  "
 assert len(top) <= 108, len(top)
 center(2, top, MID)
 fade_bar(1, 2, W - 3)
 clear(lx - 3, 15, lx + lw + 2, 15)
-ticker = " ◄◄ GROUND MIST ◄◄ SPOT 354 ◄◄ SOFT EDGE OF VISION ◄◄ PHASE 5 COMPLETE ◄◄ 7 OF 7"
+ticker = " ◄◄ VAMPYRE STATUE ◄◄ DARKMEYER RAILINGS ◄◄ POOL OF BLOOD ◄◄ DARK ALTAR ◄◄ MORT MYRE"
 run = (ticker * 3)[: lw]
 for i, ch in enumerate(run):
     put(lx + i, 15, ch, ORANGE if ch == "◄" else AMBER)
-center(16, "  ░▒▓  n O D E   1 9 :   t H E   d E S E R T   o F   t H E   r E A L   //   p H A S E   5   c O M P L E T E  ▓▒░  ", AMBER)
-center(17, "  " + elite("welcome") + "   " + elite("to the desert of the real.") + "  ", WHITE)
+center(16, "  ░▒▓  n O D E   2 0 :   t H E   c H A T E A U   //   v A M P Y R E S   a N D   d A R K   m A G I C  ▓▒░  ", AMBER)
+center(17, "  " + elite("you see, there is only one constant:") + "   " + elite("causality.") + "  ", WHITE)
 fade_bar(18, 2, W - 3)
 
 # --- release info -------------------------------------------------------------
 header(19, elite("release info"))
 clear(4, 20, W - 5, 22)
 info = [
-    ("rELEASE dATE", "2026-11-25", "cOMMITS", "48df811 ground mist  ->  sam/main"),
-    ("tYPE", "pHASE 5.7: gROUND mIST // aRENA pHASE cLOSED", "tESTS", "473 pass (+3 mist) // clippy clean"),
-    ("wAS", "uNSEEN gROUND wAS oNLY a dARKER fLOOR", "nOW", "low smoke banks fade with team vision"),
+    ("rELEASE dATE", "2026-11-25", "cOMMITS", "b261a6d revert · 9ea525d · 5f4b4a0 · dfa27f9"),
+    ("tYPE", "tHEMED pOCKETS: vAMPIRE sWAMP + dARK mAGIC", "tESTS", "472 pass (+2) // clippy clean"),
+    ("wAS", "gENERIC jUNGLE wITH dEAD tREES; a mIST lAYER", "nOW", "vampyre plaza + ritual ground, mist gone"),
 ]
 for i, (k1, v1, k2, v2) in enumerate(info):
     assert len(v1) <= 50 and 89 + len(v2) <= W - 6, (v1, v2)
@@ -308,111 +300,118 @@ for i, (k1, v1, k2, v2) in enumerate(info):
     text(76, yy, f"{k2:.<12}", DIM)
     text(89, yy, v2, HEAD)
 
-# --- left: the mist field ------------------------------------------------------
-box(4, 24, 74, 46, elite("mist.dat // the desert of the real"))
+# --- left: vampire swamp ---------------------------------------------------------
+box(4, 24, 74, 46, elite("vampire.dat // mort myre, region 54,52"))
 LX = 6
-text(LX + 1, 26, "THE FOG OF WAR", HEAD)
-text(LX + 16, 26, "// mist where no ally sees, clear where one does", DIM)
-FW, FH = 64, 12
-FX, FY = LX + 1, 28
-mrng = random.Random(19)
-eyes = [(16, 6, 9.0), (40, 4, 7.0), (52, 9, 5.5)]  # hero, ally tower, ally minion
-for y in range(FH):
-    for x in range(FW):
-        best = min((((x - ex) / 2.0) ** 2 + (y - ey) ** 2) ** 0.5 / (r / 2.0) for ex, ey, r in eyes)
-        n = mrng.random() * 0.35
-        v = best + n
-        xx, yy = FX + x, FY + y
-        if v < 0.85:
-            ch = mrng.choice("  ,.'  ") if mrng.random() < 0.5 else " "
-            put(xx, yy, ch, MID)
-            shade(xx, yy, xx, yy, CLEAR_BG)
-        elif v < 1.15:
-            put(xx, yy, "░", MIST1)
-            shade(xx, yy, xx, yy, MIST_BG)
-        elif v < 1.5:
-            put(xx, yy, "▒", MIST2)
-            shade(xx, yy, xx, yy, MIST_BG)
-        else:
-            put(xx, yy, "▓" if mrng.random() < 0.7 else "▒", MIST3 if mrng.random() < 0.6 else MIST2)
-            shade(xx, yy, xx, yy, MIST_BG)
-put(FX + 16, FY + 6, "@", CYAN)
-text(FX + 18, FY + 6, "you", CYAN)
-put(FX + 40, FY + 4, "▲", SARA)
-text(FX + 42, FY + 4, "tower", SARA)
-put(FX + 52, FY + 9, "·", WATER)
-text(FX + 54, FY + 9, "imp", WATER)
-put(FX + 5, FY + 2, "?", ZAM)
-put(FX + 60, FY + 1, "?", ZAM)
-text(LX + 1, 41, "─" * 66, FAINT)
-legend = [("▓", MIST3, "full mist"), ("▒", MIST2, "fading"), ("░", MIST1, "edge"), (" ", BRIGHT, "seen")]
-for k, (ch, col, label) in enumerate(legend):
-    x = LX + 1 + k * 17
-    put(x, 42, ch, col)
-    if ch == " ":
-        shade(x, 42, x, 42, CLEAR_BG)
-    text(x + 2, 42, label, col if ch != " " else BRIGHT)
+text(LX + 1, 26, "THE VAMPYRE PLAZA", HEAD)
+text(LX + 19, 26, "// darkmeyer railings round the statue", DIM)
+PX, PY = LX + 2, 28
+plaza = [
+    "  ,  ¥   ,    ¥   ,   ¥  ,    ¥  ,  ",
+    " ¥   ┼ ╥ ╥ ╥ ╥ ┼   ,     ≈≈≈≈≈   ¥ ",
+    "  ,  ╫  ¤   ¤  ╫    ¥   ≈≈≈≈≈≈≈    ",
+    " ¥   ╫    Ψ    ╫  ,      ≈≈≈≈≈   , ",
+    "  ,  ╫  ¤   ¤        †    ,   ♠    ",
+    " ¥   ┼ ╨ ╨ ╨     ¥     ,    ¥    , ",
+    "   ▄▄▄▄▄  ▄▄▄▄▄   ,   †   ,    ¥   ",
+    "   █▓▓▓█  █▓▓▓█     ,    ¥   ,     ",
+]
+for r, row in enumerate(plaza):
+    for c, ch in enumerate(row):
+        xx, yy = PX + c, PY + r
+        colour = {
+            "Ψ": WHITE, "╥": IRON, "╨": IRON, "╫": IRON, "┼": BLOOD,
+            "¤": LAMP, "≈": BLOOD, "¥": SWAMP, ",": (110, 90, 60),
+            "†": STONE2, "♠": (170, 150, 110), "▄": STONE2, "█": STONE2, "▓": (70, 65, 70),
+        }.get(ch, DIM)
+        put(xx, yy, ch, colour)
+        if ch == "≈":
+            shade(xx, yy, xx, yy, BLOOD_BG)
+        elif ch != " " or True:
+            shade(xx, yy, xx, yy, SWAMP_BG)
+leg = [("Ψ", WHITE, "vampyre statue 17643 x2.6"), ("╫", IRON, "railings 40294/5 x2.0"),
+       ("¤", LAMP, "swampy lamps 32611"), ("≈", BLOOD, "pool of blood 35712"),
+       ("█", STONE2, "vampyre tombs 6350/7"), ("†", STONE2, "graves 46700, 1363..")]
+for k, (ch, col, label) in enumerate(leg):
+    yy = PY + k
+    put(PX + 38, yy, ch, col)
+    text(PX + 40, yy, label, MID)
+text(PX + 38, PY + 6, "¥ reeds 3549-53", SWAMP)
+text(PX + 38, PY + 7, "♠ mushrooms 4092-4", (170, 150, 110))
+text(LX + 1, 37, "─" * 66, FAINT)
+notes = [
+    ("plaza", "open on the lane side; four lamps; statue faces the road"),
+    ("swamp", "28 bubble pools, 150 reeds, rotting trees, logs, roots"),
+    ("floor", "dry grass layer, greyer tint"),
+]
+for k, (key, line) in enumerate(notes):
+    text(LX + 1, 38 + k, key, AMBER)
+    text(LX + 8, 38 + k, line, MID)
 term = [
-    ("> ", "what is real? how do you define real?"),
-    ("> ", "what your team can see. the rest is smoke."),
+    ("> ", "i have survived your predecessors."),
+    ("> ", "and i will survive you. (the statue, probably)"),
 ]
 for k, (prompt, line) in enumerate(term):
-    yy = 44 + k
+    yy = 43 + k
     text(LX + 1, yy, prompt, DIM)
     text(LX + 3, yy, line, BRIGHT if k == 0 else HEAD)
-put(LX + 3 + len(term[-1][1]) + 1, 45, "█", BRIGHT)
+put(LX + 3 + len(term[-1][1]) + 1, 44, "█", BRIGHT)
 
-# --- right: mist internals + phase 5 ledger -------------------------------------
-box(76, 24, W - 5, 46, elite("mist.rs + phase5.dat"))
+# --- right: dark magic + schema --------------------------------------------------
+box(76, 24, W - 5, 46, elite("darkmagic.dat // draynor manor, 48,52"))
 RX = 79
-text(RX, 26, "SPOT 354", HEAD)
-text(RX + 9, 26, "// model 6288 · 27 frames · 1.88 s · all translucent", DIM)
-text(RX, 27, "─" * 64, FAINT)
-params = [
-    ("grid", "seeded 5-tile jitter inside the walls, ~3,000 puffs"),
-    ("shape", "x5-8 wide, flattened 0.28: a bank, not a ball"),
-    ("fade", "1.4/s toward mist while unseen, smoothstep edge"),
-    ("draw", "nearest 48 within 22 tiles, additive glow 0.06"),
-    ("budget", "stops at half the fx vertices: spells always fit"),
+text(RX, 26, "THE RITUAL GROUND", HEAD)
+text(RX + 18, 26, "// the arceuus dark altar in candles", DIM)
+ring = [
+    "      i     i      ",
+    "   i             i ",
+    "        ▄█▄        ",
+    "  i    ▐▓█▓▌    i  ",
+    "        ▀▀▀        ",
+    "   i             i ",
+    "      i     i      ",
 ]
-for k, (key, line) in enumerate(params):
-    yy = 28 + k
-    assert len(line) <= 54, line
-    text(RX, yy, key, AMBER)
-    text(RX + 8, yy, line, MID)
-text(RX, 33, "first pass", RED)
-text(RX + 11, 33, "glow 0.32: round white balls ──► 0.06", (200, 90, 80))
-text(RX, 34, "─" * 64, FAINT)
-text(RX, 35, "PHASE 5 // ARENA SET DRESSING", HEAD)
-text(RX + 30, 35, "// 7 of 7, all cache objects", DIM)
-ledger = [
-    ("5.1", "cliffs", "~410 rocks 19997/818/819"),
-    ("5.2", "bridges", "plank piece 699 x3"),
-    ("5.3", "bases", "o6750 fountains, god colours"),
-    ("5.4", "towers", "orbs 1526-8, surge 1460/63/66"),
-    ("5.5", "flora", "~1,950 ferns + stumps"),
-    ("5.6", "trees", "dire canopy keeps its leaves"),
-    ("5.7", "mist", "spot 354 over unseen ground"),
+for r, row in enumerate(ring):
+    for c, ch in enumerate(row):
+        xx, yy = RX + c, 28 + r
+        col = CANDLE if ch == "i" else VIOLET if ch == "▓" else (60, 40, 90)
+        put(xx, yy, ch, col)
+        shade(xx, yy, xx, yy, VIOLET_BG)
+items = [
+    ("30837", "dark altar x0.95 (x1.8 dwarfed all)"),
+    ("22936", "eight candle stands, r 4.5"),
+    ("1216", "chaos altar · 27778 + 35298 zamorak"),
+    ("12580", "symbol of zamorak banners x2"),
+    ("1190", "crystal ball · 46675 great cauldron"),
+    ("16677", "ceremonial brazier ring"),
+    ("scatter", "skulls, bones, candles, braziers"),
 ]
-for k, (num, name, what) in enumerate(ledger):
-    yy = 36 + k
-    hot = num == "5.7"
-    text(RX, yy, f" {num} ", CHIP_FG)
-    shade(RX, yy, RX + 4, yy, CHIP_BG)
-    text(RX + 6, yy, name, WHITE if hot else AMBER)
-    text(RX + 15, yy, what, BRIGHT if hot else MID)
-    text(RX + 47, yy, "[▓▓▓▓]", BRIGHT)
-    text(RX + 54, yy, "done", HEAD if hot else MID)
+for k, (oid, what) in enumerate(items):
+    text(RX + 21, 28 + k, oid, CYAN)
+    text(RX + 29, 28 + k, what, MID)
+text(RX, 35, "budget", AMBER)
+text(RX + 7, 35, "draynor transplant 110 ──► 55: trees frame, not bury", MID)
+text(RX, 36, "─" * 64, FAINT)
+text(RX, 37, "MAP FORMAT", HEAD)
+text(RX + 11, 37, "// two new fields, nothing old changes", DIM)
+text(RX, 38, " scatter.biome ", CHIP_FG)
+shade(RX, 38, RX + 14, 38, CHIP_BG)
+text(RX + 16, 38, "drop only inside that pocket, rect optional", MID)
+text(RX, 39, " place.plaza   ", CHIP_FG)
+shade(RX, 39, RX + 14, 39, CHIP_BG)
+text(RX + 16, 39, "clear radius, default 6; railings use 0", MID)
+text(RX, 40, "mist", RED)
+text(RX + 7, 40, "reverted (48df811): fog of war + height fog unchanged", (200, 90, 80))
 text(RX, 44, "TESTS", HEAD)
-text(RX + 7, 44, "473 pass  +3: seeded, fades w/o pop, nearest only", MID)
-text(RX, 45, "BENCH", HEAD)
-text(RX + 7, 45, "77.8 fps at spawn (p95 13.8 ms) // 680M target 60", MID)
+text(RX + 7, 44, "472 pass  every prop model decodes from the cache", MID)
+text(RX, 45, "SHOTS", HEAD)
+text(RX + 7, 45, "--shots: plaza + ritual, top / low / wide", MID)
 
 # --- sysop's note ------------------------------------------------------------
-header(48, elite("sysop's note // the desert of the real"))
+header(48, elite("sysop's note // the chateau"))
 clear(4, 49, W - 5, 50)
-open_ = "sTILL oPEN: oBJECTIVES pANEL (p6.3), mUSIC tOGGLE (p4.6), iTEM sETS (p3), tERRAIN pALETTE (p1.3), mINIMAP cAMP iCONS (p2.5)."
-refs = "animated::mist::{Mist, MistPuff, MIST_SPOT} // FxMesh::used_fraction // kit::spot::VERIFIED += 354"
+open_ = "sTILL oPEN: oGRE rUINS, gOBLIN cAMP, hUMAN cITY + kEEP, eLVEN lANDS, gNOME sTRONGHOLD; oBJECTIVES pANEL (p6.3)."
+refs = "props::ScatterJson.biome // PlaceJson.plaza // MapLayout::biome_rect // dire_vampire + dire_dark_magic"
 assert len(open_) <= 142 and len(refs) <= 142, (len(open_), len(refs))
 center(49, open_, HEAD)
 center(50, refs, DIM)
@@ -422,7 +421,7 @@ header(51, elite("roadmap // docs/ROADMAPPLAN.md"))
 clear(4, 52, W - 5, 56)
 phases = [
     ("P1 LIGHT", 5), ("P2 MINIMAP", 6), ("P3 SHOP", 7), ("P4 SELECT", 9),
-    ("P5 ARENA", 10), ("P6 HUD", 4), ("P7 POST", 0),
+    ("P5 ARENA", 9), ("POCKETS", 2), ("P6 HUD", 4), ("P7 POST", 0),
 ]
 for i, (name, done) in enumerate(phases):
     x = 8 + (i % 4) * 35
@@ -430,21 +429,20 @@ for i, (name, done) in enumerate(phases):
     text(x, yy, f"{name:<11}", CYAN)
     text(x + 11, yy, "[", DIM)
     for j in range(10):
-        put(x + 12 + j, yy, "▓" if j < done else "░", (WHITE if done == 10 else BRIGHT) if j < done else FAINT)
+        put(x + 12 + j, yy, "▓" if j < done else "░", BRIGHT if j < done else FAINT)
     text(x + 22, yy, f"] {done * 10:>3}%", HEAD if done else FAINT)
-text(8 + 3 * 35, 54, "◄◄ P5 SEALED", AMBER)
-nxt = ">> next: the objectives panel with named camp timers (P6.3), then the death screen and scoreboard (P7)"
+nxt = ">> next: the remaining six pockets from cache objects (ogre, goblin, human x2, elven, gnome), then the objectives panel (P6.3)"
 assert 8 + len(nxt) <= W - 6, len(nxt)
 text(8, 56, nxt, MID)
 
 fade_bar(57, 2, W - 3)
 clear(10, 58, W - 11, 61)
-greetz = "gREETZ: mORPHEUS (tHE dESERT oF tHE rEAL) * tHE sMOKE cLOUD (354) * tHE sENTINELS * sARADOMIN * zAMORAK * tANK"
+greetz = "gREETZ: tHE mEROVINGIAN (tHE cHATEAU) * pERSEPHONE * cOUNT dRAYNOR * tHE vAMPYRE sTATUE * mORT mYRE * dARKMEYER"
 assert len(greetz) <= 128, len(greetz)
 center(58, greetz, MID)
 center(59, "nOT AFFILIATED WITH JAGEX. cACHE ASSETS STAY OUT OF GIT. aLWAYS.", DIM)
-center(60, "  w e l c o m e   t o   t h e   d e s e r t   o f   t h e   r e a l .   p h a s e   5 :   d o n e .  ", HEAD)
-foot = "-=[ mObAsCaPe // 2026 // nODE 19: tHE dESERT oF tHE rEAL // 57.6k // sYSoP: rIFT // 7 oF 7, 1 cLOUD ]=-"
+center(60, "  c a u s a l i t y .   a c t i o n ,   r e a c t i o n .   c a u s e   a n d   e f f e c t .  ", HEAD)
+foot = "-=[ mObAsCaPe // 2026 // nODE 20: tHE cHATEAU // 57.6k // sYSoP: rIFT // 2 pOCKETS, 0 mIST, 100% cACHE ]=-"
 assert len(foot) <= 128, len(foot)
 center(61, foot, AMBER)
 

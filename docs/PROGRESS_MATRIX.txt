@@ -1,62 +1,62 @@
    Z        4  ^8 :? : ~TQ  9T    -k7 ~ X  @           AA +     .     7  -D -  A    $B         |  97 7 :             6           X     $       ~ :.
   ░▒▓▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▓▒░
-   ▐ vISION ▌                        wHAT yOU cAN'T sEE iS mIST.   wHAT yOUR tEAM sEES iS rEAL.   pHASE 5: dONE.                    ▐ pHASE 5 ▌
-    ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄  + . $M  '  Q&   @$WBX . @#$M#0@.    8W$ZW  :  MB@&8Z  . 8W$%00    #MWM$   M@8Z@MQ ` &%$BBM%&B      5.1 cliffs........ ok
-    █ > vision         █  8   $WQ : &MX :Q08$Q%#  M%$@#0WX   Z&@MZXB   @@MQ$8B8 .#&@ZQB%0  $W%&M8M .%&$&0&08: &$%ZZ@X@$      5.2 bridges....... ok
-    █▓▓▓▓▓▒▒▒▒▒▒▒▒▓▓▓▓▓█  E   Q8&   M0W $$``   &Q QM     @# &Z  -  &@ 00 :.  :  0X :   :  @$`  : %# M0   . M0 XB        '    5.3 fountains..... ok
-    █▓▓▓▒▒░░░  ░░░▒▒▓▓▓█  ?   WB$@ 0WBX W0::   0Z ZW     8Q @@` ,. Z8 BQ  :     &%  :  :  %&:    Q$ &$     XM $Q      . `-   5.3 god colours... ok
-    █▓▓▓▒░░  @   ░░▒▓▓▓█  & . @M W%8 WB Q8     Z@ 0ZM8X&MQ `8@8$%B0&W  $MZWWX. -@# .:     #B0$XM8Z&:%X%00#8#  XM$BQ@8 , :.   5.4 surge splash.. ok
-    █▓▓▓▒░░    · ░░▒▓▓▓█  = , M$  0  #Q X%     WM %@@0BMB  -MZ$0W$&W@   M0%Z@$ .%%` : -   M0QZBBWMQ'BW#%8&8:  Z%$&B#0 :  :   5.5 flora......... ok
-    █▓▓▓▒▒░░░  ░░░▒▒▓▓▓█  : : X#   : %8 MM     0W ##   -:BW:X0   : $Q        @X:ZM-   '   MQ -   0B:@@        0X      .      5.6 tree fix...... ok
-    █▓ 48 puffs ▒▒▓▓▓▓▓█  >   W%   ' $8 @X     8@ 0X , ,.8$.88  .  W%        Q# Q0:   :   WQ :   B@ #W        %Z             5.7 mist.......... ok
-    █▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄█  2   #@`. : #8 XM     %# $Z : ::Q& WZ     WW        #Q Z$        M@ :   Q$ W@    `  .$M'            spot 354.......... ok
-          ▄▄█████▄▄       B   W#'    W$ 0#     &@'&W :   @$ Q8     %W       .8W QZ        88     #X Q8 ,  .  -%W-            used_fraction..... ok
-     ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄   k   WW:    @W  &@@M@#$ 'Z%MQXZBM' 8$     8X W#B08%$Q   &B$&Q80W BM     #B W& ' ::  :BW$%$XB&@      smoothstep fade... ok
-     ▀▪▪▪▪▪▪▪▪▪▪▪▪▪▪▪▪▀   + . 0B     M8   Q%%0$ -:0QMQQW0 : M%    ,W0 `M%08W0     QM&8$#  Q@     @B WW : '    @&$W8MZXW  .   PHASE 5........... ok
-    % *  ^>       @7 0.$E>     ◄◄ GROUND MIST ◄◄ SPOT 354 ◄◄ SOFT EDGE OF VISION ◄◄ PHASE 5 COMPLETE ◄◄ 7 OF 7 ◄◄ GROUN      6  ? X  .      ~ B    F
-    % &  @F         ░▒▓  n O D E   1 9 :   t H E   d E S E R T   o F   t H E   r E A L   //   p H A S E   5   c O M P L E T E  ▓▒░   B      7 %    Q
-    7 4  2=       T2 Q?^ D  3   -  :      70      T%     WeLCoMe   To THe DeSeRT oF THe ReaL.   k  ^        7     =C         @  6 <  6      X !    J5
+   ▐ cHATEAU ▌                    tHE mIST iS gONE.   tHE vAMPYRES sTAYED.   oNLY cACHE oBJECTS, eVERY oNE oF tHEM.                 ▐ lOADED ▌
+    ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄  + ' &$     BX   Q0QW@   &0W$MQB ' :.#@Q0#:    WMM@$W    @BW@8B    $#BB@   WQM#WW#   Q#MQZ@#QB :    vampyre statue.... ok
+    █ > chateau        █  8 - $BB   @W#  X8ZXQ$$  $MB%#8MW:  08Q#%#%   8X8%XXBM  Q@MWQ#WX  0&ZQ&@#  Q&W@QBZX  M#%#8@@0#      darkmeyer rails... ok
+    █     ▲ ▲ ▲ ▲      █  E : XX$   &Z$ %8     X% #M   . %# Z$     &0 Z$  -:    M0 ,      QX     Z@ &B     8X ZB     :       swampy lamps...... ok
+    █    ▐█▀▀█▀▀█▌     █  ?   Q@$M @%@& Z#     && 8#     $@ &M     #@ 8W  `.    @M '      &M     &$ 8#     @M 8Z     :       pool of blood..... ok
+    █    ▐▌▓▌ ▐▓▐▌     █  &   8X 8$&'@& %Z     M@ Z@Q@&ZW0 ,ZZWXWMZ$8  QWM8$W .'%M :   .  %8W##$B8& X8WXQ%@#  B##$ZMB        vampyre tombs..... ok
+    █    ▐▌▓▌ ▐▓▐▌     █  =   0$ .# :00 &@     M% B&$@#$@  ,@8Z@B@Z8X   #&BX&X .@M        %X@M$#X#@ X0W8&BW   &0ZBW@$  .     mort myre reeds... ok
+    █    ▀▀▀▀▀▀▀▀▀     █  :  .XZ     W@ WW     BW $B     XB:$& .   0%    '   %#:WX:       80     &% @W   .   '&&  -          dark altar........ ok
+    █ > enter. ok.     █  >   W0.    %# 8%     $B &0     #M M8.    X&    :   08 BM:       @&     W& X$     . .BM  :`         candle ring....... ok
+    █▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄█  2   $B     ## BM     WW M@     8Q &X .  :XZ    : . X$ W#:  ,    #%'    QX &X'      :Q# : -         chaos altar....... ok
+          ▄▄█████▄▄       B   Q8    .X% %$     W@ XM     $0 W#.'  ,0$  `    .QZ 00   :    &0`    WW B8,       W0 . :  -      crystal ball...... ok
+     ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄   k   &% -   XX :&X8%&MQ' $%0%M#QQ  %& :  :W0 %%@BW%8X   WQ#XX@M@ W8:    ZQ %M:       ZZMZWQ@0$      biome scatter..... ok
+     ▀▪▪▪▪▪▪▪▪▪▪▪▪▪▪▪▪▀   +  .M@ '   M%.  &QM%X --M0XMB#Z:  @X     X0  0%#$#B     $%ZXQ8, $&     && W#    ,   BM&8Z0QM0      mist: removed..... --
+    % *  ^>       @7 0.$E>     ◄◄ VAMPYRE STATUE ◄◄ DARKMEYER RAILINGS ◄◄ POOL OF BLOOD ◄◄ DARK ALTAR ◄◄ MORT MYRE ◄◄ V      6  ? X  .      ~ B    F
+    % &  @F       06 ~  ░▒▓  n O D E   2 0 :   t H E   c H A T E A U   //   v A M P Y R E S   a N D   d A R K   m A G I C  ▓▒░  < 5  B      7 %    Q
+    7 4  2=       T2 Q?^ D  3   -  :      70      You See, THeRe iS oNLY oNe CoNSTaNT:   CauSaLiTY.         7     =C         @  6 <  6      X !    J5
   ░▒▓▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▓▒░E
     ■─────────────────────────────────────────────────────────  -=[ ReLeaSe iNFo ]=-  ───────────────────────────────────────────────────────────■ #.
-        rELEASE dATE.... 2026-11-25                                         cOMMITS..... 48df811 ground mist  ->  sam/main                         3&
-        tYPE............ pHASE 5.7: gROUND mIST // aRENA pHASE cLOSED       tESTS....... 473 pass (+3 mist) // clippy clean                        B1
-        wAS............. uNSEEN gROUND wAS oNLY a dARKER fLOOR              nOW......... low smoke banks fade with team vision                     <Q
+        rELEASE dATE.... 2026-11-25                                         cOMMITS..... b261a6d revert · 9ea525d · 5f4b4a0 · dfa27f9              3&
+        tYPE............ tHEMED pOCKETS: vAMPIRE sWAMP + dARK mAGIC         tESTS....... 472 pass (+2) // clippy clean                             B1
+        wAS............. gENERIC jUNGLE wITH dEAD tREES; a mIST lAYER       nOW......... vampyre plaza + ritual ground, mist gone                  <Q
     $ T   =       1  *56    #   B   2    %@       > J  %^  3      <        1&4  E Z ^           =  |        B      9         1  1 &  B        8    +&
-    ▄▀▀▐ MiST.DaT // THe DeSeRT oF THe ReaL ▌▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▄5▄▀▀▐ MiST.RS + PHaSe5.DaT ▌▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▄ ~T
+    ▄▀▀▐ VaMPiRe.DaT // MoRT MYRe, ReGioN 54,52 ▌▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▄5▄▀▀▐ DaRKMaGiC.DaT // DRaYNoR MaNoR, 48,52 ▌▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▄ ~T
     █                                                                     █.█                                                                    █  ?
-    █  THE FOG OF WAR // mist where no ally sees, clear where one does    █&█  SPOT 354 // model 6288 · 27 frames · 1.88 s · all translucent     █  $
-    █                                                                     █5█  ────────────────────────────────────────────────────────────────  █  T
-    █  ▒▓▓▓▓▓▓▒▒▓▒▓▒▒▓▒▒▓▓▒▒▓▓▒▓▓▓▓▓▓▒▓▓▒▒▓▓▒▒▒▒▒▒▒▓▓▒▓▓▓▓▒▓▓▓▓▒▓▒▓▒▓▓▓   █5█  grid    seeded 5-tile jitter inside the walls, ~3,000 puffs       █ 1%
-    █  ▒▓▓▒▓▓▓▓▓▓▓▒▒▒▒▒▒▒▒▒▒▒▓▒▓▒▓▓▒▓▓▓▒▒▒▒▒░░░▒░░▒░▒▒▒▓▓▓▓▓▓▓▓▓▓▓▒?▓▒▒   █D█  shape   x5-8 wide, flattened 0.28: a bank, not a ball             █ #D
-    █  ▓▒▓▓▓?▒▒▒▒▒░▒░▒░░░░░▒▒▒▒▓▒▒▓▓▓▓▒▓▒░▒░,',   ░░░▒▒▒▓▒▓▒▒▒▓▒▒▓▒▓▒▒▓   █T█  fade    1.4/s toward mist while unseen, smoothstep edge           █ !-
-    █  ▒▒▒▓▓▓▒▒▒▒░░░░░░ ░ ░░░░▒▒▒▒▓▓▓▒▒▒▒░░░.     , ░▒▒▒▓▒▓▓▒▓▓▓▓▓▒▓▒▒▓   █>█  draw    nearest 48 within 22 tiles, additive glow 0.06            █ <+
-    █  ▓▓▓▓▒▓▒▒▒▒░░     ''  . ░▒▒▒▓▓▓▓▓▒▒▒     ▲ tower▒▒▓▒▒▓▓▒▓▓▓▓▓▓▒▓▓   █4█  budget  stops at half the fx vertices: spells always fit          █ |X
-    █  ▒▒▒▓▒▒▒░▒░ '      ,, ░ ░░▒▒▒▒▒▒▒▒░░░.   ..  . ▒▒▒▒▓▒▒▓▒▓▓▓▒▓▒▓▓▓   █^█  first pass glow 0.32: round white balls ──► 0.06                  █ D-
-    █  ▓▒▓▓▒▒▒░░░░,    @.you  ░░▒▒▓▓▓▒▒▒▒▒░░ ░ , ░░░▒▒▒▒▒▒▒▒▒▒▒▓▒▓▓▒▒▒▓   █Z█  ────────────────────────────────────────────────────────────────  █ ~F
-    █  ▓▓▓▓▓▒▒▒░░░ '   .      ░░░▒▒▒▓▒▓▓▒▒▒▒▒░░░░░░▒▒▒▒░░▒ ░░░▒▒▒▓▒▒▓▓▒   █ █  PHASE 5 // ARENA SET DRESSING // 7 of 7, all cache objects        █ 4k
-    █  ▒▒▓▒▓▒▒▒░░░░ '    ,  ░░░░▒▒▒▓▓▓▒▒▓▒▓▓▒▒▒▒▒▒▒▒▒▒▒░   , . ░▒▒▓▒▒▒▓   █ █   5.1  cliffs   ~410 rocks 19997/818/819        [▓▓▓▓] done        █ 4
-    █  ▓▓▒▓▒▓▒▒▒░▒░░' ,  ,░░░▒▒▒▒▓▓▓▓▓▓▓▓▓▓▓▒▓▒▒▒▓▓▓▓░▒░░ .· imp░░▒▓▓▓▒   █ █   5.2  bridges  plank piece 699 x3              [▓▓▓▓] done        █ 6
-    █  ▓▓▓▓▓▓▒▒▒▒▒▒░▒░▒░▒░░▒▒▒▒▒▒▓▒▓▓▓▒▒▓▓▓▓▒▓▓▓▓▒▓▓▓▒▒░  ,  ,░░░▒▓▓▓▓▓   █ █   5.3  bases    o6750 fountains, god colours    [▓▓▓▓] done        █ @
-  ? █  ▓▓▒▒▒▓▓▓▒▓▓▒▒▒▒▒░▒▒▒▒▒▒▒▒▓▓▓▓▓▓▓▓▓▒▒▒▓▒▓▓▓▓▓▓▓▓▒▒▒░ ░░▒░▒▒▒▒▒▓▒▓   █ █   5.4  towers   orbs 1526-8, surge 1460/63/66   [▓▓▓▓] done        █ J
-  > █                                                                     █ █   5.5  flora    ~1,950 ferns + stumps           [▓▓▓▓] done        █ :
-  B █  ────────────────────────────────────────────────────────────────── █ █   5.6  trees    dire canopy keeps its leaves    [▓▓▓▓] done        █ -
-  3 █  ▓ full mist      ▒ fading         ░ edge             seen          █ █   5.7  mist     spot 354 over unseen ground     [▓▓▓▓] done        █ B
-  . █                                                                     █ █                                                                    █ J
-  9 █  > what is real? how do you define real?                            █ █  TESTS  473 pass  +3: seeded, fades w/o pop, nearest only          █ C
-  3 █  > what your team can see. the rest is smoke. █                     █ █  BENCH  77.8 fps at spawn (p95 13.8 ms) // 680M target 60          █ 2
+    █  THE VAMPYRE PLAZA // darkmeyer railings round the statue           █&█  THE RITUAL GROUND // the arceuus dark altar in candles            █  $
+    █                                                                     █5█                                                                    █  T
+    █     ,  ¥   ,    ¥   ,   ¥  ,    ¥  ,    Ψ vampyre statue 17643 x2.6 █5█        i     i        30837   dark altar x0.95 (x1.8 dwarfed all)  █ 1%
+    █    ¥   ┼ ╥ ╥ ╥ ╥ ┼   ,     ≈≈≈≈≈   ¥    ╫ railings 40294/5 x2.0     █D█     i             i   22936   eight candle stands, r 4.5           █ #D
+    █     ,  ╫  ¤   ¤  ╫    ¥   ≈≈≈≈≈≈≈       ¤ swampy lamps 32611        █T█          ▄█▄          1216    chaos altar · 27778 + 35298 zamorak  █ !-
+    █    ¥   ╫    Ψ    ╫  ,      ≈≈≈≈≈   ,    ≈ pool of blood 35712       █>█    i    ▐▓█▓▌    i    12580   symbol of zamorak banners x2         █ <+
+    █     ,  ╫  ¤   ¤        †    ,   ♠       █ vampyre tombs 6350/7      █4█          ▀▀▀          1190    crystal ball · 46675 great cauldron  █ |X
+    █    ¥   ┼ ╨ ╨ ╨     ¥     ,    ¥    ,    † graves 46700, 1363..      █^█     i             i   16677   ceremonial brazier ring              █ D-
+    █      ▄▄▄▄▄  ▄▄▄▄▄   ,   †   ,    ¥      ¥ reeds 3549-53             █Z█        i     i        scatter skulls, bones, candles, braziers     █ ~F
+    █      █▓▓▓█  █▓▓▓█     ,    ¥   ,        ♠ mushrooms 4092-4          █ █  budget draynor transplant 110 ──► 55: trees frame, not bury       █ 4k
+    █                                                                     █ █  ────────────────────────────────────────────────────────────────  █ 4
+    █  ────────────────────────────────────────────────────────────────── █ █  MAP FORMAT // two new fields, nothing old changes                 █ 6
+    █  plaza  open on the lane side; four lamps; statue faces the road    █ █   scatter.biome  drop only inside that pocket, rect optional       █ @
+  ? █  swamp  28 bubble pools, 150 reeds, rotting trees, logs, roots      █ █   place.plaza    clear radius, default 6; railings use 0           █ J
+  > █  floor  dry grass layer, greyer tint                                █ █  mist   reverted (48df811): fog of war + height fog unchanged      █ :
+  B █                                                                     █ █                                                                    █ -
+  3 █                                                                     █ █                                                                    █ B
+  . █  > i have survived your predecessors.                               █ █                                                                    █ J
+  9 █  > and i will survive you. (the statue, probably) █                 █ █  TESTS  472 pass  every prop model decodes from the cache          █ C
+  3 █                                                                     █ █  SHOTS  --shots: plaza + ritual, top / low / wide                  █ 2
   k █▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄█ █▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄█ C
            - k   -     ~  .0  #: ~  Q| T    -       k    ?6      <   ?  D @  4   :X    ! D  9=2  T>  A :   *  +J*     X *    8 6      k   &     7  D
-    ■────────────────────────────────────────────  -=[ SYSoP'S NoTe // THe DeSeRT oF THe ReaL ]=-  ──────────────────────────────────────────────■ 4
-             sTILL oPEN: oBJECTIVES pANEL (p6.3), mUSIC tOGGLE (p4.6), iTEM sETS (p3), tERRAIN pALETTE (p1.3), mINIMAP cAMP iCONS (p2.5).          E
-                          animated::mist::{Mist, MistPuff, MIST_SPOT} // FxMesh::used_fraction // kit::spot::VERIFIED += 354                       B
+    ■──────────────────────────────────────────────────  -=[ SYSoP'S NoTe // THe CHaTeau ]=-  ───────────────────────────────────────────────────■ 4
+                   sTILL oPEN: oGRE rUINS, gOBLIN cAMP, hUMAN cITY + kEEP, eLVEN lANDS, gNOME sTRONGHOLD; oBJECTIVES pANEL (p6.3).                 E
+                        props::ScatterJson.biome // PlaceJson.plaza // MapLayout::biome_rect // dire_vampire + dire_dark_magic                     B
     ■────────────────────────────────────────────────  -=[ RoaDMaP // DoCS/RoaDMaPPLaN.MD ]=-  ──────────────────────────────────────────────────■ 1
         P1 LIGHT   [▓▓▓▓▓░░░░░]  50%       P2 MINIMAP [▓▓▓▓▓▓░░░░]  60%       P3 SHOP    [▓▓▓▓▓▓▓░░░]  70%       P4 SELECT  [▓▓▓▓▓▓▓▓▓░]  90%     3k
                                                                                                                                                   BB
-        P5 ARENA   [▓▓▓▓▓▓▓▓▓▓] 100%       P6 HUD     [▓▓▓▓░░░░░░]  40%       P7 POST    [░░░░░░░░░░]   0%       ◄◄ P5 SEALED                     @
+        P5 ARENA   [▓▓▓▓▓▓▓▓▓░]  90%       POCKETS    [▓▓░░░░░░░░]  20%       P6 HUD     [▓▓▓▓░░░░░░]  40%       P7 POST    [░░░░░░░░░░]   0%     @
                                                                                                                                                   7
-        >> next: the objectives panel with named camp timers (P6.3), then the death screen and scoreboard (P7)                                    1
+        >> next: the remaining six pockets from cache objects (ogre, goblin, human x2, elven, gnome), then the objectives panel (P6.3)            1
   ░▒▓▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▓▒░
-  3      B          gREETZ: mORPHEUS (tHE dESERT oF tHE rEAL) * tHE sMOKE cLOUD (354) * tHE sENTINELS * sARADOMIN * zAMORAK * tANK              E @  &
+  3      B         gREETZ: tHE mEROVINGIAN (tHE cHATEAU) * pERSEPHONE * cOUNT dRAYNOR * tHE vAMPYRE sTATUE * mORT mYRE * dARKMEYER              E @  &
   D      %                                 nOT AFFILIATED WITH JAGEX. cACHE ASSETS STAY OUT OF GIT. aLWAYS.                                     -    E
-  7      %                w e l c o m e   t o   t h e   d e s e r t   o f   t h e   r e a l .   p h a s e   5 :   d o n e .                     .    >
-  A      0             -=[ mObAsCaPe // 2026 // nODE 19: tHE dESERT oF tHE rEAL // 57.6k // sYSoP: rIFT // 7 oF 7, 1 cLOUD ]=-                  T    &
+  7      %                   c a u s a l i t y .   a c t i o n ,   r e a c t i o n .   c a u s e   a n d   e f f e c t .                        .    >
+  A      0            -=[ mObAsCaPe // 2026 // nODE 20: tHE cHATEAU // 57.6k // sYSoP: rIFT // 2 pOCKETS, 0 mIST, 100% cACHE ]=-                T    &
