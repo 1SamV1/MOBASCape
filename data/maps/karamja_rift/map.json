@@ -1175,6 +1175,28 @@
         "scale": 1.2,
         "block": 1,
         "texture": "plain"
+      },
+      {
+        "model": 13149,
+        "at": [
+          2713,
+          3165
+        ],
+        "yaw": 0,
+        "scale": 1.7,
+        "block": 2,
+        "texture": "plain"
+      },
+      {
+        "model": 13149,
+        "at": [
+          2977,
+          2925
+        ],
+        "yaw": 0,
+        "scale": 1.7,
+        "block": 2,
+        "texture": "plain"
       }
     ],
     "lines": [
