@@ -32,7 +32,7 @@ mod wield;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use anyhow::{Context, Result};
 use clap::Parser;
@@ -110,6 +110,10 @@ struct Cli {
     /// screen, and nothing in the match holds you to it.
     #[arg(long)]
     lane: Option<String>,
+    /// Dev: lock in as soon as hero select opens, for screenshots of the
+    /// "All heroes locked in" countdown (use with `--start-select`).
+    #[arg(long)]
+    lock_in: bool,
     /// Demo: walk to this tile coordinate after one second (x y).
     #[arg(long, num_args = 2, value_names = ["X", "Y"])]
     demo_target: Option<Vec<f32>>,
@@ -127,7 +131,7 @@ struct Cli {
     #[arg(long)]
     demo_duel: bool,
     /// Fill both teams with bot heroes at boot (four allies, five enemies),
-    /// as a match from the lobby does.
+    /// as a match from hero select does.
     #[arg(long)]
     bots: bool,
     /// Demo: King Awowogei's kit against a rival champion: Bananarang,
@@ -602,6 +606,9 @@ fn main() -> Result<()> {
                 ),
                 None => {}
             }
+            if cli.lock_in && select.open {
+                select.lock_in();
+            }
             select
         },
         menu: menu::MainMenu::new(hero_select_open && start_select.is_none()),
@@ -610,8 +617,6 @@ fn main() -> Result<()> {
         last_tick_second: None,
         live_theme_inputs,
         weapon_models: HashMap::new(),
-        lobby_open: false,
-        lobby_deadline: None,
         window: None,
         window_size,
         render_scale,
@@ -774,11 +779,6 @@ struct App {
     live_theme_inputs: Option<LiveThemeInputs>,
     /// Wield models already loaded, by cache item id.
     weapon_models: HashMap<u32, Vec<rift_cache::Model>>,
-    /// The 5v5 lobby shown between the hero pick and the match.
-    lobby_open: bool,
-    /// Wall-clock deadline for the lobby auto-start, so the countdown keeps
-    /// real time even when the frame rate drops.
-    lobby_deadline: Option<Instant>,
     window: Option<Arc<Window>>,
     window_size: (u32, u32),
     render_scale: f32,
@@ -1092,14 +1092,6 @@ impl ApplicationHandler for App {
                     }
                     return;
                 }
-                if self.lobby_open {
-                    if state == ElementState::Pressed
-                        && hero_select::lobby_button_at(w, h, self.mouse_pos)
-                    {
-                        self.start_match();
-                    }
-                    return;
-                }
                 if self.hero_select.open {
                     if state == ElementState::Pressed {
                         let card = hero_select::card_at(
@@ -1116,8 +1108,10 @@ impl ApplicationHandler for App {
                             self.hero_select.toggle_lane(lane);
                         } else if let Some(slot) = card {
                             self.hero_select.select_slot(slot);
-                        } else if hero_select::confirm_at(w, h, self.mouse_pos) {
-                            self.open_lobby();
+                        } else if hero_select::confirm_at(w, h, self.mouse_pos)
+                            && !self.hero_select.is_locked()
+                        {
+                            self.lock_in();
                         }
                     }
                     return;
@@ -1229,18 +1223,6 @@ impl ApplicationHandler for App {
                     }
                     return;
                 }
-                if self.lobby_open {
-                    if event.state == ElementState::Pressed {
-                        match code {
-                            KeyCode::Escape => event_loop.exit(),
-                            KeyCode::Enter | KeyCode::NumpadEnter | KeyCode::Space => {
-                                self.start_match()
-                            }
-                            _ => {}
-                        }
-                    }
-                    return;
-                }
                 if self.hero_select.open {
                     if event.state == ElementState::Pressed {
                         match code {
@@ -1255,8 +1237,14 @@ impl ApplicationHandler for App {
                             KeyCode::KeyM => self.hero_select.set_filter(1),
                             KeyCode::KeyR => self.hero_select.set_filter(2),
                             KeyCode::KeyC => self.hero_select.set_filter(3),
+                            // Lock in; once locked, skip the rest of the
+                            // "Game starting in" count.
                             KeyCode::Enter | KeyCode::NumpadEnter | KeyCode::Space => {
-                                self.open_lobby()
+                                if self.hero_select.is_locked() {
+                                    self.hero_select.skip_countdown();
+                                } else {
+                                    self.lock_in();
+                                }
                             }
                             _ => {}
                         }
@@ -1630,12 +1618,6 @@ impl App {
         if self.hero_select.open {
             if self.renderer.is_some() {
                 self.tick_hero_select(dt);
-            }
-            return;
-        }
-        if self.lobby_open {
-            if self.renderer.is_some() {
-                self.tick_lobby(dt);
             }
             return;
         }
@@ -2735,8 +2717,8 @@ impl App {
                 );
             } else {
                 // Nothing legacy is drawn in a live match: drop whatever the
-                // menu, hero select or lobby left in the mesh, or the lobby's
-                // team cards stay on screen over the arena.
+                // menu or hero select left in the mesh, or its last frame
+                // stays on screen over the arena.
                 self.hud.vertices.clear();
                 self.hud.indices.clear();
             }
@@ -2921,22 +2903,36 @@ impl App {
         parts
     }
 
-    /// Render the paused world behind the champion picker.
+    /// Render the paused world behind the champion picker, then, once
+    /// everyone is locked in, count down on the same screen and load the
+    /// match (the reference has no lobby between the two).
     fn tick_hero_select(&mut self, dt: f32) {
+        // The previous frame showed "Loading the arena...": load now.
+        if self.hero_select.ready_to_load() {
+            self.start_match();
+            return;
+        }
         self.hero_select.time += dt;
         let (w, h) = self
             .renderer
             .as_ref()
             .map(|r| (r.size.0 as f32, r.size.1 as f32))
             .unwrap_or((1280.0, 720.0));
-        self.hero_select.hover =
-            hero_select::card_at(w, h, self.mouse_pos, &self.hero_select.visible_classes());
-        if self.hero_select.tick_countdown(dt) {
+        self.hero_select.hover = if self.hero_select.is_locked() {
+            None
+        } else {
+            hero_select::card_at(w, h, self.mouse_pos, &self.hero_select.visible_classes())
+        };
+        if self.hero_select.is_locked() {
+            self.hero_select.tick_locked(dt);
+        } else if self.hero_select.tick_countdown(dt) {
             tracing::info!("hero select: time is up");
-            self.open_lobby();
-            return;
+            self.lock_in();
         }
-        let second = self.hero_select.seconds_left();
+        let second = self
+            .hero_select
+            .starting_in()
+            .unwrap_or_else(|| self.hero_select.seconds_left());
         if second <= 5 && self.last_tick_second != Some(second) {
             self.play_ui_sound("skill_point");
         }
@@ -3170,14 +3166,15 @@ impl App {
         }
     }
 
-    /// Lock the pick in and move to the 5v5 lobby.
-    fn open_lobby(&mut self) {
+    /// Lock the pick in: the bots still choosing lock in too and hero select
+    /// counts down to the match.
+    fn lock_in(&mut self) {
         let index = self.hero_select.selected;
         let Some(champion) = self.hero_select.champions.get(index) else {
             return;
         };
         tracing::info!("hero select: locked in {} ({})", champion.name, champion.id);
-        self.hero_select.fill_picks();
+        self.hero_select.lock_in();
         let (blue, red) = self.hero_select.lineups();
         let names = |team: &[usize]| {
             team.iter()
@@ -3191,77 +3188,13 @@ impl App {
             names(&blue),
             names(&red)
         );
-        self.hero_select.open = false;
-        self.lobby_open = true;
-        self.lobby_deadline = Some(Instant::now() + Duration::from_secs(8));
         if let Some(window) = self.window.as_ref() {
-            window.set_title("Rift - Lobby");
-        }
-    }
-
-    /// Render the paused world behind the 5v5 lobby.
-    fn tick_lobby(&mut self, dt: f32) {
-        let (w, h) = self
-            .renderer
-            .as_ref()
-            .map(|r| (r.size.0 as f32, r.size.1 as f32))
-            .unwrap_or((1280.0, 720.0));
-
-        if let (Some(renderer), Some(animated), Some(height), Some(collision)) = (
-            self.renderer.as_mut(),
-            self.animated.as_mut(),
-            self.height.as_ref(),
-            self.collision.as_ref(),
-        ) {
-            let eye = renderer.camera.eye();
-            let forward = (eye - renderer.camera.target).normalize_or_zero();
-            let right = forward.cross(Vec3::Y).normalize_or_zero();
-            let up = right.cross(forward).normalize_or_zero();
-            animated.refresh_visibility(dt.min(0.05), collision);
-            animated.prepare_render(
-                height,
-                renderer.camera.target,
-                camera_cull_radius(renderer.size, &renderer.camera),
-                right,
-                up,
-                forward,
-            );
-            renderer.set_dynamic_mesh(&animated.vertices, &animated.indices);
-            renderer.set_fx_mesh(&animated.fx.vertices, &animated.fx.indices);
-            renderer.set_shadow_mesh(&animated.shadow_vertices, &animated.shadow_indices);
-            renderer.set_caster_mesh(&animated.caster_vertices, &animated.caster_indices);
-            renderer.set_lights(&animated.lights());
-            renderer.set_time(self.app_time);
-            renderer.set_vision(animated.player_pos(), 2600.0);
-            if animated.visibility_dirty {
-                renderer.set_vision_grid(
-                    animated.vision_origin,
-                    animated.visibility.width,
-                    animated.visibility.height,
-                    &animated.visibility.tiles,
-                );
-            }
-            animated.visibility_dirty = false;
-        }
-
-        self.hud
-            .build_lobby(w, h, &self.hero_select, self.mouse_pos);
-        if let Some(renderer) = self.renderer.as_mut() {
-            renderer.set_hud_mesh(&self.hud.vertices, &self.hud.indices);
-        }
-        // The lobby auto-starts like the reference client, but the player can
-        // click the button or press Enter to drop in immediately.
-        if let Some(deadline) = self.lobby_deadline {
-            if Instant::now() >= deadline {
-                self.start_match();
-            }
+            window.set_title("Rift - Game starting");
         }
     }
 
     /// Lock in the highlighted champion and start a clean match.
     fn start_match(&mut self) {
-        self.lobby_open = false;
-        self.lobby_deadline = None;
         let index = self.hero_select.selected;
         let Some(champion) = self.hero_select.champions.get(index).cloned() else {
             return;

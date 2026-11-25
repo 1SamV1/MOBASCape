@@ -128,6 +128,11 @@ pub const PICK_SCHEDULE: [(Team, usize, f32); 9] = [
     (Team::Red, 4, 22.0),
 ];
 
+/// Seconds between every hero locking in and the match loading: the
+/// reference's "All heroes locked in / Game starting in 5", shown on the
+/// select screen itself (there is no separate lobby).
+pub const LOCKED_SECONDS: f32 = 5.0;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Team {
     Blue,
@@ -148,6 +153,9 @@ pub struct HeroSelect {
     pub time: f32,
     /// Seconds left to lock in; at zero the highlighted hero is locked.
     pub countdown: f32,
+    /// Seconds until the match loads once every hero is locked in (see
+    /// [`LOCKED_SECONDS`]); `None` while picking.
+    pub locked: Option<f32>,
     /// The match mode picked on the main menu.
     pub mode: MatchMode,
     /// Your team's five rows; row 0 is you.
@@ -170,6 +178,7 @@ impl HeroSelect {
             visible: Vec::new(),
             time: 0.0,
             countdown: PICK_SECONDS,
+            locked: None,
             mode: MatchMode::Bot,
             blue: Vec::new(),
             red: Vec::new(),
@@ -339,6 +348,7 @@ impl HeroSelect {
         self.open = true;
         self.mode = mode;
         self.countdown = PICK_SECONDS;
+        self.locked = None;
         self.time = 0.0;
         self.hover = None;
         let seed = std::time::SystemTime::now()
@@ -351,7 +361,7 @@ impl HeroSelect {
 
     /// Count the pick timer down. True on the frame it runs out.
     pub fn tick_countdown(&mut self, dt: f32) -> bool {
-        if !self.open || self.countdown <= 0.0 {
+        if !self.open || self.locked.is_some() || self.countdown <= 0.0 {
             return false;
         }
         self.countdown = (self.countdown - dt).max(0.0);
@@ -362,6 +372,48 @@ impl HeroSelect {
     /// Whole seconds shown on the timer (rounded up, so 0.2 s shows 1).
     pub fn seconds_left(&self) -> u32 {
         self.countdown.ceil().max(0.0) as u32
+    }
+
+    /// Lock your highlighted hero in. Every bot still choosing locks in
+    /// with you and the "Game starting in" count begins. The hero is fixed
+    /// from here; lane calls stay open, being notes, not picks.
+    pub fn lock_in(&mut self) {
+        if self.locked.is_none() {
+            self.fill_picks();
+            self.locked = Some(LOCKED_SECONDS);
+            self.hover = None;
+        }
+    }
+
+    pub fn is_locked(&self) -> bool {
+        self.locked.is_some()
+    }
+
+    /// Count down to the match. It stops at zero, the frame that shows
+    /// "Loading the arena..."; see [`HeroSelect::ready_to_load`].
+    pub fn tick_locked(&mut self, dt: f32) {
+        if let Some(left) = self.locked.as_mut() {
+            *left = (*left - dt).max(0.0);
+        }
+    }
+
+    /// Whole seconds on "Game starting in" (rounded up); 0 while loading.
+    pub fn starting_in(&self) -> Option<u32> {
+        self.locked.map(|left| left.ceil().max(0.0) as u32)
+    }
+
+    /// Cut the count short (Enter on the locked screen). It keeps a sliver
+    /// so the next frame still shows the loading line before the load.
+    pub fn skip_countdown(&mut self) {
+        if let Some(left) = self.locked.as_mut() {
+            *left = left.min(1e-3);
+        }
+    }
+
+    /// True once the count has reached zero and that frame was drawn (the
+    /// count is ticked before drawing): load the match now.
+    pub fn ready_to_load(&self) -> bool {
+        self.locked == Some(0.0)
     }
 
     /// Recompute the visible roster for the active filter, grouped by type
@@ -376,6 +428,10 @@ impl HeroSelect {
             .collect();
         visible.sort_by_key(|&index| (class_rank(&self.champions[index].class), index));
         self.visible = visible;
+        // Once locked in, a filter only changes what the roster shows.
+        if self.locked.is_some() {
+            return;
+        }
         if !self.visible.contains(&self.selected) || self.is_picked(self.selected) {
             if let Some(&first) = self.visible.iter().find(|&&i| !self.is_picked(i)) {
                 self.selected = first;
@@ -398,7 +454,7 @@ impl HeroSelect {
     }
 
     pub fn cycle(&mut self, delta: isize) {
-        if self.visible.is_empty() {
+        if self.visible.is_empty() || self.locked.is_some() {
             return;
         }
         let count = self.visible.len() as isize;
@@ -423,6 +479,7 @@ impl HeroSelect {
     pub fn select_slot(&mut self, slot: usize) {
         if let Some(&index) = self.visible.get(slot)
             && !self.is_picked(index)
+            && self.locked.is_none()
         {
             self.selected = index;
         }
@@ -699,67 +756,6 @@ pub fn team_slot_rects(width: f32, height: f32, team: Team) -> Vec<Rect> {
         .collect()
 }
 
-/// The two five-strong lineups shown on the lobby screen.
-pub fn lobby_teams(champions: &[ChampionConfig], selected: usize) -> (Vec<usize>, Vec<usize>) {
-    let count = champions.len();
-    if count == 0 {
-        return (Vec::new(), Vec::new());
-    }
-    let selected = selected.min(count - 1);
-    let mut radiant = vec![selected];
-    for step in 1..5 {
-        radiant.push((selected + step) % count);
-    }
-    let mut dire = Vec::new();
-    for step in 0..5 {
-        dire.push((selected + step + 1) % count);
-    }
-    (radiant, dire)
-}
-
-/// Lobby card grid: two rows of five.
-pub fn lobby_card_rects(width: f32, height: f32) -> Vec<(f32, f32, f32, f32)> {
-    let gap = 12.0;
-    let side = (width * 0.072).clamp(50.0, 92.0);
-    let area_x = side + 12.0;
-    let area_w = (width - side * 2.0 - 24.0).max(240.0);
-    let card_w = (area_w - gap * 4.0) / 5.0;
-    let card_h = (height * 0.245).clamp(132.0, 186.0);
-    let top = (height * 0.235).max(126.0);
-    (0..10)
-        .map(|index| {
-            let row = index / 5;
-            let column = index % 5;
-            (
-                area_x + column as f32 * (card_w + gap),
-                top + row as f32 * (card_h + gap + 26.0),
-                card_w,
-                card_h,
-            )
-        })
-        .collect()
-}
-
-/// Radiant and dire side tabs.
-#[allow(clippy::type_complexity)]
-pub fn lobby_side_tabs(width: f32, height: f32) -> ((f32, f32, f32, f32), (f32, f32, f32, f32)) {
-    let w = (width * 0.066).clamp(46.0, 84.0);
-    let h = (height * 0.42).clamp(210.0, 310.0);
-    let top = (height * 0.235).max(126.0);
-    ((6.0, top, w, h), (width - 6.0 - w, top, w, h))
-}
-
-/// The red "loading" button under the lobby cards.
-pub fn lobby_button_rect(width: f32, height: f32) -> (f32, f32, f32, f32) {
-    let w = 360.0f32.min(width * 0.32);
-    let h = 44.0;
-    ((width - w) * 0.5, height - h - 52.0, w, h)
-}
-
-pub fn lobby_button_at(width: f32, height: f32, cursor: (f64, f64)) -> bool {
-    point_in_rect(lobby_button_rect(width, height), cursor)
-}
-
 /// Wrap a description into fixed-width lines for the detail panel.
 pub fn wrap_text(text: &str, columns: usize) -> Vec<String> {
     let mut lines = Vec::new();
@@ -978,6 +974,57 @@ pub(crate) mod tests {
         }
         select.reset_picks(7);
         assert!(!select.is_picked(1), "a new pick phase clears the columns");
+    }
+
+    #[test]
+    fn locking_in_fills_the_teams_and_counts_to_the_match() {
+        let mut select = HeroSelect::new(roster(), 0, false);
+        select.begin(MatchMode::Bot);
+        let mine = select.selected;
+        select.lock_in();
+        let (blue, red) = select.lineups();
+        assert_eq!(
+            (blue.len(), red.len()),
+            (5, 5),
+            "every bot locks in with you"
+        );
+        assert_eq!(select.starting_in(), Some(LOCKED_SECONDS as u32));
+        // The pick timer stops and a second lock-in does not restart the count.
+        assert!(!select.tick_countdown(PICK_SECONDS));
+        select.tick_locked(1.0);
+        select.lock_in();
+        assert_eq!(select.starting_in(), Some(4));
+        // Your hero is fixed; filters only change what the roster shows.
+        select.cycle(1);
+        select.select_slot(0);
+        select.set_filter(2);
+        assert_eq!(select.selected, mine);
+        // Lane calls stay open: they are notes, not picks.
+        select.toggle_lane(Lane::Top);
+        assert_eq!(select.blue[0].lane, Some(Lane::Top));
+        // The count ends on a drawn "loading" frame, then the match loads.
+        select.tick_locked(3.5);
+        assert_eq!(select.starting_in(), Some(1));
+        assert!(!select.ready_to_load());
+        select.tick_locked(1.0);
+        assert_eq!(select.starting_in(), Some(0));
+        assert!(select.ready_to_load());
+        // The next match starts picking afresh.
+        select.begin(MatchMode::Bot);
+        assert_eq!(select.locked, None);
+    }
+
+    #[test]
+    fn enter_cuts_the_count_but_keeps_the_loading_frame() {
+        let mut select = HeroSelect::new(roster(), 0, false);
+        select.begin(MatchMode::Bot);
+        select.skip_countdown();
+        assert_eq!(select.locked, None, "nothing to skip before locking in");
+        select.lock_in();
+        select.skip_countdown();
+        assert!(!select.ready_to_load(), "one frame shows the loading line");
+        select.tick_locked(0.016);
+        assert!(select.ready_to_load());
     }
 
     #[test]

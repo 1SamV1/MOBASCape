@@ -393,7 +393,11 @@ impl Hud {
                 [255, 150, 110],
             );
         }
-        let heading = format!("{}: choose your hero", sentence_case(mode.label()));
+        let heading = if select.is_locked() {
+            "All heroes locked in".to_string()
+        } else {
+            format!("{}: choose your hero", sentence_case(mode.label()))
+        };
         self.label_in(
             width,
             height,
@@ -403,29 +407,13 @@ impl Hud {
             &heading,
             ORANGE,
         );
-        let left = select.seconds_left();
-        let urgent = left <= 5;
-        let clock = format!("0:{left:02}");
-        let pulse = if urgent {
-            0.5 + 0.5 * (select.countdown * std::f32::consts::TAU).cos()
+        if let Some(seconds) = select.starting_in() {
+            self.starting_line(width, height, seconds);
         } else {
-            1.0
-        };
-        let clock_colour = if urgent {
-            [255, (60.0 + 120.0 * pulse) as u8, 40]
-        } else {
-            OSRS_YELLOW
-        };
-        self.label_in(
-            width,
-            height,
-            hero_select::timer_rect(width, height),
-            "b12",
-            2.0,
-            &clock,
-            clock_colour,
-        );
+            self.pick_clock(width, height, select);
+        }
         let leave = hero_select::leave_rect(width, height);
+
         let leave_hot = hero_select::leave_at(width, height, mouse);
         self.osrs_button(width, height, leave, false, leave_hot, false);
         self.label_in(
@@ -521,8 +509,10 @@ impl Hud {
             let selected = index == select.selected;
             let hovered = select.hover == Some(slot);
             let picked = select.is_picked(index);
+            // Once everyone is locked in the roster dims around your pick.
+            let dimmed = picked || (select.is_locked() && !selected);
             let side = cw;
-            let tint = if picked {
+            let tint = if dimmed {
                 [110, 110, 110]
             } else {
                 [255, 255, 255]
@@ -538,7 +528,7 @@ impl Hud {
                     side - 6.0,
                     uv,
                     tint,
-                    if picked { 0.55 } else { 1.0 },
+                    if dimmed { 0.55 } else { 1.0 },
                 );
             }
             if selected {
@@ -566,7 +556,7 @@ impl Hud {
                 "p11",
                 1.0,
                 &name,
-                if picked {
+                if dimmed {
                     [140, 132, 118]
                 } else if selected {
                     OSRS_YELLOW
@@ -638,21 +628,33 @@ impl Hud {
             }
         }
         let confirm = hero_select::confirm_rect(width, height);
-        let hot = hero_select::confirm_at(width, height, mouse);
-        self.osrs_button(width, height, confirm, true, hot, false);
+        let locked = select.is_locked();
+        let hot = !locked && hero_select::confirm_at(width, height, mouse);
+        // Red to lock in; grey and inert once locked, as in the reference.
+        self.osrs_button(width, height, confirm, !locked, hot, false);
         self.label_in(
             width,
             height,
             confirm,
             "b12",
             1.0,
-            "Lock in",
-            if hot { [255, 255, 255] } else { STONE_TEXT },
+            if locked { "Locked in" } else { "Lock in" },
+            if locked {
+                STONE_QUIET
+            } else if hot {
+                [255, 255, 255]
+            } else {
+                STONE_TEXT
+            },
         );
         // The timer note, only where it clears the six stats (it ran over
         // them at 1280x720): the stats sit in cells from the bar's left, the
         // last one about 72px wide.
-        let note = "At zero the highlighted hero is locked in.";
+        let note = if locked {
+            "Lane calls stay open until the match loads."
+        } else {
+            "At zero the highlighted hero is locked in."
+        };
         let nw = self.text_width_named("p11", note, 1.0);
         let note_x = confirm.0 - nw - 18.0;
         let bar_x = hero_select::bottom_rect(width, height).0;
@@ -669,6 +671,71 @@ impl Hud {
                 STONE_QUIET,
             );
         }
+    }
+
+    /// The pick timer under the title, pulsing red in the last five seconds.
+    fn pick_clock(&mut self, width: f32, height: f32, select: &HeroSelect) {
+        let left = select.seconds_left();
+        let urgent = left <= 5;
+        let clock = format!("0:{left:02}");
+        let pulse = if urgent {
+            0.5 + 0.5 * (select.countdown * std::f32::consts::TAU).cos()
+        } else {
+            1.0
+        };
+        let clock_colour = if urgent {
+            [255, (60.0 + 120.0 * pulse) as u8, 40]
+        } else {
+            OSRS_YELLOW
+        };
+        self.label_in(
+            width,
+            height,
+            hero_select::timer_rect(width, height),
+            "b12",
+            2.0,
+            &clock,
+            clock_colour,
+        );
+    }
+
+    /// "Game starting in N" under the title once everyone has locked in,
+    /// the number in yellow; "Loading the arena..." on the last frame.
+    fn starting_line(&mut self, width: f32, height: f32, seconds: u32) {
+        use super::kit::ORANGE;
+        let rect = hero_select::timer_rect(width, height);
+        if seconds == 0 {
+            self.label_in(
+                width,
+                height,
+                rect,
+                "b12",
+                2.0,
+                "Loading the arena...",
+                ORANGE,
+            );
+            return;
+        }
+        let lead = "Game starting in ";
+        let number = seconds.to_string();
+        let lw = self.text_width_named("b12", lead, 2.0);
+        let nw = self.text_width_named("b12", &number, 2.0);
+        let snapped = 2.0f32;
+        let th = self.font_ascent_named("b12") * snapped;
+        let (x, y, w, h) = rect;
+        let left = (x + (w - lw - nw) * 0.5).round();
+        let top = (y + (h - th) * 0.5).round();
+        self.text_named("b12", width, height, left, top, 2.0, lead, ORANGE);
+        self.text_named(
+            "b12",
+            width,
+            height,
+            left + lw,
+            top,
+            2.0,
+            &number,
+            OSRS_YELLOW,
+        );
     }
 
     /// Whether every tab of `width` holds its icon and the longest of
@@ -777,7 +844,7 @@ impl Hud {
                 match champion {
                     Some(champion) => {
                         if let Some(uv) = self.atlas.hero_uv(&champion.id) {
-                            let alpha = if you {
+                            let alpha = if you && !select.is_locked() {
                                 0.7 + 0.3 * (select.time * 3.0).sin().abs()
                             } else {
                                 1.0
@@ -829,8 +896,9 @@ impl Hud {
                     if you { OSRS_YELLOW } else { STONE_TEXT },
                 );
                 let room = ((x + w - text_x) / 6.4) as usize;
+                let locked_in = slot.champion.is_some() || (you && select.is_locked());
                 let (status, colour) = match (champion, you || slot.champion.is_some()) {
-                    (Some(champion), true) if !you => {
+                    (Some(champion), true) if locked_in => {
                         (clip_name(&champion.name, room), [120, 230, 120])
                     }
                     (Some(champion), _) => (

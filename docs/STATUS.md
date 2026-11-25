@@ -1,6 +1,20 @@
 # Status
 
-Last updated: bot dashes, 2026-11-24.
+Last updated: hero select lane picker and locked-in countdown, 2026-11-24.
+
+## 2026-11-24 — Hero select: lane calls, locked-in countdown
+
+- "Your lane:" tabs (Top / Jungle / Mid / Carry / Support, cache skill
+  icons 199 / 220 / 215 / 208 / 205) on the bar over the roster; the class
+  filters became compact icon tabs beside them. Every team row shows its
+  call. A call is a team indicator, not a rule: optional, withdrawn by
+  clicking it again, kept for the next draft, never checked in the match.
+  Blue's bots call the lanes the player leaves open and spawn in them.
+- After Lock in (or at zero) the screen reads "All heroes locked in /
+  Game starting in 5" like the reference: roster dimmed around your pick,
+  a grey inert *Locked in*, final picks in every row; lane calls can still
+  change. Enter skips the count. The separate 5v5 card lobby is removed.
+- Dev: `--lane <lane>` and `--lock-in` (with `--start-select`).
 
 ## 2026-11-24 — Bots dash and leap
 

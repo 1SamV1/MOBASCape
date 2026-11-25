@@ -223,7 +223,9 @@ Cache location: `.cache/osrs-235/cache` by default. Pass `--cache` and
   icons, cache fonts and cache hitmarks; `ui.wgsl` samples it with nearest
   filtering. Panels and buttons without a clean cache sprite keep procedural
   geometry. Never commit `assets/`.
-- **Match flow**: main menu -> hero select -> LOCK IN -> 5v5 lobby -> match.
+- **Match flow**: main menu -> hero select -> Lock in -> "All heroes locked
+  in / Game starting in 5" on the same screen -> match (no separate lobby,
+  as in the reference).
   The client (and the AppImage, which passes `--ui-live`) boots into the main
   menu (`menu.rs`, drawn in `hud/screens.rs`): Bot / Public / Private Match
   and Quit over an orbiting attract-mode arena. Public and Private need the
@@ -234,8 +236,12 @@ Cache location: `.cache/osrs-235/cache` by default. Pass `--cache` and
   hero playing its cast (else attack) animation then idle
   (`spotlight.rs`, a CPU raster streamed into the HUD atlas at
   `ui_assets::SPOTLIGHT_RECT`), and stats/abilities on the right.
-  `--start-select bot|public|private [--champion id]` skips the menu for
-  screenshots.
+  The "Your lane:" tabs are a team indicator, not a rule: optional,
+  never enforced; blue's bots call and play the lanes the player leaves
+  open (`hero_select::Lane`, `bot_lanes`).
+  `--start-select bot|public|private [--champion id] [--lane mid]
+  [--lock-in]` skips the menu for screenshots (`--lock-in` opens straight
+  on the locked-in countdown).
 - **Wielded weapons** (`wield.rs`): heroes on the player skeleton
   (framemap 0: Kolodion, Wise Old Man, the Ranger) hold the first weapon in
   their inventory, else their champion file's cosmetic `weapon`. The item's

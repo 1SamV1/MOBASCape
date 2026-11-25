@@ -154,9 +154,11 @@ with a commit and a push to `sam main`.
    champion data.
 5. **Popular build row** from the Recommended shop data.
 6. Music toggle in the title bar.
-7. **The lobby in the stone kit.** The 5v5 loading lobby still uses the old
-   flat panels and blue/red slabs; rebuild it from the stone windows,
-   parchment and item slots hero select uses, keeping the lane line.
+7. ~~**The lobby.**~~ Done the reference's way: it has no lobby. Lock in
+   (or the timer) turns hero select itself into "All heroes locked in /
+   Game starting in 5": roster dimmed around your pick, grey *Locked in*,
+   final picks in every row, lane calls still open; then the match loads.
+   The old flat 5v5 card lobby is gone.
 
 ### Phase 5: Arena set dressing
 
@@ -230,3 +232,5 @@ All objects from the cache, placed through the map format
 - 2026-11-24: phase 4.2 lane picker done (team indicator only; bots fill
   the lanes the player leaves open). Class filters became compact icon tabs
   on the same bar; the timer note hides where it would cover the stats.
+- 2026-11-24: phase 4.7 done: the locked-in countdown on hero select
+  replaces the separate lobby (reference still at 0:11).
