@@ -17,8 +17,9 @@
 //!   the next item of their class's recommended build.
 //!
 //! Bots level, earn gold (passive income plus last hits, camps and kills)
-//! and gear up exactly like the player does. Abilities are not used yet:
-//! they fight with basic attacks.
+//! and gear up exactly like the player does. A laner leaving the fountain
+//! reads its teleport scroll to its lane's front tower when that is a long
+//! walk away.
 
 use glam::Vec3;
 use rift_cache::Cache;
@@ -60,6 +61,9 @@ const BASE_SAFE: f32 = 3200.0;
 const MAX_ITEMS: usize = 6;
 /// Recompute a travel path at most this often (seconds).
 const REPATH: f32 = 1.0;
+/// A lane's front tower farther than this from the fountain is worth a
+/// teleport scroll instead of the walk.
+const SCROLL_WALK: f32 = 4500.0;
 
 /// What a bot is assigned to in the draft.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -507,6 +511,11 @@ impl AnimatedScene {
         let Some(b) = self.bots.iter().position(|bot| bot.unit == index) else {
             return;
         };
+        // A bot channelling its teleport scroll stands still until it lands.
+        if self.units[index].scroll.channel.is_some() {
+            self.units[index].moving = false;
+            return;
+        }
         if self.bots[b].think <= 0.0 {
             self.bots[b].think += THINK_INTERVAL;
             self.bot_think(b);
@@ -601,6 +610,9 @@ impl AnimatedScene {
     /// Lane: push along the assigned lane, fighting what is in reach.
     fn bot_lane(&mut self, b: usize, dt: f32, height: &HeightGrid, collision: &WorldCollision) {
         let index = self.bots[b].unit;
+        if self.bot_scroll_to_lane(b, height, collision) {
+            return;
+        }
         if let Some(target) = self.bot_lane_target(index) {
             self.bot_engage(b, target, dt, height, collision);
             return;
@@ -624,6 +636,43 @@ impl AnimatedScene {
             return;
         }
         self.bot_travel(b, goal, dt, height, collision);
+    }
+
+    /// Leaving the fountain for a lane whose front tower is a long walk
+    /// away: read the teleport scroll there instead (Dota 2 style).
+    fn bot_scroll_to_lane(
+        &mut self,
+        b: usize,
+        height: &HeightGrid,
+        collision: &WorldCollision,
+    ) -> bool {
+        let BotRole::Lane(lane) = self.bots[b].role else {
+            return false;
+        };
+        let index = self.bots[b].unit;
+        let unit = &self.units[index];
+        if unit.scroll.cooldown > 0.0 || unit.pos.distance(unit.home) > HOME_RADIUS * 1.5 {
+            return false;
+        }
+        let (team, home, pos) = (unit.team, unit.home, unit.pos);
+        let front = self
+            .units
+            .iter()
+            .filter(|s| {
+                s.team == team
+                    && s.health > 0.0
+                    && s.kind == UnitKind::Tower
+                    && s.structure_lane == Some(lane)
+            })
+            .map(|s| s.pos)
+            .max_by(|a, c| a.distance(home).total_cmp(&c.distance(home)));
+        let Some(front) = front else {
+            return false;
+        };
+        if pos.distance(front) < SCROLL_WALK {
+            return false;
+        }
+        self.start_scroll(index, front, collision, height).is_ok()
     }
 
     /// The bot's lane, oriented from its own nexus to the enemy's.

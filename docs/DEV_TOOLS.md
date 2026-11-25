@@ -80,6 +80,10 @@ beside the hero, looping, so spell graphics can be checked by eye. Add
 `--distance 1500` to bring the camera in. A label ending in `?` failed to
 load. The verified ids are listed in [SPELLS.md](SPELLS.md).
 
+`--demo-scroll` reads the teleport scroll (T) toward the middle of the map
+half a second in, and logs the channel and the arrival. Take a screenshot
+around frame 400 to see the channel, and after frame 760 to see the arrival.
+
 ## Shader hot reload
 
 - `--hot-shaders` watches `crates/client/src/scene.wgsl` and recompiles it

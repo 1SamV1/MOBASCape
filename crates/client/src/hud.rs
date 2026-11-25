@@ -181,7 +181,26 @@ pub struct UiVertex {
     pub color: [f32; 4],
 }
 
+/// A battle spell (D, F) or the teleport scroll (T), for both HUDs.
+#[derive(Debug, Clone, Default)]
+pub struct SpellHud {
+    /// Theme sprite role (assembled interface) for the picture.
+    pub icon: Option<String>,
+    /// Legacy atlas key for the picture: an item icon id.
+    pub item_icon: Option<String>,
+    pub cooldown: f32,
+    pub max_cooldown: f32,
+    /// 0..1 while channelling.
+    pub channel: Option<f32>,
+    /// False greys the slot out (no battle spells for this hero).
+    pub usable: bool,
+}
+
 pub struct PlayerHud {
+    /// D and F battle spells.
+    pub spells: [SpellHud; 2],
+    /// The teleport scroll on T.
+    pub scroll: SpellHud,
     pub health: f32,
     pub max_health: f32,
     pub mana: f32,
@@ -1235,6 +1254,19 @@ impl Hud {
                         [220, 220, 220],
                     );
                 }
+            }
+            // Battle spells (D, F) and the teleport scroll (T) in smaller
+            // boxes to the right of R.
+            let small = 44.0;
+            let spells = [
+                (&player.spells[0], "D"),
+                (&player.spells[1], "F"),
+                (&player.scroll, "T"),
+            ];
+            for (n, (spell, key)) in spells.into_iter().enumerate() {
+                let bx = x0 + total + 18.0 + n as f32 * (small + 6.0);
+                let by = y0 + (box_size - small) * 0.5;
+                self.spell_box(width, height, bx, by, small, spell, key);
             }
         }
         // Enemy team card on the right edge. Five fixed slots keep the card
@@ -3038,6 +3070,97 @@ impl Hud {
                 self.sprite(width, height, qx, qy, qw, qh, qu, tint, 0.93);
             }
         }
+    }
+
+    /// One battle spell or scroll box on the legacy bar.
+    #[allow(clippy::too_many_arguments)]
+    fn spell_box(
+        &mut self,
+        width: f32,
+        height: f32,
+        x: f32,
+        y: f32,
+        size: f32,
+        spell: &SpellHud,
+        key: &str,
+    ) {
+        self.slot_frame(width, height, x, y, size, size);
+        let uv = spell
+            .item_icon
+            .as_deref()
+            .and_then(|id| self.atlas.item_uv(id))
+            .or_else(|| {
+                spell
+                    .icon
+                    .as_deref()
+                    .and_then(|role| self.atlas.ui_uv(role))
+            });
+        if let Some(uv) = uv {
+            let inset = 6.0;
+            let side = size - inset * 2.0;
+            self.sprite(
+                width,
+                height,
+                x + inset,
+                y + inset,
+                side,
+                side,
+                uv,
+                [255; 3],
+                1.0,
+            );
+        }
+        if !spell.usable {
+            self.quad_alpha(width, height, x, y, size, size, [0, 0, 0], 0.6);
+        } else if spell.cooldown > 0.0 {
+            let frac = (spell.cooldown / spell.max_cooldown.max(0.001)).clamp(0.0, 1.0);
+            self.cooldown_wedge(
+                width,
+                height,
+                x + size * 0.5,
+                y + size * 0.5,
+                size * 0.5,
+                frac,
+                [10, 12, 18],
+                0.74,
+            );
+            self.text_centered(
+                width,
+                height,
+                x + size * 0.5,
+                y + size * 0.5 - 6.0,
+                1.0,
+                &format!("{:.0}", spell.cooldown.ceil()),
+                [220, 220, 220],
+            );
+        }
+        if let Some(progress) = spell.channel {
+            self.quad(
+                width,
+                height,
+                x + 3.0,
+                y + size - 6.0,
+                size - 6.0,
+                3.0,
+                [20, 18, 14],
+            );
+            let fill = (size - 6.0) * progress.clamp(0.0, 1.0);
+            self.quad(
+                width,
+                height,
+                x + 3.0,
+                y + size - 6.0,
+                fill,
+                3.0,
+                [255, 210, 80],
+            );
+        }
+        let colour = if spell.usable {
+            [235, 220, 170]
+        } else {
+            [120, 116, 108]
+        };
+        self.text(width, height, x + 3.0, y + 2.0, 1.0, key, colour);
     }
 
     /// Draw a small OSRS icon at a screen position.

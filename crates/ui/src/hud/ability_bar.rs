@@ -7,7 +7,7 @@
 
 use crate::Colour;
 use crate::draw::{DrawList, Rect};
-use crate::hud::state::AbilityState;
+use crate::hud::state::{AbilityState, SpellSlot};
 use crate::theme::Theme;
 
 /// The component's size at the interface's own scale.
@@ -27,6 +27,22 @@ pub fn ability_at(area: Rect, scale: i32, mouse: (i32, i32)) -> Option<usize> {
     (0..4).find(|n| {
         let left = (92 + *n as i32 * 42) * s;
         x >= left && x < left + 40 * s
+    })
+}
+
+/// Where the battle spells (D, F) and the teleport scroll (T) sit: left,
+/// top and side, at the interface's own scale. T takes the bottom right
+/// small slot, where Dota 2 keeps its scroll.
+const SPELL_SLOTS: [(i32, i32, i32); 3] = [(278, 10, 40), (324, 10, 40), (412, 50, 36)];
+
+/// The battle spell or scroll slot under the mouse: 0 for D, 1 for F, 2 for
+/// the scroll on T.
+pub fn spell_at(area: Rect, scale: i32, mouse: (i32, i32)) -> Option<usize> {
+    let s = scale.max(1);
+    let x = mouse.0 - area.x;
+    let y = mouse.1 - area.y;
+    SPELL_SLOTS.iter().position(|&(left, top, side)| {
+        x >= left * s && x < (left + side) * s && y >= top * s && y < (top + side) * s
     })
 }
 
@@ -203,11 +219,20 @@ pub fn draw(theme: &Theme, list: &mut DrawList, area: Rect, state: &AbilityState
             }
         }
     }
-    slot(list, 278, 10, 40, 40, "D", quiet);
-    slot(list, 324, 10, 40, 40, "F", quiet);
+    // Battle spells and the teleport scroll: a picture, a cooldown, a gold
+    // fill along the bottom while channelling, and a greyed slot when the
+    // hero has none.
+    let spells = [
+        (&state.spells[0], "D"),
+        (&state.spells[1], "F"),
+        (&state.scroll, "T"),
+    ];
+    for ((spell, label), &(x, y, side)) in spells.into_iter().zip(&SPELL_SLOTS) {
+        draw_spell(theme, list, at(x, y), side * s, label, spell, s);
+    }
 
-    // The two by two block of small item slots.
-    for (n, label) in ["1", "2", "3", "4"].iter().enumerate() {
+    // The rest of the two by two block of small item slots.
+    for (n, label) in ["1", "2", "3"].iter().enumerate() {
         let x = 372 + (n as i32 % 2) * 40;
         let y = 10 + (n as i32 / 2) * 40;
         slot(list, x, y, 36, 36, label, quiet);
@@ -256,9 +281,116 @@ pub fn draw(theme: &Theme, list: &mut DrawList, area: Rect, state: &AbilityState
     list.set_layer(previous);
 }
 
+/// One battle spell or scroll slot, `side` window pixels square at `at`.
+fn draw_spell(
+    theme: &Theme,
+    list: &mut DrawList,
+    at: (i32, i32),
+    side: i32,
+    label: &str,
+    spell: &SpellSlot,
+    s: i32,
+) {
+    let rect = Rect::new(at.0, at.1, side, side);
+    match theme.panel("panel.slot") {
+        Some(panel) => list.panel(panel, rect),
+        None => list.rect(rect, [0.09, 0.08, 0.07, 0.95]),
+    }
+    let font = theme.font("font.bold").or_else(|| theme.font("font.body"));
+    let small = theme.font("font.small").or(font);
+    let role = spell.icon.as_ref().filter(|role| theme.has_sprite(role));
+    if let Some(role) = role {
+        let inset = 3 * s;
+        list.sprite_fit(
+            theme.sprite(role),
+            Rect::new(
+                rect.x + inset,
+                rect.y + inset,
+                side - 2 * inset,
+                side - 2 * inset,
+            ),
+        );
+    }
+    let quiet = theme.colour("text.quiet");
+    if !spell.usable {
+        list.rect(rect, [0.0, 0.0, 0.0, 0.62]);
+    }
+    if spell.cooldown > 0.0 && spell.usable {
+        list.rect(rect, [0.0, 0.0, 0.0, 0.48]);
+        if let Some(font) = font {
+            let secs = spell.cooldown.ceil().to_string();
+            let width = font.width(&secs) * s;
+            list.text(
+                font,
+                &secs,
+                rect.x + (side - width) / 2,
+                rect.y + side / 2 + font.ascent * s / 2,
+                [1.0, 0.85, 0.3, 1.0],
+            );
+        }
+    }
+    if let Some(progress) = spell.channel {
+        let gold = [1.0, 0.82, 0.30, 1.0];
+        list.rect(rect, [1.0, 0.82, 0.30, 0.12]);
+        let bar = 4 * s;
+        list.rect(
+            Rect::new(rect.x, rect.bottom() - bar, side, bar),
+            [0.0, 0.0, 0.0, 0.7],
+        );
+        list.rect(
+            Rect::new(
+                rect.x,
+                rect.bottom() - bar,
+                (side as f32 * progress.clamp(0.0, 1.0)) as i32,
+                bar,
+            ),
+            gold,
+        );
+    }
+    // The hotkey: centred when there is no picture, else a corner badge.
+    let colour = if spell.usable {
+        theme.colour("text.title")
+    } else {
+        quiet
+    };
+    match (role, font, small) {
+        (None, Some(font), _) => {
+            let width = font.width(label) * s;
+            list.text(
+                font,
+                label,
+                rect.x + (side - width) / 2,
+                rect.y + side / 2 + font.ascent * s / 2,
+                colour,
+            );
+        }
+        (Some(_), _, Some(small)) => {
+            list.text(
+                small,
+                label,
+                rect.x + 3 * s,
+                rect.y + 2 * s + small.ascent * s,
+                colour,
+            );
+        }
+        _ => {}
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn spell_and_scroll_slots_are_hit_where_they_are_drawn() {
+        let area = Rect::new(100, 200, SIZE.0 * 2, SIZE.1 * 2);
+        assert_eq!(spell_at(area, 2, (100 + 279 * 2, 200 + 11 * 2)), Some(0));
+        assert_eq!(spell_at(area, 2, (100 + 363 * 2, 200 + 49 * 2)), Some(1));
+        assert_eq!(spell_at(area, 2, (100 + 430 * 2, 200 + 70 * 2)), Some(2));
+        // The gap between D and F, and the item slot above T, miss.
+        assert_eq!(spell_at(area, 2, (100 + 320 * 2, 200 + 30 * 2)), None);
+        assert_eq!(spell_at(area, 2, (100 + 430 * 2, 200 + 30 * 2)), None);
+    }
 
     #[test]
     fn ability_slots_are_hit_where_they_are_drawn() {

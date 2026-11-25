@@ -389,6 +389,20 @@ pub struct ScoreState {
     pub creep_score: u32,
 }
 
+/// A battle spell (D, F) or the teleport scroll (T) on the ability bar.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct SpellSlot {
+    /// Theme sprite role for the slot's picture.
+    pub icon: Option<String>,
+    /// Seconds before it is ready.
+    pub cooldown: f32,
+    /// 0..1 while it is being channelled (the scroll).
+    pub channel: Option<f32>,
+    /// False greys the slot out: a hero without battle spells, or an empty
+    /// pick.
+    pub usable: bool,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct AbilityState {
     pub health: u32,
@@ -411,6 +425,10 @@ pub struct AbilityState {
     pub upgradable: [bool; 4],
     /// Seconds, for the shimmer animation.
     pub time: f32,
+    /// The two battle spells, D then F.
+    pub spells: [SpellSlot; 2],
+    /// The teleport scroll, T.
+    pub scroll: SpellSlot,
 }
 
 /// The ability tooltip shown over a hovered Q, W, E or R slot:
@@ -507,4 +525,7 @@ pub struct MinimapState {
     /// right, bottom left), unclamped so it can run off the picture. When
     /// set it is drawn instead of the `camera` rectangle.
     pub view: Option<[MapPoint; 4]>,
+    /// Teleport scroll destinations, in their team's colour, seen by both
+    /// teams.
+    pub pings: Vec<StructureMark>,
 }

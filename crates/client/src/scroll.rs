@@ -13,6 +13,9 @@ use crate::kit::Afflictions;
 
 /// Where the tunable numbers live.
 pub const PATH: &str = "data/spells/teleport_scroll.json";
+/// The key the scroll's icon is baked under: the legacy atlas's item icon
+/// id, and `icon.item.<key>` in the assembled interface's theme.
+pub const ICON_KEY: &str = "teleport_scroll";
 
 /// `data/spells/teleport_scroll.json`.
 #[derive(Debug, Clone, PartialEq, Deserialize)]

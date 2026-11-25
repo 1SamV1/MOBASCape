@@ -119,6 +119,8 @@ fn base() -> HudState {
             max_ranks: [4, 4, 4, 3],
             upgradable: [false; 4],
             time: 0.0,
+            spells: Default::default(),
+            scroll: Default::default(),
         },
         minimap: MinimapState {
             lanes: vec![
@@ -193,6 +195,7 @@ fn base() -> HudState {
             vision: None,
             camera: (96, 92, 58, 48),
             view: None,
+            pings: Vec::new(),
         },
         objectives: ObjectivesState {
             lanes: vec![

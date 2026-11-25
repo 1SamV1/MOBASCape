@@ -173,6 +173,10 @@ struct Cli {
     /// graphics by eye.
     #[arg(long, value_delimiter = ',')]
     demo_gfx: Vec<u32>,
+    /// Demo: read the teleport scroll toward the middle of the map half a
+    /// second in, logging the channel and the arrival.
+    #[arg(long)]
+    demo_scroll: bool,
     /// Demo: stand beside a jungle camp and basic-attack it, to check
     /// attack animations, reach and projectiles.
     #[arg(long)]
@@ -450,11 +454,17 @@ fn main() -> Result<()> {
 
     let mut ui_atlas = ui_assets::UiAtlas::load_with_cache(&cache)?;
     // Cache-rendered inventory icons for every shop item, so the legacy HUD
-    // never falls back to a coloured placeholder or an external PNG.
-    for item in &shop.items {
-        let Some(obj) = item.obj else {
-            continue;
-        };
+    // never falls back to a coloured placeholder or an external PNG. The
+    // teleport scroll's slot uses an OSRS teleport scroll item the same way.
+    let scroll_item = scroll::ScrollConfig::load().item;
+    let icon_objs: Vec<(String, u32)> = shop
+        .items
+        .iter()
+        .filter_map(|item| item.obj.map(|obj| (item.id.clone(), obj)))
+        .chain(std::iter::once((scroll::ICON_KEY.to_string(), scroll_item)))
+        .collect();
+    for (id, obj) in &icon_objs {
+        let (id, obj) = (id.as_str(), *obj);
         match crate::item_icons::bake(&cache, obj) {
             Ok(icon) => {
                 let mut raw = Vec::with_capacity(icon.pixels.len() * 4);
@@ -464,10 +474,10 @@ fn main() -> Result<()> {
                 if let Some(image) =
                     image::RgbaImage::from_raw(icon.width as u32, icon.height as u32, raw)
                 {
-                    ui_atlas.add_item_icon(&item.id, &image);
+                    ui_atlas.add_item_icon(id, &image);
                 }
             }
-            Err(err) => tracing::warn!("item icon {} ({obj}): {err:#}", item.id),
+            Err(err) => tracing::warn!("item icon {id} ({obj}): {err:#}"),
         }
     }
     // Every champion's cache ability icons, keyed like the assembled
@@ -524,10 +534,7 @@ fn main() -> Result<()> {
     let ui_atlas = Arc::new(ui_atlas);
     // The stage 3 interface's theme, only when its dev screen was asked for.
     let item_icons: Vec<(String, u32)> = if cli.ui_live {
-        shop.items
-            .iter()
-            .filter_map(|item| item.obj.map(|obj| (item.id.clone(), obj)))
-            .collect()
+        icon_objs.clone()
     } else {
         Vec::new()
     };
@@ -679,6 +686,7 @@ fn main() -> Result<()> {
         demo_gfx: cli.demo_gfx.clone(),
         demo_gfx_timer: 0.0,
         demo_gfx_loaded: false,
+        demo_scroll: cli.demo_scroll.then_some(0.5),
         demo_attack: cli.demo_attack,
         demo_attack_stage: 0,
         demo_ranks: cli.demo_ranks,
@@ -847,6 +855,8 @@ struct App {
     demo_abilities_timer: f32,
     demo_abilities_stage: u8,
     demo_gfx: Vec<u32>,
+    /// Seconds until `--demo-scroll` reads the scroll.
+    demo_scroll: Option<f32>,
     /// Seconds until the `--demo-gfx` grid plays again.
     demo_gfx_timer: f32,
     demo_gfx_loaded: bool,
@@ -2042,6 +2052,16 @@ impl App {
                     self.demo_watchtower = false;
                 }
             }
+            if let Some(timer) = self.demo_scroll.as_mut() {
+                *timer -= dt;
+                if *timer <= 0.0 {
+                    self.demo_scroll = None;
+                    let middle = (animated.nexus_positions[0] + animated.nexus_positions[1]) * 0.5;
+                    let player = animated.player_index;
+                    let result = animated.start_scroll(player, middle, collision, height);
+                    tracing::info!("demo scroll: {result:?}");
+                }
+            }
             if !self.demo_gfx.is_empty() {
                 if !self.demo_gfx_loaded {
                     animated.preload_spotanims(&self.cache, &self.demo_gfx);
@@ -2668,9 +2688,20 @@ impl App {
                         .clamp(0.0, 1.0),
                 )
             } else {
-                None
+                // The cast bar also fills while a teleport scroll channels.
+                animated.player_scroll().2
             };
+            let (scroll_cooldown, scroll_max, scroll_channel) = animated.player_scroll();
             let player_hud = PlayerHud {
+                spells: Default::default(),
+                scroll: crate::hud::SpellHud {
+                    icon: Some(format!("icon.item.{}", crate::scroll::ICON_KEY)),
+                    item_icon: Some(crate::scroll::ICON_KEY.to_string()),
+                    cooldown: scroll_cooldown,
+                    max_cooldown: scroll_max,
+                    channel: scroll_channel,
+                    usable: true,
+                },
                 health: stats.health,
                 max_health: stats.max_health,
                 mana: stats.mana,
@@ -3667,6 +3698,18 @@ impl App {
             self.pan_camera_to_minimap(u, v);
             return true;
         }
+        // Battle spells and the scroll work like their hotkeys too.
+        if let Some(area) = placed.get(rift_ui::hud::Piece::Ability)
+            && let Some(slot) = rift_ui::hud::ability_bar::spell_at(area, scale, mouse)
+        {
+            tracing::info!("ability bar: spell slot {slot} clicked");
+            match slot {
+                0 => self.cast_spell(0),
+                1 => self.cast_spell(1),
+                _ => self.use_scroll(),
+            }
+            return true;
+        }
         // Ability slots cast like their hotkeys.
         if let Some(area) = placed.get(rift_ui::hud::Piece::Ability)
             && let Some(slot) = rift_ui::hud::ability_bar::ability_at(area, scale, mouse)
@@ -3769,6 +3812,11 @@ impl App {
         println!("Q cast={cast}");
     }
 
+    /// D and F: the hero's battle spells (magic heroes only).
+    fn cast_spell(&mut self, slot: usize) {
+        tracing::info!("battle spell {slot}: none picked");
+    }
+
     /// T: the teleport scroll, toward the allied structure nearest the
     /// cursor (docs/SPELLS.md, Part B).
     fn use_scroll(&mut self) {
@@ -3780,9 +3828,36 @@ impl App {
         ) else {
             return;
         };
-        let aim = renderer
-            .pick_ground(self.mouse_pos.0, self.mouse_pos.1, height)
-            .unwrap_or(animated.player_pos());
+        // Over a minimap, the point under the cursor there; else the ground.
+        let mouse = (self.mouse_pos.0 as i32, self.mouse_pos.1 as i32);
+        let live_map = self
+            .ui_placed
+            .as_ref()
+            .filter(|_| self.ui_live)
+            .and_then(|placed| {
+                let area = placed.get(rift_ui::hud::Piece::Minimap)?;
+                rift_ui::hud::minimap::picture_at(area, placed.scale as i32, mouse)
+            })
+            .map(|(u, v)| {
+                let (min, max) = animated.minimap_bounds;
+                crate::ui_live::world_from_map(u, v, min, max)
+            });
+        let legacy_map = (!self.ui_live)
+            .then(|| {
+                minimap_world_at(
+                    renderer.size.0 as f32,
+                    renderer.size.1 as f32,
+                    self.mouse_pos,
+                    animated.minimap_bounds,
+                )
+            })
+            .flatten();
+        let aim = match live_map.or(legacy_map) {
+            Some((x, z)) => Vec3::new(x, height.height_at(x, z), z),
+            None => renderer
+                .pick_ground(self.mouse_pos.0, self.mouse_pos.1, height)
+                .unwrap_or(animated.player_pos()),
+        };
         let player = animated.player_index;
         match animated.start_scroll(player, aim, collision, height) {
             Ok(()) => tracing::info!("scroll: channelling"),

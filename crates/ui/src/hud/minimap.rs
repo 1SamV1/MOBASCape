@@ -219,6 +219,15 @@ pub fn draw(theme: &Theme, list: &mut DrawList, area: Rect, state: &MinimapState
         }
     }
 
+    // Teleport destinations: two rings in the team colour, over the heroes
+    // so a scroll toward a fight is never hidden.
+    for ping in &state.pings {
+        let (x, y) = at(ping.at);
+        let colour = team(ping.blue);
+        ring(list, x, y, 9 * s, s.max(1), colour);
+        ring(list, x, y, 5 * s, s.max(1), colour);
+    }
+
     // What the screen shows: its true ground footprint (a trapezoid under
     // the tilted camera) when the client gives one, else a rectangle.
     let view_colour = [0.92, 0.94, 1.0, 0.75];
@@ -289,6 +298,7 @@ mod hit_tests {
             vision: None,
             camera: (0, 0, 10, 10),
             view: None,
+            pings: Vec::new(),
         }
     }
 

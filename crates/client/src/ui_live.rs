@@ -13,8 +13,8 @@ use rift_ui::hud::state::{
     AbilityNumbers, AbilityState, AbilityTooltipState, AbilityUpgrade, AllyState, BagItem,
     CampState, ChatKind, ChatLine, DamageSource, DeathState, HeroMark, HitmarkKind, HitmarkState,
     InventoryItem, ItemLink, KillFeedEntry, LaneState, MapPoint, MinimapState, NexusState,
-    ObjectivesState, OverheadState, PlateKind, ScoreState, ShopItem, ShopState, StructureMark,
-    TargetStat, TargetState, TooltipState, UnitPlate, VisionMask,
+    ObjectivesState, OverheadState, PlateKind, ScoreState, ShopItem, ShopState, SpellSlot,
+    StructureMark, TargetStat, TargetState, TooltipState, UnitPlate, VisionMask,
 };
 
 pub fn score(player: &PlayerHud) -> ScoreState {
@@ -156,6 +156,14 @@ pub fn minimap(
         vision: Some(vision_mask(animated, min, max)),
         camera,
         view: footprint.map(|corners| corners.map(|p| map_point_free(p, min, max))),
+        pings: animated
+            .scroll_pings
+            .iter()
+            .map(|&(pos, team, _)| StructureMark {
+                at: map_point(pos, min, max),
+                blue: team == 0,
+            })
+            .collect(),
     }
 }
 
@@ -816,7 +824,18 @@ pub fn ability(player: &PlayerHud) -> AbilityState {
     );
     state.portrait = Some("portrait.self".to_string());
     state.icons = std::array::from_fn(|n| Some(ability_icon_role(&player.champion_name, n)));
+    state.spells = std::array::from_fn(|n| spell_slot(&player.spells[n]));
+    state.scroll = spell_slot(&player.scroll);
     state
+}
+
+fn spell_slot(spell: &crate::hud::SpellHud) -> SpellSlot {
+    SpellSlot {
+        icon: spell.icon.clone(),
+        cooldown: spell.cooldown.max(0.0),
+        channel: spell.channel,
+        usable: spell.usable,
+    }
 }
 
 /// Theme role of a champion's ability icon: `icon.ability.<name>.<slot>`,
@@ -863,6 +882,8 @@ pub fn ability_from(
         max_ranks: [4, 4, 4, 3],
         upgradable: [false; 4],
         time: 0.0,
+        spells: Default::default(),
+        scroll: Default::default(),
     }
 }
 
