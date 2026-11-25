@@ -764,11 +764,6 @@ impl FxMesh {
         self.indices.clear();
     }
 
-    /// Share of the per-frame vertex budget already used (0 to 1).
-    pub fn used_fraction(&self) -> f32 {
-        self.vertices.len() as f32 / MAX_FX_VERTICES as f32
-    }
-
     fn room(&self, vertices: usize) -> bool {
         self.vertices.len() + vertices <= MAX_FX_VERTICES
     }

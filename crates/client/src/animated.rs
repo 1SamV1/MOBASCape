@@ -11,7 +11,6 @@ mod battle;
 pub mod bot_cast;
 pub mod bots;
 mod kit_runtime;
-mod mist;
 pub mod ranks;
 mod teleport;
 mod thrall;
@@ -851,8 +850,6 @@ pub struct AnimatedScene {
     spot_models: HashMap<u32, Arc<SpotModel>>,
     /// Impact splashes playing once.
     pub spot_bursts: Vec<SpotBurst>,
-    /// Smoke puffs over unseen ground (`mist.rs`).
-    mist: mist::Mist,
     /// Melee hit streaks.
     pub slashes: Vec<Slash>,
     /// Ability slot most recently cast, for the held range indicator.
@@ -1379,7 +1376,6 @@ impl AnimatedScene {
             .chain(scroll_config.spotanims())
             .chain(spell_book.spotanims())
             .chain(std::iter::once(thrall::THRALL_RISE))
-            .chain(std::iter::once(mist::MIST_SPOT))
             .chain(kit_spots.into_iter().flatten());
         for id in wanted {
             if spot_models.contains_key(&id) {
@@ -1417,12 +1413,6 @@ impl AnimatedScene {
             fx: FxMesh::default(),
             spot_models,
             spot_bursts: Vec::new(),
-            mist: scene
-                .map
-                .castle
-                .as_ref()
-                .map(|castle| mist::Mist::new(castle.bounds))
-                .unwrap_or_default(),
             slashes: Vec::new(),
             last_cast_slot: None,
             indicator_aim: None,
@@ -3654,7 +3644,6 @@ impl AnimatedScene {
     }
 
     pub fn update(&mut self, dt: f32, height: &HeightGrid, collision: &WorldCollision) {
-        self.update_mist(dt);
         // Frame sounds play for the span each clip advances this tick.
         let start_clocks: Vec<AnimClock> = self.units.iter().map(AnimClock::of).collect();
         self.hud_time += dt;
@@ -6378,9 +6367,6 @@ impl AnimatedScene {
             self.fx
                 .glow(pos, size * 0.35, color, 0.9 * fade, camera_right, camera_up);
         }
-
-        // Mist over unseen ground, under the spell graphics.
-        self.draw_mist(height, camera_target);
 
         // Impact splashes, spell graphics and held status graphics.
         let bursts = self
