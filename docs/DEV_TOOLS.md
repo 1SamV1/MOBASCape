@@ -174,6 +174,9 @@ it to see where load time goes before optimising.
 - `rift-tools spotanim ID`, `rift-tools spotanims --from A --to B --sheet
   out.png` and `rift-tools skeleton-anims SEQ --model M --sheet out.png`
   inspect projectile graphics and find attack clips.
+- `rift-tools model-sheet 9146 o587 o3248 --out props.png` renders cache
+  models (or objects, `o` + object id) in a labelled contact sheet with
+  their sizes, for picking map props by eye.
 
 ## Existing switches (for reference)
 

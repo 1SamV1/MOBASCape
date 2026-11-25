@@ -1,6 +1,28 @@
 # Status
 
-Last updated: thrall scrolls, 2026-11-25.
+Last updated: Phase 5 arena set dressing, 2026-11-25.
+
+## 2026-11-25 — Phase 5: arena set dressing
+
+- New `props` block in map.json (`scene/props.rs`, MAP_FORMAT v1.8):
+  single `place`ments, `lines` (a polyline, or both sides of every lane)
+  and seeded `scatter` rectangles. All are cache models. They can block
+  movement and sight, and keep off lanes, structures, camps, courtyards,
+  biome pockets and the river.
+- Shipped arena:
+  - Saradomin statues and banners at the blue gates; Zamorak statues and
+    banners at the red gates.
+  - About 410 grey cliff rocks along the lanes, with gaps.
+  - About 1,950 ferns and stumps.
+  - Cache plank bridges (piece 699) over the three river crossings. They
+    replace the procedural boardwalk and sit just above the local water.
+- Scene models can ask for `plain` texturing, which keeps the cache face
+  colours instead of a stone or leaf texture pool. Statues stay white or
+  dark, ferns stay green.
+- `rift-tools model-sheet` renders models or objects in a contact sheet
+  for picking props.
+- Still open in Phase 5: god-coloured castle pieces, the fountain, tower
+  shot graphics and ground mist.
 
 ## 2026-11-25 — Thrall scrolls
 

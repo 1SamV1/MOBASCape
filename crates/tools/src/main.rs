@@ -155,6 +155,14 @@ enum Command {
         #[arg(long)]
         sheet: Option<PathBuf>,
     },
+    /// Render cache models (or objects, as `o1441`) in a labelled contact
+    /// sheet, for picking scenery by eye.
+    ModelSheet {
+        /// Model ids, or object ids prefixed with `o`.
+        ids: Vec<String>,
+        #[arg(long)]
+        out: PathBuf,
+    },
     /// Find sequences that animate the same skeleton as `sequence` (an NPC's
     /// idle or walk), which is where its attack and death clips hide.
     SkeletonAnims {
@@ -270,6 +278,7 @@ fn main() -> Result<()> {
             out,
         } => terrain_obj(&cache, region_x, region_y, &out)?,
         Command::Spotanim { id } => spotanim(&cache, id)?,
+        Command::ModelSheet { ids, out } => model_sheet_cmd(&cache, &ids, &out)?,
         Command::Spotanims { from, to, sheet } => spotanims(&cache, from, to, sheet.as_deref())?,
         Command::SkeletonAnims {
             sequence,
@@ -1044,6 +1053,56 @@ fn spotanim_pose(
         model.animated_positions(&rift_cache::AnimationClip::default(), 0.0)
     };
     Ok((model, positions))
+}
+
+fn model_sheet_cmd(cache: &Cache, ids: &[String], out: &Path) -> Result<()> {
+    let objects: std::collections::HashMap<u32, Vec<u8>> =
+        cache.archive_files_with_ids(2, 6)?.into_iter().collect();
+    let mut tiles = Vec::new();
+    for id in ids {
+        let (label, model_id) = match id.strip_prefix('o') {
+            Some(object) => {
+                let object: u32 = object.parse()?;
+                let Some(data) = objects.get(&object) else {
+                    println!("object {object}: missing");
+                    continue;
+                };
+                let def = ObjectDefinition::parse(object, data)?;
+                let Some(model) = def.first_model() else {
+                    println!("object {object}: no model");
+                    continue;
+                };
+                (format!("o{object}/{model}"), model)
+            }
+            None => (id.clone(), id.parse()?),
+        };
+        let group = cache.group(7, model_id)?;
+        let model = Model::load(model_id, &group.data)?;
+        let positions: Vec<[f32; 3]> = (0..model.vertex_count)
+            .map(|i| {
+                [
+                    model.vertex_x[i] as f32,
+                    model.vertex_y[i] as f32,
+                    model.vertex_z[i] as f32,
+                ]
+            })
+            .collect();
+        let (lo, hi) = model.bounds();
+        println!(
+            "{label}: {} faces, size {}x{}x{}",
+            model.face_count,
+            hi[0] - lo[0],
+            hi[1] - lo[1],
+            hi[2] - lo[2]
+        );
+        tiles.push((
+            label,
+            model_sheet::render_pose(&model, &positions, 128, [44, 52, 44, 255]),
+        ));
+    }
+    model_sheet::sheet(&tiles, 8, 128).save(out)?;
+    println!("wrote {} tiles to {}", tiles.len(), out.display());
+    Ok(())
 }
 
 fn spotanims(cache: &Cache, from: u32, to: u32, sheet: Option<&Path>) -> Result<()> {

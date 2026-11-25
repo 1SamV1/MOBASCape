@@ -19,7 +19,7 @@ data/maps/karamja_rift/
 the cache and are **not committed**. `map.json` is committed because it is our
 design data; it references cache IDs, not assets.
 
-## Current `map.json` (v1.7)
+## Current `map.json` (v1.8)
 
 The playable map is `data/maps/karamja_rift/map.json`:
 
@@ -77,6 +77,32 @@ The playable map is `data/maps/karamja_rift/map.json`:
   point.
 - `brush`: rectangles `[x0, y0, x1, y1]` in world tiles. Units inside brush are
   hidden from the enemy unless the player is within 500 units.
+- `props` (v1.8, Phase 5 set dressing, `scene/props.rs`): cache models
+  only, by **model** id. Three shapes:
+  - `place`: `{model, at: [x, y], yaw (degrees), scale, block, tint,
+    texture}`: one model on one tile. The god statues (Saradomin 9146,
+    Zamorak 1400) and banners (2065, 8655) at the base gates.
+  - `lines`: `{models, points | lane_offset, spacing, jitter, gaps, scale:
+    [lo, hi], block, tint, texture, lane_clear, seed}`: models strung along
+    a polyline, or along both sides of every lane `lane_offset` tiles out.
+    `gaps` leaves runs of four slots open as jungle entrances. The grey
+    cliff rocks (19997, 818, 819) at 8.5 tiles.
+  - `scatter`: `{models, rect: [x0, y0, x1, y1], count, scale, block, tint,
+    texture, lane_clear, seed}`: ferns (12932, 1707, 1653, 1655) and stumps
+    (1685, 1629, 1695) across the arena.
+  - `block` is a square footprint in tiles that blocks movement and sight
+    (0 = walk-through). `texture` picks the pool for untextured faces:
+    `stone` (default), `wood`, `leaves`, `flowers`, or `plain` to keep the
+    cache face colours.
+  - Lines and scatter are seeded and skip anything within `lane_clear`
+    tiles of a lane, 7 tiles of a structure, 5 of a camp, 6 of a `place`
+    landmark, inside a biome pocket or base courtyard, or in the river.
+- `bridge_model`: `{model, yaw, scale, spacing, across}`: a cache bridge
+  piece tiled over every river crossing, lined up with the lane, in place of
+  the procedural boardwalk. The shipped map uses the plank bridge piece 699
+  (object 3248), 4 across at scale 1.3. Cache bridge pieces are authored at
+  plane height (699's deck is 961 units up), so the top face is dropped to
+  just over the local water. Planks never touch collision.
 - `atmosphere`: optional lighting/atmosphere block:
   `sun_dir`, `sun_color`, `ambient_sky`, `ambient_ground`, `fog_color`,
   `fog_density`, `fog_height`, `sky_top`, `sky_horizon`, `ground_fog`.

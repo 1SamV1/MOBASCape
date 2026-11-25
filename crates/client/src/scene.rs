@@ -10,6 +10,8 @@ use rift_cache::{
 use rift_sim::{Grid, find_path, simplify_path};
 use serde::Deserialize;
 
+mod props;
+
 /// Cache scenery is authored for a first-person player, but the MOBA camera
 /// frames a hero that is roughly two tiles tall. Natural props therefore need
 /// a stylistic lift so trees and ruins tower over the heroes instead of
@@ -450,6 +452,33 @@ struct MapJson {
     castle: Option<CastleJson>,
     #[serde(default)]
     atmosphere: Atmosphere,
+    /// Phase 5 set dressing: statues, banners, cliff rocks, flora.
+    #[serde(default)]
+    props: props::PropsJson,
+    /// Cache model laid as planks across each river bridge.
+    #[serde(default)]
+    bridge_model: Option<BridgeModelJson>,
+}
+
+/// A cache model tiled across every bridge deck.
+#[derive(Debug, Clone, Copy, Deserialize)]
+pub struct BridgeModelJson {
+    pub model: u32,
+    /// Extra yaw in degrees, to line the model's long axis up with the lane.
+    #[serde(default)]
+    pub yaw: f32,
+    #[serde(default = "one")]
+    pub scale: f32,
+    /// How far apart the pieces are along the lane, in tiles.
+    #[serde(default = "one")]
+    pub spacing: f32,
+    /// Pieces side by side across the deck.
+    #[serde(default = "one_u32")]
+    pub across: u32,
+}
+
+fn one_u32() -> u32 {
+    1
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -643,6 +672,8 @@ pub struct MapLayout {
     pub spawn: Option<(f32, f32)>,
     pub wave_interval: f32,
     pub atmosphere: Atmosphere,
+    pub props: props::PropsJson,
+    pub bridge_model: Option<BridgeModelJson>,
 }
 
 impl CastleSpec {
@@ -1087,6 +1118,8 @@ impl MapLayout {
             spawn: map.spawn.map(|s| (s[0], s[1])),
             wave_interval: map.wave_interval,
             atmosphere: map.atmosphere,
+            props: map.props,
+            bridge_model: map.bridge_model,
         })
     }
 
@@ -2176,7 +2209,12 @@ pub fn build(
     let mut shadow_mesh = MeshData::new();
     let mut shadow_caster_mesh = MeshData::new();
     let mut model_cache: HashMap<u32, Model> = HashMap::new();
-    let bridge_decks = append_bridge_decks(&mut model_mesh, &map, &height);
+    // A cache bridge model replaces the procedural boardwalk.
+    let bridge_decks = if map.bridge_model.is_some() {
+        0
+    } else {
+        append_bridge_decks(&mut model_mesh, &map, &height)
+    };
     tracing::info!("bridge decks: {} crossings", bridge_decks);
     let mut placements = 0usize;
     let mut decor_placements = 0usize;
@@ -3028,6 +3066,44 @@ pub fn build(
         }
     }
     tracing::info!("castle ruins: {} pieces", ruin_count);
+
+    // ------------------------------------------------------------------
+    // Arena set dressing (Phase 5): the map's `props` block, then cache
+    // plank pieces over every bridge deck.
+    // ------------------------------------------------------------------
+    {
+        let world = props::PropWorld {
+            cache,
+            map: &map,
+            height: &height,
+            structures: tree_context.structures,
+            river_blocked: tree_context.river_blocked,
+            origin: tree_context.origin,
+            water_level: &water_level,
+            water_mask: &water_mask,
+            size,
+        };
+        let mut sink = props::PropSink {
+            model_cache: &mut model_cache,
+            model_mesh: &mut model_mesh,
+            shadow_mesh: &mut shadow_mesh,
+            shadow_caster_mesh: &mut shadow_caster_mesh,
+            collision_grid: &mut collision_grid,
+            sight_grid: &mut sight_grid,
+        };
+        let counts = props::place_props(&map.props, &world, &mut sink);
+        let planks = map
+            .bridge_model
+            .map(|bridge| props::place_bridge_planks(bridge, &world, &mut sink))
+            .unwrap_or(0);
+        tracing::info!(
+            "props: {} placed, {} along lines, {} scattered, {} bridge planks",
+            counts.placed,
+            counts.lined,
+            counts.scattered,
+            planks
+        );
+    }
 
     let collision = WorldCollision::new(collision_grid, sight_grid, origin_tile_x, origin_tile_y);
 
@@ -4773,6 +4849,8 @@ enum ModelStyle {
 /// reference of its own. Keeping every face on a cache texture prevents the
 /// flat-colour triangles that used to clash with the sampled foliage and stone.
 const TEX_LEAVES: &[u32] = &[8, 28, 30, 41, 60];
+/// Texture hint for props that keep their plain cache colours.
+const TEX_PLAIN: u32 = u32::MAX;
 const TEX_STONE: &[u32] = &[2, 10, 44, 45, 46, 47];
 const TEX_WOOD: &[u32] = &[5, 16, 22, 23];
 const TEX_BARK: &[u32] = &[5, 23];
@@ -5386,6 +5464,10 @@ fn append_model_styled(
             .copied()
             .map(|t| t as u32)
             .filter(|&t| t < 256);
+        // Props that ask for "plain" keep their cache vertex colours: only
+        // faces with their own cache texture are textured.
+        let plain = own_texture.is_none()
+            && matches!(style, ModelStyle::Scenery { texture_hint, .. } if texture_hint == TEX_PLAIN);
         let mut texture_id = match style {
             ModelStyle::Castle { texture, .. } => texture,
             _ if wood_only => wood_hint,
@@ -5418,6 +5500,19 @@ fn append_model_styled(
             }
         }
         let rgb = match style {
+            ModelStyle::Scenery { tint, .. } if plain => {
+                let colour = model
+                    .face_colors
+                    .get(face_idx)
+                    .map_or([200, 200, 200], |&hsl| {
+                        rift_cache::model::hsl_to_rgb(hsl, 1.0)
+                    });
+                [
+                    (colour[0] as f32 * tint[0]).clamp(0.0, 255.0) as u8,
+                    (colour[1] as f32 * tint[1]).clamp(0.0, 255.0) as u8,
+                    (colour[2] as f32 * tint[2]).clamp(0.0, 255.0) as u8,
+                ]
+            }
             ModelStyle::Scenery { tint, .. } => [
                 (tint[0] * 255.0).clamp(0.0, 255.0) as u8,
                 (tint[1] * 255.0).clamp(0.0, 255.0) as u8,
@@ -5455,9 +5550,13 @@ fn append_model_styled(
         // Material 7 = static cache-textured scenery. It samples textures and
         // lighting but does not receive the coarse static shadow proxies, which
         // otherwise paint box-shaped self-shadow patches across tree canopies.
-        va.material = 7;
-        vb.material = 7;
-        vc.material = 7;
+        let material = if plain { 0 } else { 7 };
+        if plain {
+            texture_id = 0;
+        }
+        va.material = material;
+        vb.material = material;
+        vc.material = material;
         va.texture_id = texture_id;
         vb.texture_id = texture_id;
         vc.texture_id = texture_id;

@@ -176,15 +176,21 @@ with a commit and a push to `sam main`.
 All objects from the cache, placed through the map format
 (`docs/MAP_FORMAT.md`).
 
-1. **Cliffs.** Ring the lanes and jungle with cache rock and cliff objects
-   (grey Trollheim and Wilderness rock walls). Collision follows them.
-2. **Bridges.** Wooden plank bridges over the river at the lane crossings.
-3. **Bases.** Blue: white Saradomin castle pieces, banners and statue. Red:
-   dark Zamorak pieces. Fountain: the cache's glowing portal or pool.
-4. **Towers** as obelisks and **god statues**, with their cache spot
-   animations for shots.
-5. **Jungle flora.** Ferns, flowers, dead trees and stumps from the cache
-   across the brush and camp regions.
+1. ~~**Cliffs.**~~ Done 2026-11-25 (first pass): grey cache rocks
+   (19997, 818, 819) line both sides of every lane 8.5 tiles out, with
+   gaps as jungle entrances; each blocks a 2x2 footprint (map.json
+   `props.lines`, MAP_FORMAT.md).
+2. ~~**Bridges.**~~ Done 2026-11-25: the cache plank bridge piece (699)
+   tiled over each crossing (`bridge_model`).
+3. **Bases.** Done in part 2026-11-25: Saradomin statues (9146) and
+   banners (2065) at the blue gates, Zamorak statues (1400) and banners
+   (8655) at the red gates. Still to do: castle pieces in each god's
+   colours, and the fountain as a cache portal or pool.
+4. **Towers** are already the Obelisk of Earth (1761). Still to do: their
+   cache spot animations for shots.
+5. ~~**Jungle flora.**~~ Done 2026-11-25: about 1,950 cache ferns and
+   stumps scattered across the brush and camp regions (`props.scatter`),
+   keeping off lanes and camps.
 6. ~~Tree bug.~~ Done 2026-11-24: the dire-side tree line was planted
    with `wood_only`, which put bark on every face of the full-canopy
    models (and over their own cache textures). They keep their leaves now,
