@@ -1,6 +1,32 @@
 # Status
 
-Last updated: Chaos Elemental, 2026-11-25.
+Last updated: magic (spell graphics, teleport scroll, battle spells, Chaos Elemental), 2026-11-25.
+
+## 2026-11-25 — Magic: spell graphics, teleport scrolls, battle spells
+
+Eight commits that follow the plan in docs/SPELLS.md:
+
+- **Spell graphics.** 46 cache spot animations checked by eye and listed in
+  `kit::spot::VERIFIED` (a test keeps unlisted ids out). `--demo-gfx`
+  plays any set in a labelled grid. Every kit action can name `cast`,
+  `land`, `hit` and `hold` graphics. Kolodion's claws and pillar of fire,
+  the Wyvern's ice and the Wise Old Man's teleport now use the OSRS ones.
+  Stun holds the stars, a freeze the ice block, and a shielded hit splashes
+  (85). OSRS overhead chat (yellow text) is in both HUDs.
+- **Teleport scroll** for every hero on T: a 3 s channel to an allied
+  structure picked in the world or on either minimap, broken by hard crowd
+  control. The arrival is visible to both teams with a ping. Bots read
+  scrolls back to lane.
+- **Battle spells** for MAGIC heroes on D and F: Ancient Teleport, Heal
+  Group, Vengeance ("Taste vengeance!"), Ice Barrage, Entangle and Tele
+  Block (`data/spells/battle_spells.json`, new `NoMobility` status). They
+  run for any caster in `animated/battle.rs`. Camera follow moved to Y.
+- **Hero select**: two spell slots under the spotlight open a spellbook
+  picker; the lane fills a default pair; the team rows show spell icons or
+  the scroll. `--spells a,b` and `--spell-picker` are the dev flags.
+- **Bots** pick spells by lane and cast them by rule (`spells::bot_aim`).
+- **Chaos Elemental** (entry below).
+- ADR-056 records the magic-only rule and the scroll for everyone.
 
 ## 2026-11-25 — Chaos Elemental joins the roster
 

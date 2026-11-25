@@ -868,3 +868,41 @@ movement path every unit obeys and stop at the first unwalkable tile.
 This is an approximation: summons and zones read as bolts or strikes. A bot's casts are not its kit's exact visuals; they reuse the
 existing effect rings and projectile looks. When the kit runtime is made
 caster-generic, bots should switch to it.
+
+## ADR-056 — Battle spells are magic-only; every hero carries a teleport scroll
+
+Status: accepted, 2026-11-25.
+
+Hero select reserved two battle spell slots per player, as League of
+Legends does for summoner spells. Giving every hero a Flash-like pair
+would make the five MAGIC heroes (Kolodion, the Wise Old Man, the Ancient
+Wyvern, TzTok-Jad and the Chaos Elemental) no different from the rest, so
+the user chose:
+
+- **Battle spells are for MAGIC-class heroes only.** They pick two of six
+  OSRS spells (Ancient Teleport, Heal Group, Vengeance, Ice Barrage,
+  Entangle, Tele Block) on hero select. The lane call fills a default pair
+  but never forces one. In the match they sit on D and F. Other heroes see
+  the slots greyed out ("Magic heroes only").
+- **Every hero carries a teleport scroll** on T that works like Dota 2's
+  Town Portal: a 3 s channel to an allied tower, inhibitor or the nexus,
+  an 80 s cooldown, broken by hard crowd control, cancelled by moving or
+  casting. The arrival plays a graphic both teams can see and pings the
+  minimap.
+- **Camera follow moves from F to Y** to free F.
+
+Battle spells are data (`data/spells/battle_spells.json`, parsed by
+`crates/client/src/spells.rs`). They run in `animated/battle.rs` for any
+caster, the player and bots alike, not in the kit runtime, because that
+runtime is player-only (ADR-055). Their crowd control lands through the
+same `land_statuses` path as kit statuses, so held graphics, shields and
+splashes behave the same. Bots cast them with simple rules (`bot_aim`):
+heal when hurt, Vengeance when a hero is near, Entangle with two or more
+enemies close, a bolt on a hero within range, and Ancient Teleport out when
+low.
+
+Consequences: a non-magic hero has no summoner-style escape or heal beyond
+its kit and items, so magic picks carry utility. Adding a spell means a
+JSON entry, plus Rust only for a new effect type. Ids in its `gfx` must be
+in `kit::spot::VERIFIED`. A second wave (Blood Barrage, Cure Me, Ward of
+Arceuus, Smite, Charge, Resurrect Thrall) is listed in docs/SPELLS.md.

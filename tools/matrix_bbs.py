@@ -208,9 +208,9 @@ def code_logo(y, word):
     return x0, width
 
 
-def operator_crt(x0, y0):
-    """Tank's console loading the popular build: Cerberus's Tank list,
-    bars by price (torva 6500 ... guardian boots 3000)."""
+def hardline(x0, y0):
+    """The exit: Tank tracing a hardline. The teleport scroll's 3 s
+    channel to an allied tower, inhibitor or the nexus."""
     clear(x0 - 1, y0, x0 + 21, y0 + 11)
     for j in range(20):
         put(x0 + j, y0, "▄", MID)
@@ -218,13 +218,17 @@ def operator_crt(x0, y0):
     for k in range(1, 9):
         put(x0, y0 + k, "█", DIM)
         put(x0 + 19, y0 + k, "█", DIM)
-    text(x0 + 2, y0 + 1, "> load ", DIM)
-    text(x0 + 9, y0 + 1, "TANK", AMBER)
-    build = [("torva", 9), ("bandos", 6), ("dragon", 5), ("guard.", 4), ("ring", 5)]
-    for k, (name, n) in enumerate(build):
-        text(x0 + 2, y0 + 2 + k, f"{name:<7}", CYAN)
-        text(x0 + 9, y0 + 2 + k, "▓" * n, BRIGHT if k == 0 else MID)
-    text(x0 + 2, y0 + 7, "> 5 items. ok.", HEAD)
+    text(x0 + 2, y0 + 1, "> dial ", DIM)
+    text(x0 + 9, y0 + 1, "EXIT", AMBER)
+    text(x0 + 14, y0 + 1, "[T]", DIM)
+    text(x0 + 2, y0 + 2, "((( ring ring )))", AMBER)
+    dests = [("tower", "◄ near"), ("inhibitor", ""), ("nexus", "")]
+    for k, (name, mark) in enumerate(dests):
+        text(x0 + 2, y0 + 3 + k, name, CYAN)
+        text(x0 + 12, y0 + 3 + k, mark, WHITE)
+    text(x0 + 2, y0 + 6, "▓" * 9 + "▒░", BRIGHT)
+    text(x0 + 13, y0 + 6, "3.0s", HEAD)
+    text(x0 + 2, y0 + 7, "> arrived. ok.", HEAD)
     text(x0 + 6, y0 + 9, "▄▄█████▄▄", DIM)
     text(x0 + 1, y0 + 10, "▄" * 18, MID)
     text(x0 + 1, y0 + 11, "▀" + "▪" * 16 + "▀", DIM)
@@ -233,19 +237,19 @@ def operator_crt(x0, y0):
 
 
 GOLD = (255, 210, 90)
-PASSIVES = [
-    "frozen breath", "sticky tongue", "thick hide", "three heads", "bandos' war cry",
-    "second form", "shapeshifter", "demonic poison", "venom fangs", "dragonfire splash",
-    "old wisdom", "swift blessing",
+LOADED = [
+    "ancient teleport", "heal group", "vengeance", "ice barrage", "entangle",
+    "tele block", "teleport scroll", "no_mobility", "disarm", "scramble",
+    "one_of", "pure chaos",
 ]
 
 
-def programs(x0, y0):
-    """The twelve kit passives, loaded like training programs."""
-    clear(x0 - 1, y0, x0 + 22, y0 + len(PASSIVES) - 1)
-    for k, name in enumerate(PASSIVES):
+def spellbook(x0, y0):
+    """Everything this edition loads, like Tank's training programs."""
+    clear(x0 - 1, y0, x0 + 22, y0 + len(LOADED) - 1)
+    for k, name in enumerate(LOADED):
         yy = y0 + k
-        hot = name == "three heads"
+        hot = name == "ice barrage"
         text(x0, yy, name, WHITE if hot else CYAN)
         text(x0 + len(name), yy, "." * (18 - len(name)), FAINT)
         text(x0 + 19, yy, "ok", HEAD if hot else MID)
@@ -253,38 +257,41 @@ def programs(x0, y0):
 
 clear(2, 2, W - 3, 2)
 lx, lw = code_logo(3, "MOBASCAPE")
-operator_crt(4, 3)
-programs(125, 3)
-text(3, 2, "▐ oPERATOR ▌", DIM)
-text(W - 17, 2, "▐ pROGRAMS ▌", DIM)
-center(2, "  oPERATOR, i nEED a bUILD fOR a hELLHOUND tANK.   lOADING...   dONE.  ", MID)
+hardline(4, 3)
+spellbook(125, 3)
+text(3, 2, "▐ hARDLINE ▌", DIM)
+text(W - 18, 2, "▐ sPELLBOOK ▌", DIM)
+top = "  oPERATOR, i nEED aN eXIT.   hARDLINE tRACED: aLLIED tOWER, tHREE sECONDS.   rING.  "
+assert len(top) <= 110, len(top)
+center(2, top, MID)
 fade_bar(1, 2, W - 3)
 clear(lx - 3, 15, lx + lw + 2, 15)
-ticker = " ◄◄ POPULAR BUILD ◄◄ PASSIVE ◄◄ Q W E R ◄◄ THE PALE YELLOW BOX ◄◄ 1024x600 FITS"
+ticker = " ◄◄ D ◄◄ F ◄◄ T ◄◄ TASTE VENGEANCE! ◄◄ THERE IS NO SPOON ◄◄ MAGIC HEROES ONLY"
 run = (ticker * 3)[: lw]
 for i, ch in enumerate(run):
     put(lx + i, 15, ch, ORANGE if ch == "◄" else AMBER)
-center(16, "  ░▒▓  n O D E   1 5 :   t H E   o P E R A T O R   //   t A N K ,   l O A D   t H E   b U I L D  ▓▒░  ", AMBER)
-center(17, "  " + elite("i know three heads.") + "   " + elite("show me.") + "  ", WHITE)
+center(16, "  ░▒▓  n O D E   1 6 :   t H E   h A R D L I N E   //   d ,  f   f O R   m A G E S ,   t   f O R   a L L  ▓▒░  ", AMBER)
+center(17, "  " + elite("i know ice barrage.") + "   " + elite("show me.") + "  ", WHITE)
 fade_bar(18, 2, W - 3)
 
 # --- release info -------------------------------------------------------------
 header(19, elite("release info"))
 clear(4, 20, W - 5, 22)
 info = [
-    ("rELEASE dATE", "2026-11-24", "cOMMIT", "f079e93  ->  sam/main"),
-    ("tYPE", "hERO sELECT: pASSIVE rOW + pOPULAR bUILD", "tESTS", "433 pass // clippy clean"),
-    ("wAS", "1024x600: rOSTER, tAGS aND r oFF tHE pANEL", "nOW", "rows give way; the hover box keeps the rest"),
+    ("rELEASE dATE", "2026-11-25", "cOMMITS", "573ca67 .. d989e86 + docs  ->  sam/main"),
+    ("tYPE", "mAGIC: gFX, sCROLLS, sPELLS, cHAOS eLEMENTAL", "tESTS", "462 pass // clippy clean"),
+    ("wAS", "tINTED rINGS; nO wAY hOME bUT tHE lONG wALK", "nOW", "46 cache graphics, T for all, D/F for mages"),
 ]
 for i, (k1, v1, k2, v2) in enumerate(info):
+    assert len(v1) <= 50 and 89 + len(v2) <= W - 6, (v1, v2)
     yy = 20 + i
     text(8, yy, f"{k1:.<16}", DIM)
     text(25, yy, v1, RED if k1 == "wAS" else BRIGHT)
     text(76, yy, f"{k2:.<12}", DIM)
     text(89, yy, v2, HEAD)
 
-# --- left: the parchment --------------------------------------------------------
-box(4, 24, 74, 46, elite("parchment.dat // 1280x720"))
+# --- left: the spellbook picker -------------------------------------------------
+box(4, 24, 74, 46, elite("spellbook.dat // hero select"))
 LX = 6
 IW = 56
 
@@ -295,19 +302,11 @@ def wall(left, middle, right, fill="═"):
     return " " + left + fill * half + middle + fill * (run - half) + right + " "
 
 
-def row(inner):
-    assert len(inner) <= IW, (len(inner), inner)
-    return " ║ " + inner.ljust(IW) + " ║ "
-
-
-P_BG = (210, 190, 150)
-P_INK = (62, 46, 30)
-P_RED = (150, 28, 18)
-P_BLUE = (40, 60, 150)
-P_RULE = (120, 96, 60)
+S_BG = (46, 39, 31)
 CHIP_BG = (26, 22, 18)
 CHIP_FG = (236, 226, 200)
-for j, ch in enumerate(wall("╔═", "[1017 parchment]", "═╗")):
+S_RULE = (110, 92, 66)
+for j, ch in enumerate(wall("╔═", "[stone picker]", "═╗")):
     if ch != " ":
         put(LX + j, 26, ch, STONE if ch in "╔╗═" else DIM)
 for j, ch in enumerate(wall("╚═", "", "═╝")):
@@ -317,66 +316,61 @@ PX = LX + 3
 for k in range(1, 13):
     put(LX + 1, 26 + k, "║", STONE)
     put(LX + IW + 4, 26 + k, "║", STONE)
-shade(LX + 2, 27, LX + IW + 3, 38, P_BG)
+shade(LX + 2, 27, LX + IW + 3, 38, S_BG)
 
-
-def chip(x, y, label):
-    text(x, y, label, CHIP_FG)
-    shade(x, y, x + len(label) - 1, y, CHIP_BG)
-
-
-def ability(y, key, name, cooldowns, line):
-    chip(PX, y, f"  {key}  ")
-    put(PX + 6, y, "✶", (200, 90, 20))
-    text(PX + 10, y, name, P_RED)
-    text(PX + 26, y, cooldowns, P_BLUE)
-    if line:
-        text(PX + 10, y + 1, line, P_INK)
-
-
-text(PX, 27, "Popular build", P_RED)
-text(PX + 15, 27, "Tank", P_BLUE)
-for i, colour in enumerate([(110, 110, 125), (120, 90, 50), (170, 30, 25), (70, 60, 50), (200, 60, 40)]):
-    text(PX + 22 + i * 4, 27, "[", P_RULE)
-    put(PX + 23 + i * 4, 27, "■", colour)
-    text(PX + 24 + i * 4, 27, "]", P_RULE)
-text(PX, 28, "─" * IW, P_RULE)
-chip(PX, 29, " Passive ")
-text(PX + 10, 29, "Three heads", P_RED)
-put(PX + 22, 29, "↖", (20, 20, 20))
-text(PX + 10, 30, "Every third basic attack also hits...", P_INK)
-ability(31, "Q", "Triple Bite", "6 / 5.5 / 5 / 4.5 s", "Three quick bites in front; the last...")
-ability(33, "W", "Lava Pools", "10 / 9.5 / 9 / 8.5 s", "Spits three pools of lava that burn...")
-ability(35, "E", "Summoned Souls", "12 / 11 / 10 / 9 s", "A ranger, mage and warrior soul fly...")
-ability(37, "R", "Hellhound Howl", "65 / 58 / 50 s", "Every nearby enemy flees in fear.")
-
-# The hover box, drawn last over whatever is under it: pale yellow, black
-# edge and text, as the client draws it.
-tip = ["Every third basic attack also hits", "enemies within 260 of the target", "for 70% damage."]
-tx, ty, tw = PX + 14, 30, 38
-shade(tx - 1, ty, tx + tw, ty + len(tip) + 1, TIP)
-for j in range(tw):
-    put(tx + j, ty, "─", BLACK)
-    put(tx + j, ty + len(tip) + 1, "─", BLACK)
-for k in range(len(tip) + 2):
-    put(tx - 1, ty + k, "│" if 0 < k < len(tip) + 1 else ("┌" if k == 0 else "└"), BLACK)
-    put(tx + tw, ty + k, "│" if 0 < k < len(tip) + 1 else ("┐" if k == 0 else "┘"), BLACK)
-for k, line in enumerate(tip):
-    text(tx, ty + 1 + k, " " + line.ljust(tw - 1), BLACK)
+PURPLE = (190, 110, 255)
+ICE = (150, 220, 255)
+GREEN = (90, 230, 90)
+VINE = (150, 200, 80)
+books = [
+    ("ANCIENT", [("Ancient Teleport", "blink 450", "110 s", PURPLE), ("Ice Barrage", "freeze 1.5", "90 s", ICE)]),
+    ("LUNAR", [("Heal Group", "15% + 10%", "100 s", GREEN), ("Vengeance", "75% back", "60 s", RED)]),
+    ("STANDARD", [("Entangle", "root 320", "90 s", VINE), ("Tele Block", "no blinks", "90 s", PURPLE)]),
+]
+for c, (book, spells) in enumerate(books):
+    x = PX + c * 19
+    text(x, 27, book, ORANGE)
+    for k, (name, what, cd, colour) in enumerate(spells):
+        yy = 29 + k * 2
+        put(x, yy, "◆", colour)
+        text(x + 2, yy, name, YELLOW if name == "Ice Barrage" else STONE)
+        text(x + 2, yy + 1, what, S_RULE)
+        text(x + 18 - len(cd), yy + 1, cd, (200, 160, 90))
+text(PX, 28, "─" * IW, S_RULE)
+text(PX, 33, "─" * IW, S_RULE)
+text(PX, 34, "LANE", ORANGE)
+text(PX + 9, 34, "D", ORANGE)
+text(PX + 28, 34, "F", ORANGE)
+lanes = [
+    ("Mid", "Ancient Teleport", "Ice Barrage"),
+    ("Support", "Heal Group", "Vengeance"),
+    ("Other", "Ancient Teleport", "Heal Group"),
+]
+for k, (lane, d, f) in enumerate(lanes):
+    yy = 35 + k
+    text(PX, yy, lane, STONE)
+    text(PX + 9, yy, d, YELLOW)
+    text(PX + 28, yy, f, YELLOW)
+text(PX + 41, 35, "a default,", S_RULE)
+text(PX + 41, 36, "never a rule", S_RULE)
+text(PX, 38, "Melee / ranged: slots greyed, the scroll icon only", S_RULE)
 
 text(LX + 1, 40, "THE SENTENCE", HEAD)
-text(LX + 14, 40, "// Passive::describe, from the numbers", DIM)
-src = '{"type":"nth_attack","n":3,"radius":260,"damage":0.7}'
+text(LX + 14, 40, "// Status::describe, from the numbers", DIM)
+src = '{"type":"disarm","duration":2} {"type":"scramble","distance":350}'
+assert LX + 2 + len(src) <= 73, len(src)
 text(LX + 2, 41, src, CYAN)
 for i, ch in enumerate(src):
     if ch.isdigit() or ch == ".":
         put(LX + 2 + i, 41, ch, AMBER)
+said = '"disarm for 2 s" "throw 350 in a random..."'
+assert LX + 17 + len(said) <= 73, len(said)
 text(LX + 2, 42, "└─describe()─►", DIM)
-text(LX + 17, 42, '"Every third ... within 260 ... for 70%."', BRIGHT)
+text(LX + 17, 42, said, BRIGHT)
 
 term = [
-    ("> ", "tank, load the build."),
-    ("> ", "i know three heads."),
+    ("> ", "operator, i need an exit."),
+    ("> ", "i know ice barrage."),
     ("> ", "show me."),
 ]
 for k, (prompt, line) in enumerate(term):
@@ -384,73 +378,73 @@ for k, (prompt, line) in enumerate(term):
     text(LX + 1, yy, prompt, DIM)
     text(LX + 3, yy, line, BRIGHT if k < 2 else HEAD)
 put(LX + 3 + len(term[-1][1]) + 1, 45, "█", BRIGHT)
-text(LX + 30, 43, "12 kit passives named", MID)
-text(LX + 30, 44, "Status::describe for on-hit", MID)
-text(LX + 30, 45, '"..." when a row cuts it short', MID)
+notes = ["6 spells, 3 books, 2 slots", "bots pick by lane", "and cast by rule"]
+for k, line in enumerate(notes):
+    assert LX + 33 + len(line) <= 73, line
+    text(LX + 33, 43 + k, line, MID)
 
-# --- right: the short windows ---------------------------------------------------
-box(76, 24, W - 5, 46, elite("give_way.dat // short windows"))
+# --- right: the exit and the elemental -----------------------------------------
+box(76, 24, W - 5, 46, elite("hardline.dat + chaos.dat"))
 RX = 79
-cols = [0, 12, 30, 40, 54]
-for c, h in zip(cols, ["WINDOW", "ROWS", "ICONS", "ROSTER", "STATS"]):
-    text(RX + c, 26, h, HEAD)
+text(RX, 26, "THE EXIT [T]", HEAD)
+text(RX + 13, 26, "// every hero, like Dota's town portal", DIM)
 text(RX, 27, "─" * 64, FAINT)
-table = [
-    ["1920x1080", "3 lines", "stacked", "2x8, named", "labelled"],
-    ["1280x720", "1 line + ...", "beside", "2x8, named", "labelled"],
-    ["1024x600", "name + hover", "beside", "2x8, hover", "icon + n"],
+text(RX, 28, "read", CYAN)
+text(RX + 6, 28, "▓" * 28 + "▒░", BRIGHT)
+text(RX + 38, 28, "3.0 s ► tower/inhib/nexus", HEAD)
+text(RX, 29, "BREAKS", RED)
+text(RX + 8, 29, "stun · knock-up · fear · taunt · knockback · pull", MID)
+text(RX, 30, "CANCELS", AMBER)
+text(RX + 8, 30, "move · cast", MID)
+text(RX + 24, 30, "REFUSED", RED)
+text(RX + 32, 30, "while Tele Blocked (no_mobility)", MID)
+text(RX, 31, "SEEN", CYAN)
+text(RX + 8, 31, "by both teams: 678 out, 111 in, 750 marker, ping", MID)
+text(RX, 32, "─" * 64, FAINT)
+text(RX, 33, "CHAOS ELEMENTAL", HEAD)
+text(RX + 16, 33, "// npc 2054 · MAGIC · 520 hp · 600 range", DIM)
+kit = [
+    ("P", "Pure chaos", "every 3rd ability hit: slow|venom|drain", "558"),
+    ("Q", "Discord", "skillshot, 80 dmg + 30 mana drained", "557"),
+    ("W", "Confusion", "burst; each enemy thrown 350, anywhere", "552"),
+    ("E", "Madness", "skillshot, 45 dmg, disarmed for 2 s", "559"),
+    ("R", "Chaos Storm", "1.2 s: 3 fans x 3 bolts, each a curse", "557"),
 ]
-for k, cells in enumerate(table):
-    for c, cell in zip(cols, cells):
-        text(RX + c, 28 + k, cell, WHITE if c == 0 else BRIGHT if k < 2 else AMBER)
-text(RX, 31, "─" * 64, FAINT)
-text(RX, 32, "GIVE WAY", HEAD)
-text(RX + 9, 32, "// first to go on the left", DIM)
-chain = [("tagline", 7), ("weapon", 6), ("descriptions", 12), ("build", 5)]
-x = RX + 6
-spans = []
-for i, (word, n) in enumerate(chain):
-    text(x, 33, word, CYAN)
-    spans.append((x, n))
-    if i < len(chain) - 1:
-        text(x + n + 1, 33, "──►", DIM)
-    x += n + 5
-alive = {"1080": [1, 1, 1, 1], "720": [0, 0, 1, 1], "600": [0, 0, 0, 1]}
-for k, (res, keep) in enumerate(alive.items()):
-    text(RX, 34 + k, res, WHITE)
-    for (sx, n), on in zip(spans, keep):
-        text(sx, 34 + k, ("▓" if on else "░") * n, BRIGHT if on else FAINT)
-text(RX + 53, 35, "1 line each", MID)
-text(RX + 53, 36, "on hover", MID)
-text(RX, 37, "─" * 64, FAINT)
-text(RX, 38, "AT 1024x600, WAS", RED)
-text(RX + 33, 38, "NOW", BRIGHT)
-fixes = [
-    ("roster ran past its panel", "2 rows of 8, no name line"),
-    ("tags fell off the parchment", "the left column widens"),
-    ("R row fell off the bottom", "one-line rows, hover text"),
-    ("Damage under the Armour icon", "icon + number, label on hover"),
-]
-for k, (was, now) in enumerate(fixes):
-    assert RX + 33 + len(now) + 2 < W - 6, now
-    text(RX, 39 + k, "- " + was, (200, 90, 80))
-    text(RX + 33, 39 + k, "+ " + now, MID)
+for k, (key, name, what, gfx) in enumerate(kit):
+    yy = 34 + k
+    assert len(what) <= 40, what
+    text(RX, yy, f" {key} ", CHIP_FG)
+    shade(RX, yy, RX + 2, yy, CHIP_BG)
+    text(RX + 4, yy, name, AMBER)
+    text(RX + 17, yy, what, MID)
+    text(RX + 60, yy, gfx, CYAN)
+text(RX, 39, "─" * 64, FAINT)
+text(RX, 40, "THERE IS NO SPOON", HEAD)
+text(RX + 18, 40, "// one_of: each bolt picks its curse", DIM)
+text(RX, 41, "one_of", CYAN)
+text(RX + 7, 41, "[drain 40 | throw 250 | disarm 1.5]", AMBER)
+text(RX + 44, 41, "──► rng ──► gfx", BRIGHT)
+text(RX, 42, "- 111 sparkle: purple blob at camp size", (200, 90, 80))
+text(RX + 41, 42, "+ 552 green splash", MID)
 text(RX, 44, "TESTS", HEAD)
-text(RX + 7, 44, "433 pass  +5: sentences, names, clip, build, roster", MID)
-text(RX, 45, "FLAG", HEAD)
-text(RX + 7, 45, "--cursor X Y   puts the cursor down for hover shots", MID)
+text(RX + 7, 44, "462 pass  +1: disarm, scramble, one_of, chaos text", MID)
+text(RX, 45, "FLAGS", HEAD)
+text(RX + 7, 45, "--demo-gfx IDS  --spells a,b  --spell-picker N", MID)
 
 # --- sysop's note ------------------------------------------------------------
-header(48, elite("sysop's note // the operator"))
+header(48, elite("sysop's note // the hardline"))
 clear(4, 49, W - 5, 50)
-center(49, "sTILL oPEN: bATTLE sPELLS (p4.3), mUSIC tOGGLE (p4.6), cLIFFS + bRIDGES + gOD sTATUES (p5), iTEM sETS iN tHE sHOP (p3).", HEAD)
-center(50, "Passive::describe // Status::describe // ItemShop::popular_build // hero_select::clip_lines // Hud::tooltip // --cursor", DIM)
+open_ = "sTILL oPEN: mUSIC tOGGLE (p4.6), cLIFFS + bRIDGES + gOD sTATUES (p5), iTEM sETS (p3), sECOND-wAVE sPELLS (sMITE, tHRALL)."
+refs = "spells::SpellBook // animated::battle // scroll::blocked // Status::{Disarm, Scramble, OneOf} // Passive::Chaos"
+assert len(open_) <= 142 and len(refs) <= 142, (len(open_), len(refs))
+center(49, open_, HEAD)
+center(50, refs, DIM)
 
 # --- roadmap -------------------------------------------------------------------
 header(51, elite("roadmap // docs/ROADMAPPLAN.md"))
 clear(4, 52, W - 5, 56)
 phases = [
-    ("P1 LIGHT", 5), ("P2 MINIMAP", 6), ("P3 SHOP", 7), ("P4 SELECT", 8),
+    ("P1 LIGHT", 5), ("P2 MINIMAP", 6), ("P3 SHOP", 7), ("P4 SELECT", 9),
     ("P5 ARENA", 1), ("P6 HUD", 4), ("P7 POST", 0),
 ]
 for i, (name, done) in enumerate(phases):
@@ -461,16 +455,18 @@ for i, (name, done) in enumerate(phases):
     for j in range(10):
         put(x + 12 + j, yy, "▓" if j < done else "░", BRIGHT if j < done else FAINT)
     text(x + 22, yy, f"] {done * 10:>3}%", HEAD if done else FAINT)
-text(8, 56, ">> next: battle spells (P4.3: D/F slots, OSRS spell sprites, gameplay), the music toggle (P4.6), cliffs from cache objects (P5)", MID)
+nxt = ">> next: the music toggle (P4.6), cliffs and bridges from cache objects (P5), second-wave spells (Blood Barrage, Smite, Thrall)"
+assert 8 + len(nxt) <= W - 6, len(nxt)
+text(8, 56, nxt, MID)
 
 fade_bar(57, 2, W - 3)
 clear(10, 58, W - 11, 61)
-greetz = "gREETZ: tANK (tHE oPERATOR aND tHE bUILD) * pARCHMENT 1017 * tHE pALE yELLOW bOX * 1024x600, wHICH fITS nOW"
+greetz = "gREETZ: tRINITY (tHE hARDLINE) * tHE cHAOS eLEMENTAL (nO sPOON) * kOLODION * jAD * tHE wISE oLD mAN * vENGEANCE"
 assert len(greetz) <= 128, len(greetz)
 center(58, greetz, MID)
 center(59, "nOT AFFILIATED WITH JAGEX. cACHE ASSETS STAY OUT OF GIT. aLWAYS.", DIM)
-center(60, "  t a n k ,   l o a d   t h e   b u i l d .   i   k n o w   t h r e e   h e a d s .   s h o w   m e .  ", HEAD)
-center(61, "-=[ mObAsCaPe // 2026 // nODE 15: tHE oPERATOR // 57.6k // sYSoP: rIFT // 12 pASSIVES, 5 iTEMS, 1 pALE yELLOW bOX ]=-", AMBER)
+center(60, "  o p e r a t o r ,   i   n e e d   a n   e x i t .   i   k n o w   i c e   b a r r a g e .   s h o w   m e .  ", HEAD)
+center(61, "-=[ mObAsCaPe // 2026 // nODE 16: tHE hARDLINE // 57.6k // sYSoP: rIFT // 6 sPELLS, 1 sCROLL, 1 cHAOS eLEMENTAL ]=-", AMBER)
 
 # --- outputs ------------------------------------------------------------------
 with open(out + ".txt", "w") as f:
