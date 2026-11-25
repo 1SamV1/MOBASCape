@@ -1,62 +1,62 @@
    Z        4  ^8 :? : ~TQ  9T    -k7 ~ X  @           AA +     .     7  -D -  A    $B         |  97 7 :             6           X     $       ~ :.
   ░▒▓▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▓▒░
-   ▐ tHE pILLS ▌                 bLUE pILL: wHITE sTONE, gOLD.   rED pILL: dARK sTONE, bLOOD.   tHE fOUNTAIN iS rEAL.               ▐ lOADED ▌
-    ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄  +- .W$  :.:%8   W0#M&`  8Q&W%#Q   .:B#&&Q `   8ZZ$X$    0ZW80W    Z&M0& . @M&M@8Z:  B#@W@##0M      fountain 6750..... ok
-    █ > choose.        █  8:  0B$   $&8  XZ#M#%8  QZ&8&ZB&. ,M#Q8Q@M: .8#ZZZ@$%  XX@#8%$$  #&Z8$&0, @$B@$08@  $&8BB%B@M -    model 13149....... ok
-    █ SARA       ZAM   █  E   MMW   Z@@ Q@.    Q#.%X     B% Q@ -   %M Z%`       @%     :  BW     Q% $X     #B-M8   `    -    24 on a sheet..... ok
-    █  ▄██▄      ▄██▄  █  ?  -$W$@ M$$0 &%     &Q'#$     8B M0 -   X% XM:       $0 ,      BX     #@ #$     @#.%M   :    :    mirror spawns..... ok
-    █ ▐████▌ or ▐████▌ █  &  `W0 W$@ 0& Z8     BQ:08W%QZ0Q:-0$W&M#X#8. @08B8@   W& ,      %&@%Z@8MB.QZB8&B%X :08Q8#$%        team_at........... ok
-    █  ▀██▀      ▀██▀  █  =  :Q@  B. X8 MM -   &X #&8W%@% :`0MX0$##$%: :&&W&##  ## :      QZM$ZXW&@ %Z08B#8   0M%@X8#        CastlePalette..... ok
-    █ blue gold blood  █  :   ZX     ZX ZQ:'   $@ $X    -88:$0     MQ,       BB 0$ .      ##     B@ XX  .    .8M             blue band......... ok
-    █ > both. ok.      █  >   Q%     %$'WW.: . %0 MM    :0M $%     88:       B& BZ    '   #X     @@ 8&   :    &X             gold merlons...... ok
-    █▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄█  2   Z0  .  $B:MM:.:  B$ Z8     8W QB     80        #Z 8M,   '   @B     ZX #& - :    Q@  ,  -       dark stone........ ok
-          ▄▄█████▄▄       B   $&     &X:0Z  ,  QB ZZ  .  X@ #B     &W        %& BM.   :   QB     B$ #B ' :    B8  -  - ,     blood band........ ok
-     ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄   k : %M     @B  MQX&0W8  80WZM8%0  #% .   XX XZ$XM$%8   0MB@M##M 8Z-    QB MZ :    . MMMW&8%M0'     red pool.......... ok
-     ▀▪▪▪▪▪▪▪▪▪▪▪▪▪▪▪▪▀   + - %8 '   0M   ZXW%W   $8$&0W@   M8     MB  $$W8#Z:    8@QM@&  Q#,    Q% Z8        #MQ&Z&MZB: .   white perim....... ok
-    % *  ^>       @7 0.$E>     ◄◄ ICE-BLUE FOUNTAIN ◄◄ SARADOMIN BLUE ◄◄ ZAMORAK RED ◄◄ GOLD MERLONS ◄◄ BLOOD BAND ◄◄ I      6  ? X  .      ~ B    F
-    % &  @F      ░▒▓  n O D E   1 8 :   t H E   p I L L S   //   b L U E   o R   r E D ,   y O U R   c A S T L E   c H O O S E S  ▓▒░       7 %    Q
-    7 4  2=       T2 Q?^ D  3   -  :      70      You TaKe THe BLue PiLL,   THe CaSTLe STaYS WHiTe.         7     =C         @  6 <  6      X !    J5
+   ▐ vISION ▌                        wHAT yOU cAN'T sEE iS mIST.   wHAT yOUR tEAM sEES iS rEAL.   pHASE 5: dONE.                    ▐ pHASE 5 ▌
+    ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄  + . $M  '  Q&   @$WBX . @#$M#0@.    8W$ZW  :  MB@&8Z  . 8W$%00    #MWM$   M@8Z@MQ ` &%$BBM%&B      5.1 cliffs........ ok
+    █ > vision         █  8   $WQ : &MX :Q08$Q%#  M%$@#0WX   Z&@MZXB   @@MQ$8B8 .#&@ZQB%0  $W%&M8M .%&$&0&08: &$%ZZ@X@$      5.2 bridges....... ok
+    █▓▓▓▓▓▒▒▒▒▒▒▒▒▓▓▓▓▓█  E   Q8&   M0W $$``   &Q QM     @# &Z  -  &@ 00 :.  :  0X :   :  @$`  : %# M0   . M0 XB        '    5.3 fountains..... ok
+    █▓▓▓▒▒░░░  ░░░▒▒▓▓▓█  ?   WB$@ 0WBX W0::   0Z ZW     8Q @@` ,. Z8 BQ  :     &%  :  :  %&:    Q$ &$     XM $Q      . `-   5.3 god colours... ok
+    █▓▓▓▒░░  @   ░░▒▓▓▓█  & . @M W%8 WB Q8     Z@ 0ZM8X&MQ `8@8$%B0&W  $MZWWX. -@# .:     #B0$XM8Z&:%X%00#8#  XM$BQ@8 , :.   5.4 surge splash.. ok
+    █▓▓▓▒░░    · ░░▒▓▓▓█  = , M$  0  #Q X%     WM %@@0BMB  -MZ$0W$&W@   M0%Z@$ .%%` : -   M0QZBBWMQ'BW#%8&8:  Z%$&B#0 :  :   5.5 flora......... ok
+    █▓▓▓▒▒░░░  ░░░▒▒▓▓▓█  : : X#   : %8 MM     0W ##   -:BW:X0   : $Q        @X:ZM-   '   MQ -   0B:@@        0X      .      5.6 tree fix...... ok
+    █▓ 48 puffs ▒▒▓▓▓▓▓█  >   W%   ' $8 @X     8@ 0X , ,.8$.88  .  W%        Q# Q0:   :   WQ :   B@ #W        %Z             5.7 mist.......... ok
+    █▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄█  2   #@`. : #8 XM     %# $Z : ::Q& WZ     WW        #Q Z$        M@ :   Q$ W@    `  .$M'            spot 354.......... ok
+          ▄▄█████▄▄       B   W#'    W$ 0#     &@'&W :   @$ Q8     %W       .8W QZ        88     #X Q8 ,  .  -%W-            used_fraction..... ok
+     ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄   k   WW:    @W  &@@M@#$ 'Z%MQXZBM' 8$     8X W#B08%$Q   &B$&Q80W BM     #B W& ' ::  :BW$%$XB&@      smoothstep fade... ok
+     ▀▪▪▪▪▪▪▪▪▪▪▪▪▪▪▪▪▀   + . 0B     M8   Q%%0$ -:0QMQQW0 : M%    ,W0 `M%08W0     QM&8$#  Q@     @B WW : '    @&$W8MZXW  .   PHASE 5........... ok
+    % *  ^>       @7 0.$E>     ◄◄ GROUND MIST ◄◄ SPOT 354 ◄◄ SOFT EDGE OF VISION ◄◄ PHASE 5 COMPLETE ◄◄ 7 OF 7 ◄◄ GROUN      6  ? X  .      ~ B    F
+    % &  @F         ░▒▓  n O D E   1 9 :   t H E   d E S E R T   o F   t H E   r E A L   //   p H A S E   5   c O M P L E T E  ▓▒░   B      7 %    Q
+    7 4  2=       T2 Q?^ D  3   -  :      70      T%     WeLCoMe   To THe DeSeRT oF THe ReaL.   k  ^        7     =C         @  6 <  6      X !    J5
   ░▒▓▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▓▒░E
     ■─────────────────────────────────────────────────────────  -=[ ReLeaSe iNFo ]=-  ───────────────────────────────────────────────────────────■ #.
-        rELEASE dATE.... 2026-11-25                                         cOMMITS..... 9c3ab09 fountain + 1338896 colours  ->  sam/main          3&
-        tYPE............ pHASE 5.3: bASES. fOUNTAINS + gOD cOLOURS          tESTS....... 470 pass // clippy clean                                  B1
-        wAS............. tWO wHITE cASTLES aND a gREEN gLOW rING            nOW......... sARADOMIN bLUE + gOLD // zAMORAK bLOOD                    <Q
+        rELEASE dATE.... 2026-11-25                                         cOMMITS..... 48df811 ground mist  ->  sam/main                         3&
+        tYPE............ pHASE 5.7: gROUND mIST // aRENA pHASE cLOSED       tESTS....... 473 pass (+3 mist) // clippy clean                        B1
+        wAS............. uNSEEN gROUND wAS oNLY a dARKER fLOOR              nOW......... low smoke banks fade with team vision                     <Q
     $ T   =       1  *56    #   B   2    %@       > J  %^  3      <        1&4  E Z ^           =  |        B      9         1  1 &  B        8    +&
-    ▄▀▀▐ PiLLS.DaT // THe aReNa FRoM aBoVe ▌▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▄5▄▀▀▐ FouNTaiN.DaT + PaLeTTe.DaT ▌▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▄ ~T
+    ▄▀▀▐ MiST.DaT // THe DeSeRT oF THe ReaL ▌▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▄5▄▀▀▐ MiST.RS + PHaSe5.DaT ▌▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▄ ~T
     █                                                                     █.█                                                                    █  ?
-    █  THE MAP // 282x282 perimeter, courtyards in the corners            █&█  THE FOUNTAIN // 24 cache fountains on one model-sheet             █  $
+    █  THE FOG OF WAR // mist where no ally sees, clear where one does    █&█  SPOT 354 // model 6288 · 27 frames · 1.88 s · all translucent     █  $
     █                                                                     █5█  ────────────────────────────────────────────────────────────────  █  T
-    █    ████████████████████████████████▄▀▄▀▄▀▄▀▄▀▄▀   ZAMORAK           █5█  o6750  Large fountain    white stone, blue water    ◄ CHOSEN      █ 1%
-    █    █·  ····························█          █   dark stone        █D█  o2654  Sinclair family   teal pool, stone rim       runner-up     █ #D
-    █    █·      ≈≈                      █       ♦  █   blood band        █T█  o31625 Fountain of Uhld  dark rim, blue water       too dark      █ !-
-    █    █·         ≈≈                   █   Ψ ◉ Ψ  █   red pool          █>█  o39162 Fountain          red stand                  zamorak?      █ <+
-    █    █·            ≈≈            ·   █          █                     █4█  at blue (2713,3165) ◄─ mirror ─► red (2977,2925)                  █ |X
-    █    █·               ≈≈      ·      ████████████   ♦ fountain        █^█  x1.7  2x2 block  plain texture  inside the 900 heal range         █ D-
-    █    █·                  ≈·                    ·█   ◉ dais            █Z█  ────────────────────────────────────────────────────────────────  █ ~F
-    █    ▄▀▄▀▄▀▄▀▄▀▄▀     ·     ≈≈                 ·█   ≈ river           █ █  CASTLEPALETTE // team_at: base rect + 1 tile owns the piece       █ 4k
-    █    █          █  ·           ≈≈              ·█                     █ █  SARADOMIN      top          band         merlon       pool        █ 4
-    █    █          █                 ≈≈           ·█   SARADOMIN         █ █  ZAMORAK        top          band         merlon       pool        █ 6
-    █    █  ♦Ψ ◉ Ψ  █                    ≈≈        ·█   white stone       █ █  NEUTRAL        top          band         merlon       pool        █ @
-  ? █    █          █····························  ·█   blue band         █ █                                                                    █ J
-  > █    ████████████████████████████████████████████   gold merlons      █ █  perimeter open walls stay white; only courtyards take sides       █ :
-  B █                                                                     █ █  test      gates + dais own a team, mid-wall none, 0 != 1          █ -
-  3 █  ────────────────────────────────────────────────────────────────── █ █                                                                    █ B
-  . █  > you take the blue pill: white stone, gold.                       █ █                                                                    █ J
-  9 █  > you take the red pill: the castle bleeds.                        █ █  TESTS  470 pass  castle layout test checks every team             █ C
-  3 █  > i'm offering the truth. nothing more. █                          █ █  SHOTS  --shots: both spawns, both courtyards, perimeter           █ 2
+    █  ▒▓▓▓▓▓▓▒▒▓▒▓▒▒▓▒▒▓▓▒▒▓▓▒▓▓▓▓▓▓▒▓▓▒▒▓▓▒▒▒▒▒▒▒▓▓▒▓▓▓▓▒▓▓▓▓▒▓▒▓▒▓▓▓   █5█  grid    seeded 5-tile jitter inside the walls, ~3,000 puffs       █ 1%
+    █  ▒▓▓▒▓▓▓▓▓▓▓▒▒▒▒▒▒▒▒▒▒▒▓▒▓▒▓▓▒▓▓▓▒▒▒▒▒░░░▒░░▒░▒▒▒▓▓▓▓▓▓▓▓▓▓▓▒?▓▒▒   █D█  shape   x5-8 wide, flattened 0.28: a bank, not a ball             █ #D
+    █  ▓▒▓▓▓?▒▒▒▒▒░▒░▒░░░░░▒▒▒▒▓▒▒▓▓▓▓▒▓▒░▒░,',   ░░░▒▒▒▓▒▓▒▒▒▓▒▒▓▒▓▒▒▓   █T█  fade    1.4/s toward mist while unseen, smoothstep edge           █ !-
+    █  ▒▒▒▓▓▓▒▒▒▒░░░░░░ ░ ░░░░▒▒▒▒▓▓▓▒▒▒▒░░░.     , ░▒▒▒▓▒▓▓▒▓▓▓▓▓▒▓▒▒▓   █>█  draw    nearest 48 within 22 tiles, additive glow 0.06            █ <+
+    █  ▓▓▓▓▒▓▒▒▒▒░░     ''  . ░▒▒▒▓▓▓▓▓▒▒▒     ▲ tower▒▒▓▒▒▓▓▒▓▓▓▓▓▓▒▓▓   █4█  budget  stops at half the fx vertices: spells always fit          █ |X
+    █  ▒▒▒▓▒▒▒░▒░ '      ,, ░ ░░▒▒▒▒▒▒▒▒░░░.   ..  . ▒▒▒▒▓▒▒▓▒▓▓▓▒▓▒▓▓▓   █^█  first pass glow 0.32: round white balls ──► 0.06                  █ D-
+    █  ▓▒▓▓▒▒▒░░░░,    @.you  ░░▒▒▓▓▓▒▒▒▒▒░░ ░ , ░░░▒▒▒▒▒▒▒▒▒▒▒▓▒▓▓▒▒▒▓   █Z█  ────────────────────────────────────────────────────────────────  █ ~F
+    █  ▓▓▓▓▓▒▒▒░░░ '   .      ░░░▒▒▒▓▒▓▓▒▒▒▒▒░░░░░░▒▒▒▒░░▒ ░░░▒▒▒▓▒▒▓▓▒   █ █  PHASE 5 // ARENA SET DRESSING // 7 of 7, all cache objects        █ 4k
+    █  ▒▒▓▒▓▒▒▒░░░░ '    ,  ░░░░▒▒▒▓▓▓▒▒▓▒▓▓▒▒▒▒▒▒▒▒▒▒▒░   , . ░▒▒▓▒▒▒▓   █ █   5.1  cliffs   ~410 rocks 19997/818/819        [▓▓▓▓] done        █ 4
+    █  ▓▓▒▓▒▓▒▒▒░▒░░' ,  ,░░░▒▒▒▒▓▓▓▓▓▓▓▓▓▓▓▒▓▒▒▒▓▓▓▓░▒░░ .· imp░░▒▓▓▓▒   █ █   5.2  bridges  plank piece 699 x3              [▓▓▓▓] done        █ 6
+    █  ▓▓▓▓▓▓▒▒▒▒▒▒░▒░▒░▒░░▒▒▒▒▒▒▓▒▓▓▓▒▒▓▓▓▓▒▓▓▓▓▒▓▓▓▒▒░  ,  ,░░░▒▓▓▓▓▓   █ █   5.3  bases    o6750 fountains, god colours    [▓▓▓▓] done        █ @
+  ? █  ▓▓▒▒▒▓▓▓▒▓▓▒▒▒▒▒░▒▒▒▒▒▒▒▒▓▓▓▓▓▓▓▓▓▒▒▒▓▒▓▓▓▓▓▓▓▓▒▒▒░ ░░▒░▒▒▒▒▒▓▒▓   █ █   5.4  towers   orbs 1526-8, surge 1460/63/66   [▓▓▓▓] done        █ J
+  > █                                                                     █ █   5.5  flora    ~1,950 ferns + stumps           [▓▓▓▓] done        █ :
+  B █  ────────────────────────────────────────────────────────────────── █ █   5.6  trees    dire canopy keeps its leaves    [▓▓▓▓] done        █ -
+  3 █  ▓ full mist      ▒ fading         ░ edge             seen          █ █   5.7  mist     spot 354 over unseen ground     [▓▓▓▓] done        █ B
+  . █                                                                     █ █                                                                    █ J
+  9 █  > what is real? how do you define real?                            █ █  TESTS  473 pass  +3: seeded, fades w/o pop, nearest only          █ C
+  3 █  > what your team can see. the rest is smoke. █                     █ █  BENCH  77.8 fps at spawn (p95 13.8 ms) // 680M target 60          █ 2
   k █▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄█ █▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄█ C
            - k   -     ~  .0  #: ~  Q| T    -       k    ?6      <   ?  D @  4   :X    ! D  9=2  T>  A :   *  +J*     X *    8 6      k   &     7  D
-    ■───────────────────────────────────────────────────  -=[ SYSoP'S NoTe // THe PiLLS ]=-  ────────────────────────────────────────────────────■ 4
-                   sTILL oPEN: gROUND mIST oVER uNSEEN aREAS (p5.7), mUSIC tOGGLE (p4.6), iTEM sETS (p3), oBJECTIVES pANEL (p6.3).                 E
-                       CastlePalette::{SARADOMIN, ZAMORAK, NEUTRAL} // CastleSpec::team_at // props.place o6750 x2 // scene.rs                     B
+    ■────────────────────────────────────────────  -=[ SYSoP'S NoTe // THe DeSeRT oF THe ReaL ]=-  ──────────────────────────────────────────────■ 4
+             sTILL oPEN: oBJECTIVES pANEL (p6.3), mUSIC tOGGLE (p4.6), iTEM sETS (p3), tERRAIN pALETTE (p1.3), mINIMAP cAMP iCONS (p2.5).          E
+                          animated::mist::{Mist, MistPuff, MIST_SPOT} // FxMesh::used_fraction // kit::spot::VERIFIED += 354                       B
     ■────────────────────────────────────────────────  -=[ RoaDMaP // DoCS/RoaDMaPPLaN.MD ]=-  ──────────────────────────────────────────────────■ 1
         P1 LIGHT   [▓▓▓▓▓░░░░░]  50%       P2 MINIMAP [▓▓▓▓▓▓░░░░]  60%       P3 SHOP    [▓▓▓▓▓▓▓░░░]  70%       P4 SELECT  [▓▓▓▓▓▓▓▓▓░]  90%     3k
                                                                                                                                                   BB
-        P5 ARENA   [▓▓▓▓▓▓▓▓▓░]  90%       P6 HUD     [▓▓▓▓░░░░░░]  40%       P7 POST    [░░░░░░░░░░]   0%                                        @
+        P5 ARENA   [▓▓▓▓▓▓▓▓▓▓] 100%       P6 HUD     [▓▓▓▓░░░░░░]  40%       P7 POST    [░░░░░░░░░░]   0%       ◄◄ P5 SEALED                     @
                                                                                                                                                   7
-        >> next: ground mist from cache smoke over unseen areas (P5.7, closes P5), then the objectives panel (P6.3)                               1
+        >> next: the objectives panel with named camp timers (P6.3), then the death screen and scoreboard (P7)                                    1
   ░▒▓▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▓▒░
-  3      B            gREETZ: mORPHEUS (tHE pILLS) * sARADOMIN * zAMORAK * tHE lARGE fOUNTAIN * tHE sENTINELS * tANK * kOLODION                 E @  &
+  3      B          gREETZ: mORPHEUS (tHE dESERT oF tHE rEAL) * tHE sMOKE cLOUD (354) * tHE sENTINELS * sARADOMIN * zAMORAK * tANK              E @  &
   D      %                                 nOT AFFILIATED WITH JAGEX. cACHE ASSETS STAY OUT OF GIT. aLWAYS.                                     -    E
-  7      %                       b l u e   p i l l ,   r e d   p i l l .   t h e   f o u n t a i n   i s   r e a l .                            .    >
-  A      0           -=[ mObAsCaPe // 2026 // nODE 18: tHE pILLS // 57.6k // sYSoP: rIFT // 2 fOUNTAINS, 2 gODS, 1 wHITE wALL ]=-               T    &
+  7      %                w e l c o m e   t o   t h e   d e s e r t   o f   t h e   r e a l .   p h a s e   5 :   d o n e .                     .    >
+  A      0             -=[ mObAsCaPe // 2026 // nODE 19: tHE dESERT oF tHE rEAL // 57.6k // sYSoP: rIFT // 7 oF 7, 1 cLOUD ]=-                  T    &
