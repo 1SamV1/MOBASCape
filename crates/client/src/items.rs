@@ -29,9 +29,90 @@ pub struct ItemConfig {
     /// their cost, and buying it uses them up.
     #[serde(default)]
     pub builds_from: Vec<String>,
+    /// A thrall scroll: reading it (number key 1-6 with the shop closed)
+    /// uses the item up and raises this thrall (docs/SPELLS.md).
+    #[serde(default)]
+    pub thrall: Option<ThrallSpec>,
+}
+
+/// The Arceuus thrall a scroll raises. It fights at the hero's heel until
+/// `duration` runs out or it dies; a new one replaces the old.
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+pub struct ThrallSpec {
+    /// Cache NPC (10878-10886: ghostly, skeletal, zombified).
+    pub npc: u32,
+    pub health: f32,
+    pub damage: f32,
+    pub duration: f32,
+    /// Attack reach; a `look` makes it shoot instead of strike.
+    #[serde(default = "thrall_range")]
+    pub range: f32,
+    #[serde(default = "thrall_interval")]
+    pub interval: f32,
+    #[serde(default = "thrall_speed")]
+    pub speed: f32,
+    #[serde(default = "thrall_scale")]
+    pub scale: f32,
+    /// Projectile look from `fx::LOOKS` for a ranged or magic thrall.
+    #[serde(default)]
+    pub look: Option<String>,
+}
+
+fn thrall_range() -> f32 {
+    150.0
+}
+fn thrall_interval() -> f32 {
+    1.2
+}
+fn thrall_speed() -> f32 {
+    360.0
+}
+fn thrall_scale() -> f32 {
+    1.0
+}
+
+/// Every thrall NPC the shipped item list can raise, for preloading.
+pub fn thrall_npcs(items: &[ItemConfig]) -> Vec<u32> {
+    let mut ids: Vec<u32> = items
+        .iter()
+        .filter_map(|item| item.thrall.as_ref().map(|t| t.npc))
+        .collect();
+    ids.sort_unstable();
+    ids.dedup();
+    ids
+}
+
+/// [`thrall_npcs`] of `data/items/items.json`, empty when it cannot be read.
+pub fn shipped_thrall_npcs() -> Vec<u32> {
+    std::fs::read_to_string("data/items/items.json")
+        .ok()
+        .and_then(|text| serde_json::from_str::<Vec<ItemConfig>>(&text).ok())
+        .map(|items| thrall_npcs(&items))
+        .unwrap_or_default()
 }
 
 impl ItemConfig {
+    /// What using the item does, for shop and bag tooltips (empty for
+    /// items that only give stats).
+    pub fn use_lines(&self) -> Vec<String> {
+        match &self.thrall {
+            Some(thrall) => {
+                let style = if thrall.look.is_none() {
+                    "melee"
+                } else if thrall.range >= 500.0 {
+                    "magic"
+                } else {
+                    "ranged"
+                };
+                vec![
+                    format!("Raises a {style} thrall for {:.0} s", thrall.duration),
+                    "Press its slot key (1-6) to read".to_string(),
+                ]
+            }
+            None => Vec::new(),
+        }
+    }
+
     /// The shop section this item is listed under: the file's `tier` when
     /// given, else by cost (starter up to 500 gold, early up to 1200, core
     /// up to 3000, late above).
@@ -131,7 +212,7 @@ pub fn parse_recommendations(
     Ok(out)
 }
 
-pub const CATEGORY_LABELS: [&str; 8] = [
+pub const CATEGORY_LABELS: [&str; 9] = [
     "RECOMMENDED",
     "ALL",
     "MELEE",
@@ -140,6 +221,7 @@ pub const CATEGORY_LABELS: [&str; 8] = [
     "ARMOUR",
     "JEWELLERY",
     "BOOTS",
+    "SCROLLS",
 ];
 
 impl ItemShop {
@@ -585,6 +667,7 @@ mod tests {
             ability: 0.0,
             tier: None,
             builds_from: from.iter().map(|s| s.to_string()).collect(),
+            thrall: None,
         }
     }
 
@@ -1037,5 +1120,30 @@ mod tests {
             shop.affordable(0),
             vec![false, false, false, false, false, false]
         );
+    }
+
+    #[test]
+    fn thrall_scrolls_ship_and_raise_known_thralls() {
+        let path =
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data/items/items.json");
+        let items: Vec<ItemConfig> =
+            serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
+        let scrolls: Vec<&ItemConfig> = items.iter().filter(|i| i.thrall.is_some()).collect();
+        assert_eq!(scrolls.len(), 3, "ghostly, skeletal and zombified");
+        for item in &scrolls {
+            let thrall = item.thrall.as_ref().unwrap();
+            assert!((10878..=10886).contains(&thrall.npc), "{}", item.id);
+            assert_eq!(item.category, "scrolls");
+            assert!(CATEGORY_LABELS.contains(&"SCROLLS"));
+            assert_eq!(
+                item.damage + item.health + item.mana + item.speed + item.ability,
+                0.0
+            );
+            assert!(thrall.duration > 0.0 && thrall.health > 0.0 && thrall.damage > 0.0);
+            if let Some(look) = &thrall.look {
+                assert!(crate::fx::LOOKS.iter().any(|l| l.name == look), "{look}");
+            }
+        }
+        assert_eq!(thrall_npcs(&items), [10880, 10883, 10886]);
     }
 }

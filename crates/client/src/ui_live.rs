@@ -645,6 +645,7 @@ pub fn shop_item(item: &ItemConfig) -> ShopItem {
     if item.ability != 0.0 {
         stats.push(format!("+{:.0}% ability power", item.ability));
     }
+    stats.extend(item.use_lines());
     ShopItem {
         name: item.name.clone(),
         price: item.cost,
@@ -1275,6 +1276,7 @@ mod tests {
             ability: 15.0,
             tier: None,
             builds_from: Vec::new(),
+            thrall: None,
         };
         let converted = shop_item(&item);
         assert_eq!(converted.name, "Test blade");
@@ -1320,6 +1322,7 @@ mod tests {
             ability: 0.0,
             tier: None,
             builds_from: Vec::new(),
+            thrall: None,
         };
         let catalog = ItemShop {
             items: vec![item("Sword", [1, 2, 3]), item("Shield", [4, 5, 6])],
@@ -1384,6 +1387,7 @@ mod tests {
             ability: 0.0,
             tier: None,
             builds_from: Vec::new(),
+            thrall: None,
         };
         let catalog = ItemShop {
             items: vec![item],

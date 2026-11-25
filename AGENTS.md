@@ -317,7 +317,9 @@ Cache location: `.cache/osrs-235/cache` by default. Pass `--cache` and
 - LZMA groups are implemented but not exercised by the pinned cache.
 - Config archives use real file IDs from the reference table; keep it that way.
 - The viewer follows the player by default. Arrow keys pan; `Y` toggles follow
-  (`F` is the second battle spell, `D` the first, `T` the teleport scroll).
+  (`F` is the second battle spell, `D` the first, `T` the teleport scroll;
+  `1`-`6` buy while the shop is open and read thrall scrolls while it is
+  closed).
 - Battle spells are for MAGIC-class heroes only; every hero carries the
   teleport scroll (ADR-056, docs/SPELLS.md). Battle spells run for any caster
   in `animated/battle.rs` (player and bots); keep them out of the

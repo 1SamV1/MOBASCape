@@ -1568,5 +1568,35 @@
     "mana": 40,
     "speed": 0,
     "ability": 12
+  },
+  {
+    "id": "thrall_ghostly",
+    "name": "Ghostly thrall scroll",
+    "obj": 4251,
+    "category": "scrolls",
+    "color": [170, 180, 230],
+    "cost": 300,
+    "tier": 0,
+    "thrall": { "npc": 10880, "health": 220, "damage": 14, "duration": 40, "range": 500, "interval": 1.4, "look": "soul" }
+  },
+  {
+    "id": "thrall_skeletal",
+    "name": "Skeletal thrall scroll",
+    "obj": 526,
+    "category": "scrolls",
+    "color": [220, 215, 190],
+    "cost": 300,
+    "tier": 0,
+    "thrall": { "npc": 10883, "health": 260, "damage": 12, "duration": 40, "range": 450, "interval": 1.2, "look": "arrow" }
+  },
+  {
+    "id": "thrall_zombified",
+    "name": "Zombified thrall scroll",
+    "obj": 13448,
+    "category": "scrolls",
+    "color": [110, 150, 90],
+    "cost": 300,
+    "tier": 0,
+    "thrall": { "npc": 10886, "health": 380, "damage": 18, "duration": 40, "interval": 1.5, "speed": 330 }
   }
 ]

@@ -91,6 +91,15 @@ target/release/rift-client --ui-live --champion kolodion --distance 1100 \
     --screenshot out.png --screenshot-after 330
 ```
 
+`--items thrall_ghostly,rune_scimitar` puts items straight into the bag
+with their stats. `--demo-thrall` reads the first thrall scroll in the bag
+one second in:
+
+```sh
+target/release/rift-client --ui-live --champion kolodion --demo-attack \
+    --items thrall_ghostly --demo-thrall --screenshot out.png --screenshot-after 900
+```
+
 On hero select (`--start-select bot`), `--spell-picker 0` or `1` opens the
 battle spell picker for D or F, so it can be screenshotted.
 

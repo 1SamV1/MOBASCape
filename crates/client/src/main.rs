@@ -187,6 +187,13 @@ struct Cli {
     /// enemy hero (pair with `--demo-duel`), logging each cast.
     #[arg(long)]
     demo_spells: bool,
+    /// Items put straight into the bag at the start, by id (comma
+    /// separated, for example `thrall_ghostly,rune_scimitar`).
+    #[arg(long, value_delimiter = ',')]
+    items: Vec<String>,
+    /// Demo: read the bag's first thrall scroll one second in.
+    #[arg(long)]
+    demo_thrall: bool,
     /// Hero select: open the battle spell picker for slot 0 (D) or 1 (F),
     /// for screenshots.
     #[arg(long)]
@@ -398,6 +405,18 @@ fn main() -> Result<()> {
     let phase = Instant::now();
     let mut animated = AnimatedScene::new(&cache, &scene, &champion)?;
     App::give_player_spells(&mut animated, &champion.class, &cli.spells, None);
+    for id in &cli.items {
+        match shop.items.iter().position(|item| &item.id == id) {
+            Some(index) => match shop.owned.iter_mut().find(|slot| slot.is_none()) {
+                Some(slot) => {
+                    *slot = Some(index);
+                    animated.grant_item(&shop.items[index]);
+                }
+                None => tracing::warn!("--items: the bag is full, {id} left out"),
+            },
+            None => tracing::warn!("--items: unknown item {id}"),
+        }
+    }
     tracing::info!(
         "startup: animated scene {:.0} ms",
         phase.elapsed().as_secs_f32() * 1000.0
@@ -718,6 +737,7 @@ fn main() -> Result<()> {
         demo_gfx_timer: 0.0,
         demo_gfx_loaded: false,
         demo_scroll: cli.demo_scroll.then_some(0.5),
+        demo_thrall: cli.demo_thrall.then_some(1.0),
         demo_spells: if cli.demo_spells {
             vec![(1.0, 0), (3.0, 1)]
         } else {
@@ -895,6 +915,8 @@ struct App {
     demo_scroll: Option<f32>,
     /// `--demo-spells`: (seconds left, slot) casts still to make.
     demo_spells: Vec<(f32, usize)>,
+    /// Seconds until `--demo-thrall` reads the first thrall scroll.
+    demo_thrall: Option<f32>,
     /// Seconds until the `--demo-gfx` grid plays again.
     demo_gfx_timer: f32,
     demo_gfx_loaded: bool,
@@ -1397,6 +1419,8 @@ impl ApplicationHandler for App {
                     } else if let Some(index) = digit_index(code) {
                         if self.shop.open {
                             self.purchase_item(index);
+                        } else {
+                            self.use_item(index);
                         }
                     } else if code == KeyCode::Space {
                         self.follow = true;
@@ -2098,6 +2122,33 @@ impl App {
                         "demo watchtower: at 24 tiles (outside lock) hp {hp:.0}, tower target {target:?}"
                     );
                     self.demo_watchtower = false;
+                }
+            }
+            if let Some(timer) = self.demo_thrall.as_mut() {
+                *timer -= dt;
+                if *timer <= 0.0 {
+                    self.demo_thrall = None;
+                    let slot = self.shop.owned.iter().position(|slot| {
+                        slot.and_then(|i| self.shop.items.get(i))
+                            .is_some_and(|item| item.thrall.is_some())
+                    });
+                    match slot {
+                        Some(slot) => {
+                            let index = self.shop.owned[slot].unwrap_or_default();
+                            let spec = self.shop.items[index].thrall.clone();
+                            if let Some(spec) = spec {
+                                let result = animated.summon_thrall(&spec);
+                                if result.is_ok() {
+                                    self.shop.owned[slot] = None;
+                                }
+                                tracing::info!(
+                                    "demo thrall: slot {slot} npc {} {result:?}",
+                                    spec.npc
+                                );
+                            }
+                        }
+                        None => tracing::warn!("demo thrall: no thrall scroll in the bag"),
+                    }
                 }
             }
             for (timer, _) in &mut self.demo_spells {
@@ -3958,6 +4009,32 @@ impl App {
         }
     }
 
+    /// 1-6 with the shop closed: use the item in that bag slot. Only thrall
+    /// scrolls do anything; reading one uses it up.
+    fn use_item(&mut self, slot: usize) {
+        let Some(index) = self.shop.owned.get(slot).copied().flatten() else {
+            return;
+        };
+        let Some(item) = self.shop.items.get(index).cloned() else {
+            return;
+        };
+        let Some(spec) = item.thrall.as_ref() else {
+            return;
+        };
+        let Some(animated) = self.animated.as_mut() else {
+            return;
+        };
+        match animated.summon_thrall(spec) {
+            Ok(()) => {
+                self.shop.owned[slot] = None;
+                self.shop.forget_purchase(index);
+                tracing::info!("thrall: read {} ({} s)", item.name, spec.duration);
+                log_event(&mut self.event_log, format!("{} RISES", thrall_name(&item)));
+            }
+            Err(err) => tracing::info!("thrall: {} failed: {err}", item.name),
+        }
+    }
+
     /// T: the teleport scroll, toward the allied structure nearest the
     /// cursor (docs/SPELLS.md, Part B).
     fn use_scroll(&mut self) {
@@ -4423,6 +4500,11 @@ fn parse_shadow_mode(name: &str) -> u32 {
 
 fn parse_debug_view(name: &str) -> u32 {
     devtools::debug_view_index(name)
+}
+
+/// "GHOSTLY THRALL" from "Ghostly thrall scroll".
+fn thrall_name(item: &items::ItemConfig) -> String {
+    item.name.trim_end_matches(" scroll").to_ascii_uppercase()
 }
 
 fn digit_index(code: KeyCode) -> Option<usize> {

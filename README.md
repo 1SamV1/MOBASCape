@@ -250,7 +250,8 @@ Put `keys.json` next to `main_file_cache.dat2`, or pass `--keys`.
 - **B**: toggle the Fountain Shop
 - **Click a category**: filter shop items
 - **Click an item card**: select it; use **Buy** or **Sell** in the detail pane
-- **1–6**: quick-buy the matching shop item while the shop is open
+- **1–6**: quick-buy the matching shop item while the shop is open; with
+  the shop closed, read the thrall scroll in that bag slot
 - **Click the minimap**: pan the camera to that point (disables follow)
 - **Arrow keys**: pan the camera (disables follow)
 - **Z / X**: rotate camera

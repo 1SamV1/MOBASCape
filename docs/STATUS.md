@@ -1,6 +1,26 @@
 # Status
 
-Last updated: Pestilent Bloat and the NPC opcode 99 fix, 2026-11-25.
+Last updated: thrall scrolls, 2026-11-25.
+
+## 2026-11-25 — Thrall scrolls
+
+- Three 300-gold consumables in a new SCROLLS shop tab: ghostly (magic,
+  npc 10880), skeletal (ranged, 10883) and zombified (melee, 10886)
+  thrall scrolls, with cache icons Ectophial, Bones and an ensouled goblin
+  head. An item's new `thrall` block (`items::ThrallSpec`) describes the
+  creature; any hero can use one.
+- Number keys 1-6 read the scroll in that bag slot while the shop is closed
+  (they still buy while it is open). The scroll is used up and leaves the
+  Undo history. The thrall rises in the Arceuus swirl (1290) and fights for
+  40 s; a new one replaces the old (`animated/thrall.rs`).
+- Summons now attack their hero's target first, camps included, as OSRS
+  thralls do; kit summons gain this too. NPC loading for summons was split
+  out of the kit runtime (`kit_runtime::load_npcs`) so thralls preload
+  for every hero.
+- Shop and bag tooltips say what a scroll does (`ItemConfig::use_lines`).
+- Dev flags: `--items a,b` (start with items in the bag) and
+  `--demo-thrall`. Verified: all three rise beside Kolodion, and the ghost
+  hits the camp he attacks; the SCROLLS tab fits in both HUDs.
 
 ## 2026-11-25 — Pestilent Bloat; NPC opcode 99 fixed
 

@@ -227,7 +227,29 @@ think tick, casting at most one spell then. The rules live in
 - **Ward of Arceuus**: a shield.
 - **Smite**: true damage to jungle monsters.
 - **Charge**: faster attacks.
-- **Resurrect Thrall**: a summon.
+- ~~**Resurrect Thrall**~~: shipped as thrall scrolls, below.
+
+## Part E: thrall scrolls (every hero)
+
+Thralls are shop items, not battle spells, so any hero can raise one. The
+SCROLLS tab sells three, 300 gold each (`data/items/items.json`, the
+`thrall` block, `items::ThrallSpec`):
+
+| Scroll | Icon (obj) | Thrall (npc) | Fights | Health / damage | Lasts |
+|---|---|---|---|---|---|
+| Ghostly | Ectophial 4251 | greater ghostly 10880 | magic, 500 range, `soul` bolts | 220 / 14 | 40 s |
+| Skeletal | Bones 526 | greater skeletal 10883 | ranged, 450 range, `arrow` shots | 260 / 12 | 40 s |
+| Zombified | Ensouled goblin head 13448 | greater zombified 10886 | melee | 380 / 18 | 40 s |
+
+- **Reading one**: press the scroll's bag slot key (1-6) while the shop is
+  closed. The scroll is used up, the thrall rises beside the hero in the
+  Arceuus swirl (1290), and the event log says "GHOSTLY THRALL RISES".
+- **One at a time**: a new thrall lays the old one to rest.
+- **Fighting**: like OSRS thralls, they attack whatever their hero attacks
+  (jungle camps included), else the nearest enemy, and otherwise stay at
+  the hero's heel. Kit summons now follow the hero's target the same way.
+- **Shop**: a used scroll leaves the Undo history, so it cannot be refunded.
+- **Bots** don't buy them, because scrolls are on no recommended list.
 
 ## Part D: Chaos Elemental (npc 2054)
 

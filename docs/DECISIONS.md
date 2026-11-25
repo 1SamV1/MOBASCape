@@ -905,4 +905,5 @@ Consequences: a non-magic hero has no summoner-style escape or heal beyond
 its kit and items, so magic picks carry utility. Adding a spell means a
 JSON entry, plus Rust only for a new effect type. Ids in its `gfx` must be
 in `kit::spot::VERIFIED`. A second wave (Blood Barrage, Cure Me, Ward of
-Arceuus, Smite, Charge, Resurrect Thrall) is listed in docs/SPELLS.md.
+Arceuus, Smite, Charge) is listed in docs/SPELLS.md. Thralls shipped as
+shop scrolls for every hero instead (SPELLS.md, Part E).

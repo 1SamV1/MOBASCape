@@ -154,7 +154,8 @@ with a commit and a push to `sam main`.
    and D and F cast them in the match. Bots pick by lane and cast by rule.
    Every hero also carries a Dota 2 style teleport scroll on T (its icon
    shows in the team rows for non-magic heroes). Second wave (Blood Barrage,
-   Cure Me, Ward of Arceuus, Smite, Charge, Thrall) to follow.
+   Cure Me, Ward of Arceuus, Smite, Charge) to follow. Thralls shipped as
+   300-gold shop scrolls any hero can read (SPELLS.md, Part E).
 4. ~~**Passive row and per-rank cooldowns.**~~ Done: a "Passive" key
    chip over Q/W/E/R with the passive's name (`passive_name` in the
    champion file) and a sentence written from its numbers

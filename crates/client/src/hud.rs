@@ -2621,6 +2621,7 @@ impl Hud {
                 if item.ability > 0.0 {
                     lines.push(format!("+{:.0}% ABILITY", item.ability));
                 }
+                lines.extend(item.use_lines().iter().map(|l| l.to_ascii_uppercase()));
                 if lines.is_empty() {
                     lines.push("NO BONUS".to_string());
                 }

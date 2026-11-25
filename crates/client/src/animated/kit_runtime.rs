@@ -196,54 +196,7 @@ impl KitRuntime {
         for (slot, ability) in kit.abilities.iter().enumerate() {
             runtime.charges[slot] = ability.charges.max(1);
         }
-        let wanted = kit.npcs();
-        if wanted.is_empty() {
-            return runtime;
-        }
-        let Ok(files) = cache.archive_files_with_ids(2, 9) else {
-            tracing::warn!("kit: npc archive unavailable; summons and transforms disabled");
-            return runtime;
-        };
-        for (id, data) in files {
-            if !wanted.contains(&id) {
-                continue;
-            }
-            let Ok(def) = rift_cache::NpcDefinition::parse(id, &data) else {
-                tracing::warn!("kit: npc {id} does not decode");
-                continue;
-            };
-            let Some((&first, rest)) = def.models.split_first() else {
-                continue;
-            };
-            let loaded = (|| -> anyhow::Result<NpcAssets> {
-                let parts = assets.merged_parts(first, rest)?;
-                let idle = if def.standing_animation >= 0 {
-                    assets.clip(def.standing_animation as u32)?
-                } else {
-                    Arc::new(AnimationClip::default())
-                };
-                let walk = if def.walking_animation >= 0 {
-                    Some(assets.clip(def.walking_animation as u32)?)
-                } else {
-                    None
-                };
-                let clips: Vec<Arc<AnimationClip>> = std::iter::once(Arc::clone(&idle))
-                    .chain(walk.iter().cloned())
-                    .collect();
-                Ok(NpcAssets {
-                    model: Arc::new(super::bind_parts(&parts, &clips, "summon")),
-                    idle,
-                    walk,
-                })
-            })();
-            match loaded {
-                Ok(npc) => {
-                    tracing::info!("kit: loaded npc {id} \"{}\"", def.name);
-                    runtime.npc_assets.insert(id, npc);
-                }
-                Err(err) => tracing::warn!("kit: npc {id}: {err:#}"),
-            }
-        }
+        runtime.npc_assets = load_npcs(cache, assets, &kit.npcs(), "kit");
         runtime
     }
 
@@ -252,6 +205,65 @@ impl KitRuntime {
     pub fn controls_player(&self) -> bool {
         self.dash.is_some() || self.channel.is_some() || self.rooted_timer > 0.0
     }
+}
+
+/// Load NPC models and idle/walk clips for summons, transforms and thralls.
+/// `who` names the caller in the log.
+pub fn load_npcs(
+    cache: &rift_cache::Cache,
+    assets: &mut UnitAssets<'_>,
+    wanted: &[u32],
+    who: &str,
+) -> HashMap<u32, NpcAssets> {
+    let mut out = HashMap::new();
+    if wanted.is_empty() {
+        return out;
+    }
+    let Ok(files) = cache.archive_files_with_ids(2, 9) else {
+        tracing::warn!("{who}: npc archive unavailable");
+        return out;
+    };
+    for (id, data) in files {
+        if !wanted.contains(&id) {
+            continue;
+        }
+        let Ok(def) = rift_cache::NpcDefinition::parse(id, &data) else {
+            tracing::warn!("{who}: npc {id} does not decode");
+            continue;
+        };
+        let Some((&first, rest)) = def.models.split_first() else {
+            continue;
+        };
+        let loaded = (|| -> anyhow::Result<NpcAssets> {
+            let parts = assets.merged_parts(first, rest)?;
+            let idle = if def.standing_animation >= 0 {
+                assets.clip(def.standing_animation as u32)?
+            } else {
+                Arc::new(AnimationClip::default())
+            };
+            let walk = if def.walking_animation >= 0 {
+                Some(assets.clip(def.walking_animation as u32)?)
+            } else {
+                None
+            };
+            let clips: Vec<Arc<AnimationClip>> = std::iter::once(Arc::clone(&idle))
+                .chain(walk.iter().cloned())
+                .collect();
+            Ok(NpcAssets {
+                model: Arc::new(super::bind_parts(&parts, &clips, "summon")),
+                idle,
+                walk,
+            })
+        })();
+        match loaded {
+            Ok(npc) => {
+                tracing::info!("{who}: loaded npc {id} \"{}\"", def.name);
+                out.insert(id, npc);
+            }
+            Err(err) => tracing::warn!("{who}: npc {id}: {err:#}"),
+        }
+    }
+    out
 }
 
 impl AnimatedScene {

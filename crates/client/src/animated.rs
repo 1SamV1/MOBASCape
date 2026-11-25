@@ -13,6 +13,7 @@ pub mod bots;
 mod kit_runtime;
 pub mod ranks;
 mod teleport;
+mod thrall;
 
 use crate::champion::ChampionConfig;
 use crate::fx::{self, FxMesh};
@@ -960,6 +961,11 @@ pub struct AnimatedScene {
     /// Data-driven kit, when the champion file has one.
     kit: Option<crate::kit::Kit>,
     kit_rt: kit_runtime::KitRuntime,
+    /// Thrall NPCs the shop's scrolls can raise, loaded at start.
+    thrall_assets: HashMap<u32, kit_runtime::NpcAssets>,
+    /// The player's living thrall, if any (units are never removed, so the
+    /// index stays good).
+    thrall: Option<usize>,
     /// The champion file's Q, W, E and R entries: names, summaries and the
     /// hand-authored numbers per rank.
     ability_info: Vec<crate::champion::ChampionAbility>,
@@ -1369,6 +1375,7 @@ impl AnimatedScene {
             .chain(crate::kit::spot::ALL)
             .chain(scroll_config.spotanims())
             .chain(spell_book.spotanims())
+            .chain(std::iter::once(thrall::THRALL_RISE))
             .chain(kit_spots.into_iter().flatten());
         for id in wanted {
             if spot_models.contains_key(&id) {
@@ -1386,6 +1393,12 @@ impl AnimatedScene {
             Some(kit) => kit_runtime::KitRuntime::load(cache, &mut assets, kit),
             None => kit_runtime::KitRuntime::default(),
         };
+        let thrall_assets = kit_runtime::load_npcs(
+            cache,
+            &mut assets,
+            &crate::items::shipped_thrall_npcs(),
+            "thrall",
+        );
         let mut animated = Self {
             units,
             player_index,
@@ -1475,6 +1488,8 @@ impl AnimatedScene {
             champion_id: champion.id.clone(),
             kit: champion.kit.clone(),
             kit_rt,
+            thrall_assets,
+            thrall: None,
             ability_info: champion.abilities.clone(),
             ability_ranks: [1; 4],
             skill_points: 0,
@@ -4215,7 +4230,16 @@ impl AnimatedScene {
         let team = self.units[index].team;
         let speed_mult = self.team_speed_mult(team);
         let pos = self.units[index].pos;
-        let target = self.find_target(index, team, MINION_AGGRO);
+        // Summons and thralls attack what their hero attacks (as OSRS
+        // thralls do), camps included, then fall back to minion aggro.
+        let led = if self.units[index].cc.summoned {
+            self.units[self.player_index]
+                .attack_target
+                .filter(|&t| self.units[t].health > 0.0 && self.units[t].team != team)
+        } else {
+            None
+        };
+        let target = led.or_else(|| self.find_target(index, team, MINION_AGGRO));
 
         if let Some(target) = target {
             let target_pos = self.units[target].pos;
