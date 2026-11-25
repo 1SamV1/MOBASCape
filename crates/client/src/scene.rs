@@ -4655,8 +4655,8 @@ fn place_tree(
         return;
     }
 
-    // Dire side gets dead and dark species, the radiant side keeps the lush
-    // green canopy.
+    // The pool is the same on both sides of the river; the dire side only
+    // tints its canopy darker.
     let side = ctx.map.river_side(tile_x as f32, tile_y as f32);
     // Only models with a real brown trunk and a full canopy belong in the
     // lane tree line. The older pool mixed in bare tropical stems and dead
@@ -4684,6 +4684,10 @@ fn place_tree(
     let angle = hash01(seed ^ 0x5bf0_3635) * std::f32::consts::TAU;
     let scale = TREE_LINE_SCALE_MIN
         + hash01(seed.wrapping_add(7)) * (TREE_LINE_SCALE_MAX - TREE_LINE_SCALE_MIN);
+    // The dire side's canopy is drier and darker; it stays a canopy. It
+    // used to pass `wood_only` here, which put bark on every face of these
+    // full-canopy models (and over their own cache textures), so the whole
+    // dire tree line rendered as bark cones and bark blobs.
     let tint = if side < 0.0 {
         [0.86f32, 0.84, 0.76]
     } else {
@@ -4697,7 +4701,7 @@ fn place_tree(
         scale,
         tint,
         pick_texture(TEX_LEAVES, seed),
-        side < 0.0,
+        false,
     );
     append_model_caster(
         sink.shadow_caster_mesh,

@@ -164,9 +164,10 @@ All objects from the cache, placed through the map format
    animations for shots.
 5. **Jungle flora.** Ferns, flowers, dead trees and stumps from the cache
    across the brush and camp regions.
-6. **Tree bug.** Some trees render as large bark-textured cones with no
-   canopy (visible in the lane captures). Check which model ids they are and
-   whether the leaf faces are culled or retextured.
+6. ~~Tree bug.~~ Done 2026-11-24: the dire-side tree line was planted
+   with `wood_only`, which put bark on every face of the full-canopy
+   models (and over their own cache textures). They keep their leaves now,
+   tinted darker.
 7. **Ground mist** over unseen areas from cache smoke spot animations.
 
 ### Phase 6: HUD polish
@@ -212,3 +213,5 @@ All objects from the cache, placed through the map format
 - 2026-11-24: phase 2.3 done: the minimap bake follows the world shader's
   ground classes with cache texture colours instead of averaging floor
   colours (which showed the brown floors the shader paints over).
+- 2026-11-24: phase 5.6 done: the dire tree line's bark cones and bark
+  blobs were a `wood_only` flag on full-canopy models.
