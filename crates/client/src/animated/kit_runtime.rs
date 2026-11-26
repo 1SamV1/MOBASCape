@@ -291,6 +291,9 @@ pub struct KitRuntime {
     pub(super) flesh_heap: f32,
     /// A recast window per slot, and the unit the first cast held.
     recast: [Option<(f32, Option<usize>)>; 4],
+    /// Casts in a row toward a combo, and seconds left to cast the next.
+    combo_count: [u32; 4],
+    combo_window: [f32; 4],
     /// Toggle abilities that are on.
     toggled: [bool; 4],
     pending: Option<PendingInput>,
@@ -359,6 +362,8 @@ impl KitRuntime {
             chaos_hits: 0,
             flesh_heap: 0.0,
             recast: [None; 4],
+            combo_count: [0; 4],
+            combo_window: [0.0; 4],
             toggled: [false; 4],
             pending: None,
             form_index: 0,
@@ -473,10 +478,21 @@ impl KitRuntime {
 
     /// The slot's cooldown at its rank, or `fallback` without authored ranks.
     pub fn cooldown(&self, slot: usize, fallback: f32) -> f32 {
-        self.rank_entry(slot, self.ranks[slot].max(1))
+        let base = self
+            .rank_entry(slot, self.ranks[slot].max(1))
             .map(|entry| entry.cooldown)
             .filter(|cooldown| *cooldown > 0.0)
-            .unwrap_or(fallback)
+            .unwrap_or(fallback);
+        let cut = self
+            .kit
+            .abilities
+            .get(slot)
+            .map_or(0.0, |a| a.mastery_cooldown);
+        if self.mastered(slot) && cut > 0.0 {
+            base * (1.0 - cut.min(0.9))
+        } else {
+            base
+        }
     }
 }
 
@@ -844,6 +860,44 @@ impl AnimatedScene {
                 self.hex_unit(index, *duration);
                 return;
             }
+            Status::RootedRefund { slot, pct } => {
+                if self.units[index].cc.root_timer > 0.0 {
+                    self.kit_refund(caster, *slot, *pct);
+                }
+                return;
+            }
+            Status::KillRefund { slot, pct } => {
+                let cc = &mut self.units[index].cc;
+                cc.refund = Some((caster, *slot, *pct));
+                cc.refund_timer = 1.0;
+                return;
+            }
+            Status::HexStack { count, duration } if !self.units[index].kind.is_structure() => {
+                let cc = &mut self.units[index].cc;
+                cc.hex_stacks += 1;
+                cc.hex_stack_timer = 4.0;
+                if cc.hex_stacks >= *count {
+                    cc.hex_stacks = 0;
+                    tracing::debug!("kit: unit {index} hexed by {count} stacked hits");
+                    self.apply_status_from(
+                        index,
+                        &Status::Hex {
+                            duration: *duration,
+                        },
+                        from,
+                        caster,
+                    );
+                }
+                return;
+            }
+            Status::Shatter { damage } => {
+                let cc = &mut self.units[index].cc;
+                cc.shatter_damage = cc.shatter_damage.max(*damage);
+                cc.shatter_by = caster;
+                cc.shatter_timer = 3.0;
+                cc.shatter_frozen = cc.frozen_timer > 0.0;
+                return;
+            }
             Status::Duel { duration, reward } if !self.units[index].kind.is_structure() => {
                 let unit = &mut self.units[index];
                 unit.cc.duel_with = caster;
@@ -894,6 +948,7 @@ impl AnimatedScene {
                 if unit.cc.chill_stacks >= 3 {
                     unit.cc.chill_stacks = 0;
                     unit.cc.root_timer = unit.cc.root_timer.max(1.2);
+                    unit.cc.frozen_timer = unit.cc.frozen_timer.max(1.2);
                     let pos = unit.pos;
                     self.emit_burst(pos + Vec3::Y * 40.0, [170, 230, 255], 16, 220.0, 14.0, 0.7);
                     self.add_decal(pos, 110.0, [120, 180, 220], 1.4);
@@ -914,7 +969,12 @@ impl AnimatedScene {
             | Status::Hex { .. }
             | Status::Duel { .. }
             | Status::MissingHealth { .. }
-            | Status::VenomStack { .. } => {}
+            | Status::VenomStack { .. }
+            | Status::Shatter { .. }
+            | Status::KillRefund { .. }
+            | Status::RootedRefund { .. }
+            | Status::HexStack { .. } => {}
+            Status::WallStun { duration } => unit.cc.wall_stun = unit.cc.wall_stun.max(duration),
             Status::Silence { duration } => {
                 unit.cc.silence_timer = unit.cc.silence_timer.max(duration)
             }
@@ -923,6 +983,7 @@ impl AnimatedScene {
                 unit.cc.mark_timer = unit.cc.mark_timer.max(duration);
             }
             Status::Freeze { duration } => {
+                unit.cc.frozen_timer = unit.cc.frozen_timer.max(duration);
                 unit.cc.root_timer = unit.cc.root_timer.max(duration);
                 unit.cc.disarm_timer = unit.cc.disarm_timer.max(duration);
                 unit.strike = None;
@@ -961,7 +1022,13 @@ impl AnimatedScene {
     /// Crowd control that takes over a non-player unit for this frame:
     /// forced movement and fear. Returns true when the unit should skip its
     /// own AI.
-    pub(super) fn kit_afflicted(&mut self, index: usize, dt: f32, height: &HeightGrid) -> bool {
+    pub(super) fn kit_afflicted(
+        &mut self,
+        index: usize,
+        dt: f32,
+        height: &HeightGrid,
+        collision: &WorldCollision,
+    ) -> bool {
         let unit = &mut self.units[index];
         if unit.cc.lift_timer > 0.0 {
             // Rise over a quarter second, hang, and fall over the last half.
@@ -971,9 +1038,28 @@ impl AnimatedScene {
             unit.pos.y = ground + up.min(down) * 110.0;
         }
         if unit.cc.displace_timer > 0.0 {
-            unit.pos += unit.cc.displace * dt;
+            let next = unit.pos + unit.cc.displace * dt;
+            if collision.is_walkable_world(next.x, next.z) {
+                unit.pos = next;
+            } else {
+                // Slammed into a wall: the shove ends here, and a wall stun
+                // in the same hit lands.
+                unit.cc.displace_timer = 0.0;
+                if unit.cc.wall_stun > 0.0 {
+                    unit.stun_timer = unit.stun_timer.max(unit.cc.wall_stun);
+                    unit.cc.wall_stun = 0.0;
+                    let pos = unit.pos;
+                    self.emit_burst(pos + Vec3::Y * 60.0, [230, 230, 255], 14, 240.0, 14.0, 0.5);
+                    tracing::debug!("kit: unit {index} stunned against a wall");
+                    return true;
+                }
+            }
+            let unit = &mut self.units[index];
             unit.pos.y = height.height_at(unit.pos.x, unit.pos.z);
             unit.moving = false;
+            if unit.cc.displace_timer <= dt {
+                unit.cc.wall_stun = 0.0;
+            }
             return true;
         }
         if unit.cc.fear_timer > 0.0 && !unit.kind.is_structure() {
@@ -1022,6 +1108,54 @@ impl AnimatedScene {
             duration
         };
         bonus
+    }
+
+    /// Cut `slot`'s remaining cooldown (or charge recharge) by `pct`.
+    fn kit_refund(&mut self, caster: usize, slot: usize, pct: f32) {
+        let keep = 1.0 - pct.clamp(0.0, 1.0);
+        if let Some(rt) = self.casters.get_mut(&caster)
+            && rt.max_charges(slot) > 1
+        {
+            rt.recharge[slot] *= keep;
+        }
+        if let Some(unit) = self.units.get_mut(caster) {
+            unit.cooldowns[slot] *= keep;
+            let pos = unit.pos;
+            self.emit_burst(pos + Vec3::Y * 90.0, [120, 220, 255], 10, 160.0, 12.0, 0.5);
+        }
+        tracing::debug!("kit: unit {caster} slot {slot} refunded {pct}");
+    }
+
+    /// Shatter: frozen units with Shatter armed burst when the freeze ends.
+    fn update_shatters(&mut self) {
+        for index in 0..self.units.len() {
+            let cc = &mut self.units[index].cc;
+            if cc.shatter_damage <= 0.0 {
+                continue;
+            }
+            if cc.frozen_timer > 0.0 {
+                cc.shatter_frozen = true;
+                continue;
+            }
+            if !cc.shatter_frozen {
+                if cc.shatter_timer <= 0.0 {
+                    cc.shatter_damage = 0.0;
+                }
+                continue;
+            }
+            let (damage, by) = (cc.shatter_damage, cc.shatter_by);
+            cc.shatter_damage = 0.0;
+            cc.shatter_frozen = false;
+            if self.units[index].health <= 0.0 {
+                continue;
+            }
+            let team = self.units.get(by).map_or(0, |u| u.team);
+            self.damage_unit_mixed(index, damage, 0.0, team, Some(by));
+            let pos = self.units[index].pos;
+            self.emit_burst(pos + Vec3::Y * 50.0, [190, 240, 255], 22, 300.0, 16.0, 0.6);
+            self.gfx_on(kit::spot::ICE_BLOCK, index, self.gfx_size(index));
+            tracing::debug!("kit: unit {index} shattered for {damage}");
+        }
     }
 
     /// Toxic build-up: `caster`'s hits stack venom on `index`.
@@ -1462,6 +1596,26 @@ impl AnimatedScene {
         if ability.toggle {
             rt.toggled[slot] = true;
         }
+        // Every Nth cast in a row runs the combo instead.
+        let actions = if ability.combo_every > 1 && !ability.combo.is_empty() {
+            rt.combo_count[slot] = if rt.combo_window[slot] > 0.0 {
+                rt.combo_count[slot] + 1
+            } else {
+                1
+            };
+            rt.combo_window[slot] = ability.combo_window.max(0.5);
+            if rt.combo_count[slot] >= ability.combo_every {
+                rt.combo_count[slot] = 0;
+                rt.combo_window[slot] = 0.0;
+                let steps = rt.ranks[slot].saturating_sub(1) as f32;
+                let f = 1.0 + ability.duration_growth * steps;
+                ability.combo.iter().map(|a| a.scaled(f, 0)).collect()
+            } else {
+                actions
+            }
+        } else {
+            actions
+        };
 
         if let Some(Passive::SpellCombo { max, window, .. }) = passive.as_ref() {
             if rt.combo_last != Some(slot) && rt.combo_timer > 0.0 {
@@ -2325,6 +2479,9 @@ impl AnimatedScene {
 
     /// Kill hooks: a duel won keeps its reward.
     pub(super) fn kit_on_kill(&mut self, victim: usize) {
+        if let Some((caster, slot, pct)) = self.units[victim].cc.refund.take() {
+            self.kit_refund(caster, slot, pct);
+        }
         let cc = &self.units[victim].cc;
         if cc.duel_timer > 0.0 {
             let winner = cc.duel_with;
@@ -2837,6 +2994,7 @@ impl AnimatedScene {
         if self.casters.is_empty() {
             return;
         }
+        self.update_shatters();
         let pi = self.player_index;
         if let Some(rt) = self.casters.get_mut(&pi) {
             rt.ranks = self.ability_ranks;
@@ -2952,6 +3110,9 @@ impl AnimatedScene {
         }
         if let Some(pending) = rt.pending.as_mut() {
             pending.held += dt;
+        }
+        for window in &mut rt.combo_window {
+            *window = (*window - dt).max(0.0);
         }
         if rt.bonus_health > 0.0 {
             rt.bonus_health_timer -= dt;

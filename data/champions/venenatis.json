@@ -53,7 +53,7 @@
     {
       "key": "W",
       "name": "POUNCE",
-      "description": "Leaps onto the cursor and bites everything she lands on.",
+      "description": "Leaps onto the cursor and bites everything she lands on. At max rank landing on a rooted enemy halves the cooldown.",
       "ranks": [
         {
           "damage": 55,
@@ -219,6 +219,34 @@
                 "radius": 240,
                 "damage": 55,
                 "on_hit": [
+                  {
+                    "type": "venom",
+                    "damage": 6,
+                    "duration": 6
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "mastery": [
+          {
+            "type": "dash",
+            "distance": 700,
+            "speed": 2000,
+            "to_cursor": true,
+            "land": [
+              {
+                "type": "area",
+                "at": "caster",
+                "radius": 240,
+                "damage": 55,
+                "on_hit": [
+                  {
+                    "type": "rooted_refund",
+                    "slot": 1,
+                    "pct": 0.5
+                  },
                   {
                     "type": "venom",
                     "damage": 6,

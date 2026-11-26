@@ -48,10 +48,12 @@ Last updated: kit runtime for every hero, levels to 25 and talents,
   approval log): masteries at max rank, unit/ally targeting, recast,
   toggles, vector and charge casts, and the new statuses. Every ability
   casts in `--demo-abilities`. Known gaps: the Bloat's wall grapple and
-  rope reel-in, Icy Breath's shatter, Hop's third-hop splash, Plague's
-  three-frog count (it hexes everyone still in the circle), Gale Shot's
-  wall stun, Feather Flurry's knockback, Pounce's
-  cooldown refund, YARRRRRRR!'s kill refund, and the Tongue Lash zip. The Blowpipe Ranger now runs on the kit too: Toxic build-up
+  rope reel-in, Feather Flurry's reduced damage per shot and knockback,
+  and Tongue Lash's ally shield. Since closed: Icy Breath's shatter, Hop's
+  third-hop big splash (and faster recharge at max rank), Plague's
+  three-frog hex, Gale Shot's wall stun (every knockback now stops at
+  walls), Pounce's rooted refund, YARRRRRRR!'s kill refund and the Tongue
+  Lash zip. The Blowpipe Ranger now runs on the kit too: Toxic build-up
   (venom stacks to three, heal cut at three), piercing dart, seven-dart
   volley, caltrop hop and a three-stack Deadshot execute at max rank. Bots
   switch toggles off when no fight is near. King Awowogei's rework is in

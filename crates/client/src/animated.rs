@@ -3995,7 +3995,7 @@ impl AnimatedScene {
                 self.units[i].spawn_delay = (self.units[i].spawn_delay - dt).max(0.0);
                 continue;
             }
-            if self.kit_afflicted(i, dt, height) {
+            if self.kit_afflicted(i, dt, height, collision) {
                 continue;
             }
             if self.units[i].stun_timer > 0.0 {

@@ -107,7 +107,7 @@
     {
       "key": "R",
       "name": "YARRRRRRR!",
-      "description": "A crushing blow for 30% of the target's current health; their healing is cut.",
+      "description": "A crushing blow for 30% of the target's current health; their healing is cut. At max rank a kill refunds half the cooldown.",
       "ranks": [
         {
           "damage": 90,
@@ -291,6 +291,30 @@
               {
                 "type": "heal_cut",
                 "duration": 5
+              }
+            ]
+          }
+        ],
+        "mastery": [
+          {
+            "type": "area",
+            "at": "front",
+            "radius": 200,
+            "arc": 80,
+            "damage": 90,
+            "on_hit": [
+              {
+                "type": "current_health",
+                "pct": 0.3
+              },
+              {
+                "type": "heal_cut",
+                "duration": 5
+              },
+              {
+                "type": "kill_refund",
+                "slot": 3,
+                "pct": 0.5
               }
             ]
           }

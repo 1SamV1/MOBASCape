@@ -34,7 +34,7 @@
     {
       "key": "Q",
       "name": "GALE SHOT",
-      "description": "Hold to draw the bow, release to loose a piercing gust that knocks enemies back. The longer the draw, the farther and harder it hits.",
+      "description": "Hold to draw the bow, release to loose a piercing gust that knocks enemies back. The longer the draw, the farther and harder it hits. At max rank enemies knocked into walls are stunned.",
       "ranks": [
         {
           "damage": 180,
@@ -159,6 +159,27 @@
               {
                 "type": "knockback",
                 "distance": 150
+              }
+            ]
+          }
+        ],
+        "mastery": [
+          {
+            "type": "projectile",
+            "visual": "wind_blast",
+            "speed": 1700,
+            "range": 1600,
+            "damage": 180,
+            "width": 120,
+            "pierce": true,
+            "on_hit": [
+              {
+                "type": "knockback",
+                "distance": 150
+              },
+              {
+                "type": "wall_stun",
+                "duration": 1.0
               }
             ]
           }

@@ -26,26 +26,26 @@
     {
       "key": "Q",
       "name": "TONGUE LASH",
-      "description": "Flicks its tongue down a line, dragging the first enemy hit toward the frog. At max rank the catch is rooted.",
+      "description": "Lashes its tongue onto an enemy and zips to it, slowing it on arrival. At max rank the enemy is rooted too.",
       "ranks": [
         {
           "damage": 45,
-          "range": 850,
+          "range": 700,
           "cooldown": 7
         },
         {
           "damage": 65,
-          "range": 850,
+          "range": 700,
           "cooldown": 6.5
         },
         {
           "damage": 85,
-          "range": 900,
+          "range": 700,
           "cooldown": 6
         },
         {
           "damage": 105,
-          "range": 950,
+          "range": 700,
           "cooldown": 5.5
         }
       ]
@@ -53,7 +53,7 @@
     {
       "key": "W",
       "name": "HOP, HOP, SPLASH",
-      "description": "Three short hops held as charges. Each lands with a splash that bumps enemies up.",
+      "description": "Three short hops held as charges. Each lands with a splash; the third hop in a row lands a big splash that knocks enemies up. At max rank hops recharge 30% faster.",
       "ranks": [
         {
           "damage": 30,
@@ -104,7 +104,7 @@
     {
       "key": "R",
       "name": "PLAGUE OF FROGS",
-      "description": "Frogs rain on a wide circle for three seconds, each one hitting and slowing; enemies caught are turned into frogs. At max rank three frogs stay behind to fight.",
+      "description": "Frogs rain on a wide circle for three seconds, each one hitting and slowing; an enemy hit by three frogs is turned into a frog. At max rank three frogs stay behind to fight.",
       "ranks": [
         {
           "damage": 210,
@@ -151,43 +151,50 @@
           120,
           150
         ],
+        "target": "unit",
+        "cast_range": 700,
         "actions": [
           {
-            "type": "projectile",
-            "speed": 1900,
-            "range": 850,
-            "width": 90,
-            "damage": 45,
-            "visual": "tongue",
-            "on_hit": [
+            "type": "dash",
+            "distance": 900,
+            "speed": 2200,
+            "to_target": true,
+            "land": [
               {
-                "type": "pull",
-                "distance": 300
-              },
-              {
-                "type": "slow",
-                "pct": 0.4,
-                "duration": 1.5
+                "type": "strike",
+                "damage": 45,
+                "on_hit": [
+                  {
+                    "type": "slow",
+                    "pct": 0.4,
+                    "duration": 1.5
+                  }
+                ]
               }
             ]
           }
         ],
         "mastery": [
           {
-            "type": "projectile",
-            "speed": 1900,
-            "range": 850,
-            "width": 90,
-            "damage": 45,
-            "visual": "tongue",
-            "on_hit": [
+            "type": "dash",
+            "distance": 900,
+            "speed": 2200,
+            "to_target": true,
+            "land": [
               {
-                "type": "pull",
-                "distance": 300
-              },
-              {
-                "type": "root",
-                "duration": 0.8
+                "type": "strike",
+                "damage": 45,
+                "on_hit": [
+                  {
+                    "type": "slow",
+                    "pct": 0.4,
+                    "duration": 1.5
+                  },
+                  {
+                    "type": "root",
+                    "duration": 0.8
+                  }
+                ]
               }
             ]
           }
@@ -215,16 +222,37 @@
                 "at": "caster",
                 "radius": 200,
                 "damage": 30,
+                "on_hit": []
+              }
+            ]
+          }
+        ],
+        "combo_every": 3,
+        "combo_window": 2.5,
+        "combo": [
+          {
+            "type": "dash",
+            "distance": 300,
+            "speed": 2200,
+            "to_cursor": true,
+            "untargetable": true,
+            "land": [
+              {
+                "type": "area",
+                "at": "caster",
+                "radius": 280,
+                "damage": 60,
                 "on_hit": [
                   {
                     "type": "knockup",
-                    "duration": 0.3
+                    "duration": 0.6
                   }
                 ]
               }
             ]
           }
-        ]
+        ],
+        "mastery_cooldown": 0.3
       },
       {
         "cost": 60,
@@ -297,17 +325,10 @@
                 "type": "slow",
                 "pct": 0.25,
                 "duration": 1.0
-              }
-            ]
-          },
-          {
-            "type": "area",
-            "radius": 450,
-            "range": 900,
-            "delay": 3.2,
-            "on_hit": [
+              },
               {
-                "type": "hex",
+                "type": "hex_stack",
+                "count": 3,
                 "duration": 1.0
               }
             ]
@@ -328,17 +349,10 @@
                 "type": "slow",
                 "pct": 0.25,
                 "duration": 1.0
-              }
-            ]
-          },
-          {
-            "type": "area",
-            "radius": 450,
-            "range": 900,
-            "delay": 3.2,
-            "on_hit": [
+              },
               {
-                "type": "hex",
+                "type": "hex_stack",
+                "count": 3,
                 "duration": 1.0
               }
             ]

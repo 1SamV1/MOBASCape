@@ -94,6 +94,17 @@ pub struct Ability {
     pub recast: Vec<Action>,
     #[serde(default)]
     pub recast_window: f32,
+    /// Every `combo_every`th cast in a row (each within `combo_window`
+    /// seconds of the last) runs `combo` instead (Hop's big splash).
+    #[serde(default)]
+    pub combo_every: u32,
+    #[serde(default)]
+    pub combo_window: f32,
+    #[serde(default)]
+    pub combo: Vec<Action>,
+    /// At max rank the cooldown (or charge recharge) is this much shorter.
+    #[serde(default)]
+    pub mastery_cooldown: f32,
     /// A second press turns the ability off: its zones and empower end and
     /// the cooldown starts (Pestilence, Brimstone Blade).
     #[serde(default)]
@@ -719,6 +730,29 @@ pub enum Status {
     VenomStack {
         count: u32,
     },
+    /// A knockback in the same hit that runs into a wall stuns for this.
+    WallStun {
+        duration: f32,
+    },
+    /// When the target's next freeze ends it shatters for this damage.
+    Shatter {
+        damage: f32,
+    },
+    /// If the target dies within a second, `slot`'s cooldown drops by `pct`.
+    KillRefund {
+        slot: usize,
+        pct: f32,
+    },
+    /// Landing on a target already rooted cuts `slot`'s cooldown by `pct`.
+    RootedRefund {
+        slot: usize,
+        pct: f32,
+    },
+    /// The `count`th such hit within 4 seconds turns the target into a frog.
+    HexStack {
+        count: u32,
+        duration: f32,
+    },
 }
 
 impl Status {
@@ -879,6 +913,22 @@ pub struct Afflictions {
     /// Toxic build-up stacks, and how long until they fade.
     pub venom_stacks: u32,
     pub venom_stack_timer: f32,
+    /// Stun on hitting a wall during the current knockback.
+    pub wall_stun: f32,
+    /// Seconds a freeze still holds (for Shatter).
+    pub frozen_timer: f32,
+    /// Shatter armed on this unit: damage, who, seconds left to freeze,
+    /// and whether the freeze has started.
+    pub shatter_damage: f32,
+    pub shatter_by: usize,
+    pub shatter_timer: f32,
+    pub shatter_frozen: bool,
+    /// A kill refund owed if this unit dies soon: (caster, slot, pct).
+    pub refund: Option<(usize, usize, f32)>,
+    pub refund_timer: f32,
+    /// Plague of Frogs hits toward a hex, and seconds until they reset.
+    pub hex_stacks: u32,
+    pub hex_stack_timer: f32,
 }
 
 impl Afflictions {
@@ -931,6 +981,16 @@ impl Afflictions {
         self.evasion_timer = (self.evasion_timer - dt).max(0.0);
         self.untargetable_timer = (self.untargetable_timer - dt).max(0.0);
         self.venom_stack_timer = (self.venom_stack_timer - dt).max(0.0);
+        self.frozen_timer = (self.frozen_timer - dt).max(0.0);
+        self.shatter_timer = (self.shatter_timer - dt).max(0.0);
+        self.refund_timer = (self.refund_timer - dt).max(0.0);
+        if self.refund_timer <= 0.0 {
+            self.refund = None;
+        }
+        self.hex_stack_timer = (self.hex_stack_timer - dt).max(0.0);
+        if self.hex_stack_timer <= 0.0 {
+            self.hex_stacks = 0;
+        }
         if self.venom_stack_timer <= 0.0 {
             self.venom_stacks = 0;
         }
@@ -955,6 +1015,7 @@ impl Ability {
             .iter()
             .chain(self.mastery.iter())
             .chain(self.recast.iter())
+            .chain(self.combo.iter())
     }
 }
 
@@ -1271,6 +1332,19 @@ impl Status {
                 format!("deal {}% of missing health", pct(*p))
             }
             Status::VenomStack { count } => format!("add {count} venom stacks"),
+            Status::WallStun { duration } => {
+                format!("stun for {} s if knocked into a wall", secs(*duration))
+            }
+            Status::Shatter { damage } => format!("shatter for {damage:.0} when a freeze ends"),
+            Status::KillRefund { pct: p, .. } => {
+                format!("refund {}% of the cooldown on a kill", pct(*p))
+            }
+            Status::RootedRefund { pct: p, .. } => {
+                format!("cut the cooldown {}% on a rooted enemy", pct(*p))
+            }
+            Status::HexStack { count, duration } => {
+                format!("{count} hits turn it into a frog for {} s", secs(*duration))
+            }
         }
     }
 }
@@ -1411,6 +1485,43 @@ impl Passive {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn new_statuses_and_combos_read_from_hero_files() {
+        let read = |hero: &str| -> crate::champion::ChampionConfig {
+            let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join(format!("../../data/champions/{hero}.json"));
+            serde_json::from_str(&std::fs::read_to_string(path).expect("read")).expect("parse")
+        };
+        let has = |hero: &str, slot: usize, want: fn(&Status) -> bool| {
+            let kit = read(hero).kit.expect("kit");
+            kit.abilities[slot]
+                .all_actions()
+                .flat_map(action_statuses)
+                .any(|s| want(&s))
+        };
+        assert!(has("ancient_wyvern", 0, |s| matches!(
+            s,
+            Status::Shatter { .. }
+        )));
+        assert!(has("kree", 0, |s| matches!(s, Status::WallStun { .. })));
+        assert!(has("kril", 3, |s| matches!(
+            s,
+            Status::KillRefund { slot: 3, .. }
+        )));
+        assert!(has("venenatis", 1, |s| matches!(
+            s,
+            Status::RootedRefund { slot: 1, .. }
+        )));
+        assert!(has("big_frog", 3, |s| matches!(
+            s,
+            Status::HexStack { count: 3, .. }
+        )));
+        let frog = read("big_frog").kit.expect("kit");
+        assert_eq!(frog.abilities[1].combo_every, 3);
+        assert!(!frog.abilities[1].combo.is_empty());
+        assert!((frog.abilities[1].mastery_cooldown - 0.3).abs() < 1e-6);
+    }
+
     #[test]
     fn web_nest_zones_carry_their_speed() {
         let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))

@@ -25,7 +25,7 @@
     {
       "key": "Q",
       "name": "ICY BREATH",
-      "description": "A long, thin line of frost that chills every enemy it passes. A third chill freezes them solid.",
+      "description": "A long, thin line of frost that chills every enemy it passes. A third chill freezes them solid. At max rank frozen enemies shatter for bonus damage when the freeze ends.",
       "ranks": [
         {
           "damage": 55,
@@ -162,6 +162,31 @@
                 "type": "chill",
                 "pct": 0.3,
                 "duration": 2.5
+              }
+            ]
+          }
+        ],
+        "mastery": [
+          {
+            "type": "projectile",
+            "visual": "wind_blast",
+            "speed": 1700,
+            "range": 900,
+            "width": 110,
+            "pierce": true,
+            "damage": 55,
+            "gfx": {
+              "hit": 363
+            },
+            "on_hit": [
+              {
+                "type": "chill",
+                "pct": 0.3,
+                "duration": 2.5
+              },
+              {
+                "type": "shatter",
+                "damage": 80
               }
             ]
           }
