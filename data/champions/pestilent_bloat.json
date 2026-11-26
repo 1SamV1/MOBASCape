@@ -26,7 +26,7 @@
     {
       "key": "Q",
       "name": "FLESH HOOK",
-      "description": "Hurls a severed limb on a hook. The first enemy it hits is dragged back to the Bloat.",
+      "description": "Flings the Barrelchest anchor on a grapple rope. The first enemy it catches is dragged back to the Bloat.",
       "ranks": [
         { "damage": 80, "range": 1100, "cooldown": 13 },
         { "damage": 115, "range": 1150, "cooldown": 12 },

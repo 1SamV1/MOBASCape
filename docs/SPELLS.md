@@ -81,9 +81,14 @@ frame shows; "Use" is where MobaScape puts it.
 | 1455-1457, 1458-1460, 1461-1463, 1464-1466 | hand orbs / spiral / spiky splash in white, blue, green, red | Wind, Water, Earth and Fire Surge (cast, projectile, hit) | 1460 blue tower hit, 1466 red tower hit, 1463 watchtower hit; the rest spare |
 | 1526 / 1527 / 1528 | blue, green, red orb with gold bands (one model, three recolours) | orb projectile | blue tower, watchtower and red tower shots (flown at 3.2-3.6x) |
 | 1568 / 1569 | black fly cloud (two loops) | Pestilent Bloat's flies | Bloat W: 1568 held on the Bloat, 1569 on each enemy bitten |
-| 1574 | thrown limb (no clip) | Theatre of Blood | `bloat_hook` projectile (Bloat Q) |
+| 1574 | thrown limb (no clip) | Theatre of Blood | (spare; the Bloat Q projectile before the anchor) |
 | 1576 | red blood splat | Theatre of Blood | `bloat_hook` impact, Bloat R hit |
 | 1579 | blood pool, 6 s | Theatre of Blood | Bloat E cast |
+
+Bloat Q flies a model, not a spot animation: the Barrelchest anchor
+(ground model 23133, `fx::ANCHOR_MODEL`) on a rope drawn from the Bloat's
+hand. A `ProjectileLook` with `model` set draws that model instead of a
+graphic, and `rope` adds the line back to the caster.
 
 ## Part A: spell visual language
 
