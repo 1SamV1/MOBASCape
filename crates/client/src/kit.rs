@@ -49,6 +49,9 @@ pub enum Targeting {
     Unit,
     /// The ally nearest the cursor, or the caster when none is near.
     Ally,
+    /// The enemy nearest the cursor, else another ally there; an ally runs
+    /// the ability's `ally_actions` (Tongue Lash's shield).
+    Any,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -102,6 +105,9 @@ pub struct Ability {
     pub combo_window: f32,
     #[serde(default)]
     pub combo: Vec<Action>,
+    /// With `"target": "any"`, what runs when the unit picked is an ally.
+    #[serde(default)]
+    pub ally_actions: Vec<Action>,
     /// At max rank the cooldown (or charge recharge) is this much shorter.
     #[serde(default)]
     pub mastery_cooldown: f32,
@@ -233,6 +239,10 @@ pub enum Action {
         /// Fly at the unit the ability was cast on and hit only it.
         #[serde(default)]
         homing: bool,
+        /// A shot that reaches a wall or tree without hitting anyone bites
+        /// in, and the caster hauls itself there (the Bloat's grapple).
+        #[serde(default)]
+        grapple: bool,
         /// Projectile look from `fx::LOOKS` (for example `fire_wave`).
         /// Without one the shot is an orb tinted by the ability colour.
         #[serde(default)]
@@ -404,6 +414,16 @@ pub enum Action {
         /// Bonus health for `duration`.
         #[serde(default)]
         bonus_health: f32,
+        /// Basic attacks deal this share of their damage for `duration`
+        /// (plus `shot_damage_growth` per rank), with `shot_on_hit` on each
+        /// (Feather Flurry). With `on_target` unset, a unit-targeted cast
+        /// also locks the caster's attacks onto that unit.
+        #[serde(default)]
+        shot_damage: f32,
+        #[serde(default)]
+        shot_damage_growth: f32,
+        #[serde(default)]
+        shot_on_hit: Vec<Status>,
         #[serde(default)]
         gfx: Gfx,
     },
@@ -651,6 +671,9 @@ pub enum Status {
     },
     Pull {
         distance: f32,
+        /// Reel speed; 0 snaps the target in over a quarter second.
+        #[serde(default)]
+        speed: f32,
     },
     /// Damage per tick (every second) for `duration`.
     Venom {
@@ -1016,6 +1039,7 @@ impl Ability {
             .chain(self.mastery.iter())
             .chain(self.recast.iter())
             .chain(self.combo.iter())
+            .chain(self.ally_actions.iter())
     }
 }
 
@@ -1284,7 +1308,7 @@ impl Status {
             Status::Fear { duration } => format!("fear for {} s", secs(*duration)),
             Status::Taunt { duration } => format!("taunt for {} s", secs(*duration)),
             Status::Knockback { distance } => format!("knock back {distance:.0}"),
-            Status::Pull { distance } => format!("pull in {distance:.0}"),
+            Status::Pull { distance, .. } => format!("pull in {distance:.0}"),
             Status::Venom { damage, duration } => {
                 format!(
                     "envenom for {damage:.0} damage a second over {} s",
@@ -1485,6 +1509,38 @@ impl Passive {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn grapple_flurry_and_any_target_read_from_hero_files() {
+        let read = |hero: &str| -> Kit {
+            let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join(format!("../../data/champions/{hero}.json"));
+            let config: crate::champion::ChampionConfig =
+                serde_json::from_str(&std::fs::read_to_string(path).expect("read")).expect("parse");
+            config.kit.expect("kit")
+        };
+        let bloat = read("pestilent_bloat");
+        assert!(
+            bloat.abilities[0]
+                .mastery
+                .iter()
+                .any(|a| matches!(a, Action::Projectile { grapple: true, .. }))
+        );
+        assert!(
+            bloat.abilities[0]
+                .all_actions()
+                .flat_map(action_statuses)
+                .any(|s| matches!(s, Status::Pull { speed, .. } if speed > 0.0))
+        );
+        let kree = read("kree");
+        assert!(kree.abilities[3].actions.iter().any(|a| matches!(
+            a,
+            Action::Buff { shot_damage, .. } if (*shot_damage - 0.6).abs() < 1e-6
+        )));
+        let frog = read("big_frog");
+        assert_eq!(frog.abilities[0].target, Targeting::Any);
+        assert!(!frog.abilities[0].ally_actions.is_empty());
+    }
+
     #[test]
     fn new_statuses_and_combos_read_from_hero_files() {
         let read = |hero: &str| -> crate::champion::ChampionConfig {

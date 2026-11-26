@@ -26,7 +26,7 @@
     {
       "key": "Q",
       "name": "TONGUE LASH",
-      "description": "Lashes its tongue onto an enemy and zips to it, slowing it on arrival. At max rank the enemy is rooted too.",
+      "description": "Lashes its tongue onto a unit and zips to it. An enemy is slowed; an ally is shielded. At max rank an enemy is rooted too.",
       "ranks": [
         {
           "damage": 45,
@@ -151,7 +151,7 @@
           120,
           150
         ],
-        "target": "unit",
+        "target": "any",
         "cast_range": 700,
         "actions": [
           {
@@ -195,6 +195,22 @@
                     "duration": 0.8
                   }
                 ]
+              }
+            ]
+          }
+        ],
+        "ally_actions": [
+          {
+            "type": "dash",
+            "distance": 900,
+            "speed": 2200,
+            "to_target": true,
+            "land": [
+              {
+                "type": "buff",
+                "on_target": true,
+                "shield": 80,
+                "duration": 3
               }
             ]
           }

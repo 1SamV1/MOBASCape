@@ -174,6 +174,10 @@ struct Cli {
     /// every ability as far as the points go (25 shows the max-rank bonuses).
     #[arg(long)]
     demo_level: Option<u32>,
+    /// With `--demo-abilities`: aim Q at the nearest wall or tree instead
+    /// of the camp (checks grapples).
+    #[arg(long)]
+    demo_grapple: bool,
     /// Demo: play these cache spot animations (comma separated ids) in a
     /// labelled grid beside the hero, over and over, for checking spell
     /// graphics by eye.
@@ -746,6 +750,7 @@ fn main() -> Result<()> {
         demo_kit_stage: 0,
         demo_abilities: cli.demo_abilities,
         demo_level: cli.demo_level,
+        demo_grapple: cli.demo_grapple,
         demo_abilities_timer: 0.0,
         demo_abilities_stage: 0,
         demo_gfx: cli.demo_gfx.clone(),
@@ -926,6 +931,7 @@ struct App {
     demo_kit_stage: u8,
     demo_abilities: bool,
     demo_level: Option<u32>,
+    demo_grapple: bool,
     demo_abilities_timer: f32,
     demo_abilities_stage: u8,
     demo_gfx: Vec<u32>,
@@ -2309,6 +2315,46 @@ impl App {
                             .and_then(|index| animated.unit_pos(index))
                             .unwrap_or(animated.player_pos() + Vec3::new(400.0, 0.0, 0.0));
                         animated.debug_refill_mana();
+                        // Grapple check: aim Q at the closest blocked spot.
+                        let aim = if self.demo_grapple && slot == 0 {
+                            let from = animated.player_pos();
+                            (1..=160)
+                                .flat_map(|step| {
+                                    (0..32).map(move |k| {
+                                        let a = k as f32 / 32.0 * std::f32::consts::TAU;
+                                        from + Vec3::new(a.cos(), 0.0, a.sin())
+                                            * (step as f32 * 25.0)
+                                    })
+                                })
+                                .find(|p| {
+                                    // Away from the camp, so nothing is hit
+                                    // before the wall.
+                                    let to_wall = (*p - from).normalize_or_zero();
+                                    let to_camp = (aim - from).normalize_or_zero();
+                                    to_wall.dot(to_camp) < 0.5
+                                        && !collision.is_walkable_world(p.x, p.z)
+                                })
+                                .unwrap_or(aim)
+                        } else {
+                            aim
+                        };
+                        // Stand 700 short of that wall, facing it.
+                        if self.demo_grapple && slot == 0 {
+                            let from = animated.player_pos();
+                            let dir = (aim - from).with_y(0.0).normalize_or_zero();
+                            let spot = aim - dir * 700.0;
+                            animated.teleport_player(Vec3::new(
+                                spot.x,
+                                height.height_at(spot.x, spot.z),
+                                spot.z,
+                            ));
+                        }
+                        if self.demo_grapple && slot == 0 {
+                            tracing::info!(
+                                "demo abilities: grapple aim {:.0} away",
+                                (aim - animated.player_pos()).length()
+                            );
+                        }
                         animated.kit_aim = aim;
                         let ok = match slot {
                             0 => animated.cast_q(aim),

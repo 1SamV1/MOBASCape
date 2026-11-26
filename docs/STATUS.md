@@ -47,9 +47,11 @@ Last updated: kit runtime for every hero, levels to 25 and talents,
 - **Reworked kits for the 16 data-driven heroes** (docs/ABILITY_REWORK.md
   approval log): masteries at max rank, unit/ally targeting, recast,
   toggles, vector and charge casts, and the new statuses. Every ability
-  casts in `--demo-abilities`. Known gaps: the Bloat's wall grapple and
-  rope reel-in, Feather Flurry's reduced damage per shot and knockback,
-  and Tongue Lash's ally shield. Since closed: Icy Breath's shatter, Hop's
+  casts in `--demo-abilities`. Known gap: Web Nest passing through scenery.
+  Since closed: the Bloat's reel-in at hook speed and max-rank wall
+  grapple (`--demo-abilities --demo-grapple` aims Q at the nearest wall),
+  Feather Flurry's 60/70/80% shots locked on the target with a max-rank
+  push, Tongue Lash on an ally (zip and shield), Icy Breath's shatter, Hop's
   third-hop big splash (and faster recharge at max rank), Plague's
   three-frog hex, Gale Shot's wall stun (every knockback now stops at
   walls), Pounce's rooted refund, YARRRRRRR!'s kill refund and the Tongue

@@ -112,6 +112,8 @@ struct KitShot {
     gfx: Gfx,
     /// The `land` graphic has played (at the first strike).
     landed: bool,
+    /// A grapple: where to haul the caster from when it bites terrain.
+    grapple: Option<CastCtx>,
 }
 
 /// A roped shot after it lands: the head stays in its catch while the pull
@@ -320,6 +322,10 @@ pub struct KitRuntime {
     attack_bonus_timer: f32,
     lifesteal: f32,
     lifesteal_timer: f32,
+    /// Feather Flurry: basic attack damage share and extra statuses.
+    shot_mult: f32,
+    shot_on_hit: Vec<Status>,
+    shot_timer: f32,
     /// Tailwind attacks left after a dash.
     tailwind: u32,
 }
@@ -386,6 +392,9 @@ impl KitRuntime {
             attack_bonus_timer: 0.0,
             lifesteal: 0.0,
             lifesteal_timer: 0.0,
+            shot_mult: 1.0,
+            shot_on_hit: Vec::new(),
+            shot_timer: 0.0,
             tailwind: 0,
         }
     }
@@ -1009,12 +1018,21 @@ impl AnimatedScene {
                 unit.cc.displace = away * (distance / 0.25);
                 unit.cc.displace_timer = 0.25;
             }
-            Status::Pull { distance } => {
+            Status::Pull { distance, speed } => {
                 let toward = planar_delta(unit.pos, from);
                 let gap = (toward.length() - 110.0).max(0.0);
                 let distance = distance.min(gap);
-                unit.cc.displace = toward.normalize_or_zero() * (distance / 0.25);
-                unit.cc.displace_timer = 0.25;
+                let time = if speed > 0.0 {
+                    (distance / speed).max(0.05)
+                } else {
+                    0.25
+                };
+                unit.cc.displace = toward.normalize_or_zero() * (distance / time);
+                unit.cc.displace_timer = time;
+                // Reeled in: no fighting back on the way.
+                if speed > 0.0 {
+                    unit.stun_timer = unit.stun_timer.max(time);
+                }
             }
         }
     }
@@ -1108,6 +1126,37 @@ impl AnimatedScene {
             duration
         };
         bonus
+    }
+
+    /// The grapple bit terrain at `at`: the caster hauls itself there.
+    fn kit_grapple(&mut self, ctx: CastCtx, at: Vec3) {
+        let pi = ctx.caster;
+        let from = self.units[pi].pos;
+        let flat = planar_delta(from, at);
+        let distance = (flat.length() - DASH_STOP).max(0.0);
+        if distance < 60.0 || self.units[pi].health <= 0.0 {
+            return;
+        }
+        let dir = flat.normalize_or_zero();
+        self.units[pi].yaw = dir.x.atan2(dir.z);
+        let Some(rt) = self.casters.get_mut(&pi) else {
+            return;
+        };
+        rt.dash = Some(DashState {
+            dir,
+            remaining: distance,
+            speed: 1500.0,
+            damage: 0.0,
+            on_hit: Vec::new(),
+            hit: Vec::new(),
+            land: Vec::new(),
+            ctx,
+            gfx: Gfx::default(),
+            chase: None,
+            reset_below: 0.0,
+        });
+        self.emit_burst(at + Vec3::Y * 40.0, [150, 120, 90], 14, 220.0, 14.0, 0.5);
+        tracing::debug!("kit: unit {pi} grappled terrain {distance:.0} away");
     }
 
     /// Cut `slot`'s remaining cooldown (or charge recharge) by `pct`.
@@ -1561,6 +1610,25 @@ impl AnimatedScene {
                 None => return false,
             },
             Targeting::Ally => Some(self.kit_pick_ally(pi, target, range)),
+            Targeting::Any => match self.kit_pick_enemy(pi, target, range) {
+                Some(unit) => Some(unit),
+                None => match self.kit_pick_ally(pi, target, range) {
+                    ally if ally != pi => Some(ally),
+                    _ => return false,
+                },
+            },
+        };
+        let to_ally = unit.is_some_and(|u| self.units[u].team == self.units[pi].team);
+        let actions = if to_ally && !ability.ally_actions.is_empty() {
+            let steps = rt.ranks[slot].saturating_sub(1) as f32;
+            let f = 1.0 + ability.duration_growth * steps;
+            ability
+                .ally_actions
+                .iter()
+                .map(|a| a.scaled(f, 0))
+                .collect()
+        } else {
+            actions
         };
         {
             let player = &self.units[pi];
@@ -1722,6 +1790,7 @@ impl AnimatedScene {
                 spread,
                 explode,
                 homing,
+                grapple,
                 visual,
                 on_hit,
                 gfx,
@@ -1767,6 +1836,7 @@ impl AnimatedScene {
                         target: chase,
                         gfx: gfx.clone(),
                         landed: false,
+                        grapple: grapple.then(|| ctx.clone()),
                     });
                 }
             }
@@ -1967,6 +2037,9 @@ impl AnimatedScene {
                 jad_windup,
                 slam_stun,
                 bonus_health,
+                shot_damage,
+                shot_damage_growth,
+                shot_on_hit,
                 gfx: _,
             } => {
                 let mult = ctx.mult;
@@ -2075,6 +2148,18 @@ impl AnimatedScene {
                 if *lifesteal > 0.0 {
                     rt.lifesteal = *lifesteal;
                     rt.lifesteal_timer = *duration;
+                }
+                if *shot_damage > 0.0 {
+                    let steps = rt.ranks[ctx.slot].saturating_sub(1) as f32;
+                    rt.shot_mult = shot_damage + shot_damage_growth * steps;
+                    rt.shot_on_hit = shot_on_hit.clone();
+                    rt.shot_timer = *duration;
+                }
+                if *shot_damage > 0.0
+                    && !*on_target
+                    && let Some(lock) = ctx.unit
+                {
+                    self.units[pi].attack_target = Some(lock);
                 }
                 if *jad_every > 0 {
                     rt.jad_every = *jad_every;
@@ -2683,6 +2768,10 @@ impl AnimatedScene {
         if rt.attack_bonus_timer > 0.0 {
             damage += rt.attack_bonus;
         }
+        if rt.shot_timer > 0.0 {
+            damage *= rt.shot_mult;
+            statuses.extend(rt.shot_on_hit.iter().cloned());
+        }
         // Flesh heap: the whole bank goes into this hit.
         let banked = std::mem::take(&mut rt.flesh_heap);
         damage += banked;
@@ -2835,6 +2924,7 @@ impl AnimatedScene {
                     target: Some(goal),
                     gfx: gfx.clone(),
                     landed: false,
+                    grapple: None,
                 });
             }
             if lifesteal + heal_pct > 0.0 {
@@ -3010,7 +3100,7 @@ impl AnimatedScene {
             }
             self.update_caster(caster, dt, height, collision);
         }
-        self.update_kit_shots(dt, height);
+        self.update_kit_shots(dt, height, collision);
         self.update_kit_reels(dt);
         self.update_kit_areas(dt);
         self.update_kit_zones(dt);
@@ -3097,6 +3187,7 @@ impl AnimatedScene {
             &mut rt.slam_timer,
             &mut rt.attack_bonus_timer,
             &mut rt.lifesteal_timer,
+            &mut rt.shot_timer,
         ] {
             *timer = (*timer - dt).max(0.0);
         }
@@ -3271,7 +3362,7 @@ impl AnimatedScene {
         }
     }
 
-    fn update_kit_shots(&mut self, dt: f32, height: &HeightGrid) {
+    fn update_kit_shots(&mut self, dt: f32, height: &HeightGrid, collision: &WorldCollision) {
         let shots = std::mem::take(&mut self.kit_world.shots);
         let mut survivors = Vec::with_capacity(shots.len());
         for mut shot in shots {
@@ -3384,7 +3475,18 @@ impl AnimatedScene {
                     }
                 }
             }
-            let spent = (!hits.is_empty() && (!shot.pierce || shot.target.is_some()))
+            // A grapple that bites a wall or tree hauls its caster there.
+            let mut bit = false;
+            if hits.is_empty()
+                && let Some(ctx) = shot.grapple.as_ref()
+                && planar_delta(shot.from, shot.pos).length() > 150.0
+                && !collision.is_walkable_world(shot.pos.x, shot.pos.z)
+            {
+                bit = true;
+                self.kit_grapple(ctx.clone(), shot.pos);
+            }
+            let spent = bit
+                || (!hits.is_empty() && (!shot.pierce || shot.target.is_some()))
                 || (shot.target.is_none() && shot.remaining <= 0.0);
             if shot.target.is_none() && shot.remaining <= 0.0 && hits.is_empty() {
                 self.effects.push(Effect {

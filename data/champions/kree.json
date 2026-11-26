@@ -109,7 +109,7 @@
     {
       "key": "R",
       "name": "FEATHER FLURRY",
-      "description": "Locks onto an enemy for 10 seconds and fires feathers far faster.",
+      "description": "Locks onto an enemy for 10 seconds. Kree fires feathers at it far faster, each at reduced damage (60/70/80%). At max rank each shot pushes the target back a little.",
       "ranks": [
         {
           "range": 900,
@@ -124,7 +124,7 @@
           "cooldown": 38
         }
       ],
-      "damage_note": "+80% attack speed for 10 s"
+      "damage_note": "+200% attack speed, 60/70/80% damage a shot"
     }
   ],
   "ability_icons": [
@@ -257,14 +257,25 @@
         "actions": [
           {
             "type": "buff",
-            "attack_speed": 0.8,
+            "attack_speed": 2.0,
+            "shot_damage": 0.6,
+            "shot_damage_growth": 0.1,
+            "shot_on_hit": [],
             "duration": 10
           }
         ],
         "mastery": [
           {
             "type": "buff",
-            "attack_speed": 1.0,
+            "attack_speed": 2.0,
+            "shot_damage": 0.6,
+            "shot_damage_growth": 0.1,
+            "shot_on_hit": [
+              {
+                "type": "knockback",
+                "distance": 40
+              }
+            ],
             "duration": 10
           }
         ]
