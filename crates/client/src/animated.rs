@@ -2395,7 +2395,7 @@ impl AnimatedScene {
     fn begin_strike(&mut self, index: usize, target: usize, damage: f32, ranged: bool) {
         let unit = &mut self.units[index];
         // Disarmed (the Chaos Elemental's Madness): no basic attacks.
-        if unit.cc.disarm_timer > 0.0 {
+        if unit.cc.disarmed() {
             unit.attack_cooldown = unit.attack_cooldown.max(0.2);
             return;
         }
@@ -4300,14 +4300,26 @@ impl AnimatedScene {
         let pos = self.units[index].pos;
         // Summons and thralls attack what their hero attacks (as OSRS
         // thralls do), camps included, then fall back to minion aggro.
+        let owner = self.units[index].cc.owner.unwrap_or(self.player_index);
+        let focus = self.units[index]
+            .cc
+            .focus
+            .filter(|&t| self.units[t].health > 0.0);
         let led = if self.units[index].cc.summoned {
-            self.units[self.player_index]
-                .attack_target
-                .filter(|&t| self.units[t].health > 0.0 && self.units[t].team != team)
+            focus.or_else(|| {
+                self.units[owner]
+                    .attack_target
+                    .filter(|&t| self.units[t].health > 0.0 && self.units[t].team != team)
+            })
         } else {
             None
         };
-        let target = led.or_else(|| self.find_target(index, team, MINION_AGGRO));
+        // Guards (healers) never fight.
+        let target = if self.units[index].cc.guard {
+            None
+        } else {
+            led.or_else(|| self.find_target(index, team, MINION_AGGRO))
+        };
 
         if let Some(target) = target {
             let target_pos = self.units[target].pos;
@@ -4332,7 +4344,7 @@ impl AnimatedScene {
         } else if self.units[index].cc.summoned {
             // Kit summons stay at the champion's heel between fights.
             self.units[index].attack_target = None;
-            let heel = self.units[self.player_index].pos;
+            let heel = self.units[owner].pos;
             if self.units[index].pos.distance(heel) > 320.0 {
                 self.move_unit_toward(index, heel, dt, height, 1.2);
             } else {
@@ -4819,9 +4831,17 @@ impl AnimatedScene {
         } else {
             self.kit_incoming_mult(index)
         };
-        if incoming <= 0.0 {
+        if incoming <= 0.0 || self.duel_blocks(aggressor, index) {
             return;
         }
+        // A fragile summon (Jad's healers) dies to any hero's hit.
+        let physical = if self.units[index].cc.fragile
+            && aggressor.is_some_and(|a| self.units[a].kind.is_champion())
+        {
+            physical.max(self.units[index].health * 100.0 + 1.0e4)
+        } else {
+            physical
+        };
         let team_mult = self.team_damage_mult(attacker_team) * incoming;
         let (target_kind, camp_buff, respawn_time, killed, amount) = {
             let unit = &mut self.units[index];
@@ -4925,6 +4945,7 @@ impl AnimatedScene {
         }
         self.share_xp(index, target_kind, attacker_team, aggressor);
         self.kit_flesh_heap(index);
+        self.kit_on_kill(index);
         if reaches_feed(target_kind, hero_aggressor) {
             let victim = short_unit_name(target_kind);
             let killer = aggressor
@@ -7246,6 +7267,8 @@ fn area_indicator(at: crate::kit::Anchor, radius: f32, arc: f32, range: f32) -> 
             radius: radius + 160.0,
             arc: arc.min(150.0),
         },
+        // On the unit the ability targets: its cast range.
+        Anchor::Target => Indicator::Range { radius: range },
     }
 }
 
@@ -7324,6 +7347,8 @@ fn kit_indicators(actions: &[crate::kit::Action], attack_range: f32) -> Vec<Indi
                     radius: attack_range,
                 });
             }
+            Action::Strike { .. } => out.push(Indicator::Range { radius: 450.0 }),
+            Action::Toss { distance, .. } => out.push(Indicator::Range { radius: *distance }),
             Action::Buff { .. } => {}
         }
         if !out.is_empty() {

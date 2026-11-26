@@ -1312,6 +1312,23 @@ impl ApplicationHandler for App {
                 let PhysicalKey::Code(code) = event.physical_key else {
                     return;
                 };
+                // Releasing Q/W/E/R fires a held vector or charge ability.
+                if event.state == ElementState::Released
+                    && let Some(slot) = [KeyCode::KeyQ, KeyCode::KeyW, KeyCode::KeyE, KeyCode::KeyR]
+                        .iter()
+                        .position(|&k| k == code)
+                    && let (Some(renderer), Some(height), Some(animated)) = (
+                        self.renderer.as_ref(),
+                        self.height.as_ref(),
+                        self.animated.as_mut(),
+                    )
+                {
+                    let fallback = animated.player_pos();
+                    let point = renderer
+                        .pick_ground(self.mouse_pos.0, self.mouse_pos.1, height)
+                        .unwrap_or(fallback);
+                    animated.release_slot(slot, point);
+                }
 
                 if self.menu.open {
                     if event.state == ElementState::Pressed {

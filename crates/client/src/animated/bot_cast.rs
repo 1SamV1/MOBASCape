@@ -218,7 +218,7 @@ impl AnimatedScene {
                 u.max_mana.max(1.0),
                 u.health / u.max_health.max(1.0),
                 u.pos,
-                u.stun_timer > 0.0,
+                u.stun_timer > 0.0 || u.cc.silenced(),
             )
         };
         if stunned || self.units[target].health <= 0.0 {

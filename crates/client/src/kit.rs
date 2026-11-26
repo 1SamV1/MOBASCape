@@ -19,7 +19,36 @@ pub struct Kit {
     /// is written from the numbers by [`Passive::describe`].
     #[serde(default)]
     pub passive_name: Option<String>,
+    /// How much the passive's numbers grow per hero level past 1, as a
+    /// fraction of their base (0.067 turns a 15% slow into 16% at level 2).
+    #[serde(default)]
+    pub innate_per_level: f32,
+    /// Passives an ability brings once it is learned (Callisto's Fury
+    /// stacks come with Fury Maul), scaled by that ability's rank.
+    #[serde(default)]
+    pub ability_passives: Vec<SlotPassive>,
     pub abilities: [Ability; 4],
+}
+
+/// A passive that comes with ability `slot` once it has a rank.
+#[derive(Debug, Clone, Deserialize)]
+pub struct SlotPassive {
+    pub slot: usize,
+    pub passive: Passive,
+}
+
+/// How an ability picks what it is cast on (`docs/ABILITY_REWORK.md`,
+/// SYS-1).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Targeting {
+    /// The ground under the cursor (quick-cast).
+    #[default]
+    Point,
+    /// The enemy nearest the cursor, inside the ability's range.
+    Unit,
+    /// The ally nearest the cursor, or the caster when none is near.
+    Ally,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -36,6 +65,51 @@ pub struct Ability {
     pub color: [u8; 3],
     /// Executed in order when the ability is cast.
     pub actions: Vec<Action>,
+    /// What the ability is cast on.
+    #[serde(default)]
+    pub target: Targeting,
+    /// Range for unit and ally targets; 0 uses the rank table's range.
+    #[serde(default)]
+    pub cast_range: f32,
+    /// Damage ignores armour.
+    #[serde(default)]
+    pub pure: bool,
+    /// At the last rank these actions replace `actions` (the ability's
+    /// mastery, SYS-3). Empty keeps `actions`.
+    #[serde(default)]
+    pub mastery: Vec<Action>,
+    /// Charges at the last rank, when the mastery adds one.
+    #[serde(default)]
+    pub mastery_charges: Option<u8>,
+    /// Status, buff and form durations grow by this fraction per rank past
+    /// the first (0.2 turns 1.25 s into 2 s at rank 4).
+    #[serde(default)]
+    pub duration_growth: f32,
+    /// Extra summons per rank past the first.
+    #[serde(default)]
+    pub count_growth: f32,
+    /// A second press within `recast_window` seconds runs these instead of
+    /// casting again, free (Hibernate's roar, Telekinetic Grab's throw).
+    #[serde(default)]
+    pub recast: Vec<Action>,
+    #[serde(default)]
+    pub recast_window: f32,
+    /// A second press turns the ability off: its zones and empower end and
+    /// the cooldown starts (Pestilence, Brimstone Blade).
+    #[serde(default)]
+    pub toggle: bool,
+    /// Vector targeting: press at the start point and release toward the
+    /// direction (a tap aims from the hero through the cursor).
+    #[serde(default)]
+    pub vector: bool,
+    /// Hold to charge for up to this many seconds; release fires. 0 is off.
+    #[serde(default)]
+    pub charge: f32,
+    /// Share of range and damage an uncharged release keeps.
+    #[serde(default = "one")]
+    pub charge_range_min: f32,
+    #[serde(default = "one")]
+    pub charge_damage_min: f32,
 }
 
 /// Where an area, zone or summon is placed.
@@ -49,6 +123,8 @@ pub enum Anchor {
     Caster,
     /// Just in front of the caster, toward the cursor.
     Front,
+    /// The unit the ability was cast on.
+    Target,
 }
 
 /// Cache spot animations an action plays (docs/SPELLS.md). Every field is
@@ -143,6 +219,9 @@ pub enum Action {
         spread: f32,
         #[serde(default)]
         explode: f32,
+        /// Fly at the unit the ability was cast on and hit only it.
+        #[serde(default)]
+        homing: bool,
         /// Projectile look from `fx::LOOKS` (for example `fire_wave`).
         /// Without one the shot is an orb tinted by the ability colour.
         #[serde(default)]
@@ -228,6 +307,12 @@ pub enum Action {
         speed: f32,
         #[serde(default)]
         to_cursor: bool,
+        /// Run at the unit the ability was cast on, stopping beside it.
+        #[serde(default)]
+        to_target: bool,
+        /// Hitting a hero below this share of health resets the cooldown.
+        #[serde(default)]
+        reset_below: f32,
         #[serde(default)]
         backwards: bool,
         #[serde(default)]
@@ -270,6 +355,40 @@ pub enum Action {
         /// still for `duration` (a channelled heal).
         #[serde(default)]
         rooted: bool,
+        /// Apply to the ability's ally target instead of the caster.
+        #[serde(default)]
+        on_target: bool,
+        /// Basic attacks aimed at the unit miss for `duration`.
+        #[serde(default)]
+        evasion: bool,
+        /// Remove slows and roots.
+        #[serde(default)]
+        cleanse: bool,
+        /// Also heal and shield allied heroes within this radius.
+        #[serde(default)]
+        allies: f32,
+        /// Bonus attack damage for `duration`.
+        #[serde(default)]
+        attack_damage: f32,
+        /// Share of attack damage healed for `duration`.
+        #[serde(default)]
+        lifesteal: f32,
+        /// The first hit from each attacker in `duration` is sent back and
+        /// stuns the attacker for this long.
+        #[serde(default)]
+        reflect_stun: f32,
+        /// Every `jad_every`th attack is a Jad attack for `duration`, with
+        /// this wind-up (Inferno Unleashed).
+        #[serde(default)]
+        jad_every: u32,
+        #[serde(default)]
+        jad_windup: f32,
+        /// Basic attacks become area slams that stun for this long.
+        #[serde(default)]
+        slam_stun: f32,
+        /// Bonus health for `duration`.
+        #[serde(default)]
+        bonus_health: f32,
         #[serde(default)]
         gfx: Gfx,
     },
@@ -295,6 +414,23 @@ pub enum Action {
         #[serde(default)]
         npcs: Vec<u32>,
         #[serde(default)]
+        armor: f32,
+        /// Attack the ability's target first.
+        #[serde(default)]
+        focus: bool,
+        /// Stay at the caster's heel and never attack (healers).
+        #[serde(default)]
+        guard: bool,
+        /// Heal the caster this share of its max health per second.
+        #[serde(default)]
+        heal_owner: f32,
+        /// Also heal allied heroes near the summon.
+        #[serde(default)]
+        heal_allies: bool,
+        /// Dies to any single hit from a hero.
+        #[serde(default)]
+        fragile: bool,
+        #[serde(default)]
         gfx: Gfx,
     },
     /// Repeat an action every `interval` while the caster stands still.
@@ -317,10 +453,41 @@ pub enum Action {
         /// Reset this ability slot's cooldown when the empowered hit kills.
         #[serde(default)]
         reset_on_kill: Option<usize>,
+        /// Heal the caster this share of the empowered damage.
+        #[serde(default)]
+        heal_pct: f32,
+        /// Mana each empowered attack costs; with no mana left it ends.
+        #[serde(default)]
+        mana_per_hit: f32,
+        /// Extra damage as a share of the target's max health.
+        #[serde(default)]
+        max_health: f32,
         #[serde(default)]
         on_hit: Vec<Status>,
         #[serde(default)]
         gfx: Gfx,
+    },
+    /// Instantly hit the unit the ability was cast on.
+    Strike {
+        #[serde(default)]
+        damage: f32,
+        /// Heal the caster this share of the damage.
+        #[serde(default)]
+        heal_pct: f32,
+        /// Extra damage as a share of the caster's max health.
+        #[serde(default)]
+        caster_health: f32,
+        #[serde(default)]
+        on_hit: Vec<Status>,
+        #[serde(default)]
+        gfx: Gfx,
+    },
+    /// Throw the unit the ability was cast on toward the cursor, at most
+    /// `distance`; `land` runs where it comes down.
+    Toss {
+        distance: f32,
+        #[serde(default)]
+        land: Vec<Action>,
     },
     /// Take another NPC's model for a while, with stat bonuses.
     Transform {
@@ -338,8 +505,43 @@ pub enum Action {
         #[serde(default)]
         heal: f32,
         #[serde(default)]
+        armor: f32,
+        /// Bonus maximum health while transformed.
+        #[serde(default)]
+        bonus_health: f32,
+        /// More forms: each cast takes the next one, in order.
+        #[serde(default)]
+        cycle: Vec<FormStep>,
+        #[serde(default)]
         gfx: Gfx,
     },
+}
+
+/// One form in a cycling transform (Kolodion's Shapeshift).
+#[derive(Debug, Clone, Deserialize)]
+pub struct FormStep {
+    pub npc: u32,
+    #[serde(default = "one")]
+    pub scale: f32,
+    #[serde(default)]
+    pub damage: f32,
+    #[serde(default)]
+    pub range: f32,
+    #[serde(default)]
+    pub move_speed: f32,
+    #[serde(default)]
+    pub armor: f32,
+    #[serde(default)]
+    pub bonus_health: f32,
+    /// Basic attacks apply these while in the form.
+    #[serde(default)]
+    pub on_hit: Vec<Status>,
+    /// Basic attacks splash this share around the target.
+    #[serde(default)]
+    pub splash: f32,
+    /// Attacks aimed at the form miss.
+    #[serde(default)]
+    pub evasion: bool,
 }
 
 impl Action {
@@ -353,8 +555,13 @@ impl Action {
             | Action::Buff { gfx, .. }
             | Action::Summon { gfx, .. }
             | Action::Empower { gfx, .. }
+            | Action::Strike { gfx, .. }
             | Action::Transform { gfx, .. } => gfx,
             Action::Channel { action, .. } => action.gfx(),
+            Action::Toss { .. } => {
+                static NONE: std::sync::OnceLock<Gfx> = std::sync::OnceLock::new();
+                NONE.get_or_init(Gfx::default)
+            }
         }
     }
 
@@ -392,6 +599,8 @@ impl Action {
             Action::Summon { .. } => "kit_summon",
             Action::Channel { .. } => "kit_channel",
             Action::Empower { .. } => "kit_empower",
+            Action::Strike { .. } => "kit_projectile",
+            Action::Toss { .. } => "kit_dash",
             Action::Transform { .. } => "kit_transform",
         })
     }
@@ -474,6 +683,30 @@ pub enum Status {
     OneOf {
         of: Vec<Status>,
     },
+    /// No abilities for `duration`.
+    Silence {
+        duration: f32,
+    },
+    /// Turned into a frog: no attacks or abilities, a slow hop.
+    Hex {
+        duration: f32,
+    },
+    /// Takes `pct` more damage from everyone.
+    Mark {
+        pct: f32,
+        duration: f32,
+    },
+    /// The target and the caster can only attack each other. A caster who
+    /// kills the target in the duel keeps `reward` attack damage.
+    Duel {
+        duration: f32,
+        #[serde(default)]
+        reward: f32,
+    },
+    /// Frozen solid: rooted and disarmed, in an ice block.
+    Freeze {
+        duration: f32,
+    },
 }
 
 impl Status {
@@ -490,6 +723,10 @@ impl Status {
             }
             Status::NoMobility { duration } => Some((Some(spot::TELE_BLOCK), duration)),
             Status::Disarm { duration } => Some((Some(spot::DISARM), duration)),
+            Status::Freeze { duration } => Some((Some(spot::ICE_BLOCK), duration)),
+            Status::Silence { duration }
+            | Status::Hex { duration }
+            | Status::Duel { duration, .. } => Some((None, duration)),
             _ => None,
         }
     }
@@ -514,6 +751,10 @@ pub enum Passive {
         range: f32,
         #[serde(default)]
         damage: f32,
+        #[serde(default)]
+        armor: f32,
+        #[serde(default)]
+        move_speed: f32,
     },
     /// Basic attacks apply these statuses.
     OnHit { statuses: Vec<Status> },
@@ -536,9 +777,30 @@ pub enum Passive {
     FrostBite { pct: f32, duration: f32 },
     /// Every `every`th ability hit also lands one of `statuses`, at random.
     Chaos { every: u32, statuses: Vec<Status> },
-    /// Each enemy that dies within `radius` grows the caster's maximum (and
-    /// current) health for good: `minion` for anything, `hero` for a hero.
+    /// Each enemy that dies within `radius` banks bonus damage, `minion`
+    /// for anything and `hero` for a hero; the next basic attack spends
+    /// the whole bank.
     FleshHeap { radius: f32, minion: f32, hero: f32 },
+    /// Attacks on slowed or taunted enemies add `pct` of their max health,
+    /// at most `cap` against anything but heroes.
+    BoneCrusher { pct: f32, cap: f32 },
+    /// Every `every`th attack is a Jad attack: after `windup` seconds a
+    /// line of fire or a boulder (alternating) for `damage`.
+    JadRhythm {
+        every: u32,
+        windup: f32,
+        damage: f32,
+    },
+    /// After a dash, the next `attacks` attacks fire an extra shot at a
+    /// second enemy for `pct` of their damage.
+    Tailwind { attacks: u32, pct: f32 },
+    /// Hits on the same enemy stack `per_stack` bonus damage up to `max`;
+    /// the stacks fade `duration` after the last hit.
+    Fury {
+        per_stack: f32,
+        max: u32,
+        duration: f32,
+    },
 }
 
 /// Crowd control and summon state carried by every unit.
@@ -563,9 +825,38 @@ pub struct Afflictions {
     pub displace_timer: f32,
     /// Knock-up height animation, seconds left.
     pub lift_timer: f32,
+    /// The knock-up's full length, for its rise and fall.
+    pub lift_total: f32,
     /// A kit summon: seconds left before it expires.
     pub summoned: bool,
     pub life_timer: f32,
+    /// The hero a summon belongs to (it follows and fights for it).
+    pub owner: Option<usize>,
+    /// A summon that attacks this unit first.
+    pub focus: Option<usize>,
+    /// A summon that stays at its owner's heel and never attacks.
+    pub guard: bool,
+    /// A summon that heals its owner this share of max health per second.
+    pub heal_owner: f32,
+    pub heal_allies: bool,
+    /// A summon that dies to any hit from a hero.
+    pub fragile: bool,
+    /// No abilities.
+    pub silence_timer: f32,
+    /// A frog: no attacks or abilities, a slow hop.
+    pub hex_timer: f32,
+    /// Takes `mark_pct` more damage.
+    pub mark_pct: f32,
+    pub mark_timer: f32,
+    /// Duelling `duel_with`: neither can hurt anyone else.
+    pub duel_with: usize,
+    pub duel_timer: f32,
+    /// Attack damage kept for winning the duel.
+    pub duel_reward: f32,
+    /// Basic attacks aimed at the unit miss.
+    pub evasion_timer: f32,
+    /// Cannot be hit or targeted.
+    pub untargetable_timer: f32,
 }
 
 impl Afflictions {
@@ -573,8 +864,29 @@ impl Afflictions {
     pub fn move_mult(&self) -> f32 {
         if self.root_timer > 0.0 || self.displace_timer > 0.0 {
             0.0
+        } else if self.hex_timer > 0.0 {
+            HEX_SPEED.min(1.0 - self.slow_pct)
         } else {
             (1.0 - self.slow_pct).clamp(0.1, 1.0)
+        }
+    }
+
+    /// No abilities: silenced or hexed.
+    pub fn silenced(&self) -> bool {
+        self.silence_timer > 0.0 || self.hex_timer > 0.0
+    }
+
+    /// No basic attacks: disarmed or hexed.
+    pub fn disarmed(&self) -> bool {
+        self.disarm_timer > 0.0 || self.hex_timer > 0.0
+    }
+
+    /// Extra damage taken from a mark, as a multiplier.
+    pub fn damage_taken_mult(&self) -> f32 {
+        if self.mark_timer > 0.0 {
+            1.0 + self.mark_pct
+        } else {
+            1.0
         }
     }
 
@@ -590,6 +902,12 @@ impl Afflictions {
         self.heal_cut_timer = (self.heal_cut_timer - dt).max(0.0);
         self.no_mobility_timer = (self.no_mobility_timer - dt).max(0.0);
         self.disarm_timer = (self.disarm_timer - dt).max(0.0);
+        self.silence_timer = (self.silence_timer - dt).max(0.0);
+        self.hex_timer = (self.hex_timer - dt).max(0.0);
+        self.mark_timer = (self.mark_timer - dt).max(0.0);
+        self.duel_timer = (self.duel_timer - dt).max(0.0);
+        self.evasion_timer = (self.evasion_timer - dt).max(0.0);
+        self.untargetable_timer = (self.untargetable_timer - dt).max(0.0);
         self.lift_timer = (self.lift_timer - dt).max(0.0);
         self.chill_timer = (self.chill_timer - dt).max(0.0);
         if self.chill_timer <= 0.0 {
@@ -601,6 +919,71 @@ impl Afflictions {
             return self.life_timer <= 0.0;
         }
         false
+    }
+}
+
+impl Ability {
+    /// Every action the ability can run: normal, mastery and recast.
+    pub fn all_actions(&self) -> impl Iterator<Item = &Action> {
+        self.actions
+            .iter()
+            .chain(self.mastery.iter())
+            .chain(self.recast.iter())
+    }
+}
+
+impl Action {
+    /// A copy with every status, buff and form duration times `f` and
+    /// summon counts plus `extra`.
+    pub fn scaled(&self, f: f32, extra: u32) -> Action {
+        let mut out = self.clone();
+        out.scale_in_place(f, extra);
+        out
+    }
+
+    fn scale_in_place(&mut self, f: f32, extra: u32) {
+        let statuses = |list: &mut Vec<Status>| list.iter_mut().for_each(|s| s.scale(f));
+        match self {
+            Action::Projectile { on_hit, .. }
+            | Action::Area { on_hit, .. }
+            | Action::Empower { on_hit, .. }
+            | Action::Strike { on_hit, .. } => statuses(on_hit),
+            Action::Zone { on_tick, .. } => statuses(on_tick),
+            Action::Dash { on_hit, land, .. } => {
+                statuses(on_hit);
+                land.iter_mut().for_each(|a| a.scale_in_place(f, extra));
+            }
+            Action::Toss { land, .. } => land.iter_mut().for_each(|a| a.scale_in_place(f, extra)),
+            Action::Channel { action, .. } => action.scale_in_place(f, extra),
+            Action::Buff { duration, .. } => *duration *= f,
+            Action::Transform { duration, .. } => *duration *= f,
+            Action::Summon { count, .. } => *count += extra,
+        }
+    }
+}
+
+impl Status {
+    /// Lengthen the status by `f` (crowd control and damage over time).
+    pub fn scale(&mut self, f: f32) {
+        match self {
+            Status::Slow { duration, .. }
+            | Status::Root { duration }
+            | Status::Stun { duration }
+            | Status::Knockup { duration }
+            | Status::Fear { duration }
+            | Status::Taunt { duration }
+            | Status::HealCut { duration }
+            | Status::ArmorShred { duration, .. }
+            | Status::NoMobility { duration }
+            | Status::Disarm { duration }
+            | Status::Silence { duration }
+            | Status::Hex { duration }
+            | Status::Mark { duration, .. }
+            | Status::Duel { duration, .. }
+            | Status::Freeze { duration } => *duration *= f,
+            Status::OneOf { of } => of.iter_mut().for_each(|s| s.scale(f)),
+            _ => {}
+        }
     }
 }
 
@@ -618,7 +1001,7 @@ impl Kit {
             out.push(*npc);
         }
         for ability in &self.abilities {
-            for action in &ability.actions {
+            for action in ability.all_actions() {
                 collect_npcs(action, &mut out);
             }
         }
@@ -634,7 +1017,7 @@ impl Kit {
     pub fn spotanims(&self) -> Vec<u32> {
         let mut out = spot::ALL.to_vec();
         for ability in &self.abilities {
-            for action in &ability.actions {
+            for action in ability.all_actions() {
                 collect_spotanims(action, &mut out);
             }
         }
@@ -646,8 +1029,12 @@ impl Kit {
 
 fn collect_spotanims(action: &Action, out: &mut Vec<u32>) {
     out.extend(action.gfx().ids());
-    if let Action::Dash { land, .. } = action {
-        land.iter().for_each(|a| collect_spotanims(a, out));
+    match action {
+        Action::Dash { land, .. } | Action::Toss { land, .. } => {
+            land.iter().for_each(|a| collect_spotanims(a, out))
+        }
+        Action::Channel { action, .. } => collect_spotanims(action, out),
+        _ => {}
     }
 }
 
@@ -657,11 +1044,49 @@ fn collect_npcs(action: &Action, out: &mut Vec<u32>) {
             out.push(*npc);
             out.extend(npcs.iter().copied());
         }
-        Action::Transform { npc, .. } => out.push(*npc),
+        Action::Transform { npc, cycle, .. } => {
+            out.push(*npc);
+            out.extend(cycle.iter().map(|form| form.npc));
+        }
         Action::Channel { action, .. } => collect_npcs(action, out),
-        Action::Dash { land, .. } => land.iter().for_each(|a| collect_npcs(a, out)),
+        Action::Dash { land, .. } | Action::Toss { land, .. } => {
+            land.iter().for_each(|a| collect_npcs(a, out))
+        }
         _ => {}
     }
+    if action_statuses(action)
+        .iter()
+        .any(|s| matches!(s, Status::Hex { .. }))
+    {
+        out.push(HEX_NPC);
+    }
+}
+
+/// A hexed unit's move speed share.
+pub const HEX_SPEED: f32 = 0.55;
+
+/// The frog a hexed unit becomes (NPC 312, "Frog", from the Kiss the Frog
+/// random event).
+pub const HEX_NPC: u32 = 312;
+
+/// Every status an action can land, its nested actions included.
+pub fn action_statuses(action: &Action) -> Vec<Status> {
+    let mut out = Vec::new();
+    match action {
+        Action::Projectile { on_hit, .. }
+        | Action::Area { on_hit, .. }
+        | Action::Empower { on_hit, .. }
+        | Action::Strike { on_hit, .. } => out.extend(on_hit.iter().cloned()),
+        Action::Zone { on_tick, .. } => out.extend(on_tick.iter().cloned()),
+        Action::Dash { on_hit, land, .. } => {
+            out.extend(on_hit.iter().cloned());
+            land.iter().for_each(|a| out.extend(action_statuses(a)));
+        }
+        Action::Toss { land, .. } => land.iter().for_each(|a| out.extend(action_statuses(a))),
+        Action::Channel { action, .. } => out.extend(action_statuses(action)),
+        _ => {}
+    }
+    out
 }
 
 /// Ability damage after ability power and level: +2% per level past 1,
@@ -805,6 +1230,17 @@ impl Status {
                 format!("throw {distance:.0} in a random direction")
             }
             Status::OneOf { of } => format!("one of: {}", either(of)),
+            Status::Silence { duration } => format!("silence for {} s", secs(*duration)),
+            Status::Hex { duration } => format!("turn into a frog for {} s", secs(*duration)),
+            Status::Mark { pct: p, duration } => {
+                format!(
+                    "make take {}% more damage for {} s",
+                    pct(*p),
+                    secs(*duration)
+                )
+            }
+            Status::Duel { duration, .. } => format!("duel for {} s", secs(*duration)),
+            Status::Freeze { duration } => format!("freeze for {} s", secs(*duration)),
         }
     }
 }
@@ -893,13 +1329,42 @@ impl Passive {
                 minion,
                 hero,
             } => format!(
-                "Every enemy that dies within {radius:.0} adds {minion:.0} maximum health \
-                 for good ({hero:.0} for a hero)."
+                "Every enemy that dies within {radius:.0} banks {minion:.0} bonus damage \
+                 ({hero:.0} for a hero); the next attack spends it all."
             ),
             Passive::Chaos { every, statuses } => format!(
                 "Every {} ability hit also lands one of: {}.",
                 ordinal(*every),
                 either(statuses)
+            ),
+            Passive::BoneCrusher { pct: p, cap } => format!(
+                "Attacks on slowed or taunted enemies deal {}% of their max health more \
+                 (at most {cap:.0} against minions and monsters).",
+                pct(*p)
+            ),
+            Passive::JadRhythm {
+                every,
+                windup,
+                damage,
+            } => format!(
+                "Every {} attack is a Jad attack: after a {} s wind-up, a line of fire or a \
+                 falling boulder (in turn) for {damage:.0} damage.",
+                ordinal(*every),
+                secs(*windup)
+            ),
+            Passive::Tailwind { attacks, pct: p } => format!(
+                "After a leap or glide, the next {attacks} attacks fire an extra feather at a \
+                 second enemy for {}% damage.",
+                pct(*p)
+            ),
+            Passive::Fury {
+                per_stack,
+                max,
+                duration,
+            } => format!(
+                "Each hit on the same enemy adds {per_stack:.0} damage to the next, up to {max} \
+                 times; the stacks fade {} s after the last hit.",
+                secs(*duration)
             ),
         }
     }
@@ -988,7 +1453,7 @@ mod tests {
         .unwrap();
         assert_eq!(
             passive.describe(),
-            "Every enemy that dies within 450 adds 2 maximum health for good (25 for a hero)."
+            "Every enemy that dies within 450 banks 2 bonus damage (25 for a hero); the next attack spends it all."
         );
         let zone: Action = serde_json::from_str(
             r#"{ "type": "zone", "at": "caster", "follow": true, "radius": 260,
