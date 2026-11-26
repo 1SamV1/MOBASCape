@@ -1,8 +1,9 @@
 # Status
 
-Last updated: Vine Swing rework and the Bloat's anchor hook, 2026-11-25.
+Last updated: Vine Swing rework, the Bloat's anchor hook and the ability
+rework proposals, 2026-11-25.
 
-## 2026-11-25 — Vine Swing goes the distance; the Flesh Hook is an anchor
+## 2026-11-25 — Vine Swing goes the distance; the Flesh Hook is an anchor; ability proposals
 
 - **Vine Swing was short.** It landed on the cursor (never under 300
   units) and, when that tile was blocked, walked back toward the king
@@ -34,6 +35,16 @@ Last updated: Vine Swing rework and the Bloat's anchor hook, 2026-11-25.
   the flood fill against walls and sealed corners. Verified with fixed-dt
   captures of `--demo-awowogei` (1500 units in 1.19 s, landing held) and
   the Bloat's `--demo-abilities` (anchor in flight, latched, reeled).
+- **Ability rework proposals** in docs/ABILITY_REWORK.md: what Dota 2 does
+  with targeting, AoE, levels and innates; an audit of all 18 kits (seven
+  near-identical shield Es, three pulls, six leaps, four names used twice,
+  one way to scale); nine shared systems (`SYS-1` to `SYS-9`); and every
+  hero's passive and Q/W/E/R with an approval ID. Nothing in it is built
+  until it is approved.
+- **Small fixes.** The Flesh Hook tooltip names the anchor; SPELLS.md marks
+  1574 spare and documents model projectiles; the Swing indicator's doc
+  says it is always full length; `rift-tools --help` shows the match
+  command's line on `match` again (it had slid onto `spotanim`).
 
 ## 2026-11-25 — Ability bar: skill-point "+" and a round portrait (roadmap 6.4, part)
 
