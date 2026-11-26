@@ -65,6 +65,18 @@ pub struct ProjectileLook {
     /// Point light carried by the projectile (linear RGB, radius).
     pub light: [f32; 3],
     pub light_radius: f32,
+    /// A plain cache model flown in place of `spotanim` (an item such as
+    /// the Barrelchest anchor), lying flat and turned so its front leads.
+    pub model: Option<u32>,
+    /// Heading, `atan2(x, z)`, of the model's front in model space.
+    pub model_yaw: f32,
+    /// How far behind the model's origin, along its front, a rope ties on
+    /// (model units, before `model_scale`).
+    pub model_tail: f32,
+    /// Rope colour. A roped shot trails a rope back to its caster and is
+    /// reeled in once it hits (dragging its catch) or runs out of range.
+    /// Roped looks draw no trail or glow: the rope is the trail.
+    pub rope: Option<[u8; 3]>,
 }
 
 impl ProjectileLook {
@@ -90,6 +102,10 @@ impl ProjectileLook {
             impact_color: [255, 150, 60],
             light: [1.0, 0.45, 0.12],
             light_radius: 460.0,
+            model: None,
+            model_yaw: 0.0,
+            model_tail: 0.0,
+            rope: None,
         }
     }
 }
@@ -111,6 +127,9 @@ impl ProjectileLook {
 
 /// Look used when nothing names one: a warm arcane orb.
 pub const DEFAULT_LOOK: usize = 0;
+
+/// The Barrelchest anchor's ground model (item 10887).
+pub const ANCHOR_MODEL: u32 = 23133;
 
 /// The preset table. Order is stable; [`look_by_name`] resolves names from
 /// champion files.
@@ -680,25 +699,32 @@ pub const LOOKS: &[ProjectileLook] = &[
         light_radius: 340.0,
         ..ProjectileLook::base("madness")
     },
-    // Pestilent Bloat's Flesh Hook: a thrown limb (1574) that lands in a
-    // blood splat (1576), trailing gore.
+    // Pestilent Bloat's Flesh Hook: the Barrelchest anchor (item 10887,
+    // ground model 23133) flung flukes-first on a grapple rope. It lands in
+    // a blood splat (1576) and drips gore. The model lies flat with its
+    // shank 43 degrees off +Z, flukes forward and the ring 35 units behind
+    // its origin (measured with `rift-tools export-obj 23133`).
     ProjectileLook {
-        spotanim: Some(1574),
+        model: Some(ANCHOR_MODEL),
+        model_yaw: 0.755,
+        model_tail: 35.0,
+        model_scale: 2.6,
+        rope: Some([150, 116, 70]),
         hit_spotanim: Some(1576),
-        model_scale: 1.6,
+        hit_scale: Some(1.6),
         glow: [150, 40, 30],
-        glow_size: 40.0,
-        glow_intensity: 0.6,
+        glow_size: 30.0,
+        glow_intensity: 0.0,
         trail: [120, 20, 15],
-        trail_width: 14.0,
-        trail_points: 16,
-        embers: 30.0,
+        trail_width: 0.0,
+        trail_points: 2,
+        embers: 14.0,
         ember_color: [140, 20, 10],
         impact_radius: 140.0,
         impact_sparks: 14,
         impact_color: [170, 30, 20],
         light: [0.6, 0.15, 0.1],
-        light_radius: 200.0,
+        light_radius: 0.0,
         ..ProjectileLook::base("bloat_hook")
     },
 ];
@@ -726,6 +752,14 @@ pub fn spotanim_ids() -> Vec<u32> {
         .flat_map(|look| [look.spotanim, look.hit_spotanim])
         .flatten()
         .collect();
+    ids.sort_unstable();
+    ids.dedup();
+    ids
+}
+
+/// Every plain model the preset table flies (`ProjectileLook::model`).
+pub fn model_ids() -> Vec<u32> {
+    let mut ids: Vec<u32> = LOOKS.iter().filter_map(|look| look.model).collect();
     ids.sort_unstable();
     ids.dedup();
     ids

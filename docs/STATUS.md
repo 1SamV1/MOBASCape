@@ -1,6 +1,39 @@
 # Status
 
-Last updated: skill-point "+" and round portrait (roadmap 6.4), 2026-11-25.
+Last updated: Vine Swing rework and the Bloat's anchor hook, 2026-11-25.
+
+## 2026-11-25 — Vine Swing goes the distance; the Flesh Hook is an anchor
+
+- **Vine Swing was short.** It landed on the cursor (never under 300
+  units) and, when that tile was blocked, walked back toward the king
+  until it found open ground: a demo cast among jungle trees covered 211
+  units. Now it always swings the full rank range toward the cursor
+  (1500/1600/1700/1800, up from 900-1125); the cursor only aims.
+- **Speed curve.** The swing leaves the run-up at a fifth of its top speed,
+  speeds up smoothly for 0.6 s and holds 1700 units/s to the landing
+  (`swing_distance`, the integral of the speed curve, walked through an
+  arc-length table so the speed is true along the rise and fall). It used
+  to ease in and out, slowest at both ends.
+- **Forward arc.** The ground track bows a tenth of its length to the right
+  (was 22%), so the path reads as a curve but carries him forward.
+- **Reliable landing.** A blocked landing tile tries 64/128/192 units to
+  either side before falling short, never below 45% of the range, and only
+  lands where the king could walk on from: a flood fill from his tile
+  (`Grid::reachable_from`, `WorldCollision::walk_region`) keeps him off
+  the far side of the map wall and out of sealed pockets.
+- **Flesh Hook.** Pestilent Bloat's hook is now the Barrelchest anchor
+  (item 10887, ground model 23133) flung flukes-first on a braided grapple
+  rope tied to the Bloat. On a hit it stays in its catch while the pull
+  drags it in, then reels home; a miss reels straight back. Projectile
+  looks gained `model` (a plain cache model flown flat, front leading) and
+  `rope`; the reel is visual only, the pull is unchanged.
+- **`--fixed-dt SECONDS`** makes demo screenshots land on the same moment
+  every run (frames used to follow the wall clock).
+- Tests: the speed curve (slow start, rising, flat plateau, distance =
+  running total), speed along the arc, full-distance and blocked landings,
+  the flood fill against walls and sealed corners. Verified with fixed-dt
+  captures of `--demo-awowogei` (1500 units in 1.19 s, landing held) and
+  the Bloat's `--demo-abilities` (anchor in flight, latched, reeled).
 
 ## 2026-11-25 — Ability bar: skill-point "+" and a round portrait (roadmap 6.4, part)
 

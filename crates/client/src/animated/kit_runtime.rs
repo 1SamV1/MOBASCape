@@ -28,6 +28,10 @@ pub struct NpcAssets {
 
 /// Seconds a Scramble's throw takes.
 const SCRAMBLE_SECONDS: f32 = 0.2;
+/// A roped shot's head reels home at this speed (units/s)...
+const REEL_SPEED: f32 = 2_600.0;
+/// ...after staying stuck in its catch this long, while the pull drags it.
+const REEL_LATCH: f32 = 0.3;
 /// The Discord swirl's landing ring, shown when the Chaos passive procs.
 const CHAOS_PROC: u32 = 558;
 
@@ -78,6 +82,17 @@ struct KitShot {
     gfx: Gfx,
     /// The `land` graphic has played (at the first strike).
     landed: bool,
+}
+
+/// A roped shot after it lands: the head stays in its catch while the pull
+/// drags it in, then the rope reels the head back to the caster.
+struct KitReel {
+    pos: Vec3,
+    look: usize,
+    /// The unit the head is stuck in, for `latch` more seconds.
+    catch: Option<usize>,
+    latch: f32,
+    age: f32,
 }
 
 struct PendingArea {
@@ -162,6 +177,7 @@ struct TransformState {
 pub struct KitRuntime {
     pub npc_assets: HashMap<u32, NpcAssets>,
     shots: Vec<KitShot>,
+    reels: Vec<KitReel>,
     areas: Vec<PendingArea>,
     zones: Vec<Zone>,
     dash: Option<DashState>,
@@ -1450,6 +1466,7 @@ impl AnimatedScene {
         self.update_kit_dash(dt, height, collision);
         self.update_kit_channel(dt);
         self.update_kit_shots(dt, height);
+        self.update_kit_reels(dt);
         self.update_kit_areas(dt);
         self.update_kit_zones(dt);
     }
@@ -1642,25 +1659,84 @@ impl AnimatedScene {
             }
             if !spent {
                 survivors.push(shot);
+            } else if look.rope.is_some() {
+                let catch = hits.first().copied();
+                self.kit_rt.reels.push(KitReel {
+                    pos: shot.pos,
+                    look: shot.look,
+                    catch,
+                    latch: if catch.is_some() { REEL_LATCH } else { 0.0 },
+                    age: shot.age,
+                });
             }
         }
         self.kit_rt.shots.extend(survivors);
     }
 
-    /// Drawing data for every kit shot in flight.
+    /// Where a roped shot's rope ties on at the caster: its throwing height,
+    /// a little in front of it.
+    fn kit_rope_anchor(&self) -> Vec3 {
+        let caster = &self.units[self.player_index];
+        let forward = Vec3::new(caster.yaw.sin(), 0.0, caster.yaw.cos());
+        caster.pos + Vec3::Y * (caster.scale * 80.0) + forward * 40.0
+    }
+
+    /// Landed roped shots: stuck in their catch for a moment, then reeled
+    /// home. Purely visual; the pull is a status the hit already applied.
+    fn update_kit_reels(&mut self, dt: f32) {
+        if self.kit_rt.reels.is_empty() {
+            return;
+        }
+        let hand = self.kit_rope_anchor();
+        let alive = self.units[self.player_index].health > 0.0;
+        let mut reels = std::mem::take(&mut self.kit_rt.reels);
+        reels.retain_mut(|reel| {
+            reel.age += dt;
+            if !alive {
+                return false;
+            }
+            if let Some(catch) = reel.catch.filter(|_| reel.latch > 0.0) {
+                reel.latch -= dt;
+                if self.units.get(catch).is_some_and(|unit| unit.health > 0.0) {
+                    reel.pos = self.unit_chest(catch);
+                    return true;
+                }
+            }
+            let to = hand - reel.pos;
+            let distance = to.length();
+            let step = REEL_SPEED * dt;
+            if distance <= step + 40.0 {
+                return false;
+            }
+            reel.pos += to / distance * step;
+            true
+        });
+        self.kit_rt.reels = reels;
+    }
+
+    /// Drawing data for every kit shot in flight, and for roped heads being
+    /// reeled in (pointing away from the caster, as the rope pulls them).
     pub(super) fn kit_shot_visuals(&self) -> Vec<ShotVisual> {
-        self.kit_rt
-            .shots
-            .iter()
-            .map(|shot| ShotVisual {
-                pos: shot.pos,
-                dir: shot.dir,
-                look: shot.look,
-                trail: shot.trail.clone(),
-                age: shot.age,
-                tint: shot.tint,
-            })
-            .collect()
+        let hand = self.kit_rope_anchor();
+        let flying = self.kit_rt.shots.iter().map(|shot| ShotVisual {
+            pos: shot.pos,
+            dir: shot.dir,
+            look: shot.look,
+            trail: shot.trail.clone(),
+            age: shot.age,
+            tint: shot.tint,
+            rope_from: fx::look(shot.look).rope.map(|_| hand),
+        });
+        let reeling = self.kit_rt.reels.iter().map(|reel| ShotVisual {
+            pos: reel.pos,
+            dir: planar_delta(hand, reel.pos).normalize_or(Vec3::Z),
+            look: reel.look,
+            trail: Vec::new(),
+            age: reel.age,
+            tint: None,
+            rope_from: Some(hand),
+        });
+        flying.chain(reeling).collect()
     }
 
     /// The look a kit shot should be drawn and lit with.

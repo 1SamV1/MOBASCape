@@ -469,6 +469,8 @@ pub struct ShotVisual {
     /// Overrides the look's glow and trail colours (kit shots without a
     /// named look take their ability colour).
     pub tint: Option<[u8; 3]>,
+    /// Where a roped look's rope ties on at the caster's end.
+    pub rope_from: Option<Vec3>,
 }
 
 /// Shape drawn on the ground while the ability indicator is held.
@@ -850,6 +852,8 @@ pub struct AnimatedScene {
     pub fx: FxMesh,
     /// Cache spot animations used by projectile looks, keyed by id.
     spot_models: HashMap<u32, Arc<SpotModel>>,
+    /// Plain models flown by projectile looks (`fx::ProjectileLook::model`).
+    look_models: HashMap<u32, Arc<Model>>,
     /// Impact splashes playing once.
     pub spot_bursts: Vec<SpotBurst>,
     /// Melee hit streaks.
@@ -1392,6 +1396,16 @@ impl AnimatedScene {
             }
         }
 
+        let mut look_models = HashMap::new();
+        for id in fx::model_ids() {
+            match load_model(cache, id) {
+                Ok(model) => {
+                    look_models.insert(id, Arc::new(model));
+                }
+                Err(err) => tracing::warn!("fx: projectile model {id} unavailable: {err:#}"),
+            }
+        }
+
         let kit_rt = match &champion.kit {
             Some(kit) => kit_runtime::KitRuntime::load(cache, &mut assets, kit),
             None => kit_runtime::KitRuntime::default(),
@@ -1415,6 +1429,7 @@ impl AnimatedScene {
             projectiles: Vec::new(),
             fx: FxMesh::default(),
             spot_models,
+            look_models,
             spot_bursts: Vec::new(),
             slashes: Vec::new(),
             last_cast_slot: None,
@@ -5768,7 +5783,8 @@ impl AnimatedScene {
             .map(|projectile| (projectile.draw_pos(), *fx::look(projectile.look)))
             .chain(self.kit_shot_lights());
         for (pos, look) in shots {
-            if !self.in_team_vision(pos) {
+            // A dark iron anchor carries no light of its own.
+            if !self.in_team_vision(pos) || look.light_radius <= 0.0 {
                 continue;
             }
             lights.push(SceneLight {
@@ -5794,9 +5810,26 @@ impl AnimatedScene {
         lights
     }
 
-    /// A projectile: trail ribbon, layered glow and its cache model.
+    /// A projectile: trail ribbon, layered glow and its cache model; a
+    /// roped look (the Bloat's anchor) instead draws its model and the rope
+    /// back to its caster.
     fn draw_shot(&mut self, shot: &ShotVisual, right: Vec3, up: Vec3, forward: Vec3) {
         let look = fx::look(shot.look).tinted(shot.tint);
+        if let Some(rope) = look.rope {
+            let heading = Vec3::new(shot.dir.x, 0.0, shot.dir.z).normalize_or(Vec3::Z);
+            if let Some(model) = look.model.and_then(|id| self.look_models.get(&id)).cloned() {
+                // Flat, front leading, with a slight wobble in flight.
+                let yaw = heading.x.atan2(heading.z) - look.model_yaw;
+                let wobble = 0.12 * (shot.age * 9.0).sin();
+                let rot = Mat3::from_rotation_y(yaw) * Mat3::from_rotation_x(wobble);
+                append_banana_model(self, &model, shot.pos, rot, look.model_scale);
+            }
+            if let Some(from) = shot.rope_from {
+                let tail = shot.pos - heading * (look.model_tail * look.model_scale);
+                draw_rope(self, from, tail, rope, forward);
+            }
+            return;
+        }
         // Trails start at the head so the ribbon never lags the model.
         let mut trail = Vec::with_capacity(shot.trail.len() + 1);
         trail.push(shot.pos);
@@ -6323,6 +6356,7 @@ impl AnimatedScene {
                 trail: projectile.trail.clone(),
                 age: projectile.age,
                 tint: None,
+                rope_from: None,
             })
             .collect::<Vec<_>>();
         shots.extend(self.kit_shot_visuals());
@@ -7673,6 +7707,30 @@ fn append_quad(scene: &mut AnimatedScene, center: Vec3, right: Vec3, up: Vec3, c
     scene
         .indices
         .extend_from_slice(&[base, base + 1, base + 2, base + 2, base + 1, base + 3]);
+}
+
+/// A taut braided rope from `from` to `to`: two alternating strand shades,
+/// sagging a little more the longer it runs.
+fn draw_rope(scene: &mut AnimatedScene, from: Vec3, to: Vec3, color: [u8; 3], forward: Vec3) {
+    let along = to - from;
+    let length = along.length();
+    if length < 1.0 {
+        return;
+    }
+    let segments = ((length / 40.0).ceil() as usize).clamp(4, 48);
+    let side = along.cross(forward).normalize_or(Vec3::X);
+    let sag = Vec3::Y * -(length * 0.04).min(60.0);
+    let point = |i: usize| {
+        let s = i as f32 / segments as f32;
+        from + along * s + sag * (4.0 * s * (1.0 - s))
+    };
+    let dark = color.map(|c| (c as f32 * 0.62) as u8);
+    for i in 0..segments {
+        let (a, b) = (point(i), point(i + 1));
+        let half = (b - a) * 0.5;
+        let shade = if i % 2 == 0 { color } else { dark };
+        append_quad(scene, a + half, half, side * 6.5, shade);
+    }
 }
 
 #[cfg(test)]
