@@ -527,7 +527,8 @@
       "interval": 1.6,
       "speed": 235,
       "aggro": 430,
-      "leash": 900
+      "leash": 900,
+      "name": "JalTok-Jad"
     },
     {
       "id": "top_east",
@@ -548,7 +549,8 @@
       "interval": 1.5,
       "speed": 225,
       "aggro": 420,
-      "leash": 860
+      "leash": 860,
+      "name": "Crypt spider"
     },
     {
       "id": "bot_west",
@@ -568,7 +570,8 @@
       "interval": 1.2,
       "speed": 265,
       "aggro": 390,
-      "leash": 800
+      "leash": 800,
+      "name": "Giant bat"
     },
     {
       "id": "bot_east",
@@ -588,7 +591,8 @@
       "interval": 1.9,
       "speed": 205,
       "aggro": 460,
-      "leash": 1000
+      "leash": 1000,
+      "name": "Kree'arra Jr."
     },
     {
       "id": "inner_top_west",
@@ -608,7 +612,8 @@
       "interval": 1.7,
       "speed": 220,
       "aggro": 400,
-      "leash": 820
+      "leash": 820,
+      "name": "Spider"
     },
     {
       "id": "inner_top_east",
@@ -628,7 +633,8 @@
       "interval": 1.5,
       "speed": 240,
       "aggro": 410,
-      "leash": 840
+      "leash": 840,
+      "name": "Giant bat"
     },
     {
       "id": "inner_bot_west",
@@ -649,7 +655,8 @@
       "interval": 1.8,
       "speed": 210,
       "aggro": 440,
-      "leash": 940
+      "leash": 940,
+      "name": "Albino bat"
     },
     {
       "id": "inner_bot_east",
@@ -669,7 +676,8 @@
       "interval": 1.15,
       "speed": 270,
       "aggro": 380,
-      "leash": 780
+      "leash": 780,
+      "name": "Giant bat"
     }
   ],
   "brush": [

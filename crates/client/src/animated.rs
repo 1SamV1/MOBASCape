@@ -186,6 +186,8 @@ pub struct AnimatedUnit {
     pub camp_buff: Option<CampBuff>,
     /// A region boss camp (bots take it as a team for the buff).
     pub camp_boss: bool,
+    /// The camp creature's name from map.json, when it has one.
+    pub camp_name: Option<String>,
     pub mana: f32,
     pub max_mana: f32,
     pub level: u32,
@@ -1234,6 +1236,7 @@ impl AnimatedScene {
             unit.respawn_time = camp.respawn;
             unit.camp_buff = Some(camp.buff);
             unit.camp_boss = camp.boss;
+            unit.camp_name = camp.name.clone();
             if camp.range > 300.0 {
                 unit.look = fx::look_by_name("earth_blast");
             }
@@ -3543,6 +3546,9 @@ impl AnimatedScene {
         let unit = self.units.get(index)?;
         let name = match unit.kind {
             UnitKind::Player => self.champion_name.clone(),
+            UnitKind::Camp if unit.camp_name.is_some() => {
+                unit.camp_name.as_deref().unwrap_or_default().to_uppercase()
+            }
             UnitKind::Camp => {
                 let buff = match unit.camp_buff {
                     Some(CampBuff::Might) => "MIGHT",
@@ -5628,6 +5634,7 @@ impl AnimatedScene {
                 respawn_time: 0.0,
                 camp_buff: None,
                 camp_boss: false,
+                camp_name: None,
                 mana: 0.0,
                 max_mana: 0.0,
                 level: 1,
@@ -7010,6 +7017,7 @@ fn build_unit(
         respawn_time: 0.0,
         camp_buff: None,
         camp_boss: false,
+        camp_name: None,
         mana: 0.0,
         max_mana: 0.0,
         level: 1,

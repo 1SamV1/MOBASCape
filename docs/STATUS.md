@@ -1,6 +1,26 @@
 # Status
 
-Last updated: all eight biome pockets dressed from cache objects, 2026-11-25.
+Last updated: objectives panel (roadmap 6.3), 2026-11-25.
+
+## 2026-11-25 — Objectives panel: named objectives (roadmap 6.3)
+
+- Camps take an optional `name` in map.json, set from the cache NPC that
+  shares each camp's model: JalTok-Jad, Crypt spider (boss), Giant bat,
+  Kree'arra Jr., Spider and Albino bat (boss). The hover tooltip shows it.
+- The panel's lines below the nexuses are now six in all, as the stage 3
+  plan counts them: one per region boss under its name with its respawn
+  timer, then one "Jungle camps" line per buff for the plain camps
+  ("Alive", or "1/3  12s": how many stand and the soonest respawn). A team
+  holding a buff shows as that buff's second line ("Blue holds Might 42s").
+  Before, the panel had a generic row for each of the eight camps.
+- Countdowns ("37s", "1/3  12s") use the title colour; they were drawn in
+  the quiet colour because only all-digit states counted as figures.
+- `ui_live::camp_lines` is a pure function with a test; `state_colour` has
+  one too. The stage 3 sample carries the new lines.
+- Verified: `--ui-live` (all alive) and `--ui-layout` (the longest state:
+  timers and four second lines).
+- `tools/dress_radiant.py` now holds the radiant pocket placement script
+  (see DEV_TOOLS.md).
 
 ## 2026-11-25 — Radiant pockets dressed
 

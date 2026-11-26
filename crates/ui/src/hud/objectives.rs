@@ -190,9 +190,12 @@ fn state_colour(
     quiet: crate::Colour,
     title: crate::Colour,
 ) -> crate::Colour {
+    // Health figures ("620") and countdowns ("37s", "1/3  12s") stand out;
+    // words like "Shielded" stay quiet.
+    let countdown = state.ends_with('s') && state.starts_with(|c: char| c.is_ascii_digit());
     if state == "Alive" || state == "Open" {
         good
-    } else if state.chars().all(|c| c.is_ascii_digit()) {
+    } else if countdown || (!state.is_empty() && state.chars().all(|c| c.is_ascii_digit())) {
         title
     } else {
         quiet
@@ -209,5 +212,21 @@ fn camp_colour(
         "Might" => title,
         "Swift" => good,
         _ => quiet,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::state_colour;
+
+    #[test]
+    fn countdowns_and_health_stand_out_and_words_stay_quiet() {
+        let (good, quiet, title) = ([0.0, 1.0, 0.0, 1.0], [0.5; 4], [1.0, 0.6, 0.0, 1.0]);
+        assert_eq!(state_colour("Alive", good, quiet, title), good);
+        assert_eq!(state_colour("620", good, quiet, title), title);
+        assert_eq!(state_colour("37s", good, quiet, title), title);
+        assert_eq!(state_colour("1/3  12s", good, quiet, title), title);
+        assert_eq!(state_colour("Shielded", good, quiet, title), quiet);
+        assert_eq!(state_colour("", good, quiet, title), quiet);
     }
 }

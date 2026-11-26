@@ -611,6 +611,10 @@ struct CampJson {
     /// A region boss (bots take it as a team for the buff).
     #[serde(default)]
     boss: bool,
+    /// The creature's name (its cache NPC name), for the objectives panel
+    /// and the hover tooltip.
+    #[serde(default)]
+    name: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -631,6 +635,7 @@ pub struct CampSpawn {
     pub aggro: f32,
     pub leash: f32,
     pub boss: bool,
+    pub name: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -1001,6 +1006,7 @@ impl MapLayout {
                 aggro: camp.aggro,
                 leash: camp.leash,
                 boss: camp.boss,
+                name: camp.name.clone(),
             })
             .collect();
 

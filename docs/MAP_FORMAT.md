@@ -49,7 +49,9 @@ The playable map is `data/maps/karamja_rift/map.json`:
   `leash`. Camps aggro when a hero enters `aggro` or when they take damage,
   chase the hero, leash back to `home` when pulled past `leash`, heal to full
   on arrival and respawn after `respawn` seconds. Camps grant a 60 s team buff
-  when killed.
+  when killed. `boss: true` marks a region boss, and `name` (optional) is
+  the creature's cache NPC name: the objectives panel gives each boss a
+  line of its own under that name, and the hover tooltip shows it.
 - `biomes`: regional biome pockets. Each pocket transplants a rectangle of a
   real OSRS region into the map:
   - `region`: `[region_x, region_y]` of the source OSRS region.

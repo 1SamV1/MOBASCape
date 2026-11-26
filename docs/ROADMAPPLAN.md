@@ -210,8 +210,11 @@ All objects from the cache, placed through the map format
 2. ~~Kill feed~~ Done 2026-11-24: heroes and structures only (the practice
    dummy when a hero kills it); the same rule gates the centre
    announcements, so last hits no longer flash "YOU HAVE SLAIN A MINION!".
-3. **Objectives panel:** named objectives with respawn timers and per-lane
-   tower states, not one row per camp.
+3. ~~Objectives panel~~ Done 2026-11-25: each region boss on its own line
+   under its cache name (Crypt spider, Albino bat) with its respawn timer;
+   the plain camps fold into one line per buff ("Alive", or how many stand
+   and the soonest respawn) with the holding team's buff as a second line.
+   The per-lane tower and inhibitor pips were already live.
 4. Slimmer action bar with round portrait, skill-point "+" over abilities,
    and potion slots; equipment-grid inventory from the cache slot sprites.
 5. Announcements in OSRS yellow for objectives; bounty values in the feed.
@@ -262,3 +265,5 @@ All objects from the cache, placed through the map format
   (tagline, weapon, descriptions, build), cut text ends in "..." with the
   rest in an OSRS hover box, and at 1024x600 the roster drops its name
   line for bigger portraits and the stats drop their labels.
+- 2026-11-25: phase 6.3 objectives panel done: named boss lines, camps
+  grouped by buff, countdowns drawn in the title colour.

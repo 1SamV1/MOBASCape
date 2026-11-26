@@ -272,45 +272,23 @@ pub fn objectives(scene: &SceneData, animated: &AnimatedScene) -> ObjectivesStat
         })
         .collect();
 
-    let mut second_lines = 0;
-    let camps = animated
+    let snapshots: Vec<CampSnapshot> = animated
         .units
         .iter()
         // Scattered critter camps are gameplay camps internally but carry no
-        // team buff. The objectives panel lists the eight buff camps only.
+        // team buff. The objectives panel reads the buff camps only.
         .filter(|unit| is_objective_camp(unit.kind, unit.camp_buff))
-        .map(|unit| {
-            let grant = match unit.camp_buff.unwrap_or(CampBuff::Might) {
-                CampBuff::Might => "Might",
-                CampBuff::Swift => "Swift",
-            };
-            let state = if unit.health > 0.0 {
-                "Alive".to_string()
-            } else {
-                format!("{:.0}s", unit.dead_timer.max(0.0))
-            };
-            let detail = (0..2).find_map(|team| {
-                let (remaining, _, buff) = animated.team_buff(team)?;
-                (buff == unit.camp_buff.unwrap_or(CampBuff::Might)).then(|| {
-                    format!(
-                        "{} {} {:.0}s",
-                        if team == 0 { "Blue" } else { "Red" },
-                        grant,
-                        remaining
-                    )
-                })
-            });
-            if detail.is_some() {
-                second_lines += 1;
-            }
-            CampState {
-                name: format!("{grant} camp"),
-                grant: grant.to_string(),
-                state,
-                detail,
-            }
+        .map(|unit| CampSnapshot {
+            name: unit.camp_name.clone(),
+            buff: unit.camp_buff.unwrap_or(CampBuff::Might),
+            boss: unit.camp_boss,
+            respawn: (unit.health <= 0.0).then(|| unit.dead_timer.max(0.0)),
         })
         .collect();
+    let buffs = [animated.team_buff(0), animated.team_buff(1)]
+        .map(|b| b.map(|(remaining, _, kind)| (kind, remaining)));
+    let camps = camp_lines(&snapshots, buffs);
+    let second_lines = camps.iter().filter(|c| c.detail.is_some()).count();
 
     ObjectivesState {
         lanes,
@@ -319,6 +297,82 @@ pub fn objectives(scene: &SceneData, animated: &AnimatedScene) -> ObjectivesStat
         second_lines,
         usual_second_lines: 0,
     }
+}
+
+/// One buff camp as the objectives panel needs it.
+#[derive(Debug, Clone, PartialEq)]
+struct CampSnapshot {
+    name: Option<String>,
+    buff: CampBuff,
+    boss: bool,
+    /// Seconds until it respawns, while it is dead.
+    respawn: Option<f32>,
+}
+
+fn grant_name(buff: CampBuff) -> &'static str {
+    match buff {
+        CampBuff::Might => "Might",
+        CampBuff::Swift => "Swift",
+    }
+}
+
+/// The objective lines below the nexuses (roadmap 6.3): every region boss on
+/// a line of its own under its creature's name with its respawn timer, then
+/// one line per buff for the plain camps, "Alive" when all stand, else how
+/// many stand and the soonest respawn. A team holding a buff shows it as the
+/// second line of that buff's camp line.
+fn camp_lines(camps: &[CampSnapshot], buffs: [Option<(CampBuff, f32)>; 2]) -> Vec<CampState> {
+    let timer = |seconds: f32| format!("{:.0}s", seconds.ceil());
+    let holder = |buff: CampBuff| {
+        buffs.iter().enumerate().find_map(|(team, held)| {
+            let (kind, remaining) = (*held)?;
+            (kind == buff).then(|| {
+                format!(
+                    "{} holds {} {}",
+                    if team == 0 { "Blue" } else { "Red" },
+                    grant_name(buff),
+                    timer(remaining)
+                )
+            })
+        })
+    };
+    let mut lines: Vec<CampState> = camps
+        .iter()
+        .filter(|camp| camp.boss)
+        .map(|camp| CampState {
+            name: camp
+                .name
+                .clone()
+                .unwrap_or_else(|| format!("{} boss", grant_name(camp.buff))),
+            grant: grant_name(camp.buff).to_string(),
+            state: camp.respawn.map_or_else(|| "Alive".to_string(), timer),
+            detail: None,
+        })
+        .collect();
+    for buff in [CampBuff::Might, CampBuff::Swift] {
+        let group: Vec<&CampSnapshot> = camps
+            .iter()
+            .filter(|camp| !camp.boss && camp.buff == buff)
+            .collect();
+        if group.is_empty() {
+            continue;
+        }
+        let standing = group.iter().filter(|camp| camp.respawn.is_none()).count();
+        let soonest = group
+            .iter()
+            .filter_map(|camp| camp.respawn)
+            .min_by(|a, b| a.total_cmp(b));
+        lines.push(CampState {
+            name: "Jungle camps".to_string(),
+            grant: grant_name(buff).to_string(),
+            state: match soonest {
+                None => "Alive".to_string(),
+                Some(seconds) => format!("{standing}/{}  {}", group.len(), timer(seconds)),
+            },
+            detail: holder(buff),
+        });
+    }
+    lines
 }
 
 fn tower_slots(animated: &AnimatedScene, lane: usize, team: u8) -> [bool; 2] {
@@ -1181,6 +1235,52 @@ mod tests {
         assert!(is_objective_camp(UnitKind::Camp, Some(CampBuff::Swift)));
         assert!(!is_objective_camp(UnitKind::Camp, None));
         assert!(!is_objective_camp(UnitKind::Player, None));
+    }
+
+    #[test]
+    fn bosses_get_named_lines_and_plain_camps_group_by_buff() {
+        let camp = |name: &str, buff, boss, respawn| CampSnapshot {
+            name: Some(name.to_string()),
+            buff,
+            boss,
+            respawn,
+        };
+        let camps = [
+            camp("JalTok-Jad", CampBuff::Might, false, None),
+            camp("Crypt spider", CampBuff::Swift, true, Some(36.2)),
+            camp("Spider", CampBuff::Might, false, Some(31.4)),
+            camp("Giant bat", CampBuff::Swift, false, None),
+            camp("Albino bat", CampBuff::Might, true, None),
+            camp("Kree'arra Jr.", CampBuff::Might, false, Some(12.0)),
+        ];
+        let lines = camp_lines(&camps, [Some((CampBuff::Might, 41.5)), None]);
+        let view: Vec<(&str, &str, &str, Option<&str>)> = lines
+            .iter()
+            .map(|l| {
+                (
+                    l.name.as_str(),
+                    l.grant.as_str(),
+                    l.state.as_str(),
+                    l.detail.as_deref(),
+                )
+            })
+            .collect();
+        assert_eq!(
+            view,
+            vec![
+                ("Crypt spider", "Swift", "37s", None),
+                ("Albino bat", "Might", "Alive", None),
+                (
+                    "Jungle camps",
+                    "Might",
+                    "1/3  12s",
+                    Some("Blue holds Might 42s")
+                ),
+                ("Jungle camps", "Swift", "Alive", None),
+            ]
+        );
+        // Six objective lines with the two nexuses: the panel's usual height.
+        assert_eq!(lines.len() + 2, 6);
     }
 
     #[test]
