@@ -59,8 +59,19 @@ pub fn upgrade_block(
     None
 }
 
+/// The rank a computer-played hero has in `slot` at `level`, out of `max`
+/// ranks: Q at 1, W at 2, E at 3, R at 6, then another rank every three
+/// levels.
+pub fn auto_rank(slot: usize, level: u32, max: usize) -> u8 {
+    let first = if slot == 3 { 6 } else { slot as u32 + 1 };
+    if level < first || max == 0 {
+        return 0;
+    }
+    (1 + (level - first) / 3).min(max as u32) as u8
+}
+
 /// Rank `rank`'s value over rank 1's, or 1 when either is missing or zero.
-fn ratio(current: Option<f32>, first: Option<f32>) -> f32 {
+pub(super) fn ratio(current: Option<f32>, first: Option<f32>) -> f32 {
     match (current, first) {
         (Some(current), Some(first)) if first > 0.0 && current > 0.0 => current / first,
         _ => 1.0,

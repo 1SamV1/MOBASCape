@@ -1,8 +1,12 @@
 //! Executes data-driven champion kits (`crate::kit`) on the scene.
 //!
-//! A child of `animated` so it can reach the scene's private helpers. Only
-//! the player's champion carries a kit; its abilities hit enemy minions,
-//! camps and champions. Structures take damage but ignore crowd control.
+//! A child of `animated` so it can reach the scene's private helpers. Every
+//! champion with a kit casts it, the player and bots alike: each caster has
+//! its own [`KitRuntime`] (cooldown charges, dashes, channels, buffs), and
+//! the effects in flight (shots, areas, zones) live in the shared
+//! [`KitWorld`], tagged with their caster and team. Abilities hit the
+//! caster's enemies: the other team's minions, champions and structures,
+//! and neutral camps. Structures take damage but ignore crowd control.
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -14,6 +18,7 @@ use super::{
     AnimatedScene, Effect, Particle, ShotVisual, UnitAssets, UnitKind, advance_trail, build_unit,
     planar_delta, turn_toward,
 };
+use crate::champion::{AbilityRank, ChampionAbility};
 use crate::fx;
 use crate::kit::{self, Action, Anchor, Gfx, Passive, Status};
 use crate::scene::{HeightGrid, WorldCollision};
@@ -38,6 +43,9 @@ const CHAOS_PROC: u32 = 558;
 /// What an action needs to know about its cast.
 #[derive(Clone)]
 struct CastCtx {
+    /// The casting unit and its team.
+    caster: usize,
+    team: u8,
     color: [u8; 3],
     /// Caster position when the action runs.
     origin: Vec3,
@@ -56,6 +64,8 @@ struct CastCtx {
 }
 
 struct KitShot {
+    caster: usize,
+    team: u8,
     pos: Vec3,
     dir: Vec3,
     speed: f32,
@@ -87,6 +97,7 @@ struct KitShot {
 /// A roped shot after it lands: the head stays in its catch while the pull
 /// drags it in, then the rope reels the head back to the caster.
 struct KitReel {
+    caster: usize,
     pos: Vec3,
     look: usize,
     /// The unit the head is stuck in, for `latch` more seconds.
@@ -96,6 +107,8 @@ struct KitReel {
 }
 
 struct PendingArea {
+    caster: usize,
+    team: u8,
     pos: Vec3,
     radius: f32,
     delay: f32,
@@ -112,6 +125,8 @@ struct PendingArea {
 }
 
 struct Zone {
+    caster: usize,
+    team: u8,
     pos: Vec3,
     radius: f32,
     grow: f32,
@@ -172,14 +187,24 @@ struct TransformState {
     cast_clip: Option<Arc<AnimationClip>>,
 }
 
-/// Per-match kit state for the player's champion.
+/// Effects in flight from every caster, and the NPCs kits summon.
 #[derive(Default)]
-pub struct KitRuntime {
+pub struct KitWorld {
     pub npc_assets: HashMap<u32, NpcAssets>,
     shots: Vec<KitShot>,
     reels: Vec<KitReel>,
     areas: Vec<PendingArea>,
     zones: Vec<Zone>,
+}
+
+/// One caster's kit and its per-match state.
+pub struct KitRuntime {
+    pub kit: kit::Kit,
+    /// Current rank of each slot (0 = not learned). The player's mirror
+    /// the skill points spent; bots learn theirs with level.
+    pub ranks: [u8; 4],
+    /// The champion file's numbers per rank, Q to R.
+    pub rank_table: [Vec<AbilityRank>; 4],
     dash: Option<DashState>,
     channel: Option<ChannelState>,
     empower: Option<EmpowerState>,
@@ -206,20 +231,85 @@ pub struct KitRuntime {
 }
 
 impl KitRuntime {
-    /// Load the NPCs a kit summons or turns into.
-    pub fn load(cache: &rift_cache::Cache, assets: &mut UnitAssets<'_>, kit: &kit::Kit) -> Self {
-        let mut runtime = Self::default();
-        for (slot, ability) in kit.abilities.iter().enumerate() {
-            runtime.charges[slot] = ability.charges.max(1);
+    /// A fresh runtime for `kit`, with the champion's rank tables.
+    pub fn new(kit: &kit::Kit, abilities: &[ChampionAbility]) -> Self {
+        let mut charges = [1u8; 4];
+        for (slot, ability) in kit.abilities.iter().enumerate().take(4) {
+            charges[slot] = ability.charges.max(1);
         }
-        runtime.npc_assets = load_npcs(cache, assets, &kit.npcs(), "kit");
-        runtime
+        Self {
+            kit: kit.clone(),
+            ranks: [1; 4],
+            rank_table: std::array::from_fn(|slot| {
+                abilities
+                    .get(slot)
+                    .map(|a| a.ranks.clone())
+                    .unwrap_or_default()
+            }),
+            dash: None,
+            channel: None,
+            empower: None,
+            transform: None,
+            charges,
+            recharge: [0.0; 4],
+            attack_count: 0,
+            second_form_used: false,
+            combo_stacks: 0,
+            combo_timer: 0.0,
+            combo_last: None,
+            damage_reduction: 0.0,
+            damage_reduction_timer: 0.0,
+            reflect: 0.0,
+            reflect_timer: 0.0,
+            haste: 0.0,
+            haste_timer: 0.0,
+            untargetable_timer: 0.0,
+            rooted_timer: 0.0,
+            chaos_hits: 0,
+            flesh_heap: 0.0,
+        }
     }
 
-    /// The player's own movement is taken over by a dash, a channel or a
+    /// The caster's own movement is taken over by a dash, a channel or a
     /// rooted buff.
-    pub fn controls_player(&self) -> bool {
+    pub fn controls_movement(&self) -> bool {
         self.dash.is_some() || self.channel.is_some() || self.rooted_timer > 0.0
+    }
+
+    fn rank_entry(&self, slot: usize, rank: u8) -> Option<AbilityRank> {
+        self.rank_table
+            .get(slot)?
+            .get(rank.saturating_sub(1) as usize)
+            .copied()
+    }
+
+    fn current_and_first(&self, slot: usize) -> Option<(AbilityRank, AbilityRank)> {
+        Some((
+            self.rank_entry(slot, self.ranks[slot].max(1))?,
+            self.rank_entry(slot, 1)?,
+        ))
+    }
+
+    /// Damage, heal and shield multiplier from the slot's rank.
+    pub fn damage_mult(&self, slot: usize) -> f32 {
+        self.current_and_first(slot)
+            .map(|(now, first)| super::ranks::ratio(now.damage, first.damage))
+            .unwrap_or(1.0)
+    }
+
+    /// Reach multiplier (shot length, cast range, dash length).
+    pub fn reach_mult(&self, slot: usize) -> f32 {
+        self.current_and_first(slot)
+            .map(|(now, first)| super::ranks::ratio(Some(now.range), Some(first.range)))
+            .unwrap_or(1.0)
+    }
+
+    /// The slot's cooldown at its rank, or `fallback` without authored ranks.
+    pub fn cooldown(&self, slot: usize, fallback: f32) -> f32 {
+        self.rank_entry(slot, self.ranks[slot].max(1))
+            .map(|entry| entry.cooldown)
+            .filter(|cooldown| *cooldown > 0.0)
+            .unwrap_or(fallback)
     }
 }
 
@@ -283,18 +373,78 @@ pub fn load_npcs(
 }
 
 impl AnimatedScene {
-    fn is_kit_enemy(&self, index: usize) -> bool {
-        let unit = &self.units[index];
-        unit.health > 0.0
-            && unit.spawn_delay <= 0.0
-            && (unit.team == 1 || (unit.team == 2 && unit.kind == UnitKind::Camp))
-            && !matches!(unit.kind, UnitKind::DeliveryGuard | UnitKind::StorageChest)
+    /// Register `unit` as a kit caster, loading the NPCs its kit summons or
+    /// turns into.
+    pub(super) fn add_kit_caster(
+        &mut self,
+        cache: &rift_cache::Cache,
+        assets: &mut UnitAssets<'_>,
+        unit: usize,
+        kit: &kit::Kit,
+        abilities: &[ChampionAbility],
+    ) {
+        let wanted: Vec<u32> = kit
+            .npcs()
+            .into_iter()
+            .filter(|id| !self.kit_world.npc_assets.contains_key(id))
+            .collect();
+        let loaded = load_npcs(cache, assets, &wanted, "kit");
+        self.kit_world.npc_assets.extend(loaded);
+        self.casters.insert(unit, KitRuntime::new(kit, abilities));
     }
 
-    fn kit_enemies_in(&self, center: Vec3, radius: f32, facing: Vec3, arc: f32) -> Vec<usize> {
+    /// Kit casters in a fixed order, so a frame resolves the same way every
+    /// run.
+    fn caster_ids(&self) -> Vec<usize> {
+        let mut ids: Vec<usize> = self.casters.keys().copied().collect();
+        ids.sort_unstable();
+        ids
+    }
+
+    /// The kit passive of `caster`, if it has one.
+    fn passive_of(&self, caster: usize) -> Option<&Passive> {
+        self.casters.get(&caster)?.kit.passive.as_ref()
+    }
+
+    /// True when `index` is a live target for kit hits from `team`: the other
+    /// team's units and neutral camps, never the delivery props, scenery
+    /// creatures or anyone untargetable.
+    fn is_kit_enemy(&self, team: u8, index: usize) -> bool {
+        let unit = &self.units[index];
+        let hostile = if unit.team == 2 {
+            unit.kind == UnitKind::Camp
+        } else {
+            unit.team != team
+        };
+        unit.health > 0.0
+            && unit.spawn_delay <= 0.0
+            && hostile
+            && !matches!(
+                unit.kind,
+                UnitKind::DeliveryGuard | UnitKind::StorageChest | UnitKind::Ambient
+            )
+            && !self.unit_untargetable(index)
+    }
+
+    /// True when kit dashes, buffs or Vine Swing make `index` untargetable.
+    pub(super) fn unit_untargetable(&self, index: usize) -> bool {
+        if index == self.player_index && self.awowogei.untargetable > 0.0 {
+            return true;
+        }
+        self.kit_untargetable(index)
+    }
+
+    fn kit_enemies_in(
+        &self,
+        team: u8,
+        center: Vec3,
+        radius: f32,
+        facing: Vec3,
+        arc: f32,
+    ) -> Vec<usize> {
         let facing = Vec2::new(facing.x, facing.z);
         (0..self.units.len())
-            .filter(|&i| self.is_kit_enemy(i))
+            .filter(|&i| self.is_kit_enemy(team, i))
             .filter(|&i| {
                 let unit = &self.units[i];
                 let offset = Vec2::new(unit.pos.x - center.x, unit.pos.z - center.z);
@@ -307,7 +457,17 @@ impl AnimatedScene {
     /// Damage plus statuses on one enemy, with the action's graphics: its
     /// `hit` on the unit (a splash instead when a shield soaks the spell)
     /// and a held graphic for as long as its crowd control lasts.
-    fn kit_hit(&mut self, index: usize, damage: f32, statuses: &[Status], from: Vec3, gfx: &Gfx) {
+    #[allow(clippy::too_many_arguments)]
+    fn kit_hit(
+        &mut self,
+        caster: usize,
+        team: u8,
+        index: usize,
+        damage: f32,
+        statuses: &[Status],
+        from: Vec3,
+        gfx: &Gfx,
+    ) {
         let splashed = damage > 0.0 && self.units[index].shield > 0.0;
         let mut pure = 0.0;
         for status in statuses {
@@ -315,14 +475,13 @@ impl AnimatedScene {
                 pure += self.units[index].health * pct;
             }
         }
-        let pi = self.player_index;
         if damage > 0.0 || pure > 0.0 {
-            self.damage_unit_mixed(index, damage, pure, 0, Some(pi));
+            self.damage_unit_mixed(index, damage, pure, team, Some(caster));
         }
         if self.units[index].health <= 0.0 {
             return;
         }
-        self.land_statuses(index, statuses, from, gfx, splashed, pi);
+        self.land_statuses(index, statuses, from, gfx, splashed, caster);
     }
 
     /// After a hit's damage: its `hit` graphic (a splash instead when a
@@ -397,40 +556,46 @@ impl AnimatedScene {
 
     /// The Chaos passive: every few ability hits on `index` also land one
     /// of its statuses, with the Discord swirl.
-    fn chaos_passive(&mut self, index: usize, from: Vec3) {
-        let Some(Passive::Chaos { every, statuses }) =
-            self.kit.as_ref().and_then(|kit| kit.passive.clone())
-        else {
+    fn chaos_passive(&mut self, caster: usize, index: usize, from: Vec3) {
+        let Some(Passive::Chaos { every, statuses }) = self.passive_of(caster).cloned() else {
             return;
         };
         if self.units[index].health <= 0.0 {
             return;
         }
-        self.kit_rt.chaos_hits += 1;
-        if self.kit_rt.chaos_hits % every.max(1) != 0 {
+        let Some(rt) = self.casters.get_mut(&caster) else {
+            return;
+        };
+        rt.chaos_hits += 1;
+        if rt.chaos_hits % every.max(1) != 0 {
             return;
         }
         if let Some(pick) = self.pick_status(&statuses) {
-            let pi = self.player_index;
             let gfx = Gfx {
                 hit: Some(CHAOS_PROC),
                 ..Gfx::default()
             };
-            self.land_statuses(index, &[pick], from, &gfx, false, pi);
+            self.land_statuses(index, &[pick], from, &gfx, false, caster);
         }
     }
 
-    /// The Flesh heap passive: an enemy of the player died at `index`.
+    /// The Flesh heap passive: `index` died; every caster with the passive
+    /// near it grows.
     pub(super) fn kit_flesh_heap(&mut self, index: usize) {
+        for caster in self.caster_ids() {
+            self.kit_flesh_heap_for(caster, index);
+        }
+    }
+
+    fn kit_flesh_heap_for(&mut self, pi: usize, index: usize) {
         let Some(Passive::FleshHeap {
             radius,
             minion,
             hero,
-        }) = self.kit.as_ref().and_then(|kit| kit.passive.clone())
+        }) = self.passive_of(pi).cloned()
         else {
             return;
         };
-        let pi = self.player_index;
         if index == pi || self.units[pi].health <= 0.0 {
             return;
         }
@@ -449,7 +614,9 @@ impl AnimatedScene {
         let player = &mut self.units[pi];
         player.max_health += gain;
         player.health = (player.health + gain).min(player.max_health);
-        self.kit_rt.flesh_heap += gain;
+        if let Some(rt) = self.casters.get_mut(&pi) {
+            rt.flesh_heap += gain;
+        }
         let chest = self.unit_chest(pi);
         self.emit_burst(chest, [170, 40, 30], 6, 120.0, 9.0, 0.5);
     }
@@ -593,25 +760,94 @@ impl AnimatedScene {
         false
     }
 
-    /// Damage multiplier for the player's abilities right now.
-    fn kit_ability_mult(&self) -> f32 {
-        let player = &self.units[self.player_index];
-        let combo = match self.kit.as_ref().and_then(|kit| kit.passive.as_ref()) {
-            Some(Passive::SpellCombo { per_stack, .. }) => {
-                1.0 + per_stack * self.kit_rt.combo_stacks as f32
+    /// Damage multiplier for `caster`'s abilities right now.
+    fn kit_ability_mult(&self, caster: usize) -> f32 {
+        let unit = &self.units[caster];
+        let combo = match (self.passive_of(caster), self.casters.get(&caster)) {
+            (Some(Passive::SpellCombo { per_stack, .. }), Some(rt)) => {
+                1.0 + per_stack * rt.combo_stacks as f32
             }
             _ => 1.0,
         };
-        kit::scaled_damage(1.0, player.ability_power, player.level) * combo
+        kit::scaled_damage(1.0, unit.ability_power, unit.level) * combo
     }
 
-    /// Cast slot 0..4 from the champion's kit. False when it cannot be cast.
-    pub(super) fn cast_kit(&mut self, slot: usize, target: Vec3) -> bool {
-        let Some(kit) = self.kit.clone() else {
+    /// A bot's turn to use its kit on `target`, an enemy it is fighting.
+    /// Tries R down to Q and casts the first ability that fits the moment:
+    /// heals and shields when hurt, gap closers on heroes out of reach,
+    /// damage when the target is inside the ability's reach. Ultimates are
+    /// kept for heroes and boss camps, and basic abilities spend mana on
+    /// minions only when there is plenty. True when something was cast.
+    pub(super) fn bot_try_kit_cast(&mut self, unit: usize, target: usize) -> bool {
+        let Some(rt) = self.casters.get(&unit) else {
             return false;
         };
-        let ability = &kit.abilities[slot];
+        let (pos, mana, max_mana, hp_frac, range) = {
+            let u = &self.units[unit];
+            (
+                u.pos,
+                u.mana,
+                u.max_mana.max(1.0),
+                u.health / u.max_health.max(1.0),
+                u.attack_range,
+            )
+        };
+        let foe = &self.units[target];
+        let hero = foe.kind.is_champion();
+        let big = hero || (foe.kind == UnitKind::Camp && foe.camp_boss);
+        let distance = (planar_delta(pos, foe.pos).length() - foe.hit_radius * 0.5).max(0.0);
+        let aim = foe.pos;
+        let mut choice = None;
+        for slot in (0..4).rev() {
+            let Some(ability) = rt.kit.abilities.get(slot) else {
+                continue;
+            };
+            let charged = ability.charges <= 1 || rt.charges[slot] > 0;
+            let ready = rt.ranks[slot] > 0
+                && mana >= ability.cost
+                && (self.units[unit].cooldowns[slot] <= 0.0 || (ability.charges > 1 && charged));
+            if !ready {
+                continue;
+            }
+            let worth = hero || (slot < 3 && (big || mana > max_mana * 0.6));
+            let reach = rt.reach_mult(slot);
+            let wanted = match bot_plan(&ability.actions, reach) {
+                BotPlan::Care => hp_frac < 0.6 && distance < 900.0,
+                BotPlan::Power => big && distance <= range + 250.0,
+                BotPlan::Gap(far) => hero && distance > range + 150.0 && distance <= far,
+                BotPlan::Hit(reach) => worth && distance <= reach,
+            };
+            if wanted {
+                choice = Some(slot);
+                break;
+            }
+        }
+        match choice {
+            Some(slot) => self.cast_kit_for(unit, slot, aim),
+            None => false,
+        }
+    }
+
+    /// Cast slot 0..4 from the player's kit. False when it cannot be cast.
+    pub(super) fn cast_kit(&mut self, slot: usize, target: Vec3) -> bool {
         let pi = self.player_index;
+        self.cast_kit_for(pi, slot, target)
+    }
+
+    /// Cast slot 0..4 of `caster`'s kit at `target`. False when it cannot
+    /// be cast (dead, stunned, no mana, on cooldown, unlearned, busy).
+    pub(super) fn cast_kit_for(&mut self, pi: usize, slot: usize, target: Vec3) -> bool {
+        let Some(rt) = self.casters.get(&pi) else {
+            return false;
+        };
+        let Some(ability) = rt.kit.abilities.get(slot).cloned() else {
+            return false;
+        };
+        let passive = rt.kit.passive.clone();
+        if rt.ranks[slot] == 0 || rt.dash.is_some() || rt.channel.is_some() {
+            return false;
+        }
+        let cooldown = rt.cooldown(slot, ability.cooldown);
         {
             let player = &self.units[pi];
             // Tele Block grounds abilities that dash.
@@ -622,22 +858,20 @@ impl AnimatedScene {
             if player.health <= 0.0
                 || player.stun_timer > 0.0
                 || player.mana < ability.cost
-                || self.kit_rt.dash.is_some()
-                || self.kit_rt.channel.is_some()
                 || (dashes && player.cc.no_mobility_timer > 0.0)
             {
                 return false;
             }
         }
-        let cooldown = self.rank_cooldown(slot, ability.cooldown);
+        let rt = self.casters.get_mut(&pi).expect("checked above");
         if ability.charges > 1 {
-            if self.kit_rt.charges[slot] == 0 {
+            if rt.charges[slot] == 0 {
                 return false;
             }
-            if self.kit_rt.charges[slot] == ability.charges {
-                self.kit_rt.recharge[slot] = cooldown;
+            if rt.charges[slot] == ability.charges {
+                rt.recharge[slot] = cooldown;
             }
-            self.kit_rt.charges[slot] -= 1;
+            rt.charges[slot] -= 1;
         } else if self.units[pi].cooldowns[slot] > 0.0 {
             return false;
         } else {
@@ -645,17 +879,20 @@ impl AnimatedScene {
         }
         self.units[pi].mana -= ability.cost;
 
-        if let Some(Passive::SpellCombo { max, window, .. }) = kit.passive.as_ref() {
-            if self.kit_rt.combo_last != Some(slot) && self.kit_rt.combo_timer > 0.0 {
-                self.kit_rt.combo_stacks = (self.kit_rt.combo_stacks + 1).min(*max);
-            } else if self.kit_rt.combo_timer <= 0.0 {
-                self.kit_rt.combo_stacks = 0;
+        if let Some(Passive::SpellCombo { max, window, .. }) = passive.as_ref() {
+            if rt.combo_last != Some(slot) && rt.combo_timer > 0.0 {
+                rt.combo_stacks = (rt.combo_stacks + 1).min(*max);
+            } else if rt.combo_timer <= 0.0 {
+                rt.combo_stacks = 0;
             }
-            self.kit_rt.combo_last = Some(slot);
-            self.kit_rt.combo_timer = *window;
+            rt.combo_last = Some(slot);
+            rt.combo_timer = *window;
         }
+        let rank_mult = rt.damage_mult(slot);
+        let reach = rt.reach_mult(slot);
 
         let origin = self.units[pi].pos;
+        let team = self.units[pi].team;
         let flat = planar_delta(origin, target);
         let dir = if flat.length_squared() > 1.0 {
             flat.normalize()
@@ -665,19 +902,34 @@ impl AnimatedScene {
         };
         let player = &mut self.units[pi];
         player.yaw = dir.x.atan2(dir.z);
-        let shared_sounds = !self.slot_has_own_sounds(slot);
+        // Only the player's champion file scores its own casts.
+        let shared_sounds = pi != self.player_index || !self.slot_has_own_sounds(slot);
         if !shared_sounds {
             let name = ["q_cast", "w_cast", "e_cast", "r_cast"][slot.min(3)];
             self.play_sound(name, origin);
         }
+        if pi != self.player_index
+            && let Some(clip) = self.units[pi]
+                .cast_clip
+                .clone()
+                .or_else(|| self.units[pi].attack_clip.clone())
+        {
+            let hit = self.units[pi].attack_hit;
+            self.units[pi].action = Some(super::ActionAnim::new(
+                clip.clone(),
+                super::action_rate(&clip, hit, 0.3),
+            ));
+        }
         let ctx = CastCtx {
+            caster: pi,
+            team,
             shared_sounds,
             color: ability.color,
             origin,
             target,
             dir,
-            mult: self.kit_ability_mult() * self.rank_damage_mult(slot),
-            reach: self.rank_reach_mult(slot),
+            mult: self.kit_ability_mult(pi) * rank_mult,
+            reach,
         };
         self.effects.push(Effect {
             pos: origin,
@@ -689,7 +941,7 @@ impl AnimatedScene {
         for action in &ability.actions {
             self.run_action(action, &ctx);
         }
-        tracing::info!("kit: cast slot {slot}");
+        tracing::debug!("kit: unit {pi} cast slot {slot}");
         true
     }
 
@@ -709,7 +961,7 @@ impl AnimatedScene {
     }
 
     fn run_action(&mut self, action: &Action, ctx: &CastCtx) {
-        let pi = self.player_index;
+        let pi = ctx.caster;
         if ctx.shared_sounds
             && let Some(name) = action.sound_name()
         {
@@ -752,7 +1004,9 @@ impl AnimatedScene {
                     };
                     let angle = base + offset;
                     let dir = Vec3::new(angle.cos(), 0.0, angle.sin());
-                    self.kit_rt.shots.push(KitShot {
+                    self.kit_world.shots.push(KitShot {
+                        caster: pi,
+                        team: ctx.team,
                         pos: ctx.origin + Vec3::Y * height + dir * 40.0,
                         dir,
                         speed: *speed,
@@ -805,7 +1059,9 @@ impl AnimatedScene {
                     if wait > 0.05 {
                         self.add_decal(pos, *radius * 0.9, dim(ctx.color), wait + 0.1);
                     }
-                    self.kit_rt.areas.push(PendingArea {
+                    self.kit_world.areas.push(PendingArea {
+                        caster: pi,
+                        team: ctx.team,
                         pos,
                         radius: *radius,
                         delay: wait,
@@ -842,7 +1098,6 @@ impl AnimatedScene {
                     let pos = center + ctx.dir * (spacing * i as f32);
                     if *follow {
                         // An aura: no ground stain, the graphic rides along.
-                        let pi = self.player_index;
                         if let Some(id) = gfx.land {
                             let size = gfx.scale * self.gfx_size(pi);
                             self.gfx_hold(id, pi, *duration, size);
@@ -853,7 +1108,9 @@ impl AnimatedScene {
                             self.gfx_at(id, pos, gfx.scale);
                         }
                     }
-                    self.kit_rt.zones.push(Zone {
+                    self.kit_world.zones.push(Zone {
+                        caster: pi,
+                        team: ctx.team,
                         pos,
                         radius: *radius,
                         grow: *grow,
@@ -886,15 +1143,22 @@ impl AnimatedScene {
                 if *to_cursor {
                     distance = distance.min(planar_delta(ctx.origin, ctx.target).length());
                 }
-                if *untargetable {
-                    self.kit_rt.untargetable_timer = distance / speed.max(1.0) + 0.15;
-                }
+                let swift = match self.passive_of(pi) {
+                    Some(Passive::Swift { dash_bonus, .. }) => Some(*dash_bonus),
+                    _ => None,
+                };
                 let player = &mut self.units[pi];
                 player.path.clear();
                 player.path_index = 0;
                 player.attack_target = None;
                 player.attack_pending = false;
-                self.kit_rt.dash = Some(DashState {
+                let Some(rt) = self.casters.get_mut(&pi) else {
+                    return;
+                };
+                if *untargetable {
+                    rt.untargetable_timer = distance / speed.max(1.0) + 0.15;
+                }
+                rt.dash = Some(DashState {
                     dir,
                     remaining: distance,
                     speed: *speed,
@@ -905,11 +1169,8 @@ impl AnimatedScene {
                     ctx: ctx.clone(),
                     gfx: gfx.clone(),
                 });
-                if let Some(Passive::Swift { dash_bonus, .. }) =
-                    self.kit.as_ref().and_then(|kit| kit.passive.as_ref())
-                {
-                    let bonus = *dash_bonus;
-                    self.kit_rt.empower = Some(EmpowerState {
+                if let Some(bonus) = swift {
+                    rt.empower = Some(EmpowerState {
                         remaining: 4.0,
                         attacks: 1,
                         bonus,
@@ -946,7 +1207,9 @@ impl AnimatedScene {
                     player.attack_speed_mult = 1.0 + attack_speed;
                     player.attack_speed_timer = *duration;
                 }
-                let rt = &mut self.kit_rt;
+                let Some(rt) = self.casters.get_mut(&pi) else {
+                    return;
+                };
                 if *damage_reduction > 0.0 {
                     rt.damage_reduction = *damage_reduction;
                     rt.damage_reduction_timer = *duration;
@@ -989,7 +1252,7 @@ impl AnimatedScene {
                 }
                 for i in 0..(*count).max(1) {
                     let id = npcs.get(i as usize).copied().unwrap_or(*npc);
-                    let Some(asset) = self.kit_rt.npc_assets.get(&id) else {
+                    let Some(asset) = self.kit_world.npc_assets.get(&id) else {
                         tracing::warn!("kit: summon npc {id} not loaded");
                         continue;
                     };
@@ -1002,7 +1265,7 @@ impl AnimatedScene {
                         pos,
                         *scale,
                         UnitKind::MeleeMinion,
-                        0,
+                        ctx.team,
                         *health,
                         *range,
                         damage * ctx.mult,
@@ -1028,7 +1291,10 @@ impl AnimatedScene {
                 player.path.clear();
                 player.path_index = 0;
                 player.moving = false;
-                self.kit_rt.channel = Some(ChannelState {
+                let Some(rt) = self.casters.get_mut(&pi) else {
+                    return;
+                };
+                rt.channel = Some(ChannelState {
                     remaining: *duration,
                     interval: interval.max(0.05),
                     timer: 0.0,
@@ -1045,7 +1311,10 @@ impl AnimatedScene {
                 on_hit,
                 gfx,
             } => {
-                self.kit_rt.empower = Some(EmpowerState {
+                let Some(rt) = self.casters.get_mut(&pi) else {
+                    return;
+                };
+                rt.empower = Some(EmpowerState {
                     remaining: *duration,
                     attacks: (*attacks).max(1),
                     bonus: bonus * ctx.mult,
@@ -1066,7 +1335,7 @@ impl AnimatedScene {
                 heal,
                 gfx: _,
             } => {
-                self.kit_transform(*npc, *duration, *scale, *damage, *range, *move_speed);
+                self.kit_transform(pi, *npc, *duration, *scale, *damage, *range, *move_speed);
                 let player = &mut self.units[pi];
                 player.health = (player.health + heal * ctx.mult).min(player.max_health);
                 self.emit_burst(ctx.origin, ctx.color, 30, 320.0, 18.0, 0.9);
@@ -1074,8 +1343,10 @@ impl AnimatedScene {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn kit_transform(
         &mut self,
+        pi: usize,
         npc: u32,
         duration: f32,
         scale: f32,
@@ -1083,13 +1354,12 @@ impl AnimatedScene {
         range: f32,
         move_speed: f32,
     ) {
-        let Some(asset) = self.kit_rt.npc_assets.get(&npc) else {
+        let Some(asset) = self.kit_world.npc_assets.get(&npc) else {
             tracing::warn!("kit: transform npc {npc} not loaded");
             return;
         };
         let (model, idle, walk) = (asset.model.clone(), asset.idle.clone(), asset.walk.clone());
-        self.kit_revert_transform();
-        let pi = self.player_index;
+        self.kit_revert_transform(pi);
         let player = &mut self.units[pi];
         let old_model = std::mem::replace(&mut player.model, model);
         let old_idle = std::mem::replace(&mut player.idle, idle);
@@ -1100,7 +1370,10 @@ impl AnimatedScene {
         player.action = None;
         player.attack_range += range;
         player.attack_damage *= 1.0 + damage;
-        self.kit_rt.transform = Some(TransformState {
+        let Some(rt) = self.casters.get_mut(&pi) else {
+            return;
+        };
+        rt.transform = Some(TransformState {
             remaining: duration,
             model: old_model,
             idle: old_idle,
@@ -1125,12 +1398,14 @@ impl AnimatedScene {
         self.player_weapon = obj;
         let clips = super::unit_clips(&self.units[self.player_index]);
         let model = Arc::new(crate::wield::armed_body(&self.player_body, parts, &clips));
-        match self.kit_rt.transform.as_mut() {
+        let pi = self.player_index;
+        match self
+            .casters
+            .get_mut(&pi)
+            .and_then(|rt| rt.transform.as_mut())
+        {
             Some(transform) => transform.model = model,
-            None => {
-                let pi = self.player_index;
-                self.units[pi].model = model;
-            }
+            None => self.units[pi].model = model,
         }
         tracing::info!("wield: player holds {obj:?}");
     }
@@ -1140,11 +1415,10 @@ impl AnimatedScene {
         self.player_weapon
     }
 
-    fn kit_revert_transform(&mut self) {
-        let Some(state) = self.kit_rt.transform.take() else {
+    fn kit_revert_transform(&mut self, pi: usize) {
+        let Some(state) = self.casters.get_mut(&pi).and_then(|rt| rt.transform.take()) else {
             return;
         };
-        let pi = self.player_index;
         let player = &mut self.units[pi];
         player.model = state.model;
         player.idle = state.idle;
@@ -1157,59 +1431,71 @@ impl AnimatedScene {
         player.attack_damage /= 1.0 + state.damage;
     }
 
-    /// Movement multiplier from kit buffs and passives.
-    pub(super) fn kit_move_mult(&self) -> f32 {
-        let swift = match self.kit.as_ref().and_then(|kit| kit.passive.as_ref()) {
+    /// Movement multiplier from `unit`'s kit buffs and passives.
+    pub(super) fn kit_move_mult(&self, unit: usize) -> f32 {
+        let Some(rt) = self.casters.get(&unit) else {
+            return 1.0;
+        };
+        let swift = match rt.kit.passive.as_ref() {
             Some(Passive::Swift { move_speed, .. }) => *move_speed,
             _ => 0.0,
         };
-        let haste = if self.kit_rt.haste_timer > 0.0 {
-            self.kit_rt.haste
-        } else {
-            0.0
-        };
-        let transform = self.kit_rt.transform.as_ref().map_or(0.0, |t| t.move_speed);
+        let haste = if rt.haste_timer > 0.0 { rt.haste } else { 0.0 };
+        let transform = rt.transform.as_ref().map_or(0.0, |t| t.move_speed);
         1.0 + swift + haste + transform
     }
 
-    /// A kit dash or buff makes the player untargetable right now.
-    pub(super) fn kit_untargetable(&self) -> bool {
-        self.kit_rt.untargetable_timer > 0.0
+    /// A kit dash or buff makes `unit` untargetable right now.
+    pub(super) fn kit_untargetable(&self, unit: usize) -> bool {
+        self.casters
+            .get(&unit)
+            .is_some_and(|rt| rt.untargetable_timer > 0.0)
     }
 
-    /// Fraction of incoming damage the player takes. Zero while untargetable.
-    pub(super) fn kit_incoming_mult(&self) -> f32 {
-        if self.kit_rt.untargetable_timer > 0.0 {
+    /// True while a dash, channel or rooting buff moves `unit` for it.
+    pub(super) fn kit_controls(&self, unit: usize) -> bool {
+        self.casters
+            .get(&unit)
+            .is_some_and(KitRuntime::controls_movement)
+    }
+
+    /// Fraction of incoming damage `unit` takes. Zero while untargetable.
+    pub(super) fn kit_incoming_mult(&self, unit: usize) -> f32 {
+        let Some(rt) = self.casters.get(&unit) else {
+            return 1.0;
+        };
+        if rt.untargetable_timer > 0.0 {
             return 0.0;
         }
-        if self.kit_rt.damage_reduction_timer > 0.0 {
-            1.0 - self.kit_rt.damage_reduction.clamp(0.0, 0.9)
+        if rt.damage_reduction_timer > 0.0 {
+            1.0 - rt.damage_reduction.clamp(0.0, 0.9)
         } else {
             1.0
         }
     }
 
-    /// Extra multiplier for projectiles that hit the player.
-    pub(super) fn kit_projectile_taken(&self) -> f32 {
-        match self.kit.as_ref().and_then(|kit| kit.passive.as_ref()) {
+    /// Extra multiplier for projectiles that hit `unit`.
+    pub(super) fn kit_projectile_taken(&self, unit: usize) -> f32 {
+        match self.passive_of(unit) {
             Some(Passive::ThickHide { reduction }) => 1.0 - reduction.clamp(0.0, 0.9),
             _ => 1.0,
         }
     }
 
-    /// Reflect and second-form hooks after the player took damage.
-    pub(super) fn kit_after_player_hit(&mut self, amount: f32, aggressor: Option<usize>) {
-        if self.kit.is_none() {
+    /// Reflect and second-form hooks after kit caster `pi` took damage.
+    pub(super) fn kit_after_hit(&mut self, pi: usize, amount: f32, aggressor: Option<usize>) {
+        let Some(rt) = self.casters.get(&pi) else {
             return;
-        }
-        if self.kit_rt.reflect_timer > 0.0
+        };
+        if rt.reflect_timer > 0.0
             && let Some(attacker) = aggressor
-            && attacker != self.player_index
+            && attacker != pi
             && self.units[attacker].health > 0.0
             && self.units[attacker].attack_range < 300.0
         {
-            let back = amount * self.kit_rt.reflect;
-            self.damage_unit_mixed(attacker, 0.0, back, 0, Some(self.player_index));
+            let back = amount * rt.reflect;
+            let team = self.units[pi].team;
+            self.damage_unit_mixed(attacker, 0.0, back, team, Some(pi));
         }
         let Some(Passive::SecondForm {
             threshold,
@@ -1219,60 +1505,59 @@ impl AnimatedScene {
             scale,
             range,
             damage,
-        }) = self.kit.as_ref().and_then(|kit| kit.passive.clone())
+        }) = self.passive_of(pi).cloned()
         else {
             return;
         };
-        let pi = self.player_index;
+        let used = self.casters.get(&pi).is_none_or(|rt| rt.second_form_used);
         let player = &self.units[pi];
-        if self.kit_rt.second_form_used
-            || player.health <= 0.0
-            || player.health > player.max_health * threshold
-        {
+        if used || player.health <= 0.0 || player.health > player.max_health * threshold {
             return;
         }
-        self.kit_rt.second_form_used = true;
+        if let Some(rt) = self.casters.get_mut(&pi) {
+            rt.second_form_used = true;
+        }
         let player = &mut self.units[pi];
         player.health = (player.health + player.max_health * heal).min(player.max_health);
         let pos = player.pos;
-        self.kit_transform(npc, duration, scale, damage, range, 0.0);
+        self.kit_transform(pi, npc, duration, scale, damage, range, 0.0);
         self.emit_burst(pos, [255, 220, 120], 40, 360.0, 18.0, 1.0);
-        self.announcement = Some(("SECOND FORM".to_string(), 2.0));
-        tracing::info!("kit: second form");
-    }
-
-    /// Allied minion damage multiplier from the player's aura passive.
-    pub(super) fn kit_minion_aura(&self, minion: usize) -> f32 {
-        let Some(Passive::MinionAura { radius, damage }) =
-            self.kit.as_ref().and_then(|kit| kit.passive.as_ref())
-        else {
-            return 1.0;
-        };
-        let player = &self.units[self.player_index];
-        let unit = &self.units[minion];
-        if unit.team == player.team
-            && player.health > 0.0
-            && unit.pos.distance(player.pos) <= *radius
-        {
-            1.0 + damage
-        } else {
-            1.0
+        if pi == self.player_index {
+            self.announcement = Some(("SECOND FORM".to_string(), 2.0));
         }
+        tracing::info!("kit: unit {pi} second form");
     }
 
-    /// Experience multiplier from the scholar passive.
-    pub(super) fn kit_xp_mult(&self) -> f32 {
-        match self.kit.as_ref().and_then(|kit| kit.passive.as_ref()) {
+    /// Allied minion damage multiplier from any nearby caster's aura.
+    pub(super) fn kit_minion_aura(&self, minion: usize) -> f32 {
+        let unit = &self.units[minion];
+        let mut mult = 1.0;
+        for (&caster, rt) in &self.casters {
+            let Some(Passive::MinionAura { radius, damage }) = rt.kit.passive.as_ref() else {
+                continue;
+            };
+            let hero = &self.units[caster];
+            if unit.team == hero.team && hero.health > 0.0 && unit.pos.distance(hero.pos) <= *radius
+            {
+                mult = f32::max(mult, 1.0 + damage);
+            }
+        }
+        mult
+    }
+
+    /// Experience multiplier from `unit`'s scholar passive.
+    pub(super) fn kit_xp_mult(&self, unit: usize) -> f32 {
+        match self.passive_of(unit) {
             Some(Passive::Scholar { xp }) => 1.0 + xp,
             _ => 1.0,
         }
     }
 
-    /// The player's basic attack for kit champions: passives, empowers,
-    /// splash and frost all live here.
-    pub(super) fn kit_land_attack(&mut self, target: usize) {
-        let pi = self.player_index;
-        let passive = self.kit.as_ref().and_then(|kit| kit.passive.clone());
+    /// A kit champion's basic attack: passives, empowers, splash and frost
+    /// all live here.
+    pub(super) fn kit_land_attack(&mut self, pi: usize, target: usize) {
+        let passive = self.passive_of(pi).cloned();
+        let team = self.units[pi].team;
         let (mut damage, ranged, from, target_pos) = {
             let unit = &mut self.units[pi];
             unit.attack_cooldown = unit.attack_interval / unit.attack_speed_mult.max(0.1);
@@ -1298,7 +1583,12 @@ impl AnimatedScene {
         }
         let mut reset_slot = None;
         let mut gfx = Gfx::default();
-        if let Some(empower) = self.kit_rt.empower.as_mut() {
+        let mut empowered = false;
+        let Some(rt) = self.casters.get_mut(&pi) else {
+            return;
+        };
+        if let Some(empower) = rt.empower.as_mut() {
+            empowered = true;
             gfx = empower.gfx.clone();
             damage += empower.bonus;
             let target_unit = &self.units[target];
@@ -1307,8 +1597,12 @@ impl AnimatedScene {
             reset_slot = empower.reset_on_kill;
             empower.attacks = empower.attacks.saturating_sub(1);
             if empower.attacks == 0 {
-                self.kit_rt.empower = None;
+                rt.empower = None;
             }
+        }
+        rt.attack_count += 1;
+        let attack_count = rt.attack_count;
+        if empowered {
             self.emit_burst(
                 target_pos + Vec3::Y * 60.0,
                 [255, 240, 160],
@@ -1318,7 +1612,6 @@ impl AnimatedScene {
                 0.5,
             );
         }
-        self.kit_rt.attack_count += 1;
         let splash = match &passive {
             Some(Passive::Splash { radius, pct }) => Some((*radius, *pct)),
             _ => None,
@@ -1327,7 +1620,9 @@ impl AnimatedScene {
             let aim = self.unit_chest(target);
             let dir = (aim - from).normalize_or_zero();
             let look = self.units[pi].look;
-            self.kit_rt.shots.push(KitShot {
+            self.kit_world.shots.push(KitShot {
+                caster: pi,
+                team,
                 pos: from,
                 dir,
                 speed: 1400.0,
@@ -1354,14 +1649,16 @@ impl AnimatedScene {
             return;
         }
         self.melee_slash(pi, target, [255, 235, 200]);
-        self.kit_hit(target, damage, &statuses, self.units[pi].pos, &gfx);
+        let at = self.units[pi].pos;
+        self.kit_hit(pi, team, target, damage, &statuses, at, &gfx);
         let killed = self.units[target].health <= 0.0;
         if killed {
             self.units[pi].attack_target = None;
             if let Some(slot) = reset_slot {
                 self.units[pi].cooldowns[slot] = 0.0;
-                self.kit_rt.charges[slot] =
-                    self.kit.as_ref().map_or(1, |k| k.abilities[slot].charges);
+                if let Some(rt) = self.casters.get_mut(&pi) {
+                    rt.charges[slot] = rt.kit.abilities[slot].charges.max(1);
+                }
             }
         }
         let mut aoe: Option<(f32, f32)> = splash;
@@ -1370,7 +1667,7 @@ impl AnimatedScene {
             radius,
             damage: pct,
         }) = &passive
-            && self.kit_rt.attack_count % n.max(&1) == 0
+            && attack_count % n.max(&1) == 0
         {
             aoe = Some((*radius, *pct));
             self.effects.push(Effect {
@@ -1382,26 +1679,62 @@ impl AnimatedScene {
             });
         }
         if let Some((radius, pct)) = aoe {
-            for other in self.kit_enemies_in(target_pos, radius, Vec3::Z, 360.0) {
+            for other in self.kit_enemies_in(team, target_pos, radius, Vec3::Z, 360.0) {
                 if other != target {
-                    self.kit_hit(other, damage * pct, &[], target_pos, &Gfx::default());
+                    self.kit_hit(
+                        pi,
+                        team,
+                        other,
+                        damage * pct,
+                        &[],
+                        target_pos,
+                        &Gfx::default(),
+                    );
                 }
             }
         }
     }
 
-    /// Advance every running kit effect. Called once per frame after the
-    /// player moves.
+    /// Advance every caster's kit state and every effect in flight. Called
+    /// once per frame after the player moves.
     pub(super) fn update_kit(&mut self, dt: f32, height: &HeightGrid, collision: &WorldCollision) {
-        let Some(kit) = self.kit.as_ref() else {
+        if self.casters.is_empty() {
+            return;
+        }
+        let pi = self.player_index;
+        if let Some(rt) = self.casters.get_mut(&pi) {
+            rt.ranks = self.ability_ranks;
+        }
+        for caster in self.caster_ids() {
+            if caster != pi {
+                let level = self.units[caster].level;
+                if let Some(rt) = self.casters.get_mut(&caster) {
+                    rt.ranks = std::array::from_fn(|slot| {
+                        super::ranks::auto_rank(slot, level, rt.rank_table[slot].len())
+                    });
+                }
+            }
+            self.update_caster(caster, dt, height, collision);
+        }
+        self.update_kit_shots(dt, height);
+        self.update_kit_reels(dt);
+        self.update_kit_areas(dt);
+        self.update_kit_zones(dt);
+    }
+
+    fn update_caster(
+        &mut self,
+        pi: usize,
+        dt: f32,
+        height: &HeightGrid,
+        collision: &WorldCollision,
+    ) {
+        let Some(rt) = self.casters.get_mut(&pi) else {
             return;
         };
-        let pi = self.player_index;
         let charges: [(u8, f32); 4] = std::array::from_fn(|slot| {
-            (
-                kit.abilities[slot].charges,
-                self.rank_cooldown(slot, kit.abilities[slot].cooldown),
-            )
+            let ability = &rt.kit.abilities[slot];
+            (ability.charges, rt.cooldown(slot, ability.cooldown))
         });
 
         // Recharge multi-charge abilities; show the recharge only when empty.
@@ -1409,7 +1742,6 @@ impl AnimatedScene {
             if max <= 1 {
                 continue;
             }
-            let rt = &mut self.kit_rt;
             if rt.charges[slot] < max {
                 rt.recharge[slot] -= dt;
                 if rt.recharge[slot] <= 0.0 {
@@ -1428,7 +1760,6 @@ impl AnimatedScene {
             };
         }
 
-        let rt = &mut self.kit_rt;
         for timer in [
             &mut rt.combo_timer,
             &mut rt.damage_reduction_timer,
@@ -1445,37 +1776,43 @@ impl AnimatedScene {
                 rt.empower = None;
             }
         }
+        let mut revert = false;
         if let Some(transform) = rt.transform.as_mut() {
             transform.remaining -= dt;
-            if transform.remaining <= 0.0 {
-                self.kit_revert_transform();
-            }
+            revert = transform.remaining <= 0.0;
+        }
+        if revert {
+            self.kit_revert_transform(pi);
         }
 
         // Death clears everything the champion was doing; respawn re-arms
         // the second form.
         if self.units[pi].health <= 0.0 {
-            self.kit_rt.dash = None;
-            self.kit_rt.channel = None;
-            self.kit_rt.empower = None;
-            self.kit_rt.rooted_timer = 0.0;
-            self.kit_revert_transform();
-            self.kit_rt.second_form_used = false;
+            if let Some(rt) = self.casters.get_mut(&pi) {
+                rt.dash = None;
+                rt.channel = None;
+                rt.empower = None;
+                rt.rooted_timer = 0.0;
+                rt.second_form_used = false;
+            }
+            self.kit_revert_transform(pi);
         }
 
-        self.update_kit_dash(dt, height, collision);
-        self.update_kit_channel(dt);
-        self.update_kit_shots(dt, height);
-        self.update_kit_reels(dt);
-        self.update_kit_areas(dt);
-        self.update_kit_zones(dt);
+        self.update_kit_dash(pi, dt, height, collision);
+        self.update_kit_channel(pi, dt);
     }
 
-    fn update_kit_dash(&mut self, dt: f32, height: &HeightGrid, collision: &WorldCollision) {
-        let pi = self.player_index;
-        let Some(mut dash) = self.kit_rt.dash.take() else {
+    fn update_kit_dash(
+        &mut self,
+        pi: usize,
+        dt: f32,
+        height: &HeightGrid,
+        collision: &WorldCollision,
+    ) {
+        let Some(mut dash) = self.casters.get_mut(&pi).and_then(|rt| rt.dash.take()) else {
             return;
         };
+        let team = self.units[pi].team;
         let step = (dash.speed * dt).min(dash.remaining);
         let next = self.units[pi].pos + dash.dir * step;
         let blocked = !collision.is_walkable_world(next.x, next.z);
@@ -1500,11 +1837,11 @@ impl AnimatedScene {
             });
         }
         if dash.damage > 0.0 || !dash.on_hit.is_empty() {
-            for index in self.kit_enemies_in(pos, 130.0, Vec3::Z, 360.0) {
+            for index in self.kit_enemies_in(team, pos, 130.0, Vec3::Z, 360.0) {
                 if !dash.hit.contains(&index) {
                     dash.hit.push(index);
-                    self.kit_hit(index, dash.damage, &dash.on_hit, pos, &dash.gfx);
-                    self.chaos_passive(index, pos);
+                    self.kit_hit(pi, team, index, dash.damage, &dash.on_hit, pos, &dash.gfx);
+                    self.chaos_passive(pi, index, pos);
                 }
             }
         }
@@ -1519,14 +1856,16 @@ impl AnimatedScene {
                 motion.reset();
             }
             self.units[pi].moving = false;
-        } else {
-            self.kit_rt.dash = Some(dash);
+            if pi != self.player_index {
+                self.bot_forget_path(pi);
+            }
+        } else if let Some(rt) = self.casters.get_mut(&pi) {
+            rt.dash = Some(dash);
         }
     }
 
-    fn update_kit_channel(&mut self, dt: f32) {
-        let pi = self.player_index;
-        let Some(mut channel) = self.kit_rt.channel.take() else {
+    fn update_kit_channel(&mut self, pi: usize, dt: f32) {
+        let Some(mut channel) = self.casters.get_mut(&pi).and_then(|rt| rt.channel.take()) else {
             return;
         };
         if self.units[pi].stun_timer > 0.0 {
@@ -1542,12 +1881,14 @@ impl AnimatedScene {
         }
         if channel.remaining > 0.0 {
             self.units[pi].moving = false;
-            self.kit_rt.channel = Some(channel);
+            if let Some(rt) = self.casters.get_mut(&pi) {
+                rt.channel = Some(channel);
+            }
         }
     }
 
     fn update_kit_shots(&mut self, dt: f32, height: &HeightGrid) {
-        let shots = std::mem::take(&mut self.kit_rt.shots);
+        let shots = std::mem::take(&mut self.kit_world.shots);
         let mut survivors = Vec::with_capacity(shots.len());
         for mut shot in shots {
             let look = fx::look(shot.look).tinted(shot.tint);
@@ -1579,7 +1920,7 @@ impl AnimatedScene {
                     shot.pos.y = ground + 30.0;
                 }
                 for index in 0..self.units.len() {
-                    if shot.hit.contains(&index) || !self.is_kit_enemy(index) {
+                    if shot.hit.contains(&index) || !self.is_kit_enemy(shot.team, index) {
                         continue;
                     }
                     let unit = &self.units[index];
@@ -1611,9 +1952,18 @@ impl AnimatedScene {
                         self.gfx_at(id, ground, shot.gfx.scale);
                     }
                 }
-                self.kit_hit(index, shot.damage, &shot.on_hit, shot.from, &shot.gfx);
+                let (caster, team) = (shot.caster, shot.team);
+                self.kit_hit(
+                    caster,
+                    team,
+                    index,
+                    shot.damage,
+                    &shot.on_hit,
+                    shot.from,
+                    &shot.gfx,
+                );
                 if !shot.basic {
-                    self.chaos_passive(index, shot.from);
+                    self.chaos_passive(caster, index, shot.from);
                 }
                 self.impact_burst(shot.pos, &look);
                 if shot.explode > 0.0 {
@@ -1626,16 +1976,18 @@ impl AnimatedScene {
                         color: shot.color,
                     });
                     let splash = if shot.basic {
-                        match self.kit.as_ref().and_then(|kit| kit.passive.as_ref()) {
+                        match self.passive_of(caster) {
                             Some(Passive::Splash { pct, .. }) => *pct,
                             _ => 0.5,
                         }
                     } else {
                         0.6
                     };
-                    for other in self.kit_enemies_in(center, shot.explode, Vec3::Z, 360.0) {
+                    for other in self.kit_enemies_in(team, center, shot.explode, Vec3::Z, 360.0) {
                         if other != index {
                             self.kit_hit(
+                                caster,
+                                team,
                                 other,
                                 shot.damage * splash,
                                 &shot.on_hit,
@@ -1661,7 +2013,8 @@ impl AnimatedScene {
                 survivors.push(shot);
             } else if look.rope.is_some() {
                 let catch = hits.first().copied();
-                self.kit_rt.reels.push(KitReel {
+                self.kit_world.reels.push(KitReel {
+                    caster: shot.caster,
                     pos: shot.pos,
                     look: shot.look,
                     catch,
@@ -1670,13 +2023,13 @@ impl AnimatedScene {
                 });
             }
         }
-        self.kit_rt.shots.extend(survivors);
+        self.kit_world.shots.extend(survivors);
     }
 
-    /// Where a roped shot's rope ties on at the caster: its throwing height,
-    /// a little in front of it.
-    fn kit_rope_anchor(&self) -> Vec3 {
-        let caster = &self.units[self.player_index];
+    /// Where a roped shot's rope ties on at its caster: the throwing
+    /// height, a little in front of it.
+    fn kit_rope_anchor(&self, caster: usize) -> Vec3 {
+        let caster = &self.units[caster];
         let forward = Vec3::new(caster.yaw.sin(), 0.0, caster.yaw.cos());
         caster.pos + Vec3::Y * (caster.scale * 80.0) + forward * 40.0
     }
@@ -1684,15 +2037,13 @@ impl AnimatedScene {
     /// Landed roped shots: stuck in their catch for a moment, then reeled
     /// home. Purely visual; the pull is a status the hit already applied.
     fn update_kit_reels(&mut self, dt: f32) {
-        if self.kit_rt.reels.is_empty() {
+        if self.kit_world.reels.is_empty() {
             return;
         }
-        let hand = self.kit_rope_anchor();
-        let alive = self.units[self.player_index].health > 0.0;
-        let mut reels = std::mem::take(&mut self.kit_rt.reels);
+        let mut reels = std::mem::take(&mut self.kit_world.reels);
         reels.retain_mut(|reel| {
             reel.age += dt;
-            if !alive {
+            if self.units[reel.caster].health <= 0.0 {
                 return false;
             }
             if let Some(catch) = reel.catch.filter(|_| reel.latch > 0.0) {
@@ -1702,6 +2053,7 @@ impl AnimatedScene {
                     return true;
                 }
             }
+            let hand = self.kit_rope_anchor(reel.caster);
             let to = hand - reel.pos;
             let distance = to.length();
             let step = REEL_SPEED * dt;
@@ -1711,45 +2063,62 @@ impl AnimatedScene {
             reel.pos += to / distance * step;
             true
         });
-        self.kit_rt.reels = reels;
+        self.kit_world.reels = reels;
     }
 
     /// Drawing data for every kit shot in flight, and for roped heads being
     /// reeled in (pointing away from the caster, as the rope pulls them).
+    /// Shots the player cannot see stay hidden.
     pub(super) fn kit_shot_visuals(&self) -> Vec<ShotVisual> {
-        let hand = self.kit_rope_anchor();
-        let flying = self.kit_rt.shots.iter().map(|shot| ShotVisual {
-            pos: shot.pos,
-            dir: shot.dir,
-            look: shot.look,
-            trail: shot.trail.clone(),
-            age: shot.age,
-            tint: shot.tint,
-            rope_from: fx::look(shot.look).rope.map(|_| hand),
-        });
-        let reeling = self.kit_rt.reels.iter().map(|reel| ShotVisual {
-            pos: reel.pos,
-            dir: planar_delta(hand, reel.pos).normalize_or(Vec3::Z),
-            look: reel.look,
-            trail: Vec::new(),
-            age: reel.age,
-            tint: None,
-            rope_from: Some(hand),
+        let flying = self
+            .kit_world
+            .shots
+            .iter()
+            .filter(|shot| self.kit_effect_visible(shot.team, shot.pos))
+            .map(|shot| ShotVisual {
+                pos: shot.pos,
+                dir: shot.dir,
+                look: shot.look,
+                trail: shot.trail.clone(),
+                age: shot.age,
+                tint: shot.tint,
+                rope_from: fx::look(shot.look)
+                    .rope
+                    .map(|_| self.kit_rope_anchor(shot.caster)),
+            });
+        let reeling = self.kit_world.reels.iter().map(|reel| {
+            let hand = self.kit_rope_anchor(reel.caster);
+            ShotVisual {
+                pos: reel.pos,
+                dir: planar_delta(hand, reel.pos).normalize_or(Vec3::Z),
+                look: reel.look,
+                trail: Vec::new(),
+                age: reel.age,
+                tint: None,
+                rope_from: Some(hand),
+            }
         });
         flying.chain(reeling).collect()
     }
 
     /// The look a kit shot should be drawn and lit with.
     pub(super) fn kit_shot_lights(&self) -> Vec<(Vec3, fx::ProjectileLook)> {
-        self.kit_rt
+        self.kit_world
             .shots
             .iter()
+            .filter(|shot| self.kit_effect_visible(shot.team, shot.pos))
             .map(|shot| (shot.pos, fx::look(shot.look).tinted(shot.tint)))
             .collect()
     }
 
+    /// Allied effects always show; enemy ones only where the player's team
+    /// has vision.
+    fn kit_effect_visible(&self, team: u8, pos: Vec3) -> bool {
+        team == self.units[self.player_index].team || self.in_team_vision(pos)
+    }
+
     fn update_kit_areas(&mut self, dt: f32) {
-        let areas = std::mem::take(&mut self.kit_rt.areas);
+        let areas = std::mem::take(&mut self.kit_world.areas);
         let mut waiting = Vec::with_capacity(areas.len());
         for mut area in areas {
             area.delay -= dt;
@@ -1763,15 +2132,23 @@ impl AnimatedScene {
             if let Some(id) = area.gfx.land {
                 self.gfx_at(id, area.pos, area.gfx.scale);
             }
-            let hits = self.kit_enemies_in(area.pos, area.radius, area.facing, area.arc);
+            let hits = self.kit_enemies_in(area.team, area.pos, area.radius, area.facing, area.arc);
             let count = hits.len();
+            let (caster, team) = (area.caster, area.team);
             for index in hits {
-                self.kit_hit(index, area.damage, &area.on_hit, area.from, &area.gfx);
-                self.chaos_passive(index, area.from);
+                self.kit_hit(
+                    caster,
+                    team,
+                    index,
+                    area.damage,
+                    &area.on_hit,
+                    area.from,
+                    &area.gfx,
+                );
+                self.chaos_passive(caster, index, area.from);
             }
             if area.heal_per_hit > 0.0 && count > 0 {
-                let pi = self.player_index;
-                let player = &mut self.units[pi];
+                let player = &mut self.units[caster];
                 player.health =
                     (player.health + area.heal_per_hit * count as f32).min(player.max_health);
             }
@@ -1785,14 +2162,14 @@ impl AnimatedScene {
             let sparks = (area.radius / 12.0).clamp(10.0, 36.0) as usize;
             self.emit_burst(area.pos, area.color, sparks, area.radius * 1.4, 16.0, 0.7);
         }
-        self.kit_rt.areas.extend(waiting);
+        self.kit_world.areas.extend(waiting);
     }
 
     fn update_kit_zones(&mut self, dt: f32) {
-        let zones = std::mem::take(&mut self.kit_rt.zones);
+        let zones = std::mem::take(&mut self.kit_world.zones);
         let mut alive = Vec::with_capacity(zones.len());
-        let pi = self.player_index;
         for mut zone in zones {
+            let pi = zone.caster;
             if zone.follow {
                 if self.units[pi].health <= 0.0 {
                     continue;
@@ -1804,8 +2181,16 @@ impl AnimatedScene {
             zone.timer -= dt;
             if zone.timer <= 0.0 {
                 zone.timer += zone.tick;
-                for index in self.kit_enemies_in(zone.pos, zone.radius, Vec3::Z, 360.0) {
-                    self.kit_hit(index, zone.damage, &zone.on_tick, zone.pos, &zone.gfx);
+                for index in self.kit_enemies_in(zone.team, zone.pos, zone.radius, Vec3::Z, 360.0) {
+                    self.kit_hit(
+                        pi,
+                        zone.team,
+                        index,
+                        zone.damage,
+                        &zone.on_tick,
+                        zone.pos,
+                        &zone.gfx,
+                    );
                 }
                 if zone.self_damage > 0.0 {
                     let player = &mut self.units[pi];
@@ -1824,7 +2209,73 @@ impl AnimatedScene {
                 alive.push(zone);
             }
         }
-        self.kit_rt.zones.extend(alive);
+        self.kit_world.zones.extend(alive);
+    }
+}
+
+/// How a bot should use an ability, read from its first actions.
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum BotPlan {
+    /// Heals, shields and defences: when hurt.
+    Care,
+    /// Self buffs, empowers and transforms: in a fight with something big.
+    Power,
+    /// A dash or leap: to close on a hero up to this far away.
+    Gap(f32),
+    /// Damage or crowd control reaching this far.
+    Hit(f32),
+}
+
+fn bot_plan(actions: &[Action], reach: f32) -> BotPlan {
+    let mut hit: f32 = 0.0;
+    let mut care = false;
+    let mut power = false;
+    for action in actions {
+        match action {
+            Action::Dash { distance, .. } => return BotPlan::Gap(distance * reach),
+            Action::Projectile { range, .. } => hit = hit.max(range * reach * 0.9),
+            Action::Area {
+                at, range, radius, ..
+            }
+            | Action::Zone {
+                at, range, radius, ..
+            } => {
+                let r = match at {
+                    Anchor::Point => range * reach + radius * 0.5,
+                    _ => *radius,
+                };
+                hit = hit.max(r);
+            }
+            Action::Channel { action, .. } => {
+                if let BotPlan::Hit(r) = bot_plan(std::slice::from_ref(action), reach) {
+                    hit = hit.max(r);
+                }
+            }
+            Action::Summon { .. } => hit = hit.max(700.0),
+            Action::Buff {
+                heal,
+                heal_missing,
+                shield,
+                damage_reduction,
+                ..
+            } => {
+                if heal + heal_missing + shield + damage_reduction > 0.0 {
+                    care = true;
+                } else {
+                    power = true;
+                }
+            }
+            Action::Empower { .. } | Action::Transform { .. } => power = true,
+        }
+    }
+    if hit > 0.0 {
+        BotPlan::Hit(hit)
+    } else if care {
+        BotPlan::Care
+    } else if power {
+        BotPlan::Power
+    } else {
+        BotPlan::Hit(300.0)
     }
 }
 

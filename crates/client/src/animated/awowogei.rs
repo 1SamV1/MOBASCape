@@ -494,7 +494,7 @@ impl AnimatedScene {
     /// The king cannot be targeted (Vine Swing, or a kit's untargetable
     /// dash).
     pub(super) fn player_untargetable(&self) -> bool {
-        self.awowogei.untargetable > 0.0 || self.kit_untargetable()
+        self.awowogei.untargetable > 0.0 || self.kit_untargetable(self.player_index)
     }
 
     /// The slot's authored damage at its rank, times ability power and

@@ -232,6 +232,14 @@ impl AnimatedScene {
         if stunned || self.units[target].health <= 0.0 {
             return false;
         }
+        // Kit heroes cast their real abilities.
+        if self.casters.contains_key(&index) {
+            let cast = self.bot_try_kit_cast(index, target);
+            if cast {
+                self.bots[b].cast_gap = CAST_GAP;
+            }
+            return cast;
+        }
         let target_kind = self.units[target].kind;
         let hero = matches!(target_kind, UnitKind::Player | UnitKind::BotChampion);
         let big = hero || (target_kind == UnitKind::Camp && self.units[target].camp_boss);

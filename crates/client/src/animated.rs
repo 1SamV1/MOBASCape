@@ -966,7 +966,10 @@ pub struct AnimatedScene {
     champion_id: String,
     /// Data-driven kit, when the champion file has one.
     kit: Option<crate::kit::Kit>,
-    kit_rt: kit_runtime::KitRuntime,
+    /// Effects in flight from every kit caster, and their summon NPCs.
+    kit_world: kit_runtime::KitWorld,
+    /// Per-caster kit state, by unit index (the player and kit bots).
+    casters: HashMap<usize, kit_runtime::KitRuntime>,
     /// Thrall NPCs the shop's scrolls can raise, loaded at start.
     thrall_assets: HashMap<u32, kit_runtime::NpcAssets>,
     /// The player's living thrall, if any (units are never removed, so the
@@ -1406,10 +1409,15 @@ impl AnimatedScene {
             }
         }
 
-        let kit_rt = match &champion.kit {
-            Some(kit) => kit_runtime::KitRuntime::load(cache, &mut assets, kit),
-            None => kit_runtime::KitRuntime::default(),
-        };
+        let mut kit_world = kit_runtime::KitWorld::default();
+        let mut casters = HashMap::new();
+        if let Some(kit) = &champion.kit {
+            kit_world.npc_assets = kit_runtime::load_npcs(cache, &mut assets, &kit.npcs(), "kit");
+            casters.insert(
+                player_index,
+                kit_runtime::KitRuntime::new(kit, &champion.abilities),
+            );
+        }
         let thrall_assets = kit_runtime::load_npcs(
             cache,
             &mut assets,
@@ -1505,7 +1513,8 @@ impl AnimatedScene {
             champion_name: champion.name.clone(),
             champion_id: champion.id.clone(),
             kit: champion.kit.clone(),
-            kit_rt,
+            kit_world,
+            casters,
             thrall_assets,
             thrall: None,
             ability_info: champion.abilities.clone(),
@@ -2220,7 +2229,8 @@ impl AnimatedScene {
 
     fn player_land_attack(&mut self, target: usize) {
         if self.kit.is_some() {
-            self.kit_land_attack(target);
+            let pi = self.player_index;
+            self.kit_land_attack(pi, target);
             return;
         }
         let pi = self.player_index;
@@ -2426,6 +2436,13 @@ impl AnimatedScene {
     }
 
     fn release_strike(&mut self, index: usize, strike: PendingStrike) {
+        // Kit heroes' attacks carry their passives and empowers.
+        if index != self.player_index && self.casters.contains_key(&index) {
+            let cooldown = self.units[index].attack_cooldown;
+            self.kit_land_attack(index, strike.target);
+            self.units[index].attack_cooldown = cooldown;
+            return;
+        }
         let team = self.units[index].team;
         if strike.ranged {
             let from = self.unit_muzzle(index);
@@ -3321,7 +3338,11 @@ impl AnimatedScene {
             }
         }
         self.units.push(unit);
-        Ok(self.units.len() - 1)
+        let index = self.units.len() - 1;
+        if let Some(kit) = &champion.kit {
+            self.add_kit_caster(cache, &mut assets, index, kit, &champion.abilities);
+        }
+        Ok(index)
     }
 
     /// OSRS overhead chat over a unit ("Taste vengeance!").
@@ -3992,8 +4013,9 @@ impl AnimatedScene {
         // Replace the clock's share of every moving unit's animation time
         // with the distance it actually covered. This fixes foot sliding for
         // minions, camps and ambient creatures as well as the player.
-        for (index, unit) in self.units.iter_mut().enumerate() {
-            let moved = planar_delta(start_positions[index], unit.pos).length();
+        // Units summoned this frame have no start position and skip it.
+        for (unit, start) in self.units.iter_mut().zip(&start_positions) {
+            let moved = planar_delta(*start, unit.pos).length();
             let limit = unit.speed * dt * 4.0 + 64.0;
             if moved > 0.01 && moved <= limit && unit.walk_loop_ms > 0.0 && unit.walk_stride > 0.0 {
                 unit.anim_time_ms += moved / unit.walk_stride * unit.walk_loop_ms - dt * 1000.0;
@@ -4086,13 +4108,13 @@ impl AnimatedScene {
 
     fn update_player(&mut self, dt: f32, height: &HeightGrid, collision: &WorldCollision) {
         let pi = self.player_index;
-        let speed_mult = self.team_speed_mult(0) * self.kit_move_mult();
+        let speed_mult = self.team_speed_mult(0) * self.kit_move_mult(self.player_index);
         let steer = self.steer_wish.take();
         if self.units[pi].stun_timer > 0.0 {
             self.units[pi].moving = false;
             return;
         }
-        if (self.kit_rt.controls_player() || self.awowogei.controls_player())
+        if (self.kit_controls(self.player_index) || self.awowogei.controls_player())
             && self.units[pi].health > 0.0
         {
             // A dash, channel or rooted buff owns the champion's movement.
@@ -4776,14 +4798,10 @@ impl AnimatedScene {
         ) {
             return;
         }
-        let incoming = if index == self.player_index {
-            if self.player_untargetable() {
-                0.0
-            } else {
-                self.kit_incoming_mult()
-            }
+        let incoming = if index == self.player_index && self.player_untargetable() {
+            0.0
         } else {
-            1.0
+            self.kit_incoming_mult(index)
         };
         if incoming <= 0.0 {
             return;
@@ -4819,7 +4837,9 @@ impl AnimatedScene {
         if index == self.player_index && amount > 0.0 {
             let label = self.damage_label(attacker_team, aggressor);
             self.record_damage(&label, amount);
-            self.kit_after_player_hit(amount, aggressor);
+        }
+        if amount > 0.0 && self.casters.contains_key(&index) {
+            self.kit_after_hit(index, amount, aggressor);
         }
         let hero_aggressor = match aggressor {
             Some(aggressor) => self.units[aggressor].kind == UnitKind::Player,
@@ -5061,8 +5081,8 @@ impl AnimatedScene {
     }
 
     fn grant_xp(&mut self, xp: f32) {
-        let xp = xp * self.kit_xp_mult();
         let pi = self.player_index;
+        let xp = xp * self.kit_xp_mult(pi);
         self.units[pi].xp += xp;
         loop {
             let player = &mut self.units[pi];
@@ -5394,11 +5414,7 @@ impl AnimatedScene {
             poisoned.venom_damage = poisoned.venom_damage.max(projectile.venom);
             poisoned.venom_team = projectile.team;
         }
-        let damage = if index == self.player_index {
-            damage * self.kit_projectile_taken()
-        } else {
-            damage
-        };
+        let damage = damage * self.kit_projectile_taken(index);
         let splashed = damage > 0.0 && self.units[index].shield > 0.0;
         self.damage_unit_by(index, damage, projectile.team, projectile.attacker);
         if let Some(hit) = projectile.spell.as_deref()

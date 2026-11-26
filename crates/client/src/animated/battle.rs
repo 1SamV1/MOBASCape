@@ -451,7 +451,7 @@ impl AnimatedScene {
         collision: &WorldCollision,
         height: &HeightGrid,
     ) -> Result<(), Refusal> {
-        if self.kit_rt.controls_player() {
+        if self.kit_controls(self.player_index) {
             return Err(Refusal::Disabled);
         }
         let pi = self.player_index;

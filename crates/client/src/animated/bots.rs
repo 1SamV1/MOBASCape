@@ -530,6 +530,10 @@ impl AnimatedScene {
         let Some(b) = self.bots.iter().position(|bot| bot.unit == index) else {
             return;
         };
+        // A dash or channel from its kit moves the bot for it.
+        if self.kit_controls(index) {
+            return;
+        }
         // A bot channelling its teleport scroll stands still until it lands.
         if self.units[index].scroll.channel.is_some() {
             self.units[index].moving = false;
@@ -862,7 +866,7 @@ impl AnimatedScene {
     ) {
         let index = self.bots[b].unit;
         let pos = self.units[index].pos;
-        let speed_mult = self.team_speed_mult(self.units[index].team);
+        let speed_mult = self.team_speed_mult(self.units[index].team) * self.kit_move_mult(index);
         if planar_delta(pos, goal).length() < 600.0 {
             self.bots[b].path.clear();
             self.move_unit_toward(index, goal, dt, height, speed_mult);

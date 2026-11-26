@@ -11,6 +11,82 @@ DONE this round (asked for directly): Vine Swing's full-range speed curve
 Names are OSRS or original. Where a mechanic comes from a Dota hero the
 entry says so, but no Dota ability name is reused.
 
+## Approval log (2026-11-25)
+
+Decisions override the proposal text below.
+
+- **SYS-1** approved (all seven modes). **SYS-2** approved.
+- **SYS-3** approved: per-rank durations and counts, plus a max-rank bonus.
+  Abilities start at rank 0 and the **level cap rises to 25**.
+- **SYS-4**, **SYS-5** approved. **SYS-6** approved: silence, hex, evasion,
+  mark, duel, gear-lock.
+- **SYS-7** approved: R ranks at 6/11/16, a pick-one-of-two talent at
+  10/15/20/25, small stat bumps on the remaining levels.
+- **SYS-8** yes, designed after the kits. **SYS-9** first, before any new
+  ability is built.
+- **AWO-P** approved. **AWO-Q** changed: the max-rank bonus is a ricochet,
+  where the banana bounces once to a second enemy on the way back (replaces
+  the spin). **AWO-W** approved (two charges at max rank). **AWO-E**
+  approved.
+- **AWO-R** changed: text kept, plus his attacks become automatic area slams
+  that mini-stun (0.25 s) every enemy in each slam, and an enemy hero kill
+  while a gorilla extends the form by 6/7/8 s. Max-rank bonus: lasts 10 s
+  (the knock-up is dropped since every slam stuns).
+- **BLT-P Flesh Heap** changed: no more max health. Each enemy death nearby
+  banks bonus damage (+3 per minion, +30 per hero) that the next hit spends
+  in full, then the bank resets.
+- **BLT-Q** approved (pure damage, reel-in, wall-grapple bonus). **BLT-W
+  Pestilence** approved.
+- **BLT-E Meat Stomp** (replaces Play Dead and Bloated Hide): "The Bloat
+  stomps his right foot, making a stomp sound and a small puff of dust just
+  above the ground, and dismembered hands fall from above in front of him
+  (a shadow on the ground shows first), dealing pure damage and mini-stuns
+  to enemies." A cone 600 long in front over 1 s, each hand 40 pure damage
+  and a 0.3 s stun. Max-rank bonus: the hands rain in a ring around the
+  Bloat with a longer reach. Assets: spot animations 1570-1573 (four models on one falling clip, beside the Bloat's flies) are the falling-limb candidates, confirmed on a sheet before use.
+- **BLT-R** approved.
+- **WYV-P** approved. **WYV-Q** changed: a 900-long line of frost instead
+  of the cone (chill, third chill freezes); max-rank shatter bonus kept.
+  **WYV-W Ice Shard** approved. **WYV-R** approved.
+- **WYV-E Wyvern Flight** (replaces Ancient Ward; Glacial Tomb rejected):
+  "Takes off and glides to the cursor, chilling enemies under the landing."
+  900/950/1000/1050 range, landing chill within 300. Max-rank bonus: the
+  landing freezes instead of chilling.
+- **FRG-P** approved. **FRG-Q** rejected: Tongue Lash stays today's pull;
+  max-rank bonus roots the pulled enemy 0.8 s. **FRG-W**, **FRG-E**,
+  **FRG-R** approved.
+- **CAL-P**, **CAL-Q**, **CAL-W**, **CAL-E**, **CAL-R** approved.
+- **CER-P**, **CER-Q**, **CER-W**, **CER-E** approved. **CER-R** changed:
+  the howl also summons 2/3/4 hellhounds that chase feared enemies for 6 s;
+  fear 1.6/1.9/2.2 s and the +20% damage max-rank bonus stay.
+- **CHA-P**, **CHA-Q**, **CHA-W**, **CHA-R** approved. **CHA-E** rejected:
+  Madness stays disarm-only; max-rank bonus slows 30%. Gear-lock is
+  unused until something needs it.
+- **GRA-P**: the passive's effect changes (to be decided). **GRA-Q**,
+  **GRA-W**, **GRA-E**, **GRA-R** approved.
+- **JAD-P**, **JAD-Q**, **JAD-W** approved (Jad loses his blink).
+- **JAD-E** approved with a change: a healer dies to any single hit from a
+  hero's attack or ability.
+- **JAD-R Inferno Unleashed** approved with changes: lasts 10/13/17 s, the
+  wind-up is 0.3 s, and the boulder lands sooner after the warning than in
+  Jad's Rhythm.
+- **GRA-P Bone Crusher** (replaces the minion aura): his attacks on slowed
+  or taunted enemies deal +4% of their max health (capped against minions).
+- **KQ-P** changed: the winged form has less armour but more move speed.
+- **KQ-Q** changed: max-rank bonus heals her for 20% of the damage, and the
+  bitten enemy takes 30% more damage from her for 4 s.
+- **KQ-W Undermine** changed: no damage along the path; when she bursts out
+  she damages and mini-stuns enemies in an area around her.
+- **KQ-E** approved: each cast reflects and stuns each attacker once, and
+  the next cast can do it to the same attacker again.
+- **KQ-R Kalphite Swarm** changed (unit target): workers burrow up around
+  an enemy hero, close in and attack it for the duration. They have heavy
+  armour and little health, so they can be killed.
+- **KOL**, **KRE**, **KRL**, **RNG**, **VEN**, **VOR**, **WOM**, **ZIL**:
+  approved as proposed below ("go ahead with your recommendations").
+  **WOM-R** is A, Party Room Balloons.
+- Everything approved is to be built into the game.
+
 ## 1. What Dota 2 does (research)
 
 | Topic | Dota 2 today | Source |
