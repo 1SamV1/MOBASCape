@@ -30,6 +30,28 @@ pub fn ability_at(area: Rect, scale: i32, mouse: (i32, i32)) -> Option<usize> {
     })
 }
 
+/// The skill-point "+" over ability `slot`: a 16-pixel button centred over
+/// the slot and floating 4 pixels above the bar, as Dota 2 shows it. It sits
+/// outside the bar's own rectangle, so it is drawn without the bar's clip.
+pub fn upgrade_button(area: Rect, scale: i32, slot: usize) -> Rect {
+    let s = scale.max(1);
+    let x = 92 + slot as i32 * 42 + 12;
+    Rect::new(area.x + x * s, area.y - 20 * s, 16 * s, 16 * s)
+}
+
+/// The "+" under the mouse, among the slots that can take a point.
+pub fn upgrade_at(
+    area: Rect,
+    scale: i32,
+    mouse: (i32, i32),
+    upgradable: &[bool; 4],
+) -> Option<usize> {
+    (0..4).filter(|&n| upgradable[n]).find(|&n| {
+        let b = upgrade_button(area, scale, n);
+        mouse.0 >= b.x && mouse.0 < b.right() && mouse.1 >= b.y && mouse.1 < b.bottom()
+    })
+}
+
 /// Where the battle spells (D, F) and the teleport scroll (T) sit: left,
 /// top and side, at the interface's own scale. T takes the bottom right
 /// small slot, where Dota 2 keeps its scroll.
@@ -119,6 +141,7 @@ pub fn draw(theme: &Theme, list: &mut DrawList, area: Rect, state: &AbilityState
         quiet,
     );
     icon(list, state.portrait.as_ref(), 9, 10, 76, 76);
+    round_portrait(list, at(9, 10), s);
     slot(list, 68, 68, 18, 18, &state.level.to_string(), title);
 
     // Four ability slots and the two battle spells. A slot that would take
@@ -278,7 +301,65 @@ pub fn draw(theme: &Theme, list: &mut DrawList, area: Rect, state: &AbilityState
     }
 
     list.pop_clip();
+
+    // The skill-point "+" buttons float above the bar, outside its clip.
+    for n in (0..4).filter(|&n| state.upgradable[n]) {
+        let pulse = 0.5 + 0.5 * (state.time * 5.0 + n as f32 * 0.7).sin();
+        draw_plus(list, upgrade_button(area, s, n), s, pulse);
+    }
     list.set_layer(previous);
+}
+
+/// The portrait square's side and the ring's thickness, in interface pixels.
+const PORTRAIT: i32 = 76;
+const RING: f32 = 3.0;
+
+/// Mask the portrait square to a circle and ring it in gold. Drawn as one
+/// horizontal span per interface pixel row (the layer has no circles), so the
+/// ring has no gaps at any slope.
+fn round_portrait(list: &mut DrawList, origin: (i32, i32), s: i32) {
+    let socket: Colour = [0.05, 0.045, 0.04, 1.0];
+    let gold: Colour = [0.86, 0.68, 0.26, 1.0];
+    let shadow: Colour = [0.32, 0.22, 0.06, 1.0];
+    let half = PORTRAIT as f32 / 2.0;
+    let outer = half - 1.0;
+    let inner = outer - RING;
+    let span = |list: &mut DrawList, row: i32, from: f32, to: f32, colour: Colour| {
+        let (a, b) = (from.round() as i32, to.round() as i32);
+        if b > a {
+            list.rect(
+                Rect::new(origin.0 + a * s, origin.1 + row * s, (b - a) * s, s),
+                colour,
+            );
+        }
+    };
+    for row in 0..PORTRAIT {
+        let dy = row as f32 + 0.5 - half;
+        let ho = (outer * outer - dy * dy).max(0.0).sqrt();
+        // Corners outside the ring become the dark socket.
+        span(list, row, 0.0, half - ho, socket);
+        span(list, row, half + ho, PORTRAIT as f32, socket);
+        // The ring: the whole chord where the inner circle has ended.
+        let colour = if dy > 0.0 { shadow } else { gold };
+        if dy.abs() >= inner {
+            span(list, row, half - ho, half + ho, colour);
+        } else {
+            let hi = (inner * inner - dy * dy).sqrt();
+            span(list, row, half - ho, half - hi, colour);
+            span(list, row, half + hi, half + ho, colour);
+        }
+    }
+}
+
+/// A gold "+" button with a dark edge; `pulse` (0 to 1) brightens it.
+fn draw_plus(list: &mut DrawList, rect: Rect, s: i32, pulse: f32) {
+    list.rect(rect, [0.12, 0.08, 0.02, 0.95]);
+    let face = Rect::new(rect.x + s, rect.y + s, rect.w - 2 * s, rect.h - 2 * s);
+    list.rect(face, [0.78 + 0.18 * pulse, 0.58 + 0.16 * pulse, 0.16, 1.0]);
+    let ink: Colour = [0.16, 0.10, 0.02, 1.0];
+    let (cx, cy) = (rect.x + rect.w / 2, rect.y + rect.h / 2);
+    list.rect(Rect::new(cx - 5 * s, cy - s, 10 * s, 2 * s), ink);
+    list.rect(Rect::new(cx - s, cy - 5 * s, 2 * s, 10 * s), ink);
 }
 
 /// One battle spell or scroll slot, `side` window pixels square at `at`.
@@ -390,6 +471,22 @@ mod tests {
         // The gap between D and F, and the item slot above T, miss.
         assert_eq!(spell_at(area, 2, (100 + 320 * 2, 200 + 30 * 2)), None);
         assert_eq!(spell_at(area, 2, (100 + 430 * 2, 200 + 30 * 2)), None);
+    }
+
+    #[test]
+    fn plus_buttons_float_over_upgradable_slots_only() {
+        let area = Rect::new(100, 200, SIZE.0 * 2, SIZE.1 * 2);
+        let up = [false, true, false, true];
+        // Centre of the W button: x 92 + 42 + 12 + 8, 12 above the bar.
+        let w = (100 + (92 + 42 + 20) * 2, 200 - 12 * 2);
+        assert_eq!(upgrade_at(area, 2, w, &up), Some(1));
+        // Q's button spot is empty while Q cannot take a point.
+        let q = (100 + (92 + 20) * 2, 200 - 12 * 2);
+        assert_eq!(upgrade_at(area, 2, q, &up), None);
+        // The button is above the bar, never on the slot itself.
+        let b = upgrade_button(area, 2, 3);
+        assert!(b.bottom() <= area.y && b.y >= area.y - 24 * 2);
+        assert_eq!(upgrade_at(area, 2, (w.0, 200 + 30 * 2), &up), None);
     }
 
     #[test]

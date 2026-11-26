@@ -232,6 +232,17 @@ fn is_objective_camp(kind: UnitKind, buff: Option<CampBuff>) -> bool {
     kind == UnitKind::Camp && buff.is_some()
 }
 
+/// How to spend a point on `slot`: an unlearned ability learns on a click;
+/// a learned one casts on a click, so its "+" or Ctrl + key ranks it up.
+fn skill_point_hint(slot: usize, rank: u8, points: u32) -> String {
+    if rank == 0 {
+        format!("Click to learn ({points} left)")
+    } else {
+        let key = ["Q", "W", "E", "R"][slot.min(3)];
+        format!("Click + or Ctrl+{key} to rank up ({points} left)")
+    }
+}
+
 pub fn objectives(scene: &SceneData, animated: &AnimatedScene) -> ObjectivesState {
     let lanes = animated
         .lanes
@@ -1031,10 +1042,7 @@ pub fn ability_tooltip(
         })
         .collect();
     let hint = match animated.upgrade_block(slot) {
-        None => Some(format!(
-            "Click to spend a skill point ({} left)",
-            animated.skill_points
-        )),
+        None => Some(skill_point_hint(slot, rank, animated.skill_points)),
         Some(UpgradeBlock::NeedsLevel(needs)) if animated.skill_points > 0 => {
             Some(format!("Next rank unlocks at level {needs}"))
         }
@@ -1235,6 +1243,15 @@ mod tests {
         assert!(is_objective_camp(UnitKind::Camp, Some(CampBuff::Swift)));
         assert!(!is_objective_camp(UnitKind::Camp, None));
         assert!(!is_objective_camp(UnitKind::Player, None));
+    }
+
+    #[test]
+    fn skill_point_hint_names_the_way_to_spend_it() {
+        assert_eq!(skill_point_hint(1, 0, 2), "Click to learn (2 left)");
+        assert_eq!(
+            skill_point_hint(3, 1, 1),
+            "Click + or Ctrl+R to rank up (1 left)"
+        );
     }
 
     #[test]

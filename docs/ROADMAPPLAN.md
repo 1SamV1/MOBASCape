@@ -215,8 +215,12 @@ All objects from the cache, placed through the map format
    the plain camps fold into one line per buff ("Alive", or how many stand
    and the soonest respawn) with the holding team's buff as a second line.
    The per-lane tower and inhibitor pips were already live.
-4. Slimmer action bar with round portrait, skill-point "+" over abilities,
-   and potion slots; equipment-grid inventory from the cache slot sprites.
+4. Slimmer action bar with ~~round portrait, skill-point "+" over
+   abilities~~ (done 2026-11-25: gold-ringed round portrait; a "+" floats
+   over every slot that can take a point, Ctrl + Q/W/E/R also ranks up,
+   and a click casts a learned ability), and potion slots (need
+   consumable items first); equipment-grid inventory from the cache slot
+   sprites. Still open: the slimmer bar, potions, the equipment grid.
 5. Announcements in OSRS yellow for objectives; bounty values in the feed.
 
 ### Phase 7: Death, end of match and meta
@@ -267,3 +271,6 @@ All objects from the cache, placed through the map format
   line for bigger portraits and the stats drop their labels.
 - 2026-11-25: phase 6.3 objectives panel done: named boss lines, camps
   grouped by buff, countdowns drawn in the title colour.
+
+- 2026-11-25: phase 6.4 started: round portrait and the skill-point "+"
+  buttons with Ctrl + key learning.

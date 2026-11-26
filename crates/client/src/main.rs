@@ -1406,6 +1406,11 @@ impl ApplicationHandler for App {
                         self.cast_spell(0);
                     } else if code == KeyCode::KeyF {
                         self.cast_spell(1);
+                    } else if let Some(slot) = learn_slot(code, &self.held) {
+                        // Ctrl + Q/W/E/R spends a skill point, as in Dota 2.
+                        if let Some(animated) = self.animated.as_mut() {
+                            animated.upgrade_ability(slot);
+                        }
                     } else if code == KeyCode::KeyQ {
                         self.cast_q();
                     } else if code == KeyCode::KeyW {
@@ -3853,6 +3858,21 @@ impl App {
             self.pan_camera_to_minimap(u, v);
             return true;
         }
+        // A skill-point "+" over an ability ranks it up. It floats above the
+        // bar, outside every piece's rectangle, so it is tested first.
+        if let (Some(area), Some(animated)) = (
+            placed.get(rift_ui::hud::Piece::Ability),
+            self.animated.as_mut(),
+        ) {
+            let upgradable = [0, 1, 2, 3].map(|slot| animated.can_upgrade(slot));
+            if let Some(slot) =
+                rift_ui::hud::ability_bar::upgrade_at(area, scale, mouse, &upgradable)
+            {
+                tracing::info!("ability bar: + over slot {slot} clicked");
+                animated.upgrade_ability(slot);
+                return true;
+            }
+        }
         // Battle spells and the scroll work like their hotkeys too.
         if let Some(area) = placed.get(rift_ui::hud::Piece::Ability)
             && let Some(slot) = rift_ui::hud::ability_bar::spell_at(area, scale, mouse)
@@ -3870,9 +3890,10 @@ impl App {
             && let Some(slot) = rift_ui::hud::ability_bar::ability_at(area, scale, mouse)
         {
             tracing::info!("ability bar: slot {slot} clicked");
-            // With a skill point to spend, a click ranks the ability up
-            // instead of casting it.
+            // An unlearned ability cannot be cast, so a click learns it; a
+            // learned one casts, and its "+" (or Ctrl + key) ranks it up.
             if let Some(animated) = self.animated.as_mut()
+                && animated.ability_rank(slot) == 0
                 && animated.upgrade_ability(slot)
             {
                 return true;
@@ -4379,10 +4400,13 @@ fn draw_ui_overlay(
             && let Some(slot) =
                 rift_ui::hud::ability_bar::ability_at(area, placed.scale as i32, mouse)
         {
-            // Anchor above the bar, centred on the slot, so it never covers
-            // the slots themselves.
+            // Anchor above the bar and its skill-point "+" row, centred on
+            // the slot, so it never covers the slots or the buttons.
             let scale = placed.scale as i32;
-            let anchor = (area.x + (92 + slot as i32 * 42 + 20) * scale, area.y);
+            let anchor = (
+                area.x + (92 + slot as i32 * 42 + 20) * scale,
+                area.y - 22 * scale,
+            );
             state.ability_tooltip = crate::ui_live::ability_tooltip(animated, slot, anchor);
         }
         // Hovering D, F or T explains the spell or the scroll.
@@ -4596,9 +4620,29 @@ fn bot_builds(shop: &ItemShop, lineup: &[animated::bots::BotPick]) -> Vec<Vec<it
         .collect()
 }
 
+/// Ctrl + Q, W, E or R: the ability slot to spend a skill point on.
+fn learn_slot(code: KeyCode, held: &std::collections::HashSet<KeyCode>) -> Option<usize> {
+    if !(held.contains(&KeyCode::ControlLeft) || held.contains(&KeyCode::ControlRight)) {
+        return None;
+    }
+    [KeyCode::KeyQ, KeyCode::KeyW, KeyCode::KeyE, KeyCode::KeyR]
+        .iter()
+        .position(|&key| key == code)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn ctrl_with_qwer_learns_and_plain_keys_do_not() {
+        let mut held = std::collections::HashSet::new();
+        assert_eq!(learn_slot(KeyCode::KeyQ, &held), None);
+        held.insert(KeyCode::ControlLeft);
+        assert_eq!(learn_slot(KeyCode::KeyQ, &held), Some(0));
+        assert_eq!(learn_slot(KeyCode::KeyR, &held), Some(3));
+        assert_eq!(learn_slot(KeyCode::KeyD, &held), None);
+    }
 
     #[test]
     fn window_sizes_parse_only_positive_width_and_height() {

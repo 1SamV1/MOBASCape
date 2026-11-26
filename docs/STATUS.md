@@ -1,6 +1,27 @@
 # Status
 
-Last updated: objectives panel (roadmap 6.3), 2026-11-25.
+Last updated: skill-point "+" and round portrait (roadmap 6.4), 2026-11-25.
+
+## 2026-11-25 — Ability bar: skill-point "+" and a round portrait (roadmap 6.4, part)
+
+- **"+" buttons.** Every ability that can take a skill point gets a gold
+  "+" floating 4 px above its slot (`ability_bar::upgrade_button` /
+  `upgrade_at`, drawn outside the bar's clip and pulsing with the slot's
+  shimmer). Clicking it ranks the ability up; Ctrl + Q/W/E/R does the same.
+- **Click rule changed.** A click on a slot used to rank it up whenever a
+  point was free, so a learned ability could not be cast by click while
+  points were waiting. Now a click learns only an unlearned (rank 0)
+  ability and otherwise casts. The tooltip hint says which: "Click to
+  learn (2 left)" or "Click + or Ctrl+W to rank up (2 left)".
+- The ability tooltip anchors 22 px higher so it clears the "+" row.
+- **Round portrait.** The 76 px portrait is masked to a circle with a gold
+  ring (lit top, shadowed bottom), drawn as one span per interface row
+  because the draw layer has no circles; the corners become a dark socket.
+- Tests: "+" geometry and hit testing, the Ctrl mapping, the hint text.
+  Verified with `--demo-ranks 1` screenshots (three "+" over Q, W, E with
+  two points left; tooltip clear of them).
+- Still open in 6.4: the slimmer bar, potion slots (need consumables) and
+  the equipment-grid inventory.
 
 ## 2026-11-25 — Objectives panel: named objectives (roadmap 6.3)
 
