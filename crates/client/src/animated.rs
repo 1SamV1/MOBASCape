@@ -496,7 +496,7 @@ pub enum Indicator {
     /// Bananarang's teardrop flight toward the aim: out on the right,
     /// back on the left.
     Boomerang { length: f32 },
-    /// Vine Swing's curved arc to the aim, at most `length` away.
+    /// Vine Swing's curved arc toward the aim, always `length` long.
     Swing { length: f32 },
 }
 
