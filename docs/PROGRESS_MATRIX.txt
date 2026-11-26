@@ -1,62 +1,62 @@
    Z        4  ^8 :? : ~TQ  9T    -k7 ~ X  @           AA +     .     7  -D -  A    $B         |  97 7 :             6           X     $       ~ :.
   ░▒▓▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▓▒░
-   ▐ zION ▌                      fOUR dIRE pOCKETS dRESSED.   tHE oGRES bEAT tHE dRUMS.   tHE gOBLINS pRAY tO bANDOS.               ▐ lOADED ▌
-    ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄  +- .%%. '  #M  :BX@M&   &X0B0QW  -  %0MW$     Z8$MB$   :%#ZZ@Z'  -X8B8M   W&8&@Z@   %ZQX#XZQW'     vampire swamp..... ok
-    █ > zion           █  8:  Q8@ : %%0  BW&00X8  @B&0Z0QQ ' $%$&WB#   %WW##&#B  %&%@$$&Z  0Z0QWBM  &Q0WQX8X  80XZW8#X&`     dark magic........ ok
-    █     ¦ ▲ ▲ ¦      █  E   Z$$   $8&,@%     XB #$     %8:00     88 80 : :    Q$        &W   ' &X 0$     XZ QB :     :     ogre fire pit..... ok
-    █     ▄█████▄      █  ?   QMX$ MBZ$`QX  :  0& 8B     8M M&     $Q QX :     :&8      . B#   : %# X%     0% BX `           ogre drums........ ok
-    █    ▐▓▓▓▓▓▓▓▌     █  &  .ZB QM@:$Z:&X  '  %0 MW%##X&&  00Z0BWZW&' WM$%%Q  .0#        ZB$W8M&MM %$0$$XB&  MWBZ8$X        skull standards... ok
-    █     ▀█▀▀▀█▀      █  =   Z&  Q  8X $M  :  ZB &B#M&Z$   @#WZ0%Q8X.. 0#M%8Z,:8Q        %WXXB%%&Z #@@$@BQ   M%0BX0Q        skull barricade... ok
-    █     ▐▌   ▐▌      █  :   08.    0# &Z     WM.$B     $%.&Z . . WZ:  :    W@ BZ   :    @@     @M Q8 ,.:    MB             bandos altar...... ok
-    █ > drums. ok.     █  >   XW`    ZB M#     QX:QW     #X BB : ' 8W   :    XW $%   `    0X     0M 8Q `'   ' BZ             goblin tents...... ok
-    █▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄█  2   @M:    BQ 80     Q#:M0   ` 0M %Q   : BZ        &8 ZQ . :  . WM     QZ &Z ::   - W%             goblin banners.... ok
-          ▄▄█████▄▄       B   @B   ' W$ BX   . Z$ %Q   , WB WX     0@  .     MZ #W        WW     ZZ 8%      : @%             spit roasts....... ok
-     ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄   k   M8   . 0X  M%MQQQ0  %&@#Z0@&  X$     Q% #8Q#ZMB$   %&&QW8%$ X$     QQ 8$    .   M&@&Q$Z0Q      radiant x4........ ..
-     ▀▪▪▪▪▪▪▪▪▪▪▪▪▪▪▪▪▀   +.  WW   : W#   B&@B@   0QM80MQ  .Z$: `  W0  $WW@XZ   : Q%B##Q  XM     @% MZ    `   Z%0#QB&$Q  :   mist: removed..... --
-    % *  ^>       @7 0.$E>     ◄◄ OGRE FIRE PIT ◄◄ OGRE DRUMS ◄◄ SKULL STANDARDS ◄◄ BANDOS ALTAR ◄◄ GOBLIN TENTS ◄◄ OGR      6  ? X  .      ~ B    F
-    % &  @F       06  ░▒▓  n O D E   2 1 :   z I O N   //   o G R E   w A R   c A M P   a N D   g O B L I N   v I L L A G E  ▓▒░  5  B      7 %    Q
-    7 4  2=       T2 Q?^ D  3   -  :      70      T%    THiS iS ZioN,   aND We aRe NoT aFRaiD.  k  ^        7     =C         @  6 <  6      X !    J5
+   ▐ oRACLE ▌                         fOUR rADIANT pOCKETS dRESSED.   tHE mARKET oPENS.   tHE sPIRIT tREE wAKES.                    ▐ lOADED ▌
+    ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄  +- .%%. '  #M  :BX@M&   &X0B0QW  -  %0MW$     Z8$MB$   :%#ZZ@Z'  -X8B8M   W&8&@Z@   %ZQX#XZQW'     market stalls..... ok
+    █ > oracle         █  8:  Q8@ : %%0  BW&00X8  @B&0Z0QQ ' $%$&WB#   %WW##&#B  %&%@$$&Z  0Z0QWBM  &Q0WQX8X  80XZW8#X&`     well square....... ok
+    █     ▄▄▄▄▄▄▄      █  E   Z$$   $8&,@%     XB #$     %8:00     88 80 : :    Q$        &W   ' &X 0$     XZ QB :     :     knight statue..... ok
+    █    █ ◦ ◦ ◦ █     █  ?   QMX$ MBZ$`QX  :  0& 8B     8M M&     $Q QX :     :&8      . B#   : %# X%     0% BX `           archery range..... ok
+    █    █ ◦ ◦ ◦ █     █  &  .ZB QM@:$Z:&X  '  %0 MW%##X&&  00Z0BWZW&' WM$%%Q  .0#        ZB$W8M&MM %$0$$XB&  MWBZ8$X        dummy line........ ok
+    █    ▐▓▓▓▓▓▓▓▌     █  =   Z&  Q  8X $M  :  ZB &B#M&Z$   @#WZ0%Q8X.. 0#M%8Z,:8Q        %WXXB%%&Z #@@$@BQ   M%0BX0Q        seren fragment.... ok
+    █     ▀▀   ▀▀      █  :   08.    0# &Z     WM.$B     $%.&Z . . WZ:  :    W@ BZ   :    @@     @M Q8 ,.:    MB             elven lamps....... ok
+    █ > cookies. ok.   █  >   XW`    ZB M#     QX:QW     #X BB : ' 8W   :    XW $%   `    0X     0M 8Q `'   ' BZ             crystal trees..... ok
+    █▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄█  2   @M:    BQ 80     Q#:M0   ` 0M %Q   : BZ        &8 ZQ . :  . WM     QZ &Z ::   - W%             spirit tree....... ok
+          ▄▄█████▄▄       B   @B   ' W$ BX   . Z$ %Q   , WB WX     0@  .     MZ #W        WW     ZZ 8%      : @%             gnome glider...... ok
+     ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄   k   M8   . 0X  M%MQQQ0  %&@#Z0@&  X$     Q% #8Q#ZMB$   %&&QW8%$ X$     QQ 8$    .   M&@&Q$Z0Q      gnomeball......... ok
+     ▪▪▪▪▪▪▪▪▪▪▪▪▪▪▪▪▪▪   +.  WW   : W#   B&@B@   0QM80MQ  .Z$: `  W0  $WW@XZ   : Q%B##Q  XM     @% MZ    `   Z%0#QB&$Q  :   pockets 8/8....... ok
+    % *  ^>       @7 0.$E>     ◄◄ MARKET STALLS ◄◄ WELL SQUARE ◄◄ KNIGHTS' YARD ◄◄ FRAGMENT OF SEREN ◄◄ SPIRIT TREE ◄◄       6  ? X  .      ~ B    F
+    % &  @F       06   ░▒▓  n O D E   2 2 :   t H E   o R A C L E   //   t H E   r A D I A N T   s I D E ,   d R E S S E D  ▓▒░   5  B      7 %    Q
+    7 4  2=       T2 Q?^ D  3   -  :      You DiDN'T CoMe HeRe To MaKe THe CHoiCe.   You'Ve aLReaDY MaDe iT.      =C         @  6 <  6      X !    J5
   ░▒▓▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▓▒░E
     ■─────────────────────────────────────────────────────────  -=[ ReLeaSe iNFo ]=-  ───────────────────────────────────────────────────────────■ #.
-        rELEASE dATE.... 2026-11-25                                         cOMMITS..... 37c0dbe ogre + goblin · dfa27f9 dark magic                3&
-        tYPE............ tHEMED pOCKETS: oGRE rUINS + gOBLIN cAMP           tESTS....... 472 pass // clippy clean                                  B1
-        wAS............. tRANSPLANTED sCENERY, nO sET pIECE                 nOW......... war camp + bandos village, 4/4 dire done                  <Q
+        rELEASE dATE.... 2026-11-25                                         cOMMITS..... 252c930 radiant x4 · 37c0dbe ogre + goblin                3&
+        tYPE............ tHEMED pOCKETS: tHE rADIANT sIDE                   tESTS....... 472 pass // clippy clean                                  B1
+        wAS............. tRANSPLANTED sCENERY, nO sET pIECE                 nOW......... market, yard, grove, tree: 8/8 pockets                    <Q
     $ T   =       1  *56    #   B   2    %@       > J  %^  3      <        1&4  E Z ^           =  |        B      9         1  1 &  B        8    +&
-    ▄▀▀▐ oGRe.DaT // DiRe_oGRe, SouTH oF THe CaMP ▌▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▄5▄▀▀▐ GoBLiN.DaT // DiRe_GoBLiN, uNDeR THe WaLL ▌▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▄ ~T
+    ▄▀▀▐ CiTY.DaT // RaDiaNT_HuMaN_CiTY, BY THe ToP LaNe ▌▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▄5▄▀▀▐ RaDiaNT.DaT // KeeP, GRoVe, STRoNGHoLD ▌▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▄ ~T
     █                                                                     █.█                                                                    █  ?
-    █  THE OGRE WAR CAMP // drums round the bone-ring fire                █&█  THE GOBLIN VILLAGE // tents round the bandos altar                █  $
-    █                                                                     █5█                                                                    █  T
-    █     ●   ,  ‡        ,    ‡     ,   ●    ∩ bone-ring fire pit 6794   █5█        ▲     ▲        27752   bandos altar x1.5, plaza 4.5         █ 1%
-    █    ,   Ω        ¤▬▬           ,   ╳     Ω ogre drums 6792 x2        █D█     ▲    ¶   ¶    ▲   26482   shabby tents · 7738 little tents     █ #D
-    █      Ω    ∩∩∩∩∩                  ╳ ,    ¤ spit-roast 3453           █T█          ▄█▄          17039   red goblin standards x4              █ !-
-    █     ,    ∩ ▓▓▓ ∩   ,     ┃        ╳     ‡ skull standards 6800      █>█    ▲    ▐▓█▓▌         20040   campfire · 4328 spit roast           █ <+
-    █      ,   ∩ ▓▓▓ ∩     ,   ┃       ╳ ,    ╳ skull barricades 6788     █4█          ▀▀▀      ▲   26908   goblin stove crates x2               █ |X
-    █     ●     ∩∩∩∩∩   ☠        ,    ╳       ┃ totem pole 1759           █^█     ▲    ¶   ¶        ring    seven tents at r 7, doors inward     █ D-
-    █    ,   ‡      ,      ‡    ●   ,         ▄ coffin 6786, chest 3450   █Z█        ▲     ▲   *    scatter skulls, crates, campfires, rocks     █ ~F
-    █      ▄▄▄▄   ▄▄  ☠   ,   ●   ,   §       § serpent totem 39439       █ █  check  every model re-rendered bare: no recolour needed           █ 4k
-    █                                                                     █ █  ────────────────────────────────────────────────────────────────  █ 4
-    █  ────────────────────────────────────────────────────────────────── █ █  MAP FORMAT // biome scatters, plaza radii                         █ 6
-    █  camp   south of the jungle camp's clear ring, 3.5 tile plaza       █ █   scatter.biome  drop only inside that pocket, rect optional       █ @
-  ? █  lane   five spiked skull barricades turn their points on it        █ █   place.plaza    clear radius, default 6; railings use 0           █ J
-  > █  junk   boulders, skulls, wrecked campfires, a ruined pillar        █ █  mist   reverted (48df811): fog of war + height fog unchanged      █ :
-  B █                                                                     █ █                                                                    █ -
-  3 █                                                                     █ █                                                                    █ B
-  . █  > they beat the drums the night before the battle.                 █ █                                                                    █ J
-  9 █  > in zion they called it a rave. ogres call it tuesday. █          █ █  TESTS  472 pass  pocket test checks all four dire sets            █ C
-  3 █                                                                     █ █  SHOTS  --shots: war camp + village, top / low                     █ 2
+    █  THE MARKET STREET // stalls face the road, a well by the river     █&█  THE KNIGHTS' YARD // radiant_human_keep                           █  $
+    █                                                                     █5█   ◉      ♞      ¥   40158   knight statue, four blue banners       █  T
+    █      Π  ¡░░░░          ¶    ♔  ≈≈≈≈≈≈≈  Π stalls 1421 + five goods  █5█   ◉    ¶   ¶    ¥   1451    archery range x4 + 12896, west         █ 1%
+    █        Π   ░░░░       ¡   ═    ≈≈≈≈≈≈≈      striped 24905 · 24903   █D█   ◉      ♞      ¥   1286    dummy line 25177 32307, east           █ #D
+    █   o      Π  ¡░░░░       ◎      ≈≈≈≈≈≈≈  ¡ hanging lamps 1324        █T█   ◉    ¶   ¶    ¥   5946    weapon racks · armour stands           █ !-
+    █    o       Π   ░░░░   ═   ¡    ≈≈≈≈≈≈≈  ◎ roofed well 1410, plaza 3 █>█   ◉   ╫ Ж Ж ╫   ¥   budget  falador transplant 100 -> 35           █ <+
+    █   ▪          Π  ¡░░░░        ≈≈≈≈≈≈≈≈≈  ♔ king's statue 1527        █4█                                                                    █ |X
+    █     ▪          Π   ░░░░    ≈≈≈≈≈≈≈≈≈≈≈  ¶ noticeboard 2040          █^█  THE CRYSTAL GROVE // radiant_elven_lands                          █ D-
+    █                  Π  ¡╪╪╪╪≈≈≈≈≈≈≈≈≈≈≈≈≈  ═ benches 1496 · ╤ 1453     █Z█    ♣   o   o   ♣    38604   fragment of seren, six lamps 37359     █ ~F
+    █       ╤                ╪╪╪╪≈≈≈≈≈≈≈≈≈≈≈  o barrels 1460 · ▪ 7699     █ █          ◆          38323   glarial · 38322 baxtorian              █ 4k
+    █                                                                     █ █   Ψ  o   ✶   o  Ψ   37353   crystal trees x5, saplings             █ 4
+    █  ────────────────────────────────────────────────────────────────── █ █  ◆               ◆  30686   arcane crystals at x0.6, not x1.3      █ 6
+    █  cut    the top lane and the river split the pocket in three        █ █    ♣   o ⌂ o   ♣    budget  jungle transplant 110 -> 60            █ @
+  ? █  row    seven stalls 7.6 tiles off the lane, yaw down the road      █ █                                                                    █ J
+  > █  fix    five spots failed the lane/river check; moved, not forced   █ █  THE STRONGHOLD // radiant_gnome_stronghold                        █ :
+  B █                                                                     █ █   ♠     ▄█▄  ° ✈ °  8110    spirit tree x2.3, cache leaf canopy    █ -
+  3 █                                                                     █ █   π    ♣♣♣♣♣        1323    glider between landing lights 5647     █ B
+  . █  > bakery stall 1445. the cookies are almost done.                  █ █    π  Ψ  ┃  Ψ       1317    gnomeball goals · flag 10348           █ J
+  9 █  > and by the time you've had one, you'll feel right as rain. █     █ █      ♠          Ħ   17144   cafe: tables, chairs, cooker           █ C
+  3 █                                                                     █ █    ∩     ⚑     ∩    24742   swings · net 1439 · toadstools         █ 2
   k █▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄█ █▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄█ C
            - k   -     ~  .0  #: ~  Q| T    -       k    ?6      <   ?  D @  4   :X    ! D  9=2  T>  A :   *  +J*     X *    8 6      k   &     7  D
-    ■─────────────────────────────────────────────────────  -=[ SYSoP'S NoTe // ZioN ]=-  ───────────────────────────────────────────────────────■ 4
-                  dIRE sIDE dONE (4/4). sTILL oPEN: hUMAN cITY, hUMAN kEEP, eLVEN lANDS, gNOME sTRONGHOLD; oBJECTIVES pANEL (p6.3).                E
-                        dire_vampire + dire_dark_magic + dire_ogre + dire_goblin // shipped_dire_pockets_have_their_set_pieces                     B
+    ■──────────────────────────────────────────────────  -=[ SYSoP'S NoTe // THe oRaCLe ]=-  ────────────────────────────────────────────────────■ 4
+                    aLL eIGHT pOCKETS dRESSED fROM cACHE oBJECTS (8/8), nO fOG, nO mIST. sTILL oPEN: tHE oBJECTIVES pANEL (p6.3).                  E
+          radiant_human_city + radiant_human_keep + radiant_elven_lands + radiant_gnome_stronghold // shipped_pockets_have_their_set_pieces        B
     ■────────────────────────────────────────────────  -=[ RoaDMaP // DoCS/RoaDMaPPLaN.MD ]=-  ──────────────────────────────────────────────────■ 1
         P1 LIGHT   [▓▓▓▓▓░░░░░]  50%       P2 MINIMAP [▓▓▓▓▓▓░░░░]  60%       P3 SHOP    [▓▓▓▓▓▓▓░░░]  70%       P4 SELECT  [▓▓▓▓▓▓▓▓▓░]  90%     3k
                                                                                                                                                   BB
-        P5 ARENA   [▓▓▓▓▓▓▓▓▓░]  90%       POCKETS    [▓▓▓▓▓░░░░░]  50%       P6 HUD     [▓▓▓▓░░░░░░]  40%       P7 POST    [░░░░░░░░░░]   0%     @
+        P5 ARENA   [▓▓▓▓▓▓▓▓▓░]  90%       POCKETS    [▓▓▓▓▓▓▓▓▓▓] 100%       P6 HUD     [▓▓▓▓░░░░░░]  40%       P7 POST    [░░░░░░░░░░]   0%     @
                                                                                                                                                   7
-        >> next: the radiant side from cache objects (human city, human keep, elven lands, gnome stronghold), then P6.3                           1
+        >> next: P6.3 objectives panel: named objectives with respawn timers and per-lane tower states                                            1
   ░▒▓▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▓▒░
-  3      B               gREETZ: mORPHEUS (zION) * tANK * dOZER * gREASY gRUBFOOT * gENERAL bENTNOZE * gENERAL wARTFACE * oG                    E @  &
+  3      B          gREETZ: tHE oRACLE * sERAPH * tHE kEYMAKER * kING rOALD * sIR aMIK vARZE * gLARIAL * bAXTORIAN * kING nARNODE               E @  &
   D      %                                 nOT AFFILIATED WITH JAGEX. cACHE ASSETS STAY OUT OF GIT. aLWAYS.                                     -    E
-  7      %                             t h i s   i s   z i o n ,   a n d   w e   a r e   n o t   a f r a i d .                                  .    >
-  A      0              -=[ mObAsCaPe // 2026 // nODE 21: zION // 57.6k // sYSoP: rIFT // 4/8 pOCKETS, 0 mIST, 100% cACHE ]=-                   T    &
+  7      %                         y o u ' r e   n o t   t h e   o n e .   b u t   t h e   m a p   i s   d o n e .                              .    >
+  A      0           -=[ mObAsCaPe // 2026 // nODE 22: tHE oRACLE // 57.6k // sYSoP: rIFT // 8/8 pOCKETS, 0 mIST, 100% cACHE ]=-                T    &

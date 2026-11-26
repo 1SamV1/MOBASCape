@@ -208,28 +208,37 @@ def code_logo(y, word):
     return x0, width
 
 
+TESTS = 472
+
 GOLD = (255, 210, 90)
 BLOOD = (200, 30, 40)
-BLOOD_BG = (50, 6, 10)
-VIOLET = (170, 90, 255)
-VIOLET_BG = (26, 8, 44)
-SWAMP = (90, 140, 70)
-SWAMP_BG = (10, 22, 12)
 STONE2 = (150, 145, 150)
-IRON = (120, 110, 115)
-LAMP = (120, 255, 140)
-CANDLE = (255, 220, 120)
 CHIP_BG = (26, 22, 18)
 CHIP_FG = (236, 226, 200)
-BONE = (225, 215, 185)
 FIRE = (255, 140, 40)
-OGRE_BG = (30, 20, 8)
-GOB_BG = (14, 26, 10)
-GOB = (120, 190, 80)
+DIRT = (150, 110, 60)
+DIRT_BG = (34, 24, 10)
+CITY_BG = (16, 22, 14)
+AWNING = (236, 232, 220)
+STRIPE = (90, 150, 255)
+LAMP = (255, 230, 120)
+WOOD = (150, 100, 55)
+WATER = (80, 150, 255)
+WATER_BG = (6, 18, 40)
+KEEP_BG = (12, 16, 26)
+SARA = (90, 140, 255)
+TARGET = (255, 80, 60)
+ELF_BG = (6, 26, 26)
+CRYSTAL = (110, 240, 255)
+ELF_LAMP = (235, 245, 255)
+LEAF = (90, 200, 90)
+GNOME_BG = (10, 24, 8)
+SPIRIT = (120, 220, 90)
+TOAD = (230, 80, 50)
 
 
-def chateau(x0, y0):
-    """The gate of Zion: a drum under the dock lights."""
+def oracle(x0, y0):
+    """The Oracle's kitchen: an oven of cookies, almost done."""
     clear(x0 - 1, y0, x0 + 21, y0 + 11)
     for j in range(20):
         put(x0 + j, y0, "▄", MID)
@@ -237,25 +246,24 @@ def chateau(x0, y0):
     for k in range(1, 9):
         put(x0, y0 + k, "█", DIM)
         put(x0 + 19, y0 + k, "█", DIM)
-    text(x0 + 2, y0 + 1, "> zion", DIM)
-    art = ["  ¦ ▲ ▲ ¦  ", "  ▄█████▄  ", " ▐▓▓▓▓▓▓▓▌ ", "  ▀█▀▀▀█▀  ", "  ▐▌   ▐▌  "]
+    text(x0 + 2, y0 + 1, "> oracle", DIM)
+    art = ["  ▄▄▄▄▄▄▄  ", " █ ◦ ◦ ◦ █ ", " █ ◦ ◦ ◦ █ ", " ▐▓▓▓▓▓▓▓▌ ", "  ▀▀   ▀▀  "]
     for k, row in enumerate(art):
         for j, ch in enumerate(row):
-            col = FIRE if ch == "▓" else BONE if ch in "▲¦▐▌" else (130, 90, 50)
+            col = GOLD if ch == "◦" else FIRE if ch == "▓" else STONE2
             if ch != " ":
                 put(x0 + 4 + j, y0 + 2 + k, ch, col)
-    text(x0 + 2, y0 + 7, "> drums. ok.", HEAD)
+    text(x0 + 2, y0 + 7, "> cookies. ok.", HEAD)
     text(x0 + 6, y0 + 9, "▄▄█████▄▄", DIM)
     text(x0 + 1, y0 + 10, "▄" * 18, MID)
-    text(x0 + 1, y0 + 11, "▀" + "▪" * 16 + "▀", DIM)
-    for j in range(16):
-        put(x0 + 2 + j, y0 + 11, "▪", BLOOD if j % 4 == 1 else VIOLET if j % 4 == 3 else DIM)
+    for j in range(18):
+        put(x0 + 1 + j, y0 + 11, "▪", [AWNING, STRIPE, CRYSTAL, SPIRIT][j % 4] if 0 < j < 17 else DIM)
 
 
 LOADED = [
-    "vampire swamp", "dark magic", "ogre fire pit", "ogre drums",
-    "skull standards", "skull barricade", "bandos altar", "goblin tents",
-    "goblin banners", "spit roasts", "radiant x4", "mist: removed",
+    "market stalls", "well square", "knight statue", "archery range",
+    "dummy line", "seren fragment", "elven lamps", "crystal trees",
+    "spirit tree", "gnome glider", "gnomeball", "pockets 8/8",
 ]
 
 
@@ -263,40 +271,49 @@ def loaded_list(x0, y0):
     clear(x0 - 1, y0, x0 + 22, y0 + len(LOADED) - 1)
     for k, name in enumerate(LOADED):
         yy = y0 + k
-        gone = name.startswith("mist")
-        todo = name.startswith("radiant")
-        hot = name in ("ogre fire pit", "bandos altar")
-        text(x0, yy, name, RED if gone else AMBER if todo else WHITE if hot else CYAN)
+        last = name.startswith("pockets")
+        hot = name in ("seren fragment", "spirit tree")
+        text(x0, yy, name, GOLD if last else WHITE if hot else CYAN)
         text(x0 + len(name), yy, "." * (18 - len(name)), FAINT)
-        text(x0 + 19, yy, "--" if gone else ".." if todo else "ok", RED if gone else AMBER if todo else HEAD if hot else MID)
+        text(x0 + 19, yy, "ok", GOLD if last else HEAD if hot else MID)
+
+
+def plot(x0, y0, rows, cols, cells, back, base=" "):
+    """Draw a little map: `cells` maps (row, col) -> (glyph, colour), and
+    `back(row, col, glyph)` gives each cell's background."""
+    for r in range(rows):
+        for c in range(cols):
+            ch, col = cells.get((r, c), (base, FAINT))
+            put(x0 + c, y0 + r, ch, col)
+            shade(x0 + c, y0 + r, x0 + c, y0 + r, back(r, c, ch))
 
 
 clear(2, 2, W - 3, 2)
 lx, lw = code_logo(3, "MOBASCAPE")
-chateau(4, 3)
+oracle(4, 3)
 loaded_list(125, 3)
-text(3, 2, "▐ zION ▌", DIM)
+text(3, 2, "▐ oRACLE ▌", DIM)
 text(W - 18, 2, "▐ lOADED ▌", DIM)
-top = "  fOUR dIRE pOCKETS dRESSED.   tHE oGRES bEAT tHE dRUMS.   tHE gOBLINS pRAY tO bANDOS.  "
-assert len(top) <= 108, len(top)
+top = "  fOUR rADIANT pOCKETS dRESSED.   tHE mARKET oPENS.   tHE sPIRIT tREE wAKES.  "
+assert len(top) <= 104, len(top)
 center(2, top, MID)
 fade_bar(1, 2, W - 3)
 clear(lx - 3, 15, lx + lw + 2, 15)
-ticker = " ◄◄ OGRE FIRE PIT ◄◄ OGRE DRUMS ◄◄ SKULL STANDARDS ◄◄ BANDOS ALTAR ◄◄ GOBLIN TENTS"
+ticker = " ◄◄ MARKET STALLS ◄◄ WELL SQUARE ◄◄ KNIGHTS' YARD ◄◄ FRAGMENT OF SEREN ◄◄ SPIRIT TREE"
 run = (ticker * 3)[: lw]
 for i, ch in enumerate(run):
     put(lx + i, 15, ch, ORANGE if ch == "◄" else AMBER)
-center(16, "  ░▒▓  n O D E   2 1 :   z I O N   //   o G R E   w A R   c A M P   a N D   g O B L I N   v I L L A G E  ▓▒░  ", AMBER)
-center(17, "  " + elite("this is zion,") + "   " + elite("and we are not afraid.") + "  ", WHITE)
+center(16, "  ░▒▓  n O D E   2 2 :   t H E   o R A C L E   //   t H E   r A D I A N T   s I D E ,   d R E S S E D  ▓▒░  ", AMBER)
+center(17, "  " + elite("you didn't come here to make the choice.") + "   " + elite("you've already made it.") + "  ", WHITE)
 fade_bar(18, 2, W - 3)
 
 # --- release info -------------------------------------------------------------
 header(19, elite("release info"))
 clear(4, 20, W - 5, 22)
 info = [
-    ("rELEASE dATE", "2026-11-25", "cOMMITS", "37c0dbe ogre + goblin · dfa27f9 dark magic"),
-    ("tYPE", "tHEMED pOCKETS: oGRE rUINS + gOBLIN cAMP", "tESTS", "472 pass // clippy clean"),
-    ("wAS", "tRANSPLANTED sCENERY, nO sET pIECE", "nOW", "war camp + bandos village, 4/4 dire done"),
+    ("rELEASE dATE", "2026-11-25", "cOMMITS", "252c930 radiant x4 · 37c0dbe ogre + goblin"),
+    ("tYPE", "tHEMED pOCKETS: tHE rADIANT sIDE", "tESTS", f"{TESTS} pass // clippy clean"),
+    ("wAS", "tRANSPLANTED sCENERY, nO sET pIECE", "nOW", "market, yard, grove, tree: 8/8 pockets"),
 ]
 for i, (k1, v1, k2, v2) in enumerate(info):
     assert len(v1) <= 50 and 89 + len(v2) <= W - 6, (v1, v2)
@@ -306,53 +323,56 @@ for i, (k1, v1, k2, v2) in enumerate(info):
     text(76, yy, f"{k2:.<12}", DIM)
     text(89, yy, v2, HEAD)
 
-# --- left: vampire swamp ---------------------------------------------------------
-box(4, 24, 74, 46, elite("ogre.dat // dire_ogre, south of the camp"))
+# --- left: the human city ---------------------------------------------------------
+box(4, 24, 74, 46, elite("city.dat // radiant_human_city, by the top lane"))
 LX = 6
-text(LX + 1, 26, "THE OGRE WAR CAMP", HEAD)
-text(LX + 19, 26, "// drums round the bone-ring fire", DIM)
-PX, PY = LX + 2, 28
-plaza = [
-    "  ●   ,  ‡        ,    ‡     ,   ● ",
-    " ,   Ω        ¤▬▬           ,   ╳  ",
-    "   Ω    ∩∩∩∩∩                  ╳ , ",
-    "  ,    ∩ ▓▓▓ ∩   ,     ┃        ╳  ",
-    "   ,   ∩ ▓▓▓ ∩     ,   ┃       ╳ , ",
-    "  ●     ∩∩∩∩∩   ☠        ,    ╳    ",
-    " ,   ‡      ,      ‡    ●   ,      ",
-    "   ▄▄▄▄   ▄▄  ☠   ,   ●   ,   §    ",
-]
-for r, row in enumerate(plaza):
-    for c, ch in enumerate(row):
-        xx, yy = PX + c, PY + r
-        colour = {
-            "∩": BONE, "▓": FIRE, "Ω": (150, 100, 55), "‡": BONE, "¤": FIRE, "▬": (130, 90, 50),
-            "╳": BONE, "┃": (130, 90, 50), "●": STONE2, ",": (110, 90, 60),
-            "☠": BONE, "▄": (130, 90, 50), "§": GOB,
-        }.get(ch, DIM)
-        put(xx, yy, ch, colour)
-        shade(xx, yy, xx, yy, (60, 25, 5) if ch == "▓" else OGRE_BG)
-leg = [("∩", BONE, "bone-ring fire pit 6794"), ("Ω", (150, 100, 55), "ogre drums 6792 x2"),
-       ("¤", FIRE, "spit-roast 3453"), ("‡", BONE, "skull standards 6800"),
-       ("╳", BONE, "skull barricades 6788"), ("┃", (130, 90, 50), "totem pole 1759")]
+text(LX + 1, 26, "THE MARKET STREET", HEAD)
+text(LX + 19, 26, "// stalls face the road, a well by the river", DIM)
+PX, PY, PR, PC = LX + 2, 28, 8, 36
+city = {}
+for r in range(PR):
+    for c in range(7 + 2 * r, 11 + 2 * r):
+        city[(r, c)] = ("░", DIRT)  # the top lane
+    for c in range(max(0, 29 - 2 * max(0, r - 3)), PC):
+        city[(r, c)] = ("≈", WATER)  # the river, bending south under the lane
+for r in range(PR):
+    for c in range(7 + 2 * r, 11 + 2 * r):
+        if city.get((r, c), ("",))[0] == "≈" or (r >= 6 and c >= 19):
+            city[(r, c)] = ("╪", WOOD)  # the bridge
+for r in range(7):
+    city[(r, 3 + 2 * r)] = ("Π", STRIPE if r in (0, 3) else AWNING)
+    if r % 2 == 0:
+        city[(r, 6 + 2 * r)] = ("¡", LAMP)
+for rc, g in {
+    (2, 0): ("o", WOOD), (3, 1): ("o", WOOD), (4, 0): ("▪", WOOD), (5, 2): ("▪", WOOD),
+    (7, 4): ("╤", WOOD), (1, 20): ("¡", LAMP), (3, 24): ("¡", LAMP),
+    (2, 22): ("◎", CRYSTAL), (1, 24): ("═", WOOD), (3, 20): ("═", WOOD),
+    (0, 21): ("¶", AWNING), (0, 26): ("♔", WHITE),
+}.items():
+    city[rc] = g
+plot(PX, PY, PR, PC, city,
+     lambda r, c, ch: WATER_BG if ch == "≈" else DIRT_BG if ch in "░╪" else CITY_BG)
+leg = [("Π", AWNING, "stalls 1421 + five goods"), (" ", AWNING, "  striped 24905 · 24903"),
+       ("¡", LAMP, "hanging lamps 1324"), ("◎", CRYSTAL, "roofed well 1410, plaza 3"),
+       ("♔", WHITE, "king's statue 1527"), ("¶", AWNING, "noticeboard 2040"),
+       ("═", WOOD, "benches 1496 · ╤ 1453"), ("o", WOOD, "barrels 1460 · ▪ 7699")]
 for k, (ch, col, label) in enumerate(leg):
     yy = PY + k
+    assert PX + 40 + len(label) <= 73, label
     put(PX + 38, yy, ch, col)
     text(PX + 40, yy, label, MID)
-text(PX + 38, PY + 6, "▄ coffin 6786, chest 3450", (130, 90, 50))
-text(PX + 38, PY + 7, "§ serpent totem 39439", GOB)
 text(LX + 1, 37, "─" * 66, FAINT)
 notes = [
-    ("camp", "south of the jungle camp's clear ring, 3.5 tile plaza"),
-    ("lane", "five spiked skull barricades turn their points on it"),
-    ("junk", "boulders, skulls, wrecked campfires, a ruined pillar"),
+    ("cut", "the top lane and the river split the pocket in three"),
+    ("row", "seven stalls 7.6 tiles off the lane, yaw down the road"),
+    ("fix", "five spots failed the lane/river check; moved, not forced"),
 ]
 for k, (key, line) in enumerate(notes):
     text(LX + 1, 38 + k, key, AMBER)
     text(LX + 8, 38 + k, line, MID)
 term = [
-    ("> ", "they beat the drums the night before the battle."),
-    ("> ", "in zion they called it a rave. ogres call it tuesday."),
+    ("> ", "bakery stall 1445. the cookies are almost done."),
+    ("> ", "and by the time you've had one, you'll feel right as rain."),
 ]
 for k, (prompt, line) in enumerate(term):
     yy = 43 + k
@@ -360,61 +380,68 @@ for k, (prompt, line) in enumerate(term):
     text(LX + 3, yy, line, BRIGHT if k == 0 else HEAD)
 put(LX + 3 + len(term[-1][1]) + 1, 44, "█", BRIGHT)
 
-# --- right: dark magic + schema --------------------------------------------------
-box(76, 24, W - 5, 46, elite("goblin.dat // dire_goblin, under the wall"))
+# --- right: keep, elves, gnomes ---------------------------------------------------
+box(76, 24, W - 5, 46, elite("radiant.dat // keep, grove, stronghold"))
 RX = 79
-text(RX, 26, "THE GOBLIN VILLAGE", HEAD)
-text(RX + 19, 26, "// tents round the bandos altar", DIM)
-ring = [
-    "      ▲     ▲      ",
-    "   ▲    ¶   ¶    ▲ ",
-    "        ▄█▄        ",
-    "  ▲    ▐▓█▓▌       ",
-    "        ▀▀▀      ▲ ",
-    "   ▲    ¶   ¶      ",
-    "      ▲     ▲   *  ",
-]
-for r, row in enumerate(ring):
-    for c, ch in enumerate(row):
-        xx, yy = RX + c, 28 + r
-        col = STONE2 if ch == "▲" else BLOOD if ch == "¶" else FIRE if ch == "*" else GOB if ch == "▓" else (60, 90, 50)
-        put(xx, yy, ch, col)
-        shade(xx, yy, xx, yy, GOB_BG)
-items = [
-    ("27752", "bandos altar x1.5, plaza 4.5"),
-    ("26482", "shabby tents · 7738 little tents"),
-    ("17039", "red goblin standards x4"),
-    ("20040", "campfire · 4328 spit roast"),
-    ("26908", "goblin stove crates x2"),
-    ("ring", "seven tents at r 7, doors inward"),
-    ("scatter", "skulls, crates, campfires, rocks"),
-]
-for k, (oid, what) in enumerate(items):
-    text(RX + 21, 28 + k, oid, CYAN)
-    text(RX + 29, 28 + k, what, MID)
-text(RX, 35, "check", AMBER)
-text(RX + 7, 35, "every model re-rendered bare: no recolour needed", MID)
-text(RX, 36, "─" * 64, FAINT)
-text(RX, 37, "MAP FORMAT", HEAD)
-text(RX + 11, 37, "// biome scatters, plaza radii", DIM)
-text(RX, 38, " scatter.biome ", CHIP_FG)
-shade(RX, 38, RX + 14, 38, CHIP_BG)
-text(RX + 16, 38, "drop only inside that pocket, rect optional", MID)
-text(RX, 39, " place.plaza   ", CHIP_FG)
-shade(RX, 39, RX + 14, 39, CHIP_BG)
-text(RX + 16, 39, "clear radius, default 6; railings use 0", MID)
-text(RX, 40, "mist", RED)
-text(RX + 7, 40, "reverted (48df811): fog of war + height fog unchanged", (200, 90, 80))
-text(RX, 44, "TESTS", HEAD)
-text(RX + 7, 44, "472 pass  pocket test checks all four dire sets", MID)
-text(RX, 45, "SHOTS", HEAD)
-text(RX + 7, 45, "--shots: war camp + village, top / low", MID)
+IX = RX + 19
+
+
+def section(y, title, sub, art, back, items):
+    text(RX, y, title, HEAD)
+    text(RX + len(title) + 1, y, sub, DIM)
+    plot(RX, y + 1, 5, 17, art, back)
+    for k, (oid, what) in enumerate(items):
+        assert IX + 8 + len(what) <= W - 7, what
+        text(IX, y + 1 + k, oid, CYAN)
+        text(IX + 8, y + 1 + k, what, MID)
+
+
+keep = {(r, 1): ("◉", TARGET) for r in range(5)}
+keep.update({(r, 15): ("¥", WOOD) for r in range(5)})
+keep.update({(1, 6): ("¶", SARA), (1, 10): ("¶", SARA), (3, 6): ("¶", SARA), (3, 10): ("¶", SARA),
+             (2, 8): ("♞", WHITE), (4, 5): ("╫", WOOD), (4, 11): ("╫", WOOD),
+             (4, 7): ("Ж", STONE2), (4, 9): ("Ж", STONE2), (0, 8): ("♞", STONE2)})
+section(26, "THE KNIGHTS' YARD", "// radiant_human_keep", keep, lambda r, c, ch: KEEP_BG, [
+    ("40158", "knight statue, four blue banners"),
+    ("1451", "archery range x4 + 12896, west"),
+    ("1286", "dummy line 25177 32307, east"),
+    ("5946", "weapon racks · armour stands"),
+    ("budget", "falador transplant 100 -> 35"),
+])
+
+elf = {(2, 8): ("✶", CRYSTAL)}
+for rc in [(0, 6), (0, 10), (2, 4), (2, 12), (4, 6), (4, 10)]:
+    elf[rc] = ("o", ELF_LAMP)
+elf.update({(2, 1): ("Ψ", STONE2), (2, 15): ("Ψ", LEAF), (0, 2): ("♣", CRYSTAL), (0, 14): ("♣", CRYSTAL),
+            (4, 2): ("♣", CRYSTAL), (4, 14): ("♣", CRYSTAL), (1, 8): ("◆", CRYSTAL), (3, 0): ("◆", CRYSTAL),
+            (3, 16): ("◆", CRYSTAL), (4, 8): ("⌂", ELF_LAMP)})
+section(33, "THE CRYSTAL GROVE", "// radiant_elven_lands", elf, lambda r, c, ch: ELF_BG, [
+    ("38604", "fragment of seren, six lamps 37359"),
+    ("38323", "glarial · 38322 baxtorian"),
+    ("37353", "crystal trees x5, saplings"),
+    ("30686", "arcane crystals at x0.6, not x1.3"),
+    ("budget", "jungle transplant 110 -> 60"),
+])
+
+gno = {(0, 7): ("▄", SPIRIT), (0, 8): ("█", SPIRIT), (0, 9): ("▄", SPIRIT),
+       (1, 6): ("♣", SPIRIT), (1, 7): ("♣", SPIRIT), (1, 8): ("♣", SPIRIT), (1, 9): ("♣", SPIRIT), (1, 10): ("♣", SPIRIT),
+       (2, 8): ("┃", WOOD), (4, 2): ("∩", AWNING), (4, 14): ("∩", AWNING), (4, 8): ("⚑", GOLD),
+       (0, 14): ("✈", AWNING), (0, 12): ("°", LAMP), (0, 16): ("°", LAMP),
+       (1, 1): ("π", WOOD), (2, 2): ("π", WOOD), (3, 15): ("Ħ", WOOD),
+       (2, 5): ("Ψ", STONE2), (2, 11): ("Ψ", STONE2), (3, 4): ("♠", TOAD), (0, 1): ("♠", TOAD)}
+section(40, "THE STRONGHOLD", "// radiant_gnome_stronghold", gno, lambda r, c, ch: GNOME_BG, [
+    ("8110", "spirit tree x2.3, cache leaf canopy"),
+    ("1323", "glider between landing lights 5647"),
+    ("1317", "gnomeball goals · flag 10348"),
+    ("17144", "cafe: tables, chairs, cooker"),
+    ("24742", "swings · net 1439 · toadstools"),
+])
 
 # --- sysop's note ------------------------------------------------------------
-header(48, elite("sysop's note // zion"))
+header(48, elite("sysop's note // the oracle"))
 clear(4, 49, W - 5, 50)
-open_ = "dIRE sIDE dONE (4/4). sTILL oPEN: hUMAN cITY, hUMAN kEEP, eLVEN lANDS, gNOME sTRONGHOLD; oBJECTIVES pANEL (p6.3)."
-refs = "dire_vampire + dire_dark_magic + dire_ogre + dire_goblin // shipped_dire_pockets_have_their_set_pieces"
+open_ = "aLL eIGHT pOCKETS dRESSED fROM cACHE oBJECTS (8/8), nO fOG, nO mIST. sTILL oPEN: tHE oBJECTIVES pANEL (p6.3)."
+refs = "radiant_human_city + radiant_human_keep + radiant_elven_lands + radiant_gnome_stronghold // shipped_pockets_have_their_set_pieces"
 assert len(open_) <= 142 and len(refs) <= 142, (len(open_), len(refs))
 center(49, open_, HEAD)
 center(50, refs, DIM)
@@ -424,7 +451,7 @@ header(51, elite("roadmap // docs/ROADMAPPLAN.md"))
 clear(4, 52, W - 5, 56)
 phases = [
     ("P1 LIGHT", 5), ("P2 MINIMAP", 6), ("P3 SHOP", 7), ("P4 SELECT", 9),
-    ("P5 ARENA", 9), ("POCKETS", 5), ("P6 HUD", 4), ("P7 POST", 0),
+    ("P5 ARENA", 9), ("POCKETS", 10), ("P6 HUD", 4), ("P7 POST", 0),
 ]
 for i, (name, done) in enumerate(phases):
     x = 8 + (i % 4) * 35
@@ -432,20 +459,20 @@ for i, (name, done) in enumerate(phases):
     text(x, yy, f"{name:<11}", CYAN)
     text(x + 11, yy, "[", DIM)
     for j in range(10):
-        put(x + 12 + j, yy, "▓" if j < done else "░", BRIGHT if j < done else FAINT)
-    text(x + 22, yy, f"] {done * 10:>3}%", HEAD if done else FAINT)
-nxt = ">> next: the radiant side from cache objects (human city, human keep, elven lands, gnome stronghold), then P6.3"
+        put(x + 12 + j, yy, "▓" if j < done else "░", (GOLD if done == 10 else BRIGHT) if j < done else FAINT)
+    text(x + 22, yy, f"] {done * 10:>3}%", GOLD if done == 10 else HEAD if done else FAINT)
+nxt = ">> next: P6.3 objectives panel: named objectives with respawn timers and per-lane tower states"
 assert 8 + len(nxt) <= W - 6, len(nxt)
 text(8, 56, nxt, MID)
 
 fade_bar(57, 2, W - 3)
 clear(10, 58, W - 11, 61)
-greetz = "gREETZ: mORPHEUS (zION) * tANK * dOZER * gREASY gRUBFOOT * gENERAL bENTNOZE * gENERAL wARTFACE * oG"
+greetz = "gREETZ: tHE oRACLE * sERAPH * tHE kEYMAKER * kING rOALD * sIR aMIK vARZE * gLARIAL * bAXTORIAN * kING nARNODE"
 assert len(greetz) <= 128, len(greetz)
 center(58, greetz, MID)
 center(59, "nOT AFFILIATED WITH JAGEX. cACHE ASSETS STAY OUT OF GIT. aLWAYS.", DIM)
-center(60, "  t h i s   i s   z i o n ,   a n d   w e   a r e   n o t   a f r a i d .  ", HEAD)
-foot = "-=[ mObAsCaPe // 2026 // nODE 21: zION // 57.6k // sYSoP: rIFT // 4/8 pOCKETS, 0 mIST, 100% cACHE ]=-"
+center(60, "  y o u ' r e   n o t   t h e   o n e .   b u t   t h e   m a p   i s   d o n e .  ", HEAD)
+foot = "-=[ mObAsCaPe // 2026 // nODE 22: tHE oRACLE // 57.6k // sYSoP: rIFT // 8/8 pOCKETS, 0 mIST, 100% cACHE ]=-"
 assert len(foot) <= 128, len(foot)
 center(61, foot, AMBER)
 
