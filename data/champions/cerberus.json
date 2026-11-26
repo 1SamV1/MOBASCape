@@ -190,5 +190,23 @@
       }
     ]
   },
-  "source_npc": 5862
+  "source_npc": 5862,
+  "talents": [
+    [
+      {"name": "Hellforged Hide", "type": "health", "amount": 225},
+      {"name": "Sharp Fangs", "type": "damage", "amount": 15}
+    ],
+    [
+      {"name": "Three Heads", "type": "slot_damage", "slot": 0, "pct": 0.25},
+      {"name": "Molten Ground", "type": "slot_cooldown", "slot": 1, "pct": 0.2}
+    ],
+    [
+      {"name": "Guardian of the Gate", "type": "armor", "amount": 10},
+      {"name": "Restless Souls", "type": "slot_cooldown", "slot": 2, "pct": 0.25}
+    ],
+    [
+      {"name": "Pack Leader", "type": "slot_damage", "slot": 3, "pct": 0.3},
+      {"name": "Hunting Pace", "type": "move_speed", "pct": 0.08}
+    ]
+  ]
 }

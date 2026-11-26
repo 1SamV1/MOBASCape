@@ -429,6 +429,9 @@ pub struct AbilityState {
     pub spells: [SpellSlot; 2],
     /// The teleport scroll, T.
     pub scroll: SpellSlot,
+    /// An open talent pick: the level and the two choices' lines, drawn as
+    /// two buttons above the bar.
+    pub talent_pick: Option<(u32, [String; 2])>,
 }
 
 /// The ability tooltip shown over a hovered Q, W, E or R slot:

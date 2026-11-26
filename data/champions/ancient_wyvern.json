@@ -175,5 +175,23 @@
       }
     ]
   },
-  "source_npc": 7795
+  "source_npc": 7795,
+  "talents": [
+    [
+      {"name": "Frozen Reserves", "type": "mana", "amount": 150},
+      {"name": "Biting Cold", "type": "slot_damage", "slot": 0, "pct": 0.2}
+    ],
+    [
+      {"name": "Long Breath", "type": "slot_range", "slot": 0, "pct": 0.2},
+      {"name": "Swift Shards", "type": "slot_cooldown", "slot": 1, "pct": 0.2}
+    ],
+    [
+      {"name": "Ancient Lore", "type": "ability_power", "amount": 25},
+      {"name": "Quick Flight", "type": "slot_cooldown", "slot": 2, "pct": 0.25}
+    ],
+    [
+      {"name": "Absolute Zero", "type": "slot_damage", "slot": 3, "pct": 0.3},
+      {"name": "Endless Winter", "type": "cooldown", "pct": 0.15}
+    ]
+  ]
 }

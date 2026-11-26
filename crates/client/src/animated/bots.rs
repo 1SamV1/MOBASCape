@@ -506,16 +506,22 @@ impl AnimatedScene {
 
     /// Experience for a bot, with the player's level-up stat growth.
     pub(super) fn bot_xp(&mut self, unit: usize, xp: f32) {
-        let u = &mut self.units[unit];
-        u.xp += xp;
-        while u.level < super::MAX_LEVEL && u.xp >= super::xp_for_level(u.level) {
+        self.units[unit].xp += xp;
+        loop {
+            let u = &mut self.units[unit];
+            if u.level >= super::MAX_LEVEL || u.xp < super::xp_for_level(u.level) {
+                break;
+            }
             u.xp -= super::xp_for_level(u.level);
-            u.level += 1;
-            u.max_health += 40.0;
-            u.health = (u.health + 40.0).min(u.max_health);
-            u.attack_damage += 2.0;
-            u.max_mana += 20.0;
-            u.mana = (u.mana + 20.0).min(u.max_mana);
+            super::level_up_stats(u);
+            let level = u.level;
+            if let Some(tier) = crate::talents::TALENT_LEVELS
+                .iter()
+                .position(|&l| l == level)
+            {
+                // Bots split their picks between the two sides.
+                self.apply_talent(unit, tier, ((unit + tier) % 2) as u8);
+            }
         }
     }
 

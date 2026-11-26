@@ -24,6 +24,7 @@ mod scroll;
 mod spells;
 mod spotlight;
 mod stone;
+mod talents;
 mod terrain_textures;
 mod theme_file;
 mod ui_assets;
@@ -206,9 +207,9 @@ struct Cli {
     /// attack animations, reach and projectiles.
     #[arg(long)]
     demo_attack: bool,
-    /// Demo: level the hero to 7, spend four skill points (Q twice, W and R
-    /// once), leave two unspent so the slots glow, and hover this slot (0-3)
-    /// so its ability tooltip shows.
+    /// Demo: level the hero to 10, spend four skill points (Q twice, E and
+    /// R once), leave the rest unspent so the slots glow and the level 10
+    /// talent pick shows, and hover this slot (0-3) so its tooltip shows.
     #[arg(long)]
     demo_ranks: Option<usize>,
     /// Write the paper balance report (Markdown) to this path and exit.
@@ -1414,6 +1415,11 @@ impl ApplicationHandler for App {
                         self.cast_spell(0);
                     } else if code == KeyCode::KeyF {
                         self.cast_spell(1);
+                    } else if let Some(choice) = talent_key(code, &self.held) {
+                        // Ctrl + 1 / 2 picks the open talent.
+                        if let Some(animated) = self.animated.as_mut() {
+                            animated.pick_talent(choice);
+                        }
                     } else if let Some(slot) = learn_slot(code, &self.held) {
                         // Ctrl + Q/W/E/R spends a skill point, as in Dota 2.
                         if let Some(animated) = self.animated.as_mut() {
@@ -2289,10 +2295,10 @@ impl App {
 
             if let Some(slot) = self.demo_ranks {
                 if !self.demo_ranks_done {
-                    animated.dev_level_to(7);
+                    animated.dev_level_to(10);
                     let spent = [0, 0, 1, 3].map(|slot| animated.upgrade_ability(slot));
                     tracing::info!(
-                        "demo ranks: level 7, spent {spent:?}, ranks {:?}, {} points left",
+                        "demo ranks: level 10, spent {spent:?}, ranks {:?}, {} points left",
                         animated.ability_ranks(),
                         animated.skill_points
                     );
@@ -3868,6 +3874,17 @@ impl App {
             self.pan_camera_to_minimap(u, v);
             return true;
         }
+        // An open talent pick's buttons float above the bar too.
+        if let (Some(area), Some(animated)) = (
+            placed.get(rift_ui::hud::Piece::Ability),
+            self.animated.as_mut(),
+        ) && animated.open_talent_tier().is_some()
+            && let Some(choice) = rift_ui::hud::ability_bar::talent_at(area, scale, mouse)
+        {
+            tracing::info!("ability bar: talent {choice} clicked");
+            animated.pick_talent(choice as u8);
+            return true;
+        }
         // A skill-point "+" over an ability ranks it up. It floats above the
         // bar, outside every piece's rectangle, so it is tested first.
         if let (Some(area), Some(animated)) = (
@@ -4628,6 +4645,18 @@ fn bot_builds(shop: &ItemShop, lineup: &[animated::bots::BotPick]) -> Vec<Vec<it
         .iter()
         .map(|(c, ..)| shop.build_for(&c.id, &c.role, &c.class))
         .collect()
+}
+
+/// Ctrl + 1 or 2: the talent to pick (0 left, 1 right).
+fn talent_key(code: KeyCode, held: &std::collections::HashSet<KeyCode>) -> Option<u8> {
+    if !(held.contains(&KeyCode::ControlLeft) || held.contains(&KeyCode::ControlRight)) {
+        return None;
+    }
+    match code {
+        KeyCode::Digit1 => Some(0),
+        KeyCode::Digit2 => Some(1),
+        _ => None,
+    }
 }
 
 /// Ctrl + Q, W, E or R: the ability slot to spend a skill point on.

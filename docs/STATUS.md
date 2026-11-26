@@ -1,7 +1,7 @@
 # Status
 
-Last updated: Vine Swing rework, the Bloat's anchor hook and the ability
-rework proposals, 2026-11-25.
+Last updated: kit runtime for every hero, levels to 25 and talents,
+2026-11-25.
 
 ## 2026-11-25 — Vine Swing goes the distance; the Flesh Hook is an anchor; ability proposals
 
@@ -39,8 +39,17 @@ rework proposals, 2026-11-25.
   with targeting, AoE, levels and innates; an audit of all 18 kits (seven
   near-identical shield Es, three pulls, six leaps, four names used twice,
   one way to scale); nine shared systems (`SYS-1` to `SYS-9`); and every
-  hero's passive and Q/W/E/R with an approval ID. Nothing in it is built
-  until it is approved.
+  hero's passive and Q/W/E/R with an approval ID. The approval log at its
+  top records what the review decided.
+- **Every kit hero casts its kit (SYS-9).** One `KitRuntime` per kit
+  champion, bots included; bots learn ranks, attack through the kit and
+  cast by plan (heal when hurt, dash at heroes, damage in reach).
+- **Levels to 25 and talents (SYS-3, SYS-7).** Abilities start unlearned;
+  level 1 gives the first point. R ranks unlock at 6/11/16. Levels 10, 15,
+  20 and 25 give a pick between two talents (`talents` in each champion
+  file; HUD buttons above the bar, or Ctrl+1 / Ctrl+2). Points with
+  nothing left to rank become stat bumps. Level growth is 32 health,
+  16 mana and 1.6 damage, and kit damage grows 2% per level.
 - **Small fixes.** The Flesh Hook tooltip names the anchor; SPELLS.md marks
   1574 spare and documents model projectiles; the Swing indicator's doc
   says it is always full length; `rift-tools --help` shows the match

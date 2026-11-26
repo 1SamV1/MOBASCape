@@ -190,5 +190,23 @@
       }
     ]
   },
-  "source_npc": 11959
+  "source_npc": 11959,
+  "talents": [
+    [
+      {"name": "Dragon Scales", "type": "damage", "amount": 15},
+      {"name": "Undead Bulk", "type": "health", "amount": 175}
+    ],
+    [
+      {"name": "Bigger Bombs", "type": "slot_damage", "slot": 0, "pct": 0.25},
+      {"name": "Far Spray", "type": "slot_range", "slot": 1, "pct": 0.2}
+    ],
+    [
+      {"name": "Rapid Breath", "type": "attack_speed", "pct": 0.2},
+      {"name": "Rising Dead", "type": "slot_cooldown", "slot": 2, "pct": 0.25}
+    ],
+    [
+      {"name": "Endless Rapidfire", "type": "slot_damage", "slot": 3, "pct": 0.3},
+      {"name": "Ancient Dragon", "type": "cooldown", "pct": 0.15}
+    ]
+  ]
 }

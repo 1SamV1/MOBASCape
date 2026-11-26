@@ -196,5 +196,23 @@
       }
     ]
   },
-  "source_npc": 2215
+  "source_npc": 2215,
+  "talents": [
+    [
+      {"name": "Warchief's Bulk", "type": "health", "amount": 225},
+      {"name": "Bandos' Might", "type": "damage", "amount": 15}
+    ],
+    [
+      {"name": "Crushing Smash", "type": "slot_damage", "slot": 0, "pct": 0.25},
+      {"name": "Loyal Guard", "type": "slot_cooldown", "slot": 1, "pct": 0.2}
+    ],
+    [
+      {"name": "Godsteel Plate", "type": "armor", "amount": 12},
+      {"name": "Battle Hymn", "type": "slot_cooldown", "slot": 2, "pct": 0.25}
+    ],
+    [
+      {"name": "Bandos' Fury", "type": "slot_damage", "slot": 3, "pct": 0.3},
+      {"name": "Relentless Blows", "type": "attack_speed", "pct": 0.25}
+    ]
+  ]
 }

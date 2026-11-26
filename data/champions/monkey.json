@@ -98,5 +98,23 @@
     53,
     122,
     168
+  ],
+  "talents": [
+    [
+      {"name": "Monkey Muscle", "type": "damage", "amount": 15},
+      {"name": "Light Feet", "type": "move_speed", "pct": 0.06}
+    ],
+    [
+      {"name": "Ripe Bananarang", "type": "slot_damage", "slot": 0, "pct": 0.25},
+      {"name": "Long Vine", "type": "slot_range", "slot": 1, "pct": 0.2}
+    ],
+    [
+      {"name": "Monkey Business", "type": "attack_speed", "pct": 0.25},
+      {"name": "Slippery Peels", "type": "slot_cooldown", "slot": 2, "pct": 0.25}
+    ],
+    [
+      {"name": "Greegree Master", "type": "slot_damage", "slot": 3, "pct": 0.3},
+      {"name": "Ape Atoll King", "type": "cooldown", "pct": 0.15}
+    ]
   ]
 }

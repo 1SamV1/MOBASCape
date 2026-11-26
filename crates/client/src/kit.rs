@@ -664,9 +664,11 @@ fn collect_npcs(action: &Action, out: &mut Vec<u32>) {
     }
 }
 
-/// Ability damage after ability power and level.
+/// Ability damage after ability power and level: +2% per level past 1,
+/// so a level 25 hero hits about as hard as level 11 did on the old
+/// 5%-per-level curve.
 pub fn scaled_damage(base: f32, ability_power: f32, level: u32) -> f32 {
-    base * (1.0 + ability_power / 100.0) * (1.0 + 0.05 * level.saturating_sub(1) as f32)
+    base * (1.0 + ability_power / 100.0) * (1.0 + 0.02 * level.saturating_sub(1) as f32)
 }
 
 /// True when `offset` (planar, from the area's centre) lies inside a cone of
@@ -1243,7 +1245,7 @@ mod tests {
     fn damage_scales_with_power_and_level() {
         assert_eq!(scaled_damage(100.0, 0.0, 1), 100.0);
         assert!((scaled_damage(100.0, 50.0, 1) - 150.0).abs() < 1e-3);
-        assert!((scaled_damage(100.0, 0.0, 11) - 150.0).abs() < 1e-3);
+        assert!((scaled_damage(100.0, 0.0, 26) - 150.0).abs() < 1e-3);
     }
 
     #[test]

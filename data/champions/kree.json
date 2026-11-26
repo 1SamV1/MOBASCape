@@ -166,5 +166,23 @@
         ]
       }
     ]
-  }
+  },
+  "talents": [
+    [
+      {"name": "Armadyl Feathers", "type": "damage", "amount": 15},
+      {"name": "Tailwind", "type": "move_speed", "pct": 0.06}
+    ],
+    [
+      {"name": "Piercing Lance", "type": "slot_damage", "slot": 0, "pct": 0.25},
+      {"name": "Soaring Leap", "type": "slot_range", "slot": 1, "pct": 0.2}
+    ],
+    [
+      {"name": "Rapid Talons", "type": "attack_speed", "pct": 0.25},
+      {"name": "Feathered Guard", "type": "slot_cooldown", "slot": 2, "pct": 0.25}
+    ],
+    [
+      {"name": "Skyfire Barrage", "type": "slot_damage", "slot": 3, "pct": 0.3},
+      {"name": "Lord of the Skies", "type": "cooldown", "pct": 0.15}
+    ]
+  ]
 }

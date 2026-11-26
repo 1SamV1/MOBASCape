@@ -174,5 +174,23 @@
         ]
       }
     ]
-  }
+  },
+  "talents": [
+    [
+      {"name": "Volcanic Bulk", "type": "health", "amount": 225},
+      {"name": "Magma Core", "type": "mana", "amount": 150}
+    ],
+    [
+      {"name": "Molten Guard", "type": "slot_damage", "slot": 0, "pct": 0.25},
+      {"name": "Far Step", "type": "slot_range", "slot": 1, "pct": 0.2}
+    ],
+    [
+      {"name": "Obsidian Skin", "type": "armor", "amount": 12},
+      {"name": "Endless Healers", "type": "slot_cooldown", "slot": 2, "pct": 0.25}
+    ],
+    [
+      {"name": "Inferno Unleashed", "type": "slot_damage", "slot": 3, "pct": 0.3},
+      {"name": "Fight Caves Veteran", "type": "cooldown", "pct": 0.15}
+    ]
+  ]
 }

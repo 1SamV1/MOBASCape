@@ -121,6 +121,7 @@ fn base() -> HudState {
             time: 0.0,
             spells: Default::default(),
             scroll: Default::default(),
+            talent_pick: None,
         },
         minimap: MinimapState {
             lanes: vec![

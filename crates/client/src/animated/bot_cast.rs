@@ -160,15 +160,7 @@ impl BotSpell {
 
     /// Rank known at `level` (0 = not learned yet).
     pub fn rank_at(&self, level: u32) -> usize {
-        let (first, step) = if self.slot == 3 {
-            (6, 3)
-        } else {
-            (self.slot as u32 + 1, 3)
-        };
-        if level < first {
-            return 0;
-        }
-        (1 + ((level - first) / step) as usize).min(self.ranks.len())
+        super::ranks::auto_rank(self.slot, level, self.ranks.len()) as usize
     }
 
     fn cost(&self, rank: usize) -> f32 {
@@ -625,8 +617,8 @@ mod tests {
             (1, 2, 4, 4)
         );
         assert_eq!(
-            (r.rank_at(5), r.rank_at(6), r.rank_at(9), r.rank_at(11)),
-            (0, 1, 2, 2)
+            (r.rank_at(5), r.rank_at(6), r.rank_at(11), r.rank_at(16)),
+            (0, 1, 2, 3)
         );
     }
 

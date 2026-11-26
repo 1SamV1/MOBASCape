@@ -1056,6 +1056,7 @@ pub(crate) mod tests {
             abilities: Vec::new(),
             ability_icons: Vec::new(),
             kit: None,
+            talents: Vec::new(),
             sounds: Default::default(),
             tagline: String::new(),
             model: 0,

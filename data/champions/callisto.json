@@ -178,5 +178,23 @@
       }
     ]
   },
-  "source_npc": 6503
+  "source_npc": 6503,
+  "talents": [
+    [
+      {"name": "Winter Fat", "type": "health", "amount": 200},
+      {"name": "Heavy Paws", "type": "damage", "amount": 15}
+    ],
+    [
+      {"name": "Savage Maul", "type": "slot_damage", "slot": 0, "pct": 0.25},
+      {"name": "Long Charge", "type": "slot_range", "slot": 1, "pct": 0.2}
+    ],
+    [
+      {"name": "Thick Fur", "type": "armor", "amount": 10},
+      {"name": "Restless Sleep", "type": "slot_cooldown", "slot": 2, "pct": 0.25}
+    ],
+    [
+      {"name": "Mighty Roar", "type": "slot_damage", "slot": 3, "pct": 0.3},
+      {"name": "Frenzied Swipes", "type": "attack_speed", "pct": 0.25}
+    ]
+  ]
 }

@@ -156,5 +156,23 @@
       }
     ]
   },
-  "source_npc": 8359
+  "source_npc": 8359,
+  "talents": [
+    [
+      {"name": "Bloated Gut", "type": "health", "amount": 225},
+      {"name": "Rotten Fists", "type": "damage", "amount": 15}
+    ],
+    [
+      {"name": "Longer Rope", "type": "slot_range", "slot": 0, "pct": 0.2},
+      {"name": "Thicker Swarm", "type": "slot_damage", "slot": 1, "pct": 0.25}
+    ],
+    [
+      {"name": "Leathery Hide", "type": "armor", "amount": 10},
+      {"name": "Fresh Meat", "type": "slot_cooldown", "slot": 2, "pct": 0.25}
+    ],
+    [
+      {"name": "Endless Hunger", "type": "slot_cooldown", "slot": 3, "pct": 0.3},
+      {"name": "Barbed Anchor", "type": "slot_damage", "slot": 0, "pct": 0.3}
+    ]
+  ]
 }

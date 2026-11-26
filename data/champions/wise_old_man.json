@@ -192,5 +192,23 @@
       }
     ]
   },
-  "source_npc": 2108
+  "source_npc": 2108,
+  "talents": [
+    [
+      {"name": "Old Wisdom", "type": "mana", "amount": 150},
+      {"name": "Lore Keeper", "type": "ability_power", "amount": 20}
+    ],
+    [
+      {"name": "Far Grab", "type": "slot_range", "slot": 0, "pct": 0.2},
+      {"name": "Quick Teleport", "type": "slot_cooldown", "slot": 1, "pct": 0.2}
+    ],
+    [
+      {"name": "Spry for His Age", "type": "move_speed", "pct": 0.08},
+      {"name": "Ageless Ward", "type": "slot_cooldown", "slot": 2, "pct": 0.25}
+    ],
+    [
+      {"name": "Party Animal", "type": "slot_damage", "slot": 3, "pct": 0.3},
+      {"name": "Draynor Bank Heist", "type": "cooldown", "pct": 0.15}
+    ]
+  ]
 }

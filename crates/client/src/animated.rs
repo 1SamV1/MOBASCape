@@ -25,7 +25,7 @@ use crate::scene::{
 };
 
 /// Highest champion level.
-const MAX_LEVEL: u32 = 11;
+const MAX_LEVEL: u32 = 25;
 const Q_COOLDOWN: f32 = 5.0;
 const PLAYER_RESPAWN: f32 = 5.0;
 /// The shared meteor lands at the cursor, clamped to this cast range.
@@ -238,6 +238,8 @@ pub struct AnimatedUnit {
     /// Footprint radius used for edge-to-edge attack range. Smaller than
     /// `hit_radius`, which is a generous projectile hit box.
     pub body_radius: f32,
+    /// Ability changes from the talents this hero picked.
+    pub talent: crate::talents::TalentMods,
 }
 
 /// A one-shot animation (attack or cast) played over the base pose.
@@ -982,6 +984,14 @@ pub struct AnimatedScene {
     ability_ranks: [u8; 4],
     /// Unspent skill points: one per level gained.
     pub skill_points: u32,
+    /// Talent levels reached whose talent has not been picked yet.
+    pub talent_picks_pending: u32,
+    /// The talent picked at each talent level: 0 = left, 1 = right.
+    pub talents: [Option<u8>; 4],
+    /// Spare points turned into stat bumps (no rank left to buy).
+    pub stat_bumps: u32,
+    /// Each champion unit's talent tiers (the player and bots), by index.
+    unit_talents: HashMap<usize, Vec<[crate::talents::Talent; 2]>>,
     /// Seconds since the scene started, for interface shimmer.
     pub hud_time: f32,
     /// Cursor ground point for kit abilities whose entry point takes none.
@@ -1518,8 +1528,13 @@ impl AnimatedScene {
             thrall_assets,
             thrall: None,
             ability_info: champion.abilities.clone(),
-            ability_ranks: [1; 4],
-            skill_points: 0,
+            ability_ranks: [0; 4],
+            // Level 1's point picks the first ability.
+            skill_points: 1,
+            talent_picks_pending: 0,
+            talents: [None; 4],
+            stat_bumps: 0,
+            unit_talents: HashMap::from([(player_index, champion.talents.clone())]),
             hud_time: 0.0,
             kit_aim: Vec3::ZERO,
             steer_wish: None,
@@ -2480,7 +2495,7 @@ impl AnimatedScene {
     /// Ranger looses a poisoned dart, kits run their data, and everyone else
     /// keeps the shared arcane bolt aimed at the cursor.
     pub fn cast_q(&mut self, target: Vec3) -> bool {
-        let ok = self.cast_q_inner(target);
+        let ok = self.ability_rank(0) > 0 && self.cast_q_inner(target);
         self.after_cast(0, ok);
         ok
     }
@@ -2491,20 +2506,20 @@ impl AnimatedScene {
         collision: &WorldCollision,
         height: &HeightGrid,
     ) -> bool {
-        let ok = self.cast_w_inner(target, collision, height);
+        let ok = self.ability_rank(1) > 0 && self.cast_w_inner(target, collision, height);
         self.after_cast(1, ok);
         ok
     }
 
     pub fn cast_e(&mut self, collision: &WorldCollision, height: &HeightGrid) -> bool {
-        let ok = self.cast_e_inner(collision, height);
+        let ok = self.ability_rank(2) > 0 && self.cast_e_inner(collision, height);
         self.after_cast(2, ok);
         ok
     }
 
     /// Cast the R slot at the cursor (King Awowogei's Greegree ignores it).
     pub fn cast_r(&mut self, target: Vec3) -> bool {
-        let ok = self.cast_r_inner(target);
+        let ok = self.ability_rank(3) > 0 && self.cast_r_inner(target);
         self.after_cast(3, ok);
         ok
     }
@@ -3339,6 +3354,7 @@ impl AnimatedScene {
         }
         self.units.push(unit);
         let index = self.units.len() - 1;
+        self.unit_talents.insert(index, champion.talents.clone());
         if let Some(kit) = &champion.kit {
             self.add_kit_caster(cache, &mut assets, index, kit, &champion.abilities);
         }
@@ -5094,16 +5110,19 @@ impl AnimatedScene {
         }
     }
 
-    /// One level gained: stats grow and a skill point is earned.
+    /// One level gained: stats grow, and the level earns a skill point or,
+    /// at a talent level, a talent pick.
     fn level_up_player(&mut self) {
-        let player = &mut self.units[self.player_index];
-        player.level += 1;
-        player.max_health += 40.0;
-        player.health = (player.health + 40.0).min(player.max_health);
-        player.max_mana += 20.0;
-        player.mana = (player.mana + 20.0).min(player.max_mana);
-        player.attack_damage += 2.0;
-        self.skill_points += 1;
+        let pi = self.player_index;
+        level_up_stats(&mut self.units[pi]);
+        let level = self.units[pi].level;
+        if ranks::is_talent_level(level) {
+            self.talent_picks_pending += 1;
+            self.announcement = Some((format!("TALENT AVAILABLE (LEVEL {level})"), 2.5));
+        } else {
+            self.skill_points += 1;
+        }
+        self.spend_spare_points();
     }
 
     pub fn refresh_visibility(&mut self, dt: f32, collision: &WorldCollision) {
@@ -5648,6 +5667,7 @@ impl AnimatedScene {
                 venom_tick: 0.0,
                 venom_team: 0,
                 attack_speed_mult: 1.0,
+                talent: crate::talents::TalentMods::default(),
                 attack_speed_timer: 0.0,
                 ranged: 0.0,
                 is_champion: false,
@@ -6792,8 +6812,25 @@ pub fn damage_totals(entries: &[(String, f32)]) -> Vec<(String, u32)> {
         .collect()
 }
 
+/// Experience from `level` to the next. Gentler than the old 11-level
+/// curve so a long match reaches the level 25 cap.
 fn xp_for_level(level: u32) -> f32 {
-    100.0 + (level.saturating_sub(1) as f32) * 80.0
+    100.0 + (level.saturating_sub(1) as f32) * 40.0
+}
+
+/// Stats a hero gains with each level.
+pub const LEVEL_HEALTH: f32 = 32.0;
+pub const LEVEL_MANA: f32 = 16.0;
+pub const LEVEL_DAMAGE: f32 = 1.6;
+
+/// Raise a hero one level: health, mana and attack damage grow.
+fn level_up_stats(unit: &mut AnimatedUnit) {
+    unit.level += 1;
+    unit.max_health += LEVEL_HEALTH;
+    unit.health = (unit.health + LEVEL_HEALTH).min(unit.max_health);
+    unit.max_mana += LEVEL_MANA;
+    unit.mana = (unit.mana + LEVEL_MANA).min(unit.max_mana);
+    unit.attack_damage += LEVEL_DAMAGE;
 }
 
 /// Experience and gold for the last hit on a `kind` (player and bots).
@@ -7056,6 +7093,7 @@ fn build_unit(
         venom_tick: 0.0,
         venom_team: 0,
         attack_speed_mult: 1.0,
+        talent: crate::talents::TalentMods::default(),
         attack_speed_timer: 0.0,
         ranged: 0.0,
         is_champion: kind.is_champion(),

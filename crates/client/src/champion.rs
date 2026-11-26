@@ -90,6 +90,9 @@ pub struct ChampionConfig {
     /// hand-written kit in `animated.rs`.
     #[serde(default)]
     pub kit: Option<crate::kit::Kit>,
+    /// Four tiers of two talents, picked at levels 10, 15, 20 and 25.
+    #[serde(default)]
+    pub talents: Vec<[crate::talents::Talent; 2]>,
     /// Cosmetic weapon (an item id from `data/items/items.json`) a humanoid
     /// hero holds while no weapon is in the inventory. It grants no stats.
     #[serde(default)]

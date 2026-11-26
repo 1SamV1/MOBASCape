@@ -80,5 +80,23 @@
       ]
     }
   ],
-  "ability_icons": [45, 58, 61, 133]
+  "ability_icons": [45, 58, 61, 133],
+  "talents": [
+    [
+      {"name": "Steady Aim", "type": "damage", "amount": 15},
+      {"name": "Quick Draw", "type": "attack_speed", "pct": 0.15}
+    ],
+    [
+      {"name": "Potent Venom", "type": "slot_damage", "slot": 0, "pct": 0.25},
+      {"name": "Rapid Volley", "type": "slot_cooldown", "slot": 1, "pct": 0.2}
+    ],
+    [
+      {"name": "Fleet Footed", "type": "move_speed", "pct": 0.08},
+      {"name": "Nimble Steps", "type": "slot_cooldown", "slot": 2, "pct": 0.25}
+    ],
+    [
+      {"name": "Perfect Shot", "type": "slot_damage", "slot": 3, "pct": 0.3},
+      {"name": "Blowpipe Master", "type": "attack_speed", "pct": 0.25}
+    ]
+  ]
 }

@@ -186,5 +186,23 @@
       }
     ]
   },
-  "source_npc": 3129
+  "source_npc": 3129,
+  "talents": [
+    [
+      {"name": "Demonic Bulk", "type": "health", "amount": 175},
+      {"name": "Zamorak's Edge", "type": "damage", "amount": 15}
+    ],
+    [
+      {"name": "Hellfire", "type": "slot_damage", "slot": 0, "pct": 0.25},
+      {"name": "Raging Charge", "type": "slot_range", "slot": 1, "pct": 0.2}
+    ],
+    [
+      {"name": "Brimstone Hide", "type": "armor", "amount": 10},
+      {"name": "Infernal Ward", "type": "slot_cooldown", "slot": 2, "pct": 0.25}
+    ],
+    [
+      {"name": "Warlord's Bellow", "type": "slot_damage", "slot": 3, "pct": 0.3},
+      {"name": "Bloodlust", "type": "attack_speed", "pct": 0.25}
+    ]
+  ]
 }

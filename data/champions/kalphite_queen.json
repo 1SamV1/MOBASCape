@@ -200,5 +200,23 @@
       }
     ]
   },
-  "source_npc": 963
+  "source_npc": 963,
+  "talents": [
+    [
+      {"name": "Royal Carapace", "type": "health", "amount": 200},
+      {"name": "Serrated Mandibles", "type": "damage", "amount": 15}
+    ],
+    [
+      {"name": "Crushing Bite", "type": "slot_damage", "slot": 0, "pct": 0.25},
+      {"name": "Deep Tunnels", "type": "slot_range", "slot": 1, "pct": 0.2}
+    ],
+    [
+      {"name": "Hardened Chitin", "type": "armor", "amount": 12},
+      {"name": "Quick Moult", "type": "slot_cooldown", "slot": 2, "pct": 0.25}
+    ],
+    [
+      {"name": "Hive Mind", "type": "slot_damage", "slot": 3, "pct": 0.3},
+      {"name": "Frenzy of the Hive", "type": "attack_speed", "pct": 0.25}
+    ]
+  ]
 }

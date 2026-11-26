@@ -847,7 +847,8 @@ impl AnimatedScene {
         if rt.ranks[slot] == 0 || rt.dash.is_some() || rt.channel.is_some() {
             return false;
         }
-        let cooldown = rt.cooldown(slot, ability.cooldown);
+        let talent = self.units[pi].talent;
+        let cooldown = rt.cooldown(slot, ability.cooldown) * talent.cooldown_mult(slot);
         {
             let player = &self.units[pi];
             // Tele Block grounds abilities that dash.
@@ -888,8 +889,8 @@ impl AnimatedScene {
             rt.combo_last = Some(slot);
             rt.combo_timer = *window;
         }
-        let rank_mult = rt.damage_mult(slot);
-        let reach = rt.reach_mult(slot);
+        let rank_mult = rt.damage_mult(slot) * talent.damage_mult(slot);
+        let reach = rt.reach_mult(slot) * talent.range_mult(slot);
 
         let origin = self.units[pi].pos;
         let team = self.units[pi].team;

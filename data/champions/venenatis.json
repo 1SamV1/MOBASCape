@@ -205,5 +205,23 @@
       }
     ]
   },
-  "source_npc": 6504
+  "source_npc": 6504,
+  "talents": [
+    [
+      {"name": "Venom Fangs", "type": "damage", "amount": 15},
+      {"name": "Skittering", "type": "move_speed", "pct": 0.06}
+    ],
+    [
+      {"name": "Wide Web", "type": "slot_range", "slot": 0, "pct": 0.2},
+      {"name": "Long Pounce", "type": "slot_range", "slot": 1, "pct": 0.2}
+    ],
+    [
+      {"name": "Frenzied Bites", "type": "attack_speed", "pct": 0.25},
+      {"name": "Endless Brood", "type": "slot_cooldown", "slot": 2, "pct": 0.25}
+    ],
+    [
+      {"name": "Deadly Bloom", "type": "slot_damage", "slot": 3, "pct": 0.3},
+      {"name": "Queen of the Wilderness", "type": "cooldown", "pct": 0.15}
+    ]
+  ]
 }

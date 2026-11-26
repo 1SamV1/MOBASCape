@@ -52,6 +52,24 @@ pub fn upgrade_at(
     })
 }
 
+/// The two talent buttons above the bar while a talent pick is open: left
+/// half and right half of the bar's width, 22 pixels tall, clear of the
+/// skill-point "+" row.
+pub fn talent_button(area: Rect, scale: i32, choice: usize) -> Rect {
+    let s = scale.max(1);
+    let w = SIZE.0 / 2 - 6;
+    let x = 4 + choice as i32 * (SIZE.0 / 2);
+    Rect::new(area.x + x * s, area.y - 48 * s, w * s, 22 * s)
+}
+
+/// The talent button under the mouse (0 left, 1 right).
+pub fn talent_at(area: Rect, scale: i32, mouse: (i32, i32)) -> Option<usize> {
+    (0..2).find(|&n| {
+        let b = talent_button(area, scale, n);
+        mouse.0 >= b.x && mouse.0 < b.right() && mouse.1 >= b.y && mouse.1 < b.bottom()
+    })
+}
+
 /// Where the battle spells (D, F) and the teleport scroll (T) sit: left,
 /// top and side, at the interface's own scale. T takes the bottom right
 /// small slot, where Dota 2 keeps its scroll.
@@ -306,6 +324,37 @@ pub fn draw(theme: &Theme, list: &mut DrawList, area: Rect, state: &AbilityState
     for n in (0..4).filter(|&n| state.upgradable[n]) {
         let pulse = 0.5 + 0.5 * (state.time * 5.0 + n as f32 * 0.7).sin();
         draw_plus(list, upgrade_button(area, s, n), s, pulse);
+    }
+
+    // An open talent pick: two gold-edged buttons, Ctrl+1 / Ctrl+2.
+    if let Some((level, lines)) = &state.talent_pick {
+        let pulse = 0.5 + 0.5 * (state.time * 4.0).sin();
+        if let Some(font) = small {
+            let header = format!("TALENT (LEVEL {level}): CTRL+1 OR CTRL+2");
+            let b = talent_button(area, s, 0);
+            list.text(font, &header, b.x, b.y - 4 * s, title);
+        }
+        for (n, line) in lines.iter().enumerate() {
+            let b = talent_button(area, s, n);
+            list.rect(b, [0.55 + 0.3 * pulse, 0.42 + 0.2 * pulse, 0.12, 1.0]);
+            let face = Rect::new(b.x + s, b.y + s, b.w - 2 * s, b.h - 2 * s);
+            list.rect(face, [0.07, 0.06, 0.05, 0.96]);
+            if let Some(font) = small {
+                let mut label = format!("{}. {line}", n + 1);
+                while font.width(&label) * s > face.w - 6 * s && label.len() > 4 {
+                    label.pop();
+                }
+                list.push_clip(face);
+                list.text(
+                    font,
+                    &label,
+                    face.x + 3 * s,
+                    face.y + face.h / 2 + font.ascent * s / 2,
+                    text,
+                );
+                list.pop_clip();
+            }
+        }
     }
     list.set_layer(previous);
 }

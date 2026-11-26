@@ -1,5 +1,5 @@
 //! Paper balance: every champion's numbers at level 1 (all rank 1) and at
-//! level 11 (every ability at its top rank), worked out with the same
+//! level 25 (every ability at its top rank), worked out with the same
 //! formulas the game uses, so outliers show before anyone plays.
 //!
 //! `rift-client --balance-report docs/BALANCE.md` writes the report.
@@ -84,8 +84,8 @@ fn label(ability: &ChampionAbility) -> &str {
 
 fn stage(config: &ChampionConfig, level: u32, top_rank: bool) -> Stage {
     let gained = level.saturating_sub(1) as f32;
-    let hp = config.health + 40.0 * gained;
-    let damage = config.damage + 2.0 * gained;
+    let hp = config.health + crate::animated::LEVEL_HEALTH * gained;
+    let damage = config.damage + crate::animated::LEVEL_DAMAGE * gained;
     let ranged_scale = if config.ranged_auto {
         1.0 + config.ranged / 100.0
     } else {
@@ -142,7 +142,7 @@ pub fn analyse(config: &ChampionConfig) -> ChampionBalance {
         combo_cost,
         combos: config.mana / combo_cost.max(1.0),
         early: stage(config, 1, false),
-        late: stage(config, 11, true),
+        late: stage(config, 25, true),
     }
 }
 
@@ -224,7 +224,7 @@ pub fn report(champions: &[ChampionConfig]) -> String {
     );
     for (title, late) in [
         ("Level 1, every ability rank 1", false),
-        ("Level 11, every ability at its top rank", true),
+        ("Level 25, every ability at its top rank", true),
     ] {
         let _ = writeln!(md, "## {title}\n");
         let _ = writeln!(
@@ -272,7 +272,7 @@ pub fn report(champions: &[ChampionConfig]) -> String {
             md,
             "- {} ({}): {} is {:.2}x the group median{}",
             name,
-            if f.late { "level 11" } else { "level 1" },
+            if f.late { "level 25" } else { "level 1" },
             f.metric,
             f.ratio,
             if f.ratio >= HIGH { " ▲" } else { " ▼" }
@@ -322,13 +322,31 @@ mod tests {
         let b = analyse(&frog);
         // Rank 1 burst: Q 45 + W 40 + R 210 (E is a shield) at level 1.
         assert!((b.early.burst - 295.0).abs() < 0.01, "{}", b.early.burst);
-        // Top ranks 105 + 100 + 390, times 1.5 at level 11.
+        // Top ranks 105 + 100 + 390, times 1.48 at level 25.
         assert!(
-            (b.late.burst - 595.0 * 1.5).abs() < 0.01,
+            (b.late.burst - 595.0 * 1.48).abs() < 0.01,
             "{}",
             b.late.burst
         );
         assert!((b.early.protection - 90.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn every_hero_has_four_talent_tiers_on_real_slots() {
+        for hero in roster() {
+            assert_eq!(hero.talents.len(), 4, "{}", hero.id);
+            for pair in &hero.talents {
+                for talent in pair {
+                    use crate::talents::TalentEffect as T;
+                    if let T::SlotDamage { slot, .. }
+                    | T::SlotCooldown { slot, .. }
+                    | T::SlotRange { slot, .. } = talent.effect
+                    {
+                        assert!(slot < hero.abilities.len(), "{} {}", hero.id, talent.name);
+                    }
+                }
+            }
+        }
     }
 
     #[test]

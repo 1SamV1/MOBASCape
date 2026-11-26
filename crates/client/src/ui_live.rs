@@ -944,12 +944,13 @@ pub fn ability_from(
         cooldowns: cooldowns.map(|seconds| seconds.max(0.0)),
         portrait: None,
         icons: Default::default(),
-        ranks: [1; 4],
+        ranks: [0; 4],
         max_ranks: [4, 4, 4, 3],
         upgradable: [false; 4],
         time: 0.0,
         spells: Default::default(),
         scroll: Default::default(),
+        talent_pick: None,
     }
 }
 
@@ -958,6 +959,12 @@ pub fn ability_ranks(state: &mut AbilityState, animated: &AnimatedScene) {
     state.ranks = animated.ability_ranks();
     state.max_ranks = std::array::from_fn(|slot| animated.max_rank(slot));
     state.upgradable = std::array::from_fn(|slot| animated.can_upgrade(slot));
+    state.talent_pick = animated.open_talent_tier().map(|tier| {
+        let names = animated.player_ability_names();
+        let pair = &animated.player_talents()[tier];
+        let line = |n: usize| format!("{}: {}", pair[n].name, pair[n].effect.describe(&names));
+        (crate::talents::TALENT_LEVELS[tier], [line(0), line(1)])
+    });
     state.time = animated.hud_time;
 }
 

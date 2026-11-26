@@ -164,5 +164,23 @@
       }
     ]
   },
-  "source_npc": 2205
+  "source_npc": 2205,
+  "talents": [
+    [
+      {"name": "Blessed Blade", "type": "damage", "amount": 15},
+      {"name": "Light of Saradomin", "type": "move_speed", "pct": 0.06}
+    ],
+    [
+      {"name": "Holy Strike", "type": "slot_damage", "slot": 0, "pct": 0.25},
+      {"name": "Long Dash", "type": "slot_range", "slot": 1, "pct": 0.2}
+    ],
+    [
+      {"name": "Swift Strikes", "type": "attack_speed", "pct": 0.25},
+      {"name": "Starlit Path", "type": "slot_cooldown", "slot": 2, "pct": 0.25}
+    ],
+    [
+      {"name": "Godsword Mastery", "type": "slot_damage", "slot": 3, "pct": 0.3},
+      {"name": "Saradomin's Favour", "type": "cooldown", "pct": 0.15}
+    ]
+  ]
 }

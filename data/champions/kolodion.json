@@ -188,5 +188,23 @@
       }
     ]
   },
-  "source_npc": 1603
+  "source_npc": 1603,
+  "talents": [
+    [
+      {"name": "Mage Arena Master", "type": "mana", "amount": 150},
+      {"name": "Battle Mage", "type": "ability_power", "amount": 20}
+    ],
+    [
+      {"name": "Guthix Fury", "type": "slot_damage", "slot": 0, "pct": 0.25},
+      {"name": "Zamorak Fury", "type": "slot_damage", "slot": 1, "pct": 0.25}
+    ],
+    [
+      {"name": "Saradomin's Reach", "type": "slot_range", "slot": 2, "pct": 0.2},
+      {"name": "Arena Footwork", "type": "move_speed", "pct": 0.08}
+    ],
+    [
+      {"name": "Endless Forms", "type": "slot_cooldown", "slot": 3, "pct": 0.3},
+      {"name": "Three Gods", "type": "cooldown", "pct": 0.15}
+    ]
+  ]
 }

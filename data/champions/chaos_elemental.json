@@ -174,5 +174,23 @@
       }
     ]
   },
-  "source_npc": 2054
+  "source_npc": 2054,
+  "talents": [
+    [
+      {"name": "Chaotic Reserves", "type": "mana", "amount": 150},
+      {"name": "Unstable Power", "type": "ability_power", "amount": 20}
+    ],
+    [
+      {"name": "Raw Discord", "type": "slot_damage", "slot": 0, "pct": 0.25},
+      {"name": "Lingering Confusion", "type": "slot_cooldown", "slot": 1, "pct": 0.2}
+    ],
+    [
+      {"name": "Erratic Drift", "type": "move_speed", "pct": 0.08},
+      {"name": "Maddening Touch", "type": "slot_cooldown", "slot": 2, "pct": 0.25}
+    ],
+    [
+      {"name": "Eye of the Storm", "type": "slot_damage", "slot": 3, "pct": 0.3},
+      {"name": "Entropy", "type": "cooldown", "pct": 0.15}
+    ]
+  ]
 }
