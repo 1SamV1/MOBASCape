@@ -161,8 +161,8 @@ it to see where load time goes before optimising.
   king and cast Bananarang at it (1 s), a Banana Peel under it (3.2 s),
   Greegree (4.4 s) and Vine Swing past it (5.6 s); at 9 s it logs the
   king's health and position, the rival's health and what is still in
-  play. Screenshot frames ~130 (banana in flight), ~310 (gorilla) and
-  ~386 (swinging).
+  play. With `--fixed-dt 0.016667`: frame ~350 catches the grab, ~392 the
+  top of the swing and ~428 the landing.
 - `--mute`: no sound. `--shots` and `--benchmark` are always silent.
 - `rift-tools sound ID --out sound.wav` decodes a cache sound effect,
   prints its instruments and writes it as a WAV to audition.
@@ -174,6 +174,13 @@ it to see where load time goes before optimising.
   cursor on slot 0-3 so its ability tooltip is in the screenshot.
 - Combine with `--screenshot out.png --screenshot-after N` and step `N` to
   capture a projectile in flight.
+- `--fixed-dt SECONDS` advances every frame by that much game time instead
+  of the wall clock, so `--screenshot-after N` lands on the same moment of
+  a demo every run (N frames = N x SECONDS). Without it the frame rate,
+  and so what frame N shows, changes from run to run. For example
+  `--champion pestilent_bloat --demo-abilities --fixed-dt 0.016667
+  --screenshot hook.png --screenshot-after 95` catches the Flesh Hook's
+  anchor in flight.
 - `rift-tools spotanim ID`, `rift-tools spotanims --from A --to B --sheet
   out.png` and `rift-tools skeleton-anims SEQ --model M --sheet out.png`
   inspect projectile graphics and find attack clips.

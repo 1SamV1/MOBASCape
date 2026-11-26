@@ -275,6 +275,11 @@ struct Cli {
     /// Simulation speed multiplier for verification.
     #[arg(long, default_value_t = 1.0)]
     timescale: f32,
+    /// Dev: advance every frame by this many seconds instead of the wall
+    /// clock, so `--screenshot-after N` lands on the same game moment every
+    /// run (N frames = N x SECONDS of game time).
+    #[arg(long, value_name = "SECONDS")]
+    fixed_dt: Option<f32>,
     /// Draw the interface renderer's test screen over the game.
     #[arg(long)]
     ui_test: bool,
@@ -779,6 +784,7 @@ fn main() -> Result<()> {
         demo_camp_cast: false,
         demo_camp_done: false,
         timescale: cli.timescale,
+        fixed_dt: cli.fixed_dt.filter(|dt| *dt > 0.0),
         demo_combat_timer: 0.0,
         demo_combat_targeted: false,
         demo_combat_cast: false,
@@ -954,6 +960,8 @@ struct App {
     demo_camp_cast: bool,
     demo_camp_done: bool,
     timescale: f32,
+    /// `--fixed-dt`: seconds per frame in place of the wall clock.
+    fixed_dt: Option<f32>,
     demo_combat_timer: f32,
     demo_combat_targeted: bool,
     demo_combat_cast: bool,
@@ -1647,7 +1655,9 @@ impl App {
 
     fn tick(&mut self) {
         let now = Instant::now();
-        let dt = (now - self.last_frame).as_secs_f32().min(0.1);
+        let dt = self
+            .fixed_dt
+            .unwrap_or_else(|| (now - self.last_frame).as_secs_f32().min(0.1));
         self.last_frame = now;
         self.app_time += dt;
         let profiling = self.benchmark_remaining.is_some() && self.app_time > 1.0;
