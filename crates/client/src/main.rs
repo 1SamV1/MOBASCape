@@ -170,6 +170,10 @@ struct Cli {
     /// champion's kit, logging what each did.
     #[arg(long)]
     demo_abilities: bool,
+    /// With `--demo-abilities`: level the hero this high first and rank
+    /// every ability as far as the points go (25 shows the max-rank bonuses).
+    #[arg(long)]
+    demo_level: Option<u32>,
     /// Demo: play these cache spot animations (comma separated ids) in a
     /// labelled grid beside the hero, over and over, for checking spell
     /// graphics by eye.
@@ -741,6 +745,7 @@ fn main() -> Result<()> {
         demo_kit_timer: 0.0,
         demo_kit_stage: 0,
         demo_abilities: cli.demo_abilities,
+        demo_level: cli.demo_level,
         demo_abilities_timer: 0.0,
         demo_abilities_stage: 0,
         demo_gfx: cli.demo_gfx.clone(),
@@ -920,6 +925,7 @@ struct App {
     demo_kit_timer: f32,
     demo_kit_stage: u8,
     demo_abilities: bool,
+    demo_level: Option<u32>,
     demo_abilities_timer: f32,
     demo_abilities_stage: u8,
     demo_gfx: Vec<u32>,
@@ -2279,10 +2285,15 @@ impl App {
                         // (and its graphics) lands on a live target.
                         animated.debug_sturdy(camp, 20_000.0);
                         // Abilities start unlearned: learn one rank of each.
-                        animated.dev_level_to(6);
+                        animated.dev_level_to(self.demo_level.unwrap_or(6));
                         for slot in [0, 1, 2, 3] {
                             animated.upgrade_ability(slot);
                         }
+                        // Then rank everything as far as the points go.
+                        while [3, 0, 1, 2]
+                            .into_iter()
+                            .any(|slot| animated.upgrade_ability(slot))
+                        {}
                         tracing::info!("demo abilities: beside camp {camp}");
                     }
                     animated.debug_grant_gold(0);

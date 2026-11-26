@@ -55,8 +55,13 @@ Last updated: kit runtime for every hero, levels to 25 and talents,
   charge bar on the HUD. The Blowpipe Ranger now runs on the kit too: Toxic build-up
   (venom stacks to three, heal cut at three), piercing dart, seven-dart
   volley, caltrop hop and a three-stack Deadshot execute at max rank. Bots
-  switch toggles off when no fight is near. Awowogei keeps his hand-written
-  kit until his rework.
+  switch toggles off when no fight is near. King Awowogei's rework is in
+  his hand-written kit: Monkey Madness (four hits on one hero in 6 s charge
+  four attacks with bonus damage and a 30% heal), a ricochet on the
+  Bananarang's return, two Vine Swing charges, chained peel slips, and
+  Greegree slams that mini-stun, a 6/7/8 s extension on a hero kill and
+  10 s at max rank. `--demo-abilities --demo-level 25` casts every max-rank
+  bonus; all 72 cast.
 - **Levels to 25 and talents (SYS-3, SYS-7).** Abilities start unlearned;
   level 1 gives the first point. R ranks unlock at 6/11/16. Levels 10, 15,
   20 and 25 give a pick between two talents (`talents` in each champion

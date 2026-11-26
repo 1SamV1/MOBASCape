@@ -33,65 +33,162 @@
     {
       "key": "Q",
       "name": "BANANARANG",
-      "description": "Hurls a giant banana at the cursor. It curves out, hangs at full range, then loops home to the king's hand, striking enemies both ways.",
+      "description": "Hurls a giant banana at the cursor. It curves out, hangs at full range, then loops home to the king's hand, striking enemies both ways. At max rank the return bounces once to a second enemy nearby.",
       "damage_note": "Return hits deal 50%",
       "ranks": [
-        { "damage": 45, "range": 1300, "cooldown": 8 },
-        { "damage": 65, "range": 1300, "cooldown": 7.5 },
-        { "damage": 85, "range": 1300, "cooldown": 7 },
-        { "damage": 105, "range": 1300, "cooldown": 6.5 }
+        {
+          "damage": 45,
+          "range": 1300,
+          "cooldown": 8
+        },
+        {
+          "damage": 65,
+          "range": 1300,
+          "cooldown": 7.5
+        },
+        {
+          "damage": 85,
+          "range": 1300,
+          "cooldown": 7
+        },
+        {
+          "damage": 105,
+          "range": 1300,
+          "cooldown": 6.5
+        }
       ]
     },
     {
       "key": "W",
       "name": "VINE SWING",
-      "description": "A long vine drops from the canopy. The king leaps on and swings far toward the cursor, gathering speed until he flies at full tilt.",
+      "description": "A long vine drops from the canopy. The king leaps on and swings far toward the cursor, gathering speed until he flies at full tilt. At max rank it holds two charges.",
       "damage_note": "Always full range; untargetable until 0.5 s after landing",
       "ranks": [
-        { "range": 1500, "cooldown": 14 },
-        { "range": 1600, "cooldown": 13 },
-        { "range": 1700, "cooldown": 12 },
-        { "range": 1800, "cooldown": 11 }
+        {
+          "range": 1500,
+          "cooldown": 14
+        },
+        {
+          "range": 1600,
+          "cooldown": 13
+        },
+        {
+          "range": 1700,
+          "cooldown": 12
+        },
+        {
+          "range": 1800,
+          "cooldown": 11
+        }
       ]
     },
     {
       "key": "E",
       "name": "BANANA PEEL",
-      "description": "Throws a peel onto the target circle. Land it under an enemy to slip them at once, or leave it as a trap for the next one to step on it.",
+      "description": "Throws a peel onto the target circle. Land it under an enemy to slip them at once, or leave it as a trap for the next one to step on it. At max rank a slipping enemy that slides into another slips it too.",
       "damage_note": "1 s slip stun; trap lasts 25 s",
       "ranks": [
-        { "damage": 50, "range": 850, "cooldown": 12 },
-        { "damage": 75, "range": 900, "cooldown": 11 },
-        { "damage": 100, "range": 950, "cooldown": 10 },
-        { "damage": 125, "range": 1000, "cooldown": 9 }
+        {
+          "damage": 50,
+          "range": 850,
+          "cooldown": 12
+        },
+        {
+          "damage": 75,
+          "range": 900,
+          "cooldown": 11
+        },
+        {
+          "damage": 100,
+          "range": 950,
+          "cooldown": 10
+        },
+        {
+          "damage": 125,
+          "range": 1000,
+          "cooldown": 9
+        }
       ]
     },
     {
       "key": "R",
       "name": "GREEGREE",
-      "description": "The king turns into a hulking gorilla for 8 seconds, gaining health and trading speed for heavy slams that splash around his target.",
+      "description": "The king turns into a hulking gorilla for 8 seconds, gaining health and trading speed for heavy slams that splash and mini-stun around his target. Killing an enemy hero extends the form. At max rank it lasts 10 seconds.",
       "damage_label": "Slam",
       "damage_note": "8 s gorilla: +250/400/550 health",
       "ranks": [
-        { "damage": 60, "range": 220, "cooldown": 80 },
-        { "damage": 95, "range": 220, "cooldown": 70 },
-        { "damage": 130, "range": 220, "cooldown": 60 }
+        {
+          "damage": 60,
+          "range": 220,
+          "cooldown": 80
+        },
+        {
+          "damage": 95,
+          "range": 220,
+          "cooldown": 70
+        },
+        {
+          "damage": 130,
+          "range": 220,
+          "cooldown": 60
+        }
       ]
     }
   ],
   "sounds": {
-    "q_throw": { "id": 1930, "volume": 0.8 },
-    "q_whirl": { "id": 1930, "volume": 0.3, "speed": 1.6 },
-    "q_hit": { "id": 2498, "volume": 0.7 },
-    "q_catch": { "id": 2582, "volume": 0.9 },
-    "w_swing": { "id": 1930, "volume": 0.7, "speed": 0.75 },
-    "w_land": { "id": 2739, "volume": 0.8 },
-    "e_throw": { "id": 1930, "volume": 0.5, "speed": 1.3 },
-    "e_land": { "id": 2739, "volume": 0.4, "speed": 1.4 },
-    "e_slip": { "id": 227, "volume": 0.6 },
-    "r_transform": { "id": 200, "volume": 0.7 },
-    "r_revert": { "id": 2663, "volume": 0.6 },
-    "r_slam": { "id": 2735, "volume": 0.7, "speed": 0.8 }
+    "q_throw": {
+      "id": 1930,
+      "volume": 0.8
+    },
+    "q_whirl": {
+      "id": 1930,
+      "volume": 0.3,
+      "speed": 1.6
+    },
+    "q_hit": {
+      "id": 2498,
+      "volume": 0.7
+    },
+    "q_catch": {
+      "id": 2582,
+      "volume": 0.9
+    },
+    "w_swing": {
+      "id": 1930,
+      "volume": 0.7,
+      "speed": 0.75
+    },
+    "w_land": {
+      "id": 2739,
+      "volume": 0.8
+    },
+    "e_throw": {
+      "id": 1930,
+      "volume": 0.5,
+      "speed": 1.3
+    },
+    "e_land": {
+      "id": 2739,
+      "volume": 0.4,
+      "speed": 1.4
+    },
+    "e_slip": {
+      "id": 227,
+      "volume": 0.6
+    },
+    "r_transform": {
+      "id": 200,
+      "volume": 0.7
+    },
+    "r_revert": {
+      "id": 2663,
+      "volume": 0.6
+    },
+    "r_slam": {
+      "id": 2735,
+      "volume": 0.7,
+      "speed": 0.8
+    }
   },
   "ability_icons": [
     57,
@@ -101,20 +198,56 @@
   ],
   "talents": [
     [
-      {"name": "Monkey Muscle", "type": "damage", "amount": 15},
-      {"name": "Light Feet", "type": "move_speed", "pct": 0.06}
+      {
+        "name": "Monkey Muscle",
+        "type": "damage",
+        "amount": 15
+      },
+      {
+        "name": "Light Feet",
+        "type": "move_speed",
+        "pct": 0.06
+      }
     ],
     [
-      {"name": "Ripe Bananarang", "type": "slot_damage", "slot": 0, "pct": 0.25},
-      {"name": "Long Vine", "type": "slot_range", "slot": 1, "pct": 0.2}
+      {
+        "name": "Ripe Bananarang",
+        "type": "slot_damage",
+        "slot": 0,
+        "pct": 0.25
+      },
+      {
+        "name": "Long Vine",
+        "type": "slot_range",
+        "slot": 1,
+        "pct": 0.2
+      }
     ],
     [
-      {"name": "Monkey Business", "type": "attack_speed", "pct": 0.25},
-      {"name": "Slippery Peels", "type": "slot_cooldown", "slot": 2, "pct": 0.25}
+      {
+        "name": "Monkey Business",
+        "type": "attack_speed",
+        "pct": 0.25
+      },
+      {
+        "name": "Slippery Peels",
+        "type": "slot_cooldown",
+        "slot": 2,
+        "pct": 0.25
+      }
     ],
     [
-      {"name": "Greegree Master", "type": "slot_damage", "slot": 3, "pct": 0.3},
-      {"name": "Ape Atoll King", "type": "cooldown", "pct": 0.15}
+      {
+        "name": "Greegree Master",
+        "type": "slot_damage",
+        "slot": 3,
+        "pct": 0.3
+      },
+      {
+        "name": "Ape Atoll King",
+        "type": "cooldown",
+        "pct": 0.15
+      }
     ]
   ]
 }

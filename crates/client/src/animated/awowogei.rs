@@ -103,6 +103,26 @@ const GORILLA_SCALE: f32 = 3.2;
 const GORILLA_DAMAGE: f32 = 1.7;
 const GORILLA_INTERVAL: f32 = 1.35;
 pub const SLAM_RADIUS: f32 = 220.0;
+/// Every gorilla slam mini-stuns what it hits.
+const SLAM_STUN: f32 = 0.25;
+/// Greegree at max rank.
+const GREEGREE_MASTERED: f32 = 10.0;
+/// An enemy hero kill while a gorilla extends the form (per rank).
+const GREEGREE_KILL_EXTEND: [f32; 3] = [6.0, 7.0, 8.0];
+/// Monkey Madness: hits on one enemy hero within this window charge it.
+const MADNESS_HITS: u32 = 4;
+const MADNESS_WINDOW: f32 = 6.0;
+/// Charged attacks, their bonus (base + per level) and the heal share.
+const MADNESS_ATTACKS: u32 = 4;
+const MADNESS_BONUS: f32 = 15.0;
+const MADNESS_PER_LEVEL: f32 = 3.0;
+const MADNESS_HEAL: f32 = 0.3;
+/// Bananarang max rank: the return bounces once to an enemy this close.
+const RICOCHET_RANGE: f32 = 500.0;
+/// Vine Swing charges at max rank.
+const VINE_CHARGES: u32 = 2;
+/// Banana Peel max rank: a sliding enemy this close to another slips it.
+const CHAIN_REACH: f32 = 90.0;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BananaLeg {
@@ -130,6 +150,8 @@ pub struct Bananarang {
     pub hit_home: Vec<usize>,
     pub whirl: f32,
     pub trail: Vec<Vec3>,
+    /// Max rank: the return leg may still bounce to a second enemy.
+    pub ricochet: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -181,6 +203,9 @@ pub struct Slip {
     pub unit: usize,
     pub vel: Vec3,
     pub t: f32,
+    pub damage: f32,
+    /// Max rank: this slide still slips the first enemy it runs into.
+    pub chain: bool,
 }
 
 pub struct GorillaAssets {
@@ -215,6 +240,15 @@ pub struct AwowogeiState {
     pub greegree: Option<Greegree>,
     /// Seconds the king cannot be targeted or damaged.
     pub untargetable: f32,
+    /// Monkey Madness: the hero being counted, hits so far, seconds left
+    /// to land the rest, and charged attacks waiting.
+    pub madness_target: Option<usize>,
+    pub madness_hits: u32,
+    pub madness_timer: f32,
+    pub madness_charged: u32,
+    /// Vine Swing at max rank: charges spent and the recharge timer.
+    pub vine_used: u32,
+    pub vine_recharge: f32,
 }
 
 impl AwowogeiState {
@@ -509,18 +543,129 @@ impl AnimatedScene {
     /// Mana, cooldown and state checks shared by the four casts.
     fn awowogei_ready(&self, slot: usize) -> bool {
         let player = &self.units[self.player_index];
+        let charged = slot == 1 && self.ability_mastered(1);
         player.health > 0.0
             && player.stun_timer <= 0.0
-            && player.cooldowns[slot] <= 0.0
+            && (if charged {
+                self.awowogei.vine_used < VINE_CHARGES
+            } else {
+                player.cooldowns[slot] <= 0.0
+            })
             && player.mana >= COSTS[slot]
             && !self.awowogei.controls_player()
     }
 
     fn awowogei_spend(&mut self, slot: usize, fallback: f32) {
         let cooldown = self.rank_cooldown(slot, fallback);
+        if slot == 1 && self.ability_mastered(1) {
+            let state = &mut self.awowogei;
+            if state.vine_used == 0 {
+                state.vine_recharge = cooldown;
+            }
+            state.vine_used += 1;
+            let wait = if state.vine_used >= VINE_CHARGES {
+                state.vine_recharge
+            } else {
+                0.0
+            };
+            let player = &mut self.units[self.player_index];
+            player.mana -= COSTS[slot];
+            player.cooldowns[slot] = wait;
+            return;
+        }
         let player = &mut self.units[self.player_index];
         player.mana -= COSTS[slot];
         player.cooldowns[slot] = cooldown;
+    }
+
+    /// True once `slot` is at its last rank (its max-rank bonus is on).
+    fn ability_mastered(&self, slot: usize) -> bool {
+        let max = self.max_rank(slot);
+        max > 0 && self.ability_rank(slot) >= max
+    }
+
+    /// Vine Swing charges refill one at a time at max rank.
+    fn update_vine_charges(&mut self, dt: f32) {
+        if !self.ability_mastered(1) || self.awowogei.vine_used == 0 {
+            return;
+        }
+        let cooldown = self.rank_cooldown(1, COOLDOWNS[1]);
+        let state = &mut self.awowogei;
+        state.vine_recharge -= dt;
+        if state.vine_recharge <= 0.0 {
+            state.vine_used -= 1;
+            state.vine_recharge = if state.vine_used > 0 { cooldown } else { 0.0 };
+        }
+        let wait = if state.vine_used >= VINE_CHARGES {
+            state.vine_recharge.max(0.0)
+        } else {
+            0.0
+        };
+        self.units[self.player_index].cooldowns[1] = wait;
+    }
+
+    fn is_enemy_hero(&self, index: usize) -> bool {
+        let unit = &self.units[index];
+        unit.team == 1 && unit.kind.is_champion() && unit.health > 0.0
+    }
+
+    /// Monkey Madness: count a hit (attack or banana) on `target`. Four on
+    /// the same enemy hero within 6 seconds charge the next four attacks.
+    pub(super) fn madness_count(&mut self, target: usize) {
+        if self.champion_id != "monkey" || !self.is_enemy_hero(target) {
+            return;
+        }
+        let state = &mut self.awowogei;
+        if state.madness_target != Some(target) || state.madness_timer <= 0.0 {
+            state.madness_target = Some(target);
+            state.madness_hits = 0;
+        }
+        state.madness_hits += 1;
+        state.madness_timer = MADNESS_WINDOW;
+        if state.madness_hits >= MADNESS_HITS {
+            state.madness_hits = 0;
+            state.madness_target = None;
+            state.madness_charged = MADNESS_ATTACKS;
+            let pos = self.units[self.player_index].pos + Vec3::Y * 90.0;
+            self.emit_burst(pos, [255, 200, 40], 26, 260.0, 16.0, 0.8);
+            self.announcement = Some(("MONKEY MADNESS".to_string(), 1.5));
+            tracing::info!("awowogei: monkey madness charged");
+        }
+    }
+
+    /// A king's basic attack landed on `target` for `damage`: count it for
+    /// Monkey Madness and spend a charged attack (bonus damage and a heal).
+    pub(super) fn madness_attack(&mut self, target: usize) {
+        if self.champion_id != "monkey" {
+            return;
+        }
+        let pi = self.player_index;
+        if self.awowogei.madness_charged > 0 && self.units[target].health > 0.0 {
+            self.awowogei.madness_charged -= 1;
+            let level = self.units[pi].level.saturating_sub(1) as f32;
+            let bonus = MADNESS_BONUS + MADNESS_PER_LEVEL * level;
+            let before = self.units[target].health;
+            self.damage_unit_mixed_kind(target, bonus, 0.0, 0, Some(pi), HitsplatKind::MaxHit);
+            let dealt = (before - self.units[target].health).max(0.0);
+            let player = &mut self.units[pi];
+            player.health = (player.health + dealt * MADNESS_HEAL).min(player.max_health);
+            let at = self.units[target].pos + Vec3::Y * 60.0;
+            self.emit_burst(at, [255, 200, 40], 10, 200.0, 12.0, 0.4);
+            return;
+        }
+        self.madness_count(target);
+    }
+
+    /// An enemy hero died to the king while a gorilla: stay one longer.
+    pub(super) fn greegree_kill(&mut self, victim: usize, killer: Option<usize>) {
+        if killer != Some(self.player_index) || !self.units[victim].kind.is_champion() {
+            return;
+        }
+        let rank = self.ability_rank(3).clamp(1, 3) as usize;
+        if let Some(greegree) = self.awowogei.greegree.as_mut() {
+            greegree.remaining += GREEGREE_KILL_EXTEND[rank - 1];
+            self.announcement = Some(("GREEGREE EXTENDED".to_string(), 1.5));
+        }
     }
 
     fn aim_dir(&self, target: Vec3) -> Vec3 {
@@ -568,6 +713,7 @@ impl AnimatedScene {
             hit_home: Vec::new(),
             whirl: Q_WHIRL_INTERVAL,
             trail: Vec::new(),
+            ricochet: self.ability_mastered(0),
         });
         self.effects.push(Effect {
             pos: hand,
@@ -701,10 +847,15 @@ impl AnimatedScene {
         let bonus_health = 250.0 + 150.0 * rank;
         let slam = self.ability_damage(3);
         self.awowogei_spend(3, COOLDOWNS[3]);
+        let duration = if self.ability_mastered(3) {
+            GREEGREE_MASTERED
+        } else {
+            GREEGREE_DURATION
+        };
         let pi = self.player_index;
         let player = &mut self.units[pi];
         let greegree = Greegree {
-            remaining: GREEGREE_DURATION,
+            remaining: duration,
             bonus_health,
             slam,
             model: std::mem::replace(&mut player.model, model),
@@ -774,6 +925,8 @@ impl AnimatedScene {
             .collect();
         for index in hits {
             self.damage_unit_mixed(index, slam, 0.0, 0, Some(pi));
+            let unit = &mut self.units[index];
+            unit.stun_timer = unit.stun_timer.max(SLAM_STUN);
         }
         self.effects.push(Effect {
             pos: at,
@@ -815,6 +968,8 @@ impl AnimatedScene {
         collision: &WorldCollision,
     ) {
         self.awowogei.untargetable = (self.awowogei.untargetable - dt).max(0.0);
+        self.awowogei.madness_timer = (self.awowogei.madness_timer - dt).max(0.0);
+        self.update_vine_charges(dt);
         let alive = self.units[self.player_index].health > 0.0;
         if !alive {
             self.awowogei.vine = None;
@@ -937,6 +1092,34 @@ impl AnimatedScene {
                     let stun = banana.stun;
                     let unit = &mut self.units[index];
                     unit.stun_timer = unit.stun_timer.max(stun);
+                }
+                self.madness_count(index);
+                if leg == BananaLeg::Home && banana.ricochet {
+                    banana.ricochet = false;
+                    let from = self.units[index].pos;
+                    let bounce = (0..self.units.len())
+                        .filter(|&i| i != index && self.is_awowogei_enemy(i))
+                        .map(|i| (i, planar_delta(from, self.units[i].pos).length()))
+                        .filter(|&(_, d)| d <= RICOCHET_RANGE)
+                        .min_by(|a, b| a.1.total_cmp(&b.1))
+                        .map(|(i, _)| i);
+                    if let Some(next) = bounce {
+                        let to = self.units[next].pos;
+                        self.damage_unit_mixed_kind(
+                            next,
+                            amount * 0.6,
+                            amount * 0.4,
+                            0,
+                            Some(self.player_index),
+                            HitsplatKind::Damage,
+                        );
+                        self.madness_count(next);
+                        for step in 1..=6 {
+                            let p = from.lerp(to, step as f32 / 6.0) + Vec3::Y * 80.0;
+                            self.emit_burst(p, [255, 220, 60], 2, 80.0, 10.0, 0.3);
+                        }
+                        self.play_sound("q_hit", to);
+                    }
                 }
                 let color = if crit { [255, 90, 40] } else { [255, 220, 60] };
                 self.effects.push(Effect {
@@ -1136,10 +1319,13 @@ impl AnimatedScene {
         unit.attack_target = None;
         let pos = unit.pos;
         self.awowogei.slips.retain(|slip| slip.unit != index);
+        let chain = self.ability_mastered(2);
         self.awowogei.slips.push(Slip {
             unit: index,
             vel: dir * SLIP_SPEED,
             t: 0.0,
+            damage,
+            chain,
         });
         self.emit_burst(pos, [255, 220, 70], 12, 220.0, 14.0, 0.5);
         self.play_sound("e_slip", pos);
@@ -1148,7 +1334,25 @@ impl AnimatedScene {
 
     fn update_slips(&mut self, dt: f32, height: &HeightGrid, collision: &WorldCollision) {
         let mut slips = std::mem::take(&mut self.awowogei.slips);
+        let sliding: Vec<usize> = slips.iter().map(|slip| slip.unit).collect();
+        let mut chained: Vec<(usize, f32, Vec3)> = Vec::new();
         slips.retain_mut(|slip| {
+            if slip.chain
+                && let Some(pos) = self.units.get(slip.unit).map(|u| u.pos)
+            {
+                let hit = (0..self.units.len()).find(|&i| {
+                    i != slip.unit
+                        && !sliding.contains(&i)
+                        && !chained.iter().any(|c| c.0 == i)
+                        && self.is_awowogei_enemy(i)
+                        && planar_delta(pos, self.units[i].pos).length()
+                            <= CHAIN_REACH + self.units[i].body_radius
+                });
+                if let Some(next) = hit {
+                    slip.chain = false;
+                    chained.push((next, slip.damage, pos));
+                }
+            }
             slip.t += dt;
             let Some(unit) = self.units.get_mut(slip.unit) else {
                 return false;
@@ -1173,6 +1377,9 @@ impl AnimatedScene {
             true
         });
         self.awowogei.slips = slips;
+        for (index, damage, at) in chained {
+            self.slip(index, damage, at);
+        }
     }
 
     /// Draw the bananas, peels and vine.

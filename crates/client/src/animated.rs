@@ -2276,7 +2276,10 @@ impl AnimatedScene {
         } else {
             self.melee_slash(pi, target, [255, 235, 200]);
             self.damage_unit_by(target, damage, 0, Some(pi));
-            if self.awowogei.greegree.is_some() {
+            if pi == self.player_index {
+                self.madness_attack(target);
+            }
+            if pi == self.player_index && self.awowogei.greegree.is_some() {
                 self.greegree_slam(target);
             }
             if self.units[target].health <= 0.0 {
@@ -4946,6 +4949,7 @@ impl AnimatedScene {
         self.share_xp(index, target_kind, attacker_team, aggressor);
         self.kit_flesh_heap(index);
         self.kit_on_kill(index);
+        self.greegree_kill(index, aggressor);
         if reaches_feed(target_kind, hero_aggressor) {
             let victim = short_unit_name(target_kind);
             let killer = aggressor
