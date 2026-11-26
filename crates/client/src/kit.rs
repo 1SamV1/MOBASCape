@@ -707,6 +707,14 @@ pub enum Status {
     Freeze {
         duration: f32,
     },
+    /// Extra pure damage equal to a share of missing health (an execute).
+    MissingHealth {
+        pct: f32,
+    },
+    /// Adds `count` stacks of the caster's Toxic build-up at once.
+    VenomStack {
+        count: u32,
+    },
 }
 
 impl Status {
@@ -801,6 +809,13 @@ pub enum Passive {
         max: u32,
         duration: f32,
     },
+    /// Attacks and abilities stack venom up to `max` times, `per_stack`
+    /// damage a second each; at `max` stacks the target heals less.
+    ToxicBuildup {
+        per_stack: f32,
+        max: u32,
+        duration: f32,
+    },
 }
 
 /// Crowd control and summon state carried by every unit.
@@ -857,6 +872,9 @@ pub struct Afflictions {
     pub evasion_timer: f32,
     /// Cannot be hit or targeted.
     pub untargetable_timer: f32,
+    /// Toxic build-up stacks, and how long until they fade.
+    pub venom_stacks: u32,
+    pub venom_stack_timer: f32,
 }
 
 impl Afflictions {
@@ -908,6 +926,10 @@ impl Afflictions {
         self.duel_timer = (self.duel_timer - dt).max(0.0);
         self.evasion_timer = (self.evasion_timer - dt).max(0.0);
         self.untargetable_timer = (self.untargetable_timer - dt).max(0.0);
+        self.venom_stack_timer = (self.venom_stack_timer - dt).max(0.0);
+        if self.venom_stack_timer <= 0.0 {
+            self.venom_stacks = 0;
+        }
         self.lift_timer = (self.lift_timer - dt).max(0.0);
         self.chill_timer = (self.chill_timer - dt).max(0.0);
         if self.chill_timer <= 0.0 {
@@ -1241,6 +1263,10 @@ impl Status {
             }
             Status::Duel { duration, .. } => format!("duel for {} s", secs(*duration)),
             Status::Freeze { duration } => format!("freeze for {} s", secs(*duration)),
+            Status::MissingHealth { pct: p } => {
+                format!("deal {}% of missing health", pct(*p))
+            }
+            Status::VenomStack { count } => format!("add {count} venom stacks"),
         }
     }
 }
@@ -1356,6 +1382,15 @@ impl Passive {
                 "After a leap or glide, the next {attacks} attacks fire an extra feather at a \
                  second enemy for {}% damage.",
                 pct(*p)
+            ),
+            Passive::ToxicBuildup {
+                per_stack,
+                max,
+                duration,
+            } => format!(
+                "Attacks and darts stack venom up to {max} times ({per_stack:.0} damage a second \
+                 each, for {} s). At {max} stacks the target heals less.",
+                secs(*duration)
             ),
             Passive::Fury {
                 per_stack,

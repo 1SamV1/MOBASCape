@@ -640,11 +640,22 @@ impl AnimatedScene {
         } else {
             (damage, 0.0)
         };
+        let mut stacks = 0;
         for status in statuses {
-            if let Status::CurrentHealth { pct } = status {
-                pure += self.units[index].health * pct;
+            match status {
+                Status::CurrentHealth { pct } => pure += self.units[index].health * pct,
+                Status::MissingHealth { pct } => {
+                    let unit = &self.units[index];
+                    pure += (unit.max_health - unit.health).max(0.0) * pct;
+                }
+                Status::VenomStack { count } => stacks += count,
+                _ => {}
             }
         }
+        if damage + pure > 0.0 {
+            stacks += 1;
+        }
+        self.toxic_buildup(caster, index, stacks);
         // Fury stacks: hits on the same enemy grow the next ones.
         let fury = self.kit_fury(caster, index);
         let damage = if damage + pure > 0.0 {
@@ -899,7 +910,9 @@ impl AnimatedScene {
             Status::Scramble { .. }
             | Status::OneOf { .. }
             | Status::Hex { .. }
-            | Status::Duel { .. } => {}
+            | Status::Duel { .. }
+            | Status::MissingHealth { .. }
+            | Status::VenomStack { .. } => {}
             Status::Silence { duration } => {
                 unit.cc.silence_timer = unit.cc.silence_timer.max(duration)
             }
@@ -1009,6 +1022,38 @@ impl AnimatedScene {
         bonus
     }
 
+    /// Toxic build-up: `caster`'s hits stack venom on `index`.
+    fn toxic_buildup(&mut self, caster: usize, index: usize, add: u32) {
+        let Some(rt) = self.casters.get(&caster) else {
+            return;
+        };
+        let Some(&Passive::ToxicBuildup {
+            per_stack,
+            max,
+            duration,
+        }) = rt.kit.passive.as_ref()
+        else {
+            return;
+        };
+        if add == 0 || self.units[index].kind.is_structure() {
+            return;
+        }
+        let growth =
+            1.0 + rt.kit.innate_per_level * self.units[caster].level.saturating_sub(1) as f32;
+        let unit = &mut self.units[index];
+        unit.cc.venom_stacks = (unit.cc.venom_stacks + add).min(max);
+        unit.cc.venom_stack_timer = duration;
+        if unit.venom_timer <= 0.0 {
+            unit.venom_tick = 1.0;
+        }
+        unit.venom_timer = unit.venom_timer.max(duration);
+        unit.venom_damage = per_stack * growth * unit.cc.venom_stacks as f32;
+        unit.venom_team = 0;
+        if unit.cc.venom_stacks >= max {
+            unit.cc.heal_cut_timer = unit.cc.heal_cut_timer.max(duration);
+        }
+    }
+
     /// Turn `index` into a frog for `seconds` (or keep it one longer).
     fn hex_unit(&mut self, index: usize, seconds: f32) {
         if let Some(hex) = self.kit_world.hexed.get_mut(&index) {
@@ -1103,6 +1148,12 @@ impl AnimatedScene {
         let big = hero || (foe.kind == UnitKind::Camp && foe.camp_boss);
         let distance = (planar_delta(pos, foe.pos).length() - foe.hit_radius * 0.5).max(0.0);
         let aim = foe.pos;
+        // A toggle left on with no fight near (or nearly dead) goes off.
+        if let Some(slot) = (0..4).find(|&s| rt.toggled[s])
+            && (distance > 900.0 || hp_frac < 0.25 || mana < max_mana * 0.1)
+        {
+            return self.cast_kit_for(unit, slot, aim);
+        }
         let mut choice = None;
         for slot in (0..4).rev() {
             let Some(ability) = rt.kit.abilities.get(slot) else {

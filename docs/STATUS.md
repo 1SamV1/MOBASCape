@@ -52,8 +52,11 @@ Last updated: kit runtime for every hero, levels to 25 and talents,
   three-frog count (it hexes everyone still in the circle), Gale Shot's
   wall stun, Feather Flurry's knockback, Web Nest hiding and speed, Pounce's
   cooldown refund, YARRRRRRR!'s kill refund, the Tongue Lash zip, and a
-  charge bar on the HUD. Awowogei and the Ranger keep their hand-written kits
-  until their rework.
+  charge bar on the HUD. The Blowpipe Ranger now runs on the kit too: Toxic build-up
+  (venom stacks to three, heal cut at three), piercing dart, seven-dart
+  volley, caltrop hop and a three-stack Deadshot execute at max rank. Bots
+  switch toggles off when no fight is near. Awowogei keeps his hand-written
+  kit until his rework.
 - **Levels to 25 and talents (SYS-3, SYS-7).** Abilities start unlearned;
   level 1 gives the first point. R ranks unlock at 6/11/16. Levels 10, 15,
   20 and 25 give a pick between two talents (`talents` in each champion
