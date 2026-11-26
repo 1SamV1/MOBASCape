@@ -7,9 +7,10 @@
 //!   coming back. Enemy towers, inhibitors and the nexus take only the
 //!   pure share (40%) of each hit, and are never stunned.
 //! - **W Vine Swing**: a long vine drops from the canopy, the king runs and
-//!   jumps onto it and swings along a curved arc that rises over hills and
-//!   sets him down softly. Untargetable from the cast until 0.5 s after he
-//!   lands.
+//!   jumps onto it and swings the full distance toward the cursor (which
+//!   only aims) along a forward arc that rises over hills. He leaves the
+//!   run-up slowly, picks up speed through the swing and holds his top speed
+//!   to the landing. Untargetable from the cast until 0.5 s after he lands.
 //! - **E Banana Peel**: a peel lobbed onto a ground circle (it cannot be
 //!   aimed at a unit). Landing under an enemy slips it at once; otherwise it
 //!   waits as a trap for the first enemy to step on it.
@@ -58,9 +59,23 @@ const Q_WHIRL_INTERVAL: f32 = 0.36;
 /// Height the banana cruises above the ground.
 const Q_CRUISE: f32 = 80.0;
 
-/// Shortest and rank-1 longest Vine Swing.
-pub const VINE_MIN: f32 = 300.0;
-pub const VINE_RANGE: f32 = 900.0;
+/// Rank-1 Vine Swing distance (the champion file's ranks scale it). The
+/// king always swings this far; the cursor only aims.
+pub const VINE_RANGE: f32 = 1_500.0;
+/// A blocked landing falls back toward the king, but never closer than
+/// this share of the full swing.
+const VINE_SHORTEST: f32 = 0.45;
+/// How far the arc bows to the king's right, as a share of its length (the
+/// middle of the path sits half this far off the straight line).
+const VINE_BOW: f32 = 0.1;
+/// Top speed along the arc, units per second.
+const VINE_TOP_SPEED: f32 = 1_700.0;
+/// Speed off the run-up, as a share of the top speed.
+const VINE_START_SPEED: f32 = 0.2;
+/// Seconds of picking up speed before it plateaus.
+const VINE_RAMP: f32 = 0.6;
+/// Steps of the table that turns distance along the arc into progress.
+const ARC_STEPS: usize = 48;
 /// Untargetable for this long after landing.
 const VINE_AFTER: f32 = 0.5;
 /// How far above the arc's top the vine is tied.
@@ -142,6 +157,8 @@ pub struct VineSwing {
     /// Where the vine's free end is (the king's hand while he holds it).
     pub rope_end: Vec3,
     pub release_end: Vec3,
+    /// Distance along the arc at each of its `ARC_STEPS` steps of progress.
+    pub arc: [f32; ARC_STEPS + 1],
 }
 
 pub struct PeelShot {
@@ -325,11 +342,43 @@ pub fn steer_home(
     (pos + heading * speed * dt, heading, speed)
 }
 
-/// Swing timing: slow at the grab and the landing, fastest at the bottom
-/// of the arc, like a pendulum.
-fn swing_ease(u: f32) -> f32 {
-    let u = u.clamp(0.0, 1.0);
-    u - (std::f32::consts::TAU * u).sin() / std::f32::consts::TAU * 0.6
+/// Speed along the swing `t` seconds after the grab: it leaves the run-up
+/// at `VINE_START_SPEED` of the top speed, speeds up smoothly for
+/// `VINE_RAMP` seconds, then holds the top speed to the landing. The swing
+/// itself runs on [`swing_distance`], its integral.
+#[cfg(test)]
+fn swing_speed(t: f32) -> f32 {
+    let start = VINE_TOP_SPEED * VINE_START_SPEED;
+    start + (VINE_TOP_SPEED - start) * smoothstep(t / VINE_RAMP)
+}
+
+/// Distance along the swing `t` seconds after the grab: the integral of the
+/// speed curve (`swing_speed`).
+fn swing_distance(t: f32) -> f32 {
+    let start = VINE_TOP_SPEED * VINE_START_SPEED;
+    let x = (t / VINE_RAMP).clamp(0.0, 1.0);
+    // smoothstep integrates to x^3 - x^4 / 2 over [0, x].
+    let ramp = VINE_RAMP * (start * x + (VINE_TOP_SPEED - start) * (x * x * x - 0.5 * x.powi(4)));
+    ramp + VINE_TOP_SPEED * (t - VINE_RAMP).max(0.0)
+}
+
+/// Seconds the swing takes to cover `length` of arc.
+fn swing_duration(length: f32) -> f32 {
+    let ramp = swing_distance(VINE_RAMP);
+    if length >= ramp {
+        return VINE_RAMP + (length - ramp) / VINE_TOP_SPEED;
+    }
+    // Still picking up speed: the distance only grows, so halve the span.
+    let (mut lo, mut hi) = (0.0, VINE_RAMP);
+    for _ in 0..30 {
+        let mid = 0.5 * (lo + hi);
+        if swing_distance(mid) < length {
+            lo = mid;
+        } else {
+            hi = mid;
+        }
+    }
+    hi
 }
 
 fn smoothstep(u: f32) -> f32 {
@@ -337,11 +386,36 @@ fn smoothstep(u: f32) -> f32 {
     u * u * (3.0 - 2.0 * u)
 }
 
-/// The arc's ground track for a swing of `reach` toward `dir`.
+/// The control point of the arc's ground track: a gentle bow to the king's
+/// right, so the swing reads as a curve but always carries him forward.
 fn swing_track(grab: Vec3, land: Vec3) -> Vec3 {
     let span = planar_delta(grab, land);
     let dir = span.normalize_or_zero();
-    (grab + land) * 0.5 + right_of(dir) * (span.length() * 0.22)
+    (grab + land) * 0.5 + right_of(dir) * (span.length() * VINE_BOW)
+}
+
+/// Where a swing of `reach` toward `dir` from `start` lands: the full
+/// distance if `open` allows it, else the furthest open spot, trying a
+/// little to either side of a blocked one (a tree, a rock) before falling
+/// short, and never closer than `VINE_SHORTEST` of the reach.
+pub fn swing_landing(
+    start: Vec3,
+    dir: Vec3,
+    reach: f32,
+    open: impl Fn(Vec3) -> bool,
+) -> Option<Vec3> {
+    let side = right_of(dir);
+    let mut along = reach;
+    while along >= reach * VINE_SHORTEST {
+        for nudge in [0.0, 64.0, -64.0, 128.0, -128.0, 192.0, -192.0] {
+            let p = start + dir * along + side * nudge;
+            if open(p) {
+                return Some(p);
+            }
+        }
+        along -= 32.0;
+    }
+    None
 }
 
 /// Indicator path of a swing (XZ only).
@@ -362,6 +436,37 @@ fn swing_point(vine: &VineSwing, s: f32) -> Vec3 {
     let (h0, h1) = vine.heights;
     p.y = h0 + (h1 - h0) * smoothstep(s) + vine.lift * 4.0 * s * (1.0 - s);
     p
+}
+
+/// Distance along the swing at each of `ARC_STEPS` even steps of its
+/// progress, counting the rise and the fall.
+fn arc_table(vine: &VineSwing) -> [f32; ARC_STEPS + 1] {
+    let mut table = [0.0; ARC_STEPS + 1];
+    let mut previous = swing_point(vine, 0.0);
+    for step in 1..=ARC_STEPS {
+        let p = swing_point(vine, step as f32 / ARC_STEPS as f32);
+        table[step] = table[step - 1] + (p - previous).length();
+        previous = p;
+    }
+    table
+}
+
+/// Arc progress (0 at the grab, 1 at the landing) once `distance` of it is
+/// covered.
+fn progress_at(table: &[f32; ARC_STEPS + 1], distance: f32) -> f32 {
+    let total = table[ARC_STEPS];
+    if distance <= 0.0 || total <= 0.0 {
+        return 0.0;
+    }
+    if distance >= total {
+        return 1.0;
+    }
+    let step = table
+        .partition_point(|&len| len <= distance)
+        .clamp(1, ARC_STEPS)
+        - 1;
+    let across = (table[step + 1] - table[step]).max(1e-4);
+    (step as f32 + (distance - table[step]) / across) / ARC_STEPS as f32
 }
 
 /// How high the arc has to rise to clear the ground along the track.
@@ -476,7 +581,7 @@ impl AnimatedScene {
         true
     }
 
-    /// W: drop a vine and swing toward `target`.
+    /// W: drop a vine and swing the full distance toward `target`.
     pub(super) fn cast_vine_swing(
         &mut self,
         target: Vec3,
@@ -486,29 +591,20 @@ impl AnimatedScene {
         if !self.awowogei_ready(1) {
             return false;
         }
-        let dir = self.aim_dir(target);
+        let aim = self.aim_dir(target);
         let pi = self.player_index;
         let start = self.units[pi].pos;
-        let longest = VINE_RANGE * self.rank_reach_mult(1);
-        let wanted = planar_delta(start, target)
-            .length()
-            .clamp(VINE_MIN, longest);
-        // Land on the furthest walkable spot along the aim.
-        let mut reach = wanted;
-        let land = loop {
-            let p = start + dir * reach;
-            if collision.is_walkable_world(p.x, p.z) {
-                break Some(Vec3::new(p.x, height.height_at(p.x, p.z), p.z));
-            }
-            reach -= 32.0;
-            if reach < VINE_MIN * 0.5 {
-                break None;
-            }
-        };
-        let Some(land) = land else {
+        let reach = VINE_RANGE * self.rank_reach_mult(1);
+        // Land only where the king could walk on from: never over the map's
+        // wall or inside a pocket closed off by scenery.
+        let region = collision.walk_region(start);
+        let open = |p: Vec3| collision.is_walkable_world(p.x, p.z) && region.contains(p.x, p.z);
+        let Some(spot) = swing_landing(start, aim, reach, open) else {
             return false;
         };
-        let mut run = (reach * 0.15).min(150.0);
+        let land = Vec3::new(spot.x, height.height_at(spot.x, spot.z), spot.z);
+        let dir = planar_delta(start, land).normalize_or(aim);
+        let mut run = (planar_delta(start, land).length() * 0.15).min(150.0);
         let mut grab = start + dir * run;
         if !collision.is_walkable_world(grab.x, grab.z) {
             run = 0.0;
@@ -524,10 +620,26 @@ impl AnimatedScene {
         let pivot = Vec3::new(mid.x, top + VINE_HANG, mid.z);
         let speed = self.units[pi].speed.max(1.0);
         let run_time = (run / (speed * 1.8)).clamp(0.14, 0.3);
-        let span = planar_delta(grab, land).length();
-        let swing_time = 0.6 + span / 2_200.0;
+        let mut vine = VineSwing {
+            phase: VinePhase::Run,
+            t: 0.0,
+            start,
+            grab,
+            land,
+            control,
+            pivot,
+            run_time,
+            swing_time: 0.0,
+            lift,
+            heights,
+            rope_end: pivot,
+            release_end: pivot,
+            arc: [0.0; ARC_STEPS + 1],
+        };
+        vine.arc = arc_table(&vine);
+        vine.swing_time = swing_duration(vine.arc[ARC_STEPS]);
         self.awowogei_spend(1, COOLDOWNS[1]);
-        self.awowogei.untargetable = run_time + swing_time + VINE_AFTER;
+        self.awowogei.untargetable = run_time + vine.swing_time + VINE_AFTER;
         {
             let player = &mut self.units[pi];
             player.path.clear();
@@ -537,21 +649,7 @@ impl AnimatedScene {
             player.attack_pending = false;
             player.yaw = dir.x.atan2(dir.z);
         }
-        self.awowogei.vine = Some(VineSwing {
-            phase: VinePhase::Run,
-            t: 0.0,
-            start,
-            grab,
-            land,
-            control,
-            pivot,
-            run_time,
-            swing_time,
-            lift,
-            heights,
-            rope_end: pivot,
-            release_end: pivot,
-        });
+        self.awowogei.vine = Some(vine);
         self.emit_burst(start, [90, 170, 60], 10, 160.0, 14.0, 0.5);
         self.play_sound("w_swing", start);
         true
@@ -901,8 +999,11 @@ impl AnimatedScene {
                 }
             }
             VinePhase::Swing => {
-                let u = vine.t / vine.swing_time;
-                let s = swing_ease(u);
+                // Distance along the arc follows the speed curve: slow off the
+                // run-up, faster through the swing, then a steady top speed.
+                let covered = swing_distance(vine.t);
+                let landed = covered >= vine.arc[ARC_STEPS];
+                let s = progress_at(&vine.arc, covered);
                 let pos = swing_point(&vine, s);
                 let ahead = swing_point(&vine, (s + 0.02).min(1.0));
                 let player = &mut self.units[pi];
@@ -922,7 +1023,7 @@ impl AnimatedScene {
                     let rest = vine.pivot - Vec3::Y * (vine.pivot.y - hand.y) * 0.8;
                     vine.rope_end = vine.release_end.lerp(rest, smoothstep(k) * 0.5);
                 }
-                if u >= 1.0 {
+                if landed {
                     let land = Vec3::new(
                         vine.land.x,
                         height.height_at(vine.land.x, vine.land.z),
@@ -1252,11 +1353,85 @@ mod tests {
     }
 
     #[test]
-    fn the_swing_is_slow_at_the_ends_and_fast_in_the_middle() {
-        let speed = |u: f32| (swing_ease(u + 0.01) - swing_ease(u)) / 0.01;
-        assert!(speed(0.5) > speed(0.0) * 3.0);
-        assert!(speed(0.5) > speed(0.99) * 3.0);
-        assert!(swing_ease(0.0).abs() < 1e-6 && (swing_ease(1.0) - 1.0).abs() < 1e-6);
+    fn the_swing_starts_slow_and_speeds_up_to_a_plateau() {
+        let start = swing_speed(0.0);
+        assert!((start - VINE_TOP_SPEED * VINE_START_SPEED).abs() < 1e-3);
+        // Faster every step through the ramp...
+        let mut previous = start;
+        for i in 1..=12 {
+            let speed = swing_speed(VINE_RAMP * i as f32 / 12.0);
+            assert!(speed > previous, "step {i}: {speed} after {previous}");
+            previous = speed;
+        }
+        // ...then flat at the top speed to the landing.
+        for t in [VINE_RAMP, VINE_RAMP + 0.3, VINE_RAMP + 2.0] {
+            assert!((swing_speed(t) - VINE_TOP_SPEED).abs() < 1e-3, "{t}");
+        }
+        // The distance is the speed's running total, with no jump where
+        // the ramp meets the plateau.
+        let dt = 1e-3;
+        for t in [0.1, 0.3, VINE_RAMP - 0.01, VINE_RAMP + 0.01, 1.2] {
+            let measured = (swing_distance(t + dt) - swing_distance(t - dt)) / (2.0 * dt);
+            assert!((measured - swing_speed(t)).abs() < 2.0, "{t}: {measured}");
+        }
+        assert_eq!(swing_distance(0.0), 0.0);
+        for length in [200.0, 612.0, 1_500.0, 2_000.0] {
+            let t = swing_duration(length);
+            assert!((swing_distance(t) - length).abs() < 0.5, "{length} in {t}s");
+        }
+    }
+
+    #[test]
+    fn the_king_moves_along_the_arc_at_the_curve_speed() {
+        let mut vine = VineSwing {
+            phase: VinePhase::Swing,
+            t: 0.0,
+            start: Vec3::ZERO,
+            grab: Vec3::ZERO,
+            land: Vec3::new(0.0, 0.0, 1_500.0),
+            control: swing_track(Vec3::ZERO, Vec3::new(0.0, 0.0, 1_500.0)),
+            pivot: Vec3::ZERO,
+            run_time: 0.2,
+            swing_time: 0.0,
+            lift: 380.0,
+            heights: (0.0, 0.0),
+            rope_end: Vec3::ZERO,
+            release_end: Vec3::ZERO,
+            arc: [0.0; ARC_STEPS + 1],
+        };
+        vine.arc = arc_table(&vine);
+        let total = vine.arc[ARC_STEPS];
+        assert!(total > 1_500.0, "the rise and fall add to the ground span");
+        let at = |t: f32| swing_point(&vine, progress_at(&vine.arc, swing_distance(t)));
+        let dt = 1.0 / 60.0;
+        let step = |t: f32| (at(t + dt) - at(t)).length() / dt;
+        assert!(step(0.0) < VINE_TOP_SPEED * 0.3, "slow off the run-up");
+        assert!(step(0.3) > step(0.05) * 1.5, "picking up speed");
+        let late = step(VINE_RAMP + 0.1);
+        assert!(
+            (late - VINE_TOP_SPEED).abs() < VINE_TOP_SPEED * 0.03,
+            "{late}"
+        );
+        assert_eq!(progress_at(&vine.arc, total + 10.0), 1.0);
+        assert_eq!(progress_at(&vine.arc, -1.0), 0.0);
+    }
+
+    #[test]
+    fn the_swing_goes_the_full_distance_wherever_the_cursor_is() {
+        let dir = Vec3::Z;
+        let land = swing_landing(Vec3::ZERO, dir, 1_500.0, |_| true).unwrap();
+        assert!((land - Vec3::new(0.0, 0.0, 1_500.0)).length() < 1e-3);
+        // A tree on the landing tile: step to its side, not 1,000 units short.
+        let tree = Vec3::new(0.0, 0.0, 1_500.0);
+        let land =
+            swing_landing(Vec3::ZERO, dir, 1_500.0, |p| (p - tree).length() > 100.0).unwrap();
+        assert!(land.z >= 1_499.0 && land.x.abs() <= 128.0, "{land:?}");
+        // A wall across the far end: the furthest open spot before it.
+        let land = swing_landing(Vec3::ZERO, dir, 1_500.0, |p| p.z < 1_100.0).unwrap();
+        assert!(land.z < 1_100.0 && land.z > 1_060.0, "{land:?}");
+        // Nothing open past the shortest share: no swing.
+        let shortest = 1_500.0 * VINE_SHORTEST;
+        assert!(swing_landing(Vec3::ZERO, dir, 1_500.0, |p| p.z < shortest - 40.0).is_none());
     }
 
     #[test]
@@ -1275,14 +1450,19 @@ mod tests {
             heights: (10.0, 240.0),
             rope_end: Vec3::ZERO,
             release_end: Vec3::ZERO,
+            arc: [0.0; ARC_STEPS + 1],
         };
         assert!((swing_point(&vine, 0.0).y - 10.0).abs() < 0.01);
         let end = swing_point(&vine, 1.0);
         assert!((end.y - 240.0).abs() < 0.01, "lands up on the hill");
         assert!((end.z - 900.0).abs() < 0.01);
         assert!(swing_point(&vine, 0.5).y > 240.0, "rises above both ends");
-        let preview = swing_preview(Vec3::ZERO, Vec3::Z, 900.0);
-        assert!(preview[10].x > 50.0, "curves to the side");
+        let preview = swing_preview(Vec3::ZERO, Vec3::Z, 1_500.0);
+        let middle = preview[11];
+        assert!(middle.x > 20.0, "a gentle curve: {middle:?}");
+        assert!(middle.x < 1_500.0 * 0.08, "but mostly forward: {middle:?}");
+        let end = preview.last().unwrap();
+        assert!((end.z - 1_500.0).abs() < 1e-3, "out to the full length");
     }
 
     #[test]

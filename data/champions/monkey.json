@@ -45,13 +45,13 @@
     {
       "key": "W",
       "name": "VINE SWING",
-      "description": "A long vine drops from the canopy. The king leaps on and swings in a curving arc over hills to the target, landing softly.",
-      "damage_note": "Untargetable until 0.5 s after landing",
+      "description": "A long vine drops from the canopy. The king leaps on and swings far toward the cursor, gathering speed until he flies at full tilt.",
+      "damage_note": "Always full range; untargetable until 0.5 s after landing",
       "ranks": [
-        { "range": 900, "cooldown": 14 },
-        { "range": 975, "cooldown": 13 },
-        { "range": 1050, "cooldown": 12 },
-        { "range": 1125, "cooldown": 11 }
+        { "range": 1500, "cooldown": 14 },
+        { "range": 1600, "cooldown": 13 },
+        { "range": 1700, "cooldown": 12 },
+        { "range": 1800, "cooldown": 11 }
       ]
     },
     {

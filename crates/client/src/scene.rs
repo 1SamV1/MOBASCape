@@ -228,6 +228,20 @@ impl WorldCollision {
         !self.sight_grid.is_walkable(tx, ty)
     }
 
+    /// The tiles a walker standing at `from` can reach on foot. `from` is
+    /// snapped to the nearest walkable tile first, as a path search would.
+    pub fn walk_region(&self, from: Vec3) -> WalkRegion {
+        let (tx, ty) = self.tile_of(from.x, from.z);
+        let start = self.grid.nearest_walkable(tx, ty, 20).unwrap_or((tx, ty));
+        WalkRegion {
+            seen: self.grid.reachable_from(start),
+            width: self.grid.width(),
+            height: self.grid.height(),
+            origin_tile_x: self.origin_tile_x,
+            origin_tile_y: self.origin_tile_y,
+        }
+    }
+
     pub fn nearest_walkable_world(&self, world_x: f32, world_z: f32) -> Option<(i32, i32)> {
         let (tx, ty) = self.tile_of(world_x, world_z);
         self.grid.nearest_walkable(tx, ty, 12)
@@ -265,6 +279,29 @@ impl WorldCollision {
             return next;
         }
         pos
+    }
+}
+
+/// Tiles reachable on foot from one spot ([`WorldCollision::walk_region`]),
+/// so a leap can refuse to land somewhere its hero could never walk out of.
+pub struct WalkRegion {
+    seen: Vec<bool>,
+    width: i32,
+    height: i32,
+    origin_tile_x: i32,
+    origin_tile_y: i32,
+}
+
+impl WalkRegion {
+    /// Whether a world point stands on a tile of the region.
+    pub fn contains(&self, world_x: f32, world_z: f32) -> bool {
+        let tx = (world_x / 128.0).floor() as i32 - self.origin_tile_x;
+        let ty = (world_z / 128.0).floor() as i32 - self.origin_tile_y;
+        tx >= 0
+            && ty >= 0
+            && tx < self.width
+            && ty < self.height
+            && self.seen[(ty * self.width + tx) as usize]
     }
 }
 

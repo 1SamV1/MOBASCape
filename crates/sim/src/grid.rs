@@ -293,11 +293,73 @@ impl Grid {
             }
         }
     }
+
+    /// Every cell a walker standing on `start` can reach, in row order
+    /// (`y * width + x`). Steps go to the four side neighbours, which joins
+    /// the same cells as [`crate::find_path`]'s eight-way steps that may not
+    /// cut a blocked corner. A blocked or outside `start` reaches nothing.
+    pub fn reachable_from(&self, start: (i32, i32)) -> Vec<bool> {
+        let mut seen = vec![false; self.blocked.len()];
+        if !self.is_walkable(start.0, start.1) {
+            return seen;
+        }
+        let mut queue = std::collections::VecDeque::from([start]);
+        seen[(start.1 * self.width + start.0) as usize] = true;
+        while let Some((x, y)) = queue.pop_front() {
+            for (nx, ny) in [(x - 1, y), (x + 1, y), (x, y - 1), (x, y + 1)] {
+                if self.is_walkable(nx, ny) {
+                    let index = (ny * self.width + nx) as usize;
+                    if !seen[index] {
+                        seen[index] = true;
+                        queue.push_back((nx, ny));
+                    }
+                }
+            }
+        }
+        seen
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn reachable_cells_stop_at_a_wall_and_its_corners() {
+        // A wall down column 3 splits a 7x5 grid.
+        let mut grid = Grid::new(7, 5);
+        for y in 0..5 {
+            grid.set_blocked(3, y, true);
+        }
+        let left = grid.reachable_from((0, 0));
+        let at = |x: i32, y: i32| left[(y * 7 + x) as usize];
+        assert!(at(2, 4) && at(0, 2), "its own side");
+        assert!(!at(4, 0) && !at(6, 4), "not past the wall");
+        assert!(!at(3, 2), "not the wall itself");
+        grid.set_blocked(3, 2, false);
+        let open = grid.reachable_from((0, 0));
+        assert!(open[4 * 7 + 6], "a door in the wall lets it through");
+        assert!(
+            grid.reachable_from((3, 0)).iter().all(|seen| !seen),
+            "a blocked start"
+        );
+        assert!(
+            grid.reachable_from((-1, 0)).iter().all(|seen| !seen),
+            "outside"
+        );
+        // Two blocked cells touching at a corner seal it, as for A*.
+        let mut corner = Grid::new(3, 3);
+        corner.set_blocked(1, 0, true);
+        corner.set_blocked(0, 1, true);
+        assert!(
+            !corner.reachable_from((0, 0))[4],
+            "no squeezing past a corner"
+        );
+        assert!(
+            crate::find_path(&corner, (0, 0), (1, 1)).is_none(),
+            "A* agrees"
+        );
+    }
 
     /// The four walls of an upright box, as triangles: `half` wide each way
     /// about (cx, cz), from `bottom` to `top`.

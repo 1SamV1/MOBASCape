@@ -6082,8 +6082,8 @@ impl AnimatedScene {
                 }
             }
             Indicator::Swing { length } => {
-                let reach = to_aim.length().clamp(awowogei::VINE_MIN, length);
-                let path = awowogei::swing_preview(origin, aim_dir, reach);
+                // The swing always goes its full length; the cursor aims.
+                let path = awowogei::swing_preview(origin, aim_dir, length);
                 for pair in path.windows(2) {
                     let delta = planar_delta(pair[0], pair[1]);
                     self.fx.ground_strip(
