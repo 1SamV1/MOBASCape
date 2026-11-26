@@ -141,7 +141,6 @@ enum Command {
         /// Folder to write into.
         out: PathBuf,
     },
-    /// Run a deterministic headless 5v5 bot match and print its state hash.
     /// Print a spot animation (projectile / spell graphic) definition.
     Spotanim { id: u32 },
     /// List spot animations in an id range, optionally as a contact sheet of
@@ -188,6 +187,7 @@ enum Command {
         #[arg(long)]
         sheet: Option<PathBuf>,
     },
+    /// Run a deterministic headless 5v5 bot match and print its state hash.
     Match {
         #[arg(long, default_value_t = 1)]
         seed: u32,
