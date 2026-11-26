@@ -320,15 +320,15 @@ mod tests {
             .find(|c| c.id == "big_frog")
             .expect("big frog");
         let b = analyse(&frog);
-        // Rank 1 burst: Q 45 + W 40 + R 210 (E is a shield) at level 1.
-        assert!((b.early.burst - 295.0).abs() < 0.01, "{}", b.early.burst);
-        // Top ranks 105 + 100 + 390, times 1.48 at level 25.
+        // Rank 1 burst: Q 45 + W 30 + R 210 (E is a hex) at level 1.
+        assert!((b.early.burst - 285.0).abs() < 0.01, "{}", b.early.burst);
+        // Top ranks 105 + 60 + 390, times 1.48 at level 25.
         assert!(
-            (b.late.burst - 595.0 * 1.48).abs() < 0.01,
+            (b.late.burst - 555.0 * 1.48).abs() < 0.01,
             "{}",
             b.late.burst
         );
-        assert!((b.early.protection - 90.0).abs() < 0.01);
+        assert_eq!(b.early.protection, 0.0);
     }
 
     #[test]

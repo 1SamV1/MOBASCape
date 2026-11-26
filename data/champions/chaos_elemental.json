@@ -29,42 +29,102 @@
       "name": "DISCORD",
       "description": "A swirling bolt that burns away the target's mana.",
       "ranks": [
-        { "damage": 80, "range": 950, "cooldown": 7 },
-        { "damage": 110, "range": 950, "cooldown": 6.5 },
-        { "damage": 140, "range": 1000, "cooldown": 6 },
-        { "damage": 170, "range": 1000, "cooldown": 5.5 }
+        {
+          "damage": 80,
+          "range": 950,
+          "cooldown": 7
+        },
+        {
+          "damage": 110,
+          "range": 950,
+          "cooldown": 6.5
+        },
+        {
+          "damage": 140,
+          "range": 1000,
+          "cooldown": 6
+        },
+        {
+          "damage": 170,
+          "range": 1000,
+          "cooldown": 5.5
+        }
       ]
     },
     {
       "key": "W",
       "name": "CONFUSION",
-      "description": "A burst at the cursor throws every enemy in it somewhere nearby.",
+      "description": "A burst at the cursor throws every enemy in it somewhere nearby. At max rank they land silenced.",
       "ranks": [
-        { "damage": 50, "range": 850, "cooldown": 12 },
-        { "damage": 72, "range": 850, "cooldown": 11 },
-        { "damage": 94, "range": 900, "cooldown": 10 },
-        { "damage": 116, "range": 900, "cooldown": 9 }
+        {
+          "damage": 50,
+          "range": 850,
+          "cooldown": 12
+        },
+        {
+          "damage": 72,
+          "range": 850,
+          "cooldown": 11
+        },
+        {
+          "damage": 94,
+          "range": 900,
+          "cooldown": 10
+        },
+        {
+          "damage": 116,
+          "range": 900,
+          "cooldown": 9
+        }
       ]
     },
     {
       "key": "E",
       "name": "MADNESS",
-      "description": "A red bolt that leaves the first enemy it hits unable to attack.",
+      "description": "A red bolt that throws its victim into chaos: it cannot attack for a few seconds. At max rank it is slowed too.",
       "ranks": [
-        { "damage": 45, "range": 900, "cooldown": 14 },
-        { "damage": 65, "range": 900, "cooldown": 13 },
-        { "damage": 85, "range": 950, "cooldown": 12 },
-        { "damage": 105, "range": 950, "cooldown": 11 }
+        {
+          "damage": 45,
+          "range": 900,
+          "cooldown": 14
+        },
+        {
+          "damage": 65,
+          "range": 900,
+          "cooldown": 13
+        },
+        {
+          "damage": 85,
+          "range": 950,
+          "cooldown": 12
+        },
+        {
+          "damage": 105,
+          "range": 950,
+          "cooldown": 11
+        }
       ]
     },
     {
       "key": "R",
       "name": "CHAOS STORM",
-      "description": "Three fans of bolts, each carrying Discord, Confusion or Madness at random.",
+      "description": "Three fans of bolts, each landing a random drain, throw or disarm. At max rank a fourth fan, and the bolts pierce.",
       "ranks": [
-        { "damage": 45, "range": 900, "cooldown": 70 },
-        { "damage": 65, "range": 950, "cooldown": 60 },
-        { "damage": 85, "range": 1000, "cooldown": 50 }
+        {
+          "damage": 45,
+          "range": 900,
+          "cooldown": 70
+        },
+        {
+          "damage": 65,
+          "range": 950,
+          "cooldown": 60
+        },
+        {
+          "damage": 85,
+          "range": 1000,
+          "cooldown": 50
+        }
       ]
     }
   ],
@@ -80,16 +140,31 @@
       "type": "chaos",
       "every": 3,
       "statuses": [
-        { "type": "slow", "pct": 0.3, "duration": 1.5 },
-        { "type": "venom", "damage": 8, "duration": 3 },
-        { "type": "mana_drain", "amount": 25 }
+        {
+          "type": "slow",
+          "pct": 0.3,
+          "duration": 1.5
+        },
+        {
+          "type": "venom",
+          "damage": 8,
+          "duration": 3
+        },
+        {
+          "type": "mana_drain",
+          "amount": 25
+        }
       ]
     },
     "abilities": [
       {
         "cost": 35,
         "cooldown": 7,
-        "color": [200, 120, 255],
+        "color": [
+          200,
+          120,
+          255
+        ],
         "actions": [
           {
             "type": "projectile",
@@ -99,7 +174,10 @@
             "damage": 80,
             "width": 90,
             "on_hit": [
-              { "type": "mana_drain", "amount": 30 }
+              {
+                "type": "mana_drain",
+                "amount": 30
+              }
             ]
           }
         ]
@@ -107,17 +185,48 @@
       {
         "cost": 50,
         "cooldown": 12,
-        "color": [110, 255, 120],
+        "color": [
+          110,
+          255,
+          120
+        ],
         "actions": [
           {
             "type": "area",
-            "gfx": { "land": 550 },
+            "gfx": {
+              "land": 550
+            },
             "radius": 220,
             "range": 850,
             "delay": 0.3,
             "damage": 50,
             "on_hit": [
-              { "type": "scramble", "distance": 350 }
+              {
+                "type": "scramble",
+                "distance": 350
+              }
+            ]
+          }
+        ],
+        "mastery": [
+          {
+            "type": "area",
+            "gfx": {
+              "land": 550
+            },
+            "radius": 220,
+            "range": 850,
+            "delay": 0.3,
+            "damage": 50,
+            "on_hit": [
+              {
+                "type": "scramble",
+                "distance": 350
+              },
+              {
+                "type": "silence",
+                "duration": 1.0
+              }
             ]
           }
         ]
@@ -125,7 +234,12 @@
       {
         "cost": 45,
         "cooldown": 14,
-        "color": [255, 90, 80],
+        "color": [
+          255,
+          90,
+          80
+        ],
+        "duration_growth": 0.25,
         "actions": [
           {
             "type": "projectile",
@@ -135,7 +249,31 @@
             "damage": 45,
             "width": 80,
             "on_hit": [
-              { "type": "disarm", "duration": 2 }
+              {
+                "type": "disarm",
+                "duration": 2
+              }
+            ]
+          }
+        ],
+        "mastery": [
+          {
+            "type": "projectile",
+            "visual": "madness",
+            "speed": 1400,
+            "range": 900,
+            "damage": 45,
+            "width": 80,
+            "on_hit": [
+              {
+                "type": "disarm",
+                "duration": 2
+              },
+              {
+                "type": "slow",
+                "pct": 0.3,
+                "duration": 2
+              }
             ]
           }
         ]
@@ -143,7 +281,11 @@
       {
         "cost": 100,
         "cooldown": 70,
-        "color": [220, 160, 255],
+        "color": [
+          220,
+          160,
+          255
+        ],
         "actions": [
           {
             "type": "channel",
@@ -158,13 +300,60 @@
               "width": 80,
               "count": 3,
               "spread": 40,
+              "pierce": false,
               "on_hit": [
                 {
                   "type": "one_of",
                   "of": [
-                    { "type": "mana_drain", "amount": 40 },
-                    { "type": "scramble", "distance": 250 },
-                    { "type": "disarm", "duration": 1.5 }
+                    {
+                      "type": "mana_drain",
+                      "amount": 40
+                    },
+                    {
+                      "type": "scramble",
+                      "distance": 250
+                    },
+                    {
+                      "type": "disarm",
+                      "duration": 1.5
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        ],
+        "mastery": [
+          {
+            "type": "channel",
+            "duration": 1.6,
+            "interval": 0.4,
+            "action": {
+              "type": "projectile",
+              "visual": "chaos",
+              "speed": 1400,
+              "range": 900,
+              "damage": 45,
+              "width": 80,
+              "count": 3,
+              "spread": 40,
+              "pierce": true,
+              "on_hit": [
+                {
+                  "type": "one_of",
+                  "of": [
+                    {
+                      "type": "mana_drain",
+                      "amount": 40
+                    },
+                    {
+                      "type": "scramble",
+                      "distance": 250
+                    },
+                    {
+                      "type": "disarm",
+                      "duration": 1.5
+                    }
                   ]
                 }
               ]
@@ -177,20 +366,56 @@
   "source_npc": 2054,
   "talents": [
     [
-      {"name": "Chaotic Reserves", "type": "mana", "amount": 150},
-      {"name": "Unstable Power", "type": "ability_power", "amount": 20}
+      {
+        "name": "Chaotic Reserves",
+        "type": "mana",
+        "amount": 150
+      },
+      {
+        "name": "Unstable Power",
+        "type": "ability_power",
+        "amount": 20
+      }
     ],
     [
-      {"name": "Raw Discord", "type": "slot_damage", "slot": 0, "pct": 0.25},
-      {"name": "Lingering Confusion", "type": "slot_cooldown", "slot": 1, "pct": 0.2}
+      {
+        "name": "Raw Discord",
+        "type": "slot_damage",
+        "slot": 0,
+        "pct": 0.25
+      },
+      {
+        "name": "Lingering Confusion",
+        "type": "slot_cooldown",
+        "slot": 1,
+        "pct": 0.2
+      }
     ],
     [
-      {"name": "Erratic Drift", "type": "move_speed", "pct": 0.08},
-      {"name": "Maddening Touch", "type": "slot_cooldown", "slot": 2, "pct": 0.25}
+      {
+        "name": "Erratic Drift",
+        "type": "move_speed",
+        "pct": 0.08
+      },
+      {
+        "name": "Maddening Touch",
+        "type": "slot_cooldown",
+        "slot": 2,
+        "pct": 0.25
+      }
     ],
     [
-      {"name": "Eye of the Storm", "type": "slot_damage", "slot": 3, "pct": 0.3},
-      {"name": "Entropy", "type": "cooldown", "pct": 0.15}
+      {
+        "name": "Eye of the Storm",
+        "type": "slot_damage",
+        "slot": 3,
+        "pct": 0.3
+      },
+      {
+        "name": "Entropy",
+        "type": "cooldown",
+        "pct": 0.15
+      }
     ]
   ]
 }

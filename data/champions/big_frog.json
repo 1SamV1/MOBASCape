@@ -26,45 +26,101 @@
     {
       "key": "Q",
       "name": "TONGUE LASH",
-      "description": "Flicks its tongue down a line, dragging the first enemy hit toward the frog.",
+      "description": "Flicks its tongue down a line, dragging the first enemy hit toward the frog. At max rank the catch is rooted.",
       "ranks": [
-        { "damage": 45, "range": 850, "cooldown": 7 },
-        { "damage": 65, "range": 850, "cooldown": 6.5 },
-        { "damage": 85, "range": 900, "cooldown": 6 },
-        { "damage": 105, "range": 950, "cooldown": 5.5 }
+        {
+          "damage": 45,
+          "range": 850,
+          "cooldown": 7
+        },
+        {
+          "damage": 65,
+          "range": 850,
+          "cooldown": 6.5
+        },
+        {
+          "damage": 85,
+          "range": 900,
+          "cooldown": 6
+        },
+        {
+          "damage": 105,
+          "range": 950,
+          "cooldown": 5.5
+        }
       ]
     },
     {
       "key": "W",
-      "name": "BIG LEAP",
-      "description": "Bounds to the cursor and lands with a splash that knocks enemies up.",
+      "name": "HOP, HOP, SPLASH",
+      "description": "Three short hops held as charges. Each lands with a splash that bumps enemies up.",
       "ranks": [
-        { "damage": 40, "range": 650, "cooldown": 10 },
-        { "damage": 60, "range": 700, "cooldown": 9.5 },
-        { "damage": 80, "range": 750, "cooldown": 9 },
-        { "damage": 100, "range": 800, "cooldown": 8.5 }
+        {
+          "damage": 30,
+          "range": 300,
+          "cooldown": 4
+        },
+        {
+          "damage": 40,
+          "range": 300,
+          "cooldown": 3.75
+        },
+        {
+          "damage": 50,
+          "range": 300,
+          "cooldown": 3.5
+        },
+        {
+          "damage": 60,
+          "range": 300,
+          "cooldown": 3
+        }
       ]
     },
     {
       "key": "E",
-      "name": "SWAMP CROAK",
-      "description": "A booming croak that slows everything nearby and toughens the frog's hide.",
-      "damage_label": "Shield",
+      "name": "FROG KISS",
+      "description": "Turns an enemy into a frog for a moment. It cannot attack or cast, and can only hop slowly about. At max rank the frog also takes more damage.",
       "ranks": [
-        { "damage": 90, "range": 340, "cooldown": 12 },
-        { "damage": 115, "range": 340, "cooldown": 11.5 },
-        { "damage": 140, "range": 340, "cooldown": 11 },
-        { "damage": 165, "range": 340, "cooldown": 10 }
-      ]
+        {
+          "range": 600,
+          "cooldown": 14
+        },
+        {
+          "range": 600,
+          "cooldown": 13
+        },
+        {
+          "range": 600,
+          "cooldown": 12
+        },
+        {
+          "range": 600,
+          "cooldown": 11
+        }
+      ],
+      "damage_note": "Hex lasts 1.25/1.5/1.75/2 s"
     },
     {
       "key": "R",
       "name": "PLAGUE OF FROGS",
-      "description": "Frogs rain from the sky around the cursor, and three of them stay to fight.",
+      "description": "Frogs rain on a wide circle for three seconds, each one hitting and slowing; enemies caught are turned into frogs. At max rank three frogs stay behind to fight.",
       "ranks": [
-        { "damage": 210, "range": 900, "cooldown": 60 },
-        { "damage": 300, "range": 1000, "cooldown": 52 },
-        { "damage": 390, "range": 1100, "cooldown": 44 }
+        {
+          "damage": 210,
+          "range": 900,
+          "cooldown": 60
+        },
+        {
+          "damage": 300,
+          "range": 1000,
+          "cooldown": 52
+        },
+        {
+          "damage": 390,
+          "range": 1100,
+          "cooldown": 44
+        }
       ]
     }
   ],
@@ -90,7 +146,11 @@
       {
         "cost": 30,
         "cooldown": 7,
-        "color": [255, 120, 150],
+        "color": [
+          255,
+          120,
+          150
+        ],
         "actions": [
           {
             "type": "projectile",
@@ -100,59 +160,128 @@
             "damage": 45,
             "visual": "tongue",
             "on_hit": [
-              {"type": "pull", "distance": 300},
-              {"type": "slow", "pct": 0.3, "duration": 1.2}
+              {
+                "type": "pull",
+                "distance": 300
+              },
+              {
+                "type": "slow",
+                "pct": 0.4,
+                "duration": 1.5
+              }
             ]
           }
-        ]
-      },
-      {
-        "cost": 35,
-        "cooldown": 10,
-        "color": [120, 220, 110],
-        "actions": [
+        ],
+        "mastery": [
           {
-            "type": "dash",
-            "distance": 650,
-            "speed": 2400,
-            "to_cursor": true,
-            "untargetable": true,
-            "land": [
+            "type": "projectile",
+            "speed": 1900,
+            "range": 850,
+            "width": 90,
+            "damage": 45,
+            "visual": "tongue",
+            "on_hit": [
               {
-                "type": "area",
-                "at": "caster",
-                "radius": 260,
-                "damage": 40,
-                "on_hit": [{"type": "knockup", "duration": 0.5}]
+                "type": "pull",
+                "distance": 300
+              },
+              {
+                "type": "root",
+                "duration": 0.8
               }
             ]
           }
         ]
       },
       {
-        "cost": 30,
-        "cooldown": 12,
-        "color": [150, 255, 140],
+        "cost": 15,
+        "cooldown": 4,
+        "charges": 3,
+        "color": [
+          120,
+          220,
+          110
+        ],
         "actions": [
           {
-            "type": "area",
-            "at": "caster",
-            "radius": 340,
-            "damage": 20,
-            "on_hit": [{"type": "slow", "pct": 0.35, "duration": 1.5}]
-          },
+            "type": "dash",
+            "distance": 300,
+            "speed": 2200,
+            "to_cursor": true,
+            "untargetable": true,
+            "land": [
+              {
+                "type": "area",
+                "at": "caster",
+                "radius": 200,
+                "damage": 30,
+                "on_hit": [
+                  {
+                    "type": "knockup",
+                    "duration": 0.3
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "cost": 60,
+        "cooldown": 14,
+        "color": [
+          150,
+          255,
+          140
+        ],
+        "target": "unit",
+        "duration_growth": 0.2,
+        "actions": [
           {
-            "type": "buff",
-            "shield": 90,
-            "damage_reduction": 0.15,
-            "duration": 3
+            "type": "projectile",
+            "homing": true,
+            "visual": "tongue",
+            "speed": 1600,
+            "range": 900,
+            "damage": 0,
+            "on_hit": [
+              {
+                "type": "hex",
+                "duration": 1.25
+              }
+            ]
+          }
+        ],
+        "mastery": [
+          {
+            "type": "projectile",
+            "homing": true,
+            "visual": "tongue",
+            "speed": 1600,
+            "range": 900,
+            "damage": 0,
+            "on_hit": [
+              {
+                "type": "hex",
+                "duration": 1.25
+              },
+              {
+                "type": "mark",
+                "pct": 0.15,
+                "duration": 1.25
+              }
+            ]
           }
         ]
       },
       {
         "cost": 100,
         "cooldown": 60,
-        "color": [90, 200, 80],
+        "color": [
+          90,
+          200,
+          80
+        ],
         "actions": [
           {
             "type": "area",
@@ -160,10 +289,59 @@
             "range": 900,
             "delay": 0.4,
             "damage": 35,
-            "repeat": 6,
-            "interval": 0.18,
-            "scatter": 300,
-            "on_hit": [{"type": "slow", "pct": 0.25, "duration": 1.0}]
+            "repeat": 12,
+            "interval": 0.25,
+            "scatter": 450,
+            "on_hit": [
+              {
+                "type": "slow",
+                "pct": 0.25,
+                "duration": 1.0
+              }
+            ]
+          },
+          {
+            "type": "area",
+            "radius": 450,
+            "range": 900,
+            "delay": 3.2,
+            "on_hit": [
+              {
+                "type": "hex",
+                "duration": 1.0
+              }
+            ]
+          }
+        ],
+        "mastery": [
+          {
+            "type": "area",
+            "radius": 150,
+            "range": 900,
+            "delay": 0.4,
+            "damage": 35,
+            "repeat": 12,
+            "interval": 0.25,
+            "scatter": 450,
+            "on_hit": [
+              {
+                "type": "slow",
+                "pct": 0.25,
+                "duration": 1.0
+              }
+            ]
+          },
+          {
+            "type": "area",
+            "radius": 450,
+            "range": 900,
+            "delay": 3.2,
+            "on_hit": [
+              {
+                "type": "hex",
+                "duration": 1.0
+              }
+            ]
           },
           {
             "type": "summon",
@@ -177,24 +355,61 @@
           }
         ]
       }
-    ]
+    ],
+    "innate_per_level": 0.067
   },
   "talents": [
     [
-      {"name": "Thick Skin", "type": "health", "amount": 175},
-      {"name": "Webbed Feet", "type": "move_speed", "pct": 0.06}
+      {
+        "name": "Thick Skin",
+        "type": "health",
+        "amount": 175
+      },
+      {
+        "name": "Webbed Feet",
+        "type": "move_speed",
+        "pct": 0.06
+      }
     ],
     [
-      {"name": "Long Tongue", "type": "slot_range", "slot": 0, "pct": 0.2},
-      {"name": "Toxic Spit", "type": "slot_damage", "slot": 1, "pct": 0.25}
+      {
+        "name": "Long Tongue",
+        "type": "slot_range",
+        "slot": 0,
+        "pct": 0.2
+      },
+      {
+        "name": "Toxic Spit",
+        "type": "slot_damage",
+        "slot": 1,
+        "pct": 0.25
+      }
     ],
     [
-      {"name": "Slimy Hide", "type": "armor", "amount": 8},
-      {"name": "Spring Legs", "type": "slot_cooldown", "slot": 1, "pct": 0.25}
+      {
+        "name": "Slimy Hide",
+        "type": "armor",
+        "amount": 8
+      },
+      {
+        "name": "Spring Legs",
+        "type": "slot_cooldown",
+        "slot": 1,
+        "pct": 0.25
+      }
     ],
     [
-      {"name": "Plague Swarm", "type": "slot_damage", "slot": 3, "pct": 0.3},
-      {"name": "Croaking Chorus", "type": "cooldown", "pct": 0.15}
+      {
+        "name": "Plague Swarm",
+        "type": "slot_damage",
+        "slot": 3,
+        "pct": 0.3
+      },
+      {
+        "name": "Croaking Chorus",
+        "type": "cooldown",
+        "pct": 0.15
+      }
     ]
   ]
 }

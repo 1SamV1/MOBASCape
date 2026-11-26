@@ -2278,6 +2278,11 @@ impl App {
                         // The camp outlives all four abilities, so each one
                         // (and its graphics) lands on a live target.
                         animated.debug_sturdy(camp, 20_000.0);
+                        // Abilities start unlearned: learn one rank of each.
+                        animated.dev_level_to(6);
+                        for slot in [0, 1, 2, 3] {
+                            animated.upgrade_ability(slot);
+                        }
                         tracing::info!("demo abilities: beside camp {camp}");
                     }
                     animated.debug_grant_gold(0);
@@ -2300,6 +2305,8 @@ impl App {
                             2 => animated.cast_e(collision, height),
                             _ => animated.cast_r(aim),
                         };
+                        // Held (vector or charge) abilities fire on release.
+                        let ok = ok || animated.release_slot(slot, aim);
                         tracing::info!("demo abilities: slot {slot} cast={ok}");
                         self.demo_abilities_stage += 1;
                     }

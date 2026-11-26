@@ -26,47 +26,107 @@
   "abilities": [
     {
       "key": "Q",
-      "name": "SARADOMIN STRIKE",
-      "description": "Lightning strikes the cursor after a short delay.",
+      "name": "HOLY LIGHTNING",
+      "description": "Lightning strikes the cursor after a short delay. At max rank it strikes twice.",
       "ranks": [
-        { "damage": 70, "range": 850, "cooldown": 6 },
-        { "damage": 95, "range": 850, "cooldown": 5.5 },
-        { "damage": 120, "range": 900, "cooldown": 5 },
-        { "damage": 145, "range": 950, "cooldown": 4.5 }
+        {
+          "damage": 70,
+          "range": 850,
+          "cooldown": 6
+        },
+        {
+          "damage": 95,
+          "range": 850,
+          "cooldown": 5.5
+        },
+        {
+          "damage": 120,
+          "range": 900,
+          "cooldown": 5
+        },
+        {
+          "damage": 145,
+          "range": 950,
+          "cooldown": 4.5
+        }
       ]
     },
     {
       "key": "W",
       "name": "BLESSED DASH",
-      "description": "A quick dash; holds two charges.",
+      "description": "A quick dash; holds two charges. At max rank three.",
       "ranks": [
-        { "damage": 20, "range": 480, "cooldown": 8 },
-        { "damage": 30, "range": 480, "cooldown": 7.5 },
-        { "damage": 40, "range": 520, "cooldown": 7 },
-        { "damage": 50, "range": 560, "cooldown": 6.5 }
+        {
+          "damage": 20,
+          "range": 480,
+          "cooldown": 8
+        },
+        {
+          "damage": 30,
+          "range": 480,
+          "cooldown": 7.5
+        },
+        {
+          "damage": 40,
+          "range": 520,
+          "cooldown": 7
+        },
+        {
+          "damage": 50,
+          "range": 560,
+          "cooldown": 6.5
+        }
       ]
     },
     {
       "key": "E",
       "name": "STARLIGHT",
-      "description": "Heals her and nearby allies.",
+      "description": "Heals her and nearby allied heroes. At max rank it also removes slows.",
       "damage_label": "Heal",
       "ranks": [
-        { "damage": 90, "range": 0, "cooldown": 14 },
-        { "damage": 115, "range": 0, "cooldown": 13 },
-        { "damage": 140, "range": 0, "cooldown": 12 },
-        { "damage": 165, "range": 0, "cooldown": 11 }
+        {
+          "damage": 90,
+          "range": 500,
+          "cooldown": 14
+        },
+        {
+          "damage": 115,
+          "range": 500,
+          "cooldown": 13
+        },
+        {
+          "damage": 140,
+          "range": 500,
+          "cooldown": 12
+        },
+        {
+          "damage": 165,
+          "range": 500,
+          "cooldown": 11
+        }
       ]
     },
     {
       "key": "R",
-      "name": "GODSWORD SPECIAL",
-      "description": "Her next hit deals huge damage; a kill resets Blessed Dash.",
+      "name": "HEALING BLADE",
+      "description": "Her next hit deals huge damage and heals her for half of it. A kill resets Blessed Dash.",
       "damage_label": "Bonus damage",
       "ranks": [
-        { "damage": 150, "range": 0, "cooldown": 50 },
-        { "damage": 225, "range": 0, "cooldown": 44 },
-        { "damage": 300, "range": 0, "cooldown": 38 }
+        {
+          "damage": 150,
+          "range": 0,
+          "cooldown": 50
+        },
+        {
+          "damage": 225,
+          "range": 0,
+          "cooldown": 44
+        },
+        {
+          "damage": 300,
+          "range": 0,
+          "cooldown": 38
+        }
       ]
     }
   ],
@@ -99,6 +159,26 @@
             "range": 850,
             "delay": 0.5,
             "damage": 70,
+            "repeat": 1,
+            "interval": 0.4,
+            "on_hit": [
+              {
+                "type": "slow",
+                "pct": 0.2,
+                "duration": 1.0
+              }
+            ]
+          }
+        ],
+        "mastery": [
+          {
+            "type": "area",
+            "radius": 170,
+            "range": 850,
+            "delay": 0.5,
+            "damage": 70,
+            "repeat": 2,
+            "interval": 0.4,
             "on_hit": [
               {
                 "type": "slow",
@@ -113,6 +193,7 @@
         "cost": 20,
         "cooldown": 8,
         "charges": 2,
+        "mastery_charges": 3,
         "color": [
           180,
           220,
@@ -140,6 +221,17 @@
           {
             "type": "buff",
             "heal": 90,
+            "allies": 500,
+            "cleanse": false,
+            "duration": 1
+          }
+        ],
+        "mastery": [
+          {
+            "type": "buff",
+            "heal": 90,
+            "allies": 500,
+            "cleanse": true,
             "duration": 1
           }
         ]
@@ -158,6 +250,7 @@
             "duration": 6,
             "bonus": 150,
             "missing_health": 0.15,
+            "heal_pct": 0.5,
             "reset_on_kill": 1
           }
         ]
@@ -167,20 +260,56 @@
   "source_npc": 2205,
   "talents": [
     [
-      {"name": "Blessed Blade", "type": "damage", "amount": 15},
-      {"name": "Light of Saradomin", "type": "move_speed", "pct": 0.06}
+      {
+        "name": "Blessed Blade",
+        "type": "damage",
+        "amount": 15
+      },
+      {
+        "name": "Light of Saradomin",
+        "type": "move_speed",
+        "pct": 0.06
+      }
     ],
     [
-      {"name": "Holy Strike", "type": "slot_damage", "slot": 0, "pct": 0.25},
-      {"name": "Long Dash", "type": "slot_range", "slot": 1, "pct": 0.2}
+      {
+        "name": "Holy Strike",
+        "type": "slot_damage",
+        "slot": 0,
+        "pct": 0.25
+      },
+      {
+        "name": "Long Dash",
+        "type": "slot_range",
+        "slot": 1,
+        "pct": 0.2
+      }
     ],
     [
-      {"name": "Swift Strikes", "type": "attack_speed", "pct": 0.25},
-      {"name": "Starlit Path", "type": "slot_cooldown", "slot": 2, "pct": 0.25}
+      {
+        "name": "Swift Strikes",
+        "type": "attack_speed",
+        "pct": 0.25
+      },
+      {
+        "name": "Starlit Path",
+        "type": "slot_cooldown",
+        "slot": 2,
+        "pct": 0.25
+      }
     ],
     [
-      {"name": "Godsword Mastery", "type": "slot_damage", "slot": 3, "pct": 0.3},
-      {"name": "Saradomin's Favour", "type": "cooldown", "pct": 0.15}
+      {
+        "name": "Godsword Mastery",
+        "type": "slot_damage",
+        "slot": 3,
+        "pct": 0.3
+      },
+      {
+        "name": "Saradomin's Favour",
+        "type": "cooldown",
+        "pct": 0.15
+      }
     ]
   ]
 }

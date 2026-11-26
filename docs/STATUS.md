@@ -44,6 +44,16 @@ Last updated: kit runtime for every hero, levels to 25 and talents,
 - **Every kit hero casts its kit (SYS-9).** One `KitRuntime` per kit
   champion, bots included; bots learn ranks, attack through the kit and
   cast by plan (heal when hurt, dash at heroes, damage in reach).
+- **Reworked kits for the 16 data-driven heroes** (docs/ABILITY_REWORK.md
+  approval log): masteries at max rank, unit/ally targeting, recast,
+  toggles, vector and charge casts, and the new statuses. Every ability
+  casts in `--demo-abilities`. Known gaps: the Bloat's wall grapple and
+  rope reel-in, Icy Breath's shatter, Hop's third-hop splash, Plague's
+  three-frog count (it hexes everyone still in the circle), Gale Shot's
+  wall stun, Feather Flurry's knockback, Web Nest hiding and speed, Pounce's
+  cooldown refund, YARRRRRRR!'s kill refund, the Tongue Lash zip, and a
+  charge bar on the HUD. Awowogei and the Ranger keep their hand-written kits
+  until their rework.
 - **Levels to 25 and talents (SYS-3, SYS-7).** Abilities start unlearned;
   level 1 gives the first point. R ranks unlock at 6/11/16. Levels 10, 15,
   20 and 25 give a pick between two talents (`talents` in each champion

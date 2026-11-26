@@ -26,44 +26,104 @@
     {
       "key": "Q",
       "name": "TRIPLE BITE",
-      "description": "Three quick bites in front; the last one slows.",
+      "description": "Three quick bites in front; the last one slows. At max rank it stuns instead.",
       "ranks": [
-        { "damage": 66, "range": 230, "cooldown": 6 },
-        { "damage": 90, "range": 230, "cooldown": 5.5 },
-        { "damage": 114, "range": 230, "cooldown": 5 },
-        { "damage": 138, "range": 230, "cooldown": 4.5 }
+        {
+          "damage": 66,
+          "range": 230,
+          "cooldown": 6
+        },
+        {
+          "damage": 90,
+          "range": 230,
+          "cooldown": 5.5
+        },
+        {
+          "damage": 114,
+          "range": 230,
+          "cooldown": 5
+        },
+        {
+          "damage": 138,
+          "range": 230,
+          "cooldown": 4.5
+        }
       ]
     },
     {
       "key": "W",
       "name": "LAVA POOLS",
-      "description": "Spits three pools of lava that burn enemies standing in them.",
+      "description": "Spits three pools of lava along the line you draw (press, drag, release). Enemies in them burn and slow; Cerberus heals while he stands in one. At max rank the pools erupt as they fade.",
       "ranks": [
-        { "damage": 112, "range": 900, "cooldown": 10 },
-        { "damage": 150, "range": 950, "cooldown": 9.5 },
-        { "damage": 190, "range": 1000, "cooldown": 9 },
-        { "damage": 230, "range": 1050, "cooldown": 8.5 }
+        {
+          "damage": 112,
+          "range": 900,
+          "cooldown": 10
+        },
+        {
+          "damage": 150,
+          "range": 950,
+          "cooldown": 9.5
+        },
+        {
+          "damage": 190,
+          "range": 1000,
+          "cooldown": 9
+        },
+        {
+          "damage": 230,
+          "range": 1050,
+          "cooldown": 8.5
+        }
       ]
     },
     {
       "key": "E",
       "name": "SUMMONED SOULS",
-      "description": "A ranger, mage and warrior soul fly out in a line, draining mana.",
+      "description": "Ranger, mage and warrior souls fly out in a fan; each soul slows, drains mana or stuns.",
       "ranks": [
-        { "damage": 38, "range": 1000, "cooldown": 12 },
-        { "damage": 52, "range": 1000, "cooldown": 11 },
-        { "damage": 66, "range": 1000, "cooldown": 10 },
-        { "damage": 80, "range": 1000, "cooldown": 9 }
+        {
+          "damage": 38,
+          "range": 1000,
+          "cooldown": 12
+        },
+        {
+          "damage": 52,
+          "range": 1000,
+          "cooldown": 11
+        },
+        {
+          "damage": 66,
+          "range": 1000,
+          "cooldown": 10
+        },
+        {
+          "damage": 80,
+          "range": 1000,
+          "cooldown": 9
+        }
       ]
     },
     {
       "key": "R",
       "name": "HELLHOUND HOWL",
-      "description": "Every nearby enemy flees in fear.",
+      "description": "Every nearby enemy flees in fear, and hellhounds join the hunt. At max rank feared enemies take more damage.",
       "ranks": [
-        { "damage": 80, "range": 520, "cooldown": 65 },
-        { "damage": 130, "range": 520, "cooldown": 58 },
-        { "damage": 180, "range": 520, "cooldown": 50 }
+        {
+          "damage": 80,
+          "range": 520,
+          "cooldown": 65
+        },
+        {
+          "damage": 130,
+          "range": 520,
+          "cooldown": 58
+        },
+        {
+          "damage": 180,
+          "range": 520,
+          "cooldown": 50
+        }
       ]
     }
   ],
@@ -114,11 +174,36 @@
               }
             ]
           }
+        ],
+        "mastery": [
+          {
+            "type": "area",
+            "at": "front",
+            "radius": 230,
+            "arc": 120,
+            "damage": 22,
+            "repeat": 3,
+            "interval": 0.18
+          },
+          {
+            "type": "area",
+            "at": "front",
+            "radius": 230,
+            "arc": 120,
+            "delay": 0.4,
+            "on_hit": [
+              {
+                "type": "stun",
+                "duration": 0.6
+              }
+            ]
+          }
         ]
       },
       {
         "cost": 45,
         "cooldown": 10,
+        "vector": true,
         "color": [
           255,
           120,
@@ -133,7 +218,42 @@
             "tick": 0.5,
             "range": 900,
             "count": 3,
-            "spacing": 210
+            "spacing": 210,
+            "heal_caster": 15,
+            "on_tick": [
+              {
+                "type": "slow",
+                "pct": 0.2,
+                "duration": 0.6
+              }
+            ]
+          }
+        ],
+        "mastery": [
+          {
+            "type": "zone",
+            "radius": 150,
+            "duration": 4,
+            "damage": 14,
+            "tick": 0.5,
+            "range": 900,
+            "count": 3,
+            "spacing": 210,
+            "heal_caster": 15,
+            "on_tick": [
+              {
+                "type": "slow",
+                "pct": 0.2,
+                "duration": 0.6
+              }
+            ]
+          },
+          {
+            "type": "area",
+            "radius": 380,
+            "range": 900,
+            "delay": 4.0,
+            "damage": 120
           }
         ]
       },
@@ -158,8 +278,22 @@
             "spread": 24,
             "on_hit": [
               {
-                "type": "mana_drain",
-                "amount": 30
+                "type": "one_of",
+                "of": [
+                  {
+                    "type": "slow",
+                    "pct": 0.3,
+                    "duration": 1.5
+                  },
+                  {
+                    "type": "mana_drain",
+                    "amount": 30
+                  },
+                  {
+                    "type": "stun",
+                    "duration": 0.5
+                  }
+                ]
               }
             ]
           }
@@ -173,6 +307,8 @@
           60,
           40
         ],
+        "duration_growth": 0.1875,
+        "count_growth": 1,
         "actions": [
           {
             "type": "area",
@@ -185,6 +321,47 @@
                 "duration": 1.6
               }
             ]
+          },
+          {
+            "type": "summon",
+            "npc": 104,
+            "count": 2,
+            "duration": 6,
+            "health": 160,
+            "damage": 14,
+            "scale": 0.8,
+            "speed": 520,
+            "at": "caster"
+          }
+        ],
+        "mastery": [
+          {
+            "type": "area",
+            "at": "caster",
+            "radius": 520,
+            "damage": 80,
+            "on_hit": [
+              {
+                "type": "fear",
+                "duration": 1.6
+              },
+              {
+                "type": "mark",
+                "pct": 0.2,
+                "duration": 1.6
+              }
+            ]
+          },
+          {
+            "type": "summon",
+            "npc": 104,
+            "count": 2,
+            "duration": 6,
+            "health": 160,
+            "damage": 14,
+            "scale": 0.8,
+            "speed": 520,
+            "at": "caster"
           }
         ]
       }
@@ -193,20 +370,56 @@
   "source_npc": 5862,
   "talents": [
     [
-      {"name": "Hellforged Hide", "type": "health", "amount": 225},
-      {"name": "Sharp Fangs", "type": "damage", "amount": 15}
+      {
+        "name": "Hellforged Hide",
+        "type": "health",
+        "amount": 225
+      },
+      {
+        "name": "Sharp Fangs",
+        "type": "damage",
+        "amount": 15
+      }
     ],
     [
-      {"name": "Three Heads", "type": "slot_damage", "slot": 0, "pct": 0.25},
-      {"name": "Molten Ground", "type": "slot_cooldown", "slot": 1, "pct": 0.2}
+      {
+        "name": "Three Heads",
+        "type": "slot_damage",
+        "slot": 0,
+        "pct": 0.25
+      },
+      {
+        "name": "Molten Ground",
+        "type": "slot_cooldown",
+        "slot": 1,
+        "pct": 0.2
+      }
     ],
     [
-      {"name": "Guardian of the Gate", "type": "armor", "amount": 10},
-      {"name": "Restless Souls", "type": "slot_cooldown", "slot": 2, "pct": 0.25}
+      {
+        "name": "Guardian of the Gate",
+        "type": "armor",
+        "amount": 10
+      },
+      {
+        "name": "Restless Souls",
+        "type": "slot_cooldown",
+        "slot": 2,
+        "pct": 0.25
+      }
     ],
     [
-      {"name": "Pack Leader", "type": "slot_damage", "slot": 3, "pct": 0.3},
-      {"name": "Hunting Pace", "type": "move_speed", "pct": 0.08}
+      {
+        "name": "Pack Leader",
+        "type": "slot_damage",
+        "slot": 3,
+        "pct": 0.3
+      },
+      {
+        "name": "Hunting Pace",
+        "type": "move_speed",
+        "pct": 0.08
+      }
     ]
   ]
 }

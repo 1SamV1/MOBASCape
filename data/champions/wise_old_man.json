@@ -36,45 +36,105 @@
     {
       "key": "Q",
       "name": "TELEKINETIC GRAB",
-      "description": "Yanks the first enemy hit toward him.",
+      "description": "Lifts an enemy into the air, stunned. Press again to choose where it lands; the landing stuns enemies around it.",
       "ranks": [
-        { "damage": 35, "range": 1000, "cooldown": 9 },
-        { "damage": 55, "range": 1000, "cooldown": 8.5 },
-        { "damage": 75, "range": 1050, "cooldown": 8 },
-        { "damage": 95, "range": 1100, "cooldown": 7.5 }
+        {
+          "damage": 35,
+          "range": 700,
+          "cooldown": 12
+        },
+        {
+          "damage": 55,
+          "range": 700,
+          "cooldown": 11
+        },
+        {
+          "damage": 75,
+          "range": 700,
+          "cooldown": 10
+        },
+        {
+          "damage": 95,
+          "range": 700,
+          "cooldown": 9
+        }
       ]
     },
     {
       "key": "W",
       "name": "TELEPORT OTHER",
-      "description": "Hurls nearby enemies away from him.",
+      "description": "Hurls nearby enemies away from him. At max rank they are slowed.",
       "ranks": [
-        { "damage": 30, "range": 360, "cooldown": 12 },
-        { "damage": 50, "range": 360, "cooldown": 11 },
-        { "damage": 70, "range": 360, "cooldown": 10 },
-        { "damage": 90, "range": 360, "cooldown": 9 }
+        {
+          "damage": 30,
+          "range": 360,
+          "cooldown": 12
+        },
+        {
+          "damage": 50,
+          "range": 360,
+          "cooldown": 11
+        },
+        {
+          "damage": 70,
+          "range": 360,
+          "cooldown": 10
+        },
+        {
+          "damage": 90,
+          "range": 360,
+          "cooldown": 9
+        }
       ]
     },
     {
       "key": "E",
       "name": "WARD OF AGES",
-      "description": "Shields himself and heals over the next hits.",
+      "description": "Wards an ally or himself: a shield that also shakes off slows and roots. At max rank he also gains speed.",
       "damage_label": "Shield",
       "ranks": [
-        { "damage": 130, "range": 0, "cooldown": 13 },
-        { "damage": 160, "range": 0, "cooldown": 12 },
-        { "damage": 190, "range": 0, "cooldown": 11 },
-        { "damage": 220, "range": 0, "cooldown": 10 }
+        {
+          "damage": 130,
+          "range": 700,
+          "cooldown": 13
+        },
+        {
+          "damage": 160,
+          "range": 700,
+          "cooldown": 12
+        },
+        {
+          "damage": 190,
+          "range": 700,
+          "cooldown": 11
+        },
+        {
+          "damage": 220,
+          "range": 700,
+          "cooldown": 10
+        }
       ]
     },
     {
       "key": "R",
       "name": "PARTY ROOM BALLOONS",
-      "description": "Balloons pop across an area: enemies are stunned, he is healed.",
+      "description": "Balloons pop across an area; enemies are stunned and he is healed. At max rank party hats heal allies too.",
       "ranks": [
-        { "damage": 320, "range": 1000, "cooldown": 70 },
-        { "damage": 450, "range": 1100, "cooldown": 62 },
-        { "damage": 580, "range": 1200, "cooldown": 54 }
+        {
+          "damage": 320,
+          "range": 1000,
+          "cooldown": 70
+        },
+        {
+          "damage": 450,
+          "range": 1100,
+          "cooldown": 62
+        },
+        {
+          "damage": 580,
+          "range": 1200,
+          "cooldown": 54
+        }
       ]
     }
   ],
@@ -92,8 +152,10 @@
     },
     "abilities": [
       {
-        "cost": 40,
-        "cooldown": 9,
+        "cost": 50,
+        "cooldown": 12,
+        "target": "unit",
+        "duration_growth": 0.167,
         "color": [
           255,
           230,
@@ -101,24 +163,37 @@
         ],
         "actions": [
           {
-            "type": "projectile",
-            "visual": "telegrab",
-            "speed": 1400,
-            "range": 1000,
+            "type": "strike",
             "damage": 35,
-            "width": 100,
             "on_hit": [
               {
-                "type": "pull",
-                "distance": 600
-              },
-              {
-                "type": "stun",
-                "duration": 0.5
+                "type": "knockup",
+                "duration": 1.2
               }
             ]
           }
-        ]
+        ],
+        "recast": [
+          {
+            "type": "toss",
+            "distance": 375,
+            "land": [
+              {
+                "type": "area",
+                "at": "caster",
+                "radius": 220,
+                "delay": 0.35,
+                "on_hit": [
+                  {
+                    "type": "stun",
+                    "duration": 0.5
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "recast_window": 1.2
       },
       {
         "cost": 45,
@@ -131,7 +206,9 @@
         "actions": [
           {
             "type": "area",
-            "gfx": { "hit": 111 },
+            "gfx": {
+              "hit": 111
+            },
             "at": "caster",
             "radius": 360,
             "damage": 30,
@@ -142,11 +219,34 @@
               }
             ]
           }
+        ],
+        "mastery": [
+          {
+            "type": "area",
+            "gfx": {
+              "hit": 111
+            },
+            "at": "caster",
+            "radius": 360,
+            "damage": 30,
+            "on_hit": [
+              {
+                "type": "knockback",
+                "distance": 420
+              },
+              {
+                "type": "slow",
+                "pct": 0.3,
+                "duration": 2
+              }
+            ]
+          }
         ]
       },
       {
         "cost": 45,
         "cooldown": 13,
+        "target": "ally",
         "color": [
           180,
           200,
@@ -155,10 +255,30 @@
         "actions": [
           {
             "type": "buff",
-            "gfx": { "cast": 744 },
+            "on_target": true,
+            "gfx": {
+              "cast": 744
+            },
             "shield": 130,
-            "heal": 40,
+            "cleanse": true,
             "duration": 4
+          }
+        ],
+        "mastery": [
+          {
+            "type": "buff",
+            "on_target": true,
+            "gfx": {
+              "cast": 744
+            },
+            "shield": 130,
+            "cleanse": true,
+            "duration": 4
+          },
+          {
+            "type": "buff",
+            "move_speed": 0.2,
+            "duration": 3
           }
         ]
       },
@@ -188,6 +308,30 @@
               }
             ]
           }
+        ],
+        "mastery": [
+          {
+            "type": "area",
+            "radius": 170,
+            "range": 1000,
+            "delay": 0.5,
+            "damage": 40,
+            "repeat": 8,
+            "interval": 0.12,
+            "scatter": 320,
+            "heal_per_hit": 12,
+            "on_hit": [
+              {
+                "type": "stun",
+                "duration": 0.7
+              }
+            ]
+          },
+          {
+            "type": "buff",
+            "heal": 60,
+            "allies": 600
+          }
         ]
       }
     ]
@@ -195,20 +339,56 @@
   "source_npc": 2108,
   "talents": [
     [
-      {"name": "Old Wisdom", "type": "mana", "amount": 150},
-      {"name": "Lore Keeper", "type": "ability_power", "amount": 20}
+      {
+        "name": "Old Wisdom",
+        "type": "mana",
+        "amount": 150
+      },
+      {
+        "name": "Lore Keeper",
+        "type": "ability_power",
+        "amount": 20
+      }
     ],
     [
-      {"name": "Far Grab", "type": "slot_range", "slot": 0, "pct": 0.2},
-      {"name": "Quick Teleport", "type": "slot_cooldown", "slot": 1, "pct": 0.2}
+      {
+        "name": "Far Grab",
+        "type": "slot_range",
+        "slot": 0,
+        "pct": 0.2
+      },
+      {
+        "name": "Quick Teleport",
+        "type": "slot_cooldown",
+        "slot": 1,
+        "pct": 0.2
+      }
     ],
     [
-      {"name": "Spry for His Age", "type": "move_speed", "pct": 0.08},
-      {"name": "Ageless Ward", "type": "slot_cooldown", "slot": 2, "pct": 0.25}
+      {
+        "name": "Spry for His Age",
+        "type": "move_speed",
+        "pct": 0.08
+      },
+      {
+        "name": "Ageless Ward",
+        "type": "slot_cooldown",
+        "slot": 2,
+        "pct": 0.25
+      }
     ],
     [
-      {"name": "Party Animal", "type": "slot_damage", "slot": 3, "pct": 0.3},
-      {"name": "Draynor Bank Heist", "type": "cooldown", "pct": 0.15}
+      {
+        "name": "Party Animal",
+        "type": "slot_damage",
+        "slot": 3,
+        "pct": 0.3
+      },
+      {
+        "name": "Draynor Bank Heist",
+        "type": "cooldown",
+        "pct": 0.15
+      }
     ]
   ]
 }

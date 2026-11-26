@@ -1141,7 +1141,11 @@ impl AnimatedScene {
 
     /// The player let go of `slot`'s key: a held vector or charge fires.
     pub fn release_slot(&mut self, slot: usize, target: Vec3) -> bool {
-        self.kit_release(slot, target)
+        let ok = self.kit_release(slot, target);
+        if ok {
+            self.after_cast(slot, true);
+        }
+        ok
     }
 
     /// Cast slot 0..4 of `caster`'s kit at `target`, a tap: full charge,

@@ -26,46 +26,101 @@
     {
       "key": "Q",
       "name": "MANDIBLE CRUSH",
-      "description": "A crushing bite in front that stuns.",
+      "description": "A crushing bite in front that stuns. At max rank she heals off the bite and the bitten take more damage for 4 seconds.",
       "ranks": [
-        { "damage": 60, "range": 260, "cooldown": 8 },
-        { "damage": 85, "range": 260, "cooldown": 7.5 },
-        { "damage": 110, "range": 260, "cooldown": 7 },
-        { "damage": 135, "range": 260, "cooldown": 6.5 }
+        {
+          "damage": 60,
+          "range": 260,
+          "cooldown": 8
+        },
+        {
+          "damage": 85,
+          "range": 260,
+          "cooldown": 7.5
+        },
+        {
+          "damage": 110,
+          "range": 260,
+          "cooldown": 7
+        },
+        {
+          "damage": 135,
+          "range": 260,
+          "cooldown": 6.5
+        }
       ]
     },
     {
       "key": "W",
-      "name": "BURROW",
-      "description": "Digs to a point; she cannot be hit while underground.",
+      "name": "UNDERMINE",
+      "description": "Burrows to the cursor, unhittable underground, then bursts out, damaging and mini-stunning enemies around her. At max rank she leaves an acid pool that slows.",
       "ranks": [
-        { "damage": 40, "range": 750, "cooldown": 12 },
-        { "damage": 60, "range": 800, "cooldown": 11 },
-        { "damage": 80, "range": 850, "cooldown": 10 },
-        { "damage": 100, "range": 900, "cooldown": 9 }
+        {
+          "damage": 40,
+          "range": 750,
+          "cooldown": 12
+        },
+        {
+          "damage": 60,
+          "range": 800,
+          "cooldown": 11
+        },
+        {
+          "damage": 80,
+          "range": 850,
+          "cooldown": 10
+        },
+        {
+          "damage": 100,
+          "range": 900,
+          "cooldown": 9
+        }
       ]
     },
     {
       "key": "E",
-      "name": "CHITIN",
-      "description": "Hardens her shell: less damage taken and melee attackers are hurt.",
-      "damage_label": "Defence",
-      "damage_note": "25% less damage, 40% reflected",
+      "name": "SPIKED CARAPACE",
+      "description": "For a moment the first hit from each enemy is sent back and stuns the attacker. Each cast can catch the same attacker again. At max rank the window is longer and reflects double.",
+      "damage_note": "Reflects and stuns each attacker for 1 s",
       "ranks": [
-        { "range": 0, "cooldown": 14 },
-        { "range": 0, "cooldown": 13 },
-        { "range": 0, "cooldown": 12 },
-        { "range": 0, "cooldown": 11 }
+        {
+          "range": 0,
+          "cooldown": 14
+        },
+        {
+          "range": 0,
+          "cooldown": 13
+        },
+        {
+          "range": 0,
+          "cooldown": 12
+        },
+        {
+          "range": 0,
+          "cooldown": 11
+        }
       ]
     },
     {
       "key": "R",
-      "name": "SWARM",
-      "description": "Kalphite workers burst out and charge in a line.",
+      "name": "KALPHITE SWARM",
+      "description": "Kalphite workers burrow up around an enemy hero, close in and attack it for 7 seconds. They are heavily armoured but frail. At max rank soldiers come instead.",
       "ranks": [
-        { "damage": 110, "range": 1100, "cooldown": 70 },
-        { "damage": 165, "range": 1150, "cooldown": 62 },
-        { "damage": 220, "range": 1200, "cooldown": 54 }
+        {
+          "damage": 14,
+          "range": 1100,
+          "cooldown": 70
+        },
+        {
+          "damage": 20,
+          "range": 1100,
+          "cooldown": 62
+        },
+        {
+          "damage": 26,
+          "range": 1100,
+          "cooldown": 54
+        }
       ]
     }
   ],
@@ -85,7 +140,9 @@
       "duration": 8,
       "scale": 1.2,
       "range": 250,
-      "damage": 0.3
+      "damage": 0.3,
+      "armor": -10,
+      "move_speed": 0.15
     },
     "abilities": [
       {
@@ -110,6 +167,27 @@
               }
             ]
           }
+        ],
+        "mastery": [
+          {
+            "type": "area",
+            "at": "front",
+            "radius": 260,
+            "arc": 100,
+            "damage": 60,
+            "heal_per_hit": 27,
+            "on_hit": [
+              {
+                "type": "stun",
+                "duration": 0.8
+              },
+              {
+                "type": "mark",
+                "pct": 0.3,
+                "duration": 4
+              }
+            ]
+          }
         ]
       },
       {
@@ -131,13 +209,49 @@
               {
                 "type": "area",
                 "at": "caster",
-                "radius": 260,
+                "radius": 300,
                 "damage": 40,
                 "on_hit": [
                   {
+                    "type": "stun",
+                    "duration": 0.5
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "mastery": [
+          {
+            "type": "dash",
+            "distance": 750,
+            "speed": 1500,
+            "to_cursor": true,
+            "untargetable": true,
+            "land": [
+              {
+                "type": "area",
+                "at": "caster",
+                "radius": 300,
+                "damage": 40,
+                "on_hit": [
+                  {
+                    "type": "stun",
+                    "duration": 0.5
+                  }
+                ]
+              },
+              {
+                "type": "zone",
+                "at": "caster",
+                "radius": 260,
+                "duration": 3,
+                "tick": 0.5,
+                "on_tick": [
+                  {
                     "type": "slow",
-                    "pct": 0.3,
-                    "duration": 1.2
+                    "pct": 0.25,
+                    "duration": 0.6
                   }
                 ]
               }
@@ -156,9 +270,16 @@
         "actions": [
           {
             "type": "buff",
-            "damage_reduction": 0.25,
-            "reflect": 0.4,
-            "duration": 4
+            "reflect_stun": 1.0,
+            "duration": 1.5
+          }
+        ],
+        "mastery": [
+          {
+            "type": "buff",
+            "reflect_stun": 1.0,
+            "reflect": 2.0,
+            "duration": 2.0
           }
         ]
       },
@@ -170,31 +291,34 @@
           170,
           80
         ],
+        "target": "unit",
+        "cast_range": 1100,
         "actions": [
           {
             "type": "summon",
             "npc": 955,
             "count": 4,
             "duration": 7,
-            "health": 140,
-            "damage": 10,
+            "health": 80,
+            "damage": 14,
+            "armor": 80,
             "scale": 1.3,
-            "at": "front"
-          },
+            "at": "target",
+            "focus": true
+          }
+        ],
+        "mastery": [
           {
-            "type": "projectile",
-            "visual": "acid",
-            "speed": 900,
-            "range": 1100,
-            "damage": 110,
-            "width": 260,
-            "pierce": true,
-            "on_hit": [
-              {
-                "type": "knockback",
-                "distance": 180
-              }
-            ]
+            "type": "summon",
+            "npc": 138,
+            "count": 4,
+            "duration": 7,
+            "health": 80,
+            "damage": 14,
+            "armor": 80,
+            "scale": 1.3,
+            "at": "target",
+            "focus": true
           }
         ]
       }
@@ -203,20 +327,56 @@
   "source_npc": 963,
   "talents": [
     [
-      {"name": "Royal Carapace", "type": "health", "amount": 200},
-      {"name": "Serrated Mandibles", "type": "damage", "amount": 15}
+      {
+        "name": "Royal Carapace",
+        "type": "health",
+        "amount": 200
+      },
+      {
+        "name": "Serrated Mandibles",
+        "type": "damage",
+        "amount": 15
+      }
     ],
     [
-      {"name": "Crushing Bite", "type": "slot_damage", "slot": 0, "pct": 0.25},
-      {"name": "Deep Tunnels", "type": "slot_range", "slot": 1, "pct": 0.2}
+      {
+        "name": "Crushing Bite",
+        "type": "slot_damage",
+        "slot": 0,
+        "pct": 0.25
+      },
+      {
+        "name": "Deep Tunnels",
+        "type": "slot_range",
+        "slot": 1,
+        "pct": 0.2
+      }
     ],
     [
-      {"name": "Hardened Chitin", "type": "armor", "amount": 12},
-      {"name": "Quick Moult", "type": "slot_cooldown", "slot": 2, "pct": 0.25}
+      {
+        "name": "Hardened Chitin",
+        "type": "armor",
+        "amount": 12
+      },
+      {
+        "name": "Quick Moult",
+        "type": "slot_cooldown",
+        "slot": 2,
+        "pct": 0.25
+      }
     ],
     [
-      {"name": "Hive Mind", "type": "slot_damage", "slot": 3, "pct": 0.3},
-      {"name": "Frenzy of the Hive", "type": "attack_speed", "pct": 0.25}
+      {
+        "name": "Hive Mind",
+        "type": "slot_damage",
+        "slot": 3,
+        "pct": 0.3
+      },
+      {
+        "name": "Frenzy of the Hive",
+        "type": "attack_speed",
+        "pct": 0.25
+      }
     ]
   ]
 }

@@ -26,47 +26,102 @@
     {
       "key": "Q",
       "name": "SMASH",
-      "description": "Slams the ground in a cone, damaging and slowing enemies.",
+      "description": "Slams the ground in a cone, damaging and slowing enemies. At max rank enemies at the tip are knocked up.",
       "ranks": [
-        { "damage": 55, "range": 430, "cooldown": 7 },
-        { "damage": 80, "range": 430, "cooldown": 6.5 },
-        { "damage": 105, "range": 430, "cooldown": 6 },
-        { "damage": 130, "range": 430, "cooldown": 5.5 }
+        {
+          "damage": 55,
+          "range": 430,
+          "cooldown": 7
+        },
+        {
+          "damage": 80,
+          "range": 430,
+          "cooldown": 6.5
+        },
+        {
+          "damage": 105,
+          "range": 430,
+          "cooldown": 6
+        },
+        {
+          "damage": 130,
+          "range": 430,
+          "cooldown": 5.5
+        }
       ]
     },
     {
       "key": "W",
       "name": "BODYGUARDS",
-      "description": "Summons Strongstack, Steelwill and Grimspike to fight for 8 seconds.",
+      "description": "Strongstack, Steelwill and Grimspike fight for him for 8 seconds. At max rank they stay 12.",
       "damage_label": "Guard hit",
       "ranks": [
-        { "damage": 11, "range": 0, "cooldown": 18 },
-        { "damage": 14, "range": 0, "cooldown": 17 },
-        { "damage": 17, "range": 0, "cooldown": 16 },
-        { "damage": 20, "range": 0, "cooldown": 15 }
+        {
+          "damage": 11,
+          "range": 0,
+          "cooldown": 18
+        },
+        {
+          "damage": 14,
+          "range": 0,
+          "cooldown": 17
+        },
+        {
+          "damage": 17,
+          "range": 0,
+          "cooldown": 16
+        },
+        {
+          "damage": 20,
+          "range": 0,
+          "cooldown": 15
+        }
       ]
     },
     {
       "key": "E",
       "name": "WAR CRY",
-      "description": "Takes 30% less damage for 4 seconds and taunts nearby enemies.",
-      "damage_label": "Defence",
-      "damage_note": "30% less damage taken",
+      "description": "Takes 30% less damage for 4 seconds and taunts nearby enemies. At max rank the taunt lasts longer.",
+      "damage_note": "30% less damage taken for 4 s",
       "ranks": [
-        { "range": 320, "cooldown": 13 },
-        { "range": 320, "cooldown": 12 },
-        { "range": 320, "cooldown": 11 },
-        { "range": 320, "cooldown": 10 }
+        {
+          "range": 320,
+          "cooldown": 13
+        },
+        {
+          "range": 320,
+          "cooldown": 12
+        },
+        {
+          "range": 320,
+          "cooldown": 11
+        },
+        {
+          "range": 320,
+          "cooldown": 10
+        }
       ]
     },
     {
       "key": "R",
-      "name": "BANDOS' WRATH",
-      "description": "Leaps to a location and knocks every enemy there into the air.",
+      "name": "BANDOS' CHALLENGE",
+      "description": "Leaps onto an enemy hero and challenges it: the two can only attack each other. If Graardor wins, he keeps 8 attack damage for the match. At max rank he takes less damage in the duel.",
       "ranks": [
-        { "damage": 150, "range": 900, "cooldown": 70 },
-        { "damage": 225, "range": 1000, "cooldown": 62 },
-        { "damage": 300, "range": 1100, "cooldown": 54 }
+        {
+          "damage": 60,
+          "range": 900,
+          "cooldown": 70
+        },
+        {
+          "damage": 90,
+          "range": 900,
+          "cooldown": 62
+        },
+        {
+          "damage": 120,
+          "range": 900,
+          "cooldown": 54
+        }
       ]
     }
   ],
@@ -77,11 +132,11 @@
     131
   ],
   "kit": {
-    "passive_name": "Bandos' war cry",
+    "passive_name": "Bone crusher",
     "passive": {
-      "type": "minion_aura",
-      "radius": 900,
-      "damage": 0.15
+      "type": "bone_crusher",
+      "pct": 0.04,
+      "cap": 60
     },
     "abilities": [
       {
@@ -107,6 +162,34 @@
               }
             ]
           }
+        ],
+        "mastery": [
+          {
+            "type": "area",
+            "at": "caster",
+            "radius": 430,
+            "arc": 110,
+            "damage": 55,
+            "on_hit": [
+              {
+                "type": "slow",
+                "pct": 0.35,
+                "duration": 1.5
+              }
+            ]
+          },
+          {
+            "type": "area",
+            "at": "point",
+            "range": 360,
+            "radius": 110,
+            "on_hit": [
+              {
+                "type": "knockup",
+                "duration": 0.5
+              }
+            ]
+          }
         ]
       },
       {
@@ -128,6 +211,23 @@
             ],
             "count": 3,
             "duration": 8,
+            "health": 160,
+            "damage": 11,
+            "scale": 1.25,
+            "at": "caster"
+          }
+        ],
+        "mastery": [
+          {
+            "type": "summon",
+            "npc": 2216,
+            "npcs": [
+              2216,
+              2217,
+              2218
+            ],
+            "count": 3,
+            "duration": 12,
             "health": 160,
             "damage": 11,
             "scale": 1.25,
@@ -160,6 +260,24 @@
               }
             ]
           }
+        ],
+        "mastery": [
+          {
+            "type": "buff",
+            "damage_reduction": 0.3,
+            "duration": 4
+          },
+          {
+            "type": "area",
+            "at": "caster",
+            "radius": 320,
+            "on_hit": [
+              {
+                "type": "taunt",
+                "duration": 1.75
+              }
+            ]
+          }
         ]
       },
       {
@@ -170,23 +288,52 @@
           110,
           40
         ],
+        "target": "unit",
+        "cast_range": 900,
+        "duration_growth": 0.25,
         "actions": [
           {
             "type": "dash",
             "distance": 900,
-            "speed": 1700,
-            "to_cursor": true,
+            "speed": 1900,
+            "to_target": true,
             "untargetable": true,
             "land": [
               {
-                "type": "area",
-                "at": "caster",
-                "radius": 380,
-                "damage": 150,
+                "type": "strike",
+                "damage": 60,
                 "on_hit": [
                   {
-                    "type": "knockup",
-                    "duration": 1.0
+                    "type": "duel",
+                    "duration": 3.0,
+                    "reward": 8
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "mastery": [
+          {
+            "type": "buff",
+            "damage_reduction": 0.25,
+            "duration": 4.5
+          },
+          {
+            "type": "dash",
+            "distance": 900,
+            "speed": 1900,
+            "to_target": true,
+            "untargetable": true,
+            "land": [
+              {
+                "type": "strike",
+                "damage": 60,
+                "on_hit": [
+                  {
+                    "type": "duel",
+                    "duration": 3.0,
+                    "reward": 8
                   }
                 ]
               }
@@ -199,20 +346,56 @@
   "source_npc": 2215,
   "talents": [
     [
-      {"name": "Warchief's Bulk", "type": "health", "amount": 225},
-      {"name": "Bandos' Might", "type": "damage", "amount": 15}
+      {
+        "name": "Warchief's Bulk",
+        "type": "health",
+        "amount": 225
+      },
+      {
+        "name": "Bandos' Might",
+        "type": "damage",
+        "amount": 15
+      }
     ],
     [
-      {"name": "Crushing Smash", "type": "slot_damage", "slot": 0, "pct": 0.25},
-      {"name": "Loyal Guard", "type": "slot_cooldown", "slot": 1, "pct": 0.2}
+      {
+        "name": "Crushing Smash",
+        "type": "slot_damage",
+        "slot": 0,
+        "pct": 0.25
+      },
+      {
+        "name": "Loyal Guard",
+        "type": "slot_cooldown",
+        "slot": 1,
+        "pct": 0.2
+      }
     ],
     [
-      {"name": "Godsteel Plate", "type": "armor", "amount": 12},
-      {"name": "Battle Hymn", "type": "slot_cooldown", "slot": 2, "pct": 0.25}
+      {
+        "name": "Godsteel Plate",
+        "type": "armor",
+        "amount": 12
+      },
+      {
+        "name": "Battle Hymn",
+        "type": "slot_cooldown",
+        "slot": 2,
+        "pct": 0.25
+      }
     ],
     [
-      {"name": "Bandos' Fury", "type": "slot_damage", "slot": 3, "pct": 0.3},
-      {"name": "Relentless Blows", "type": "attack_speed", "pct": 0.25}
+      {
+        "name": "Bandos' Fury",
+        "type": "slot_damage",
+        "slot": 3,
+        "pct": 0.3
+      },
+      {
+        "name": "Relentless Blows",
+        "type": "attack_speed",
+        "pct": 0.25
+      }
     ]
   ]
 }

@@ -26,45 +26,105 @@
     {
       "key": "Q",
       "name": "FLESH HOOK",
-      "description": "Flings the Barrelchest anchor on a grapple rope. The first enemy it catches is dragged back to the Bloat.",
+      "description": "Flings the Barrelchest anchor on a grapple rope. The first enemy it catches takes pure damage and is dragged back to the Bloat.",
       "ranks": [
-        { "damage": 80, "range": 1100, "cooldown": 13 },
-        { "damage": 115, "range": 1150, "cooldown": 12 },
-        { "damage": 150, "range": 1200, "cooldown": 11 },
-        { "damage": 185, "range": 1250, "cooldown": 10 }
+        {
+          "damage": 80,
+          "range": 1100,
+          "cooldown": 13
+        },
+        {
+          "damage": 115,
+          "range": 1150,
+          "cooldown": 12
+        },
+        {
+          "damage": 150,
+          "range": 1200,
+          "cooldown": 11
+        },
+        {
+          "damage": 185,
+          "range": 1250,
+          "cooldown": 10
+        }
       ]
     },
     {
       "key": "W",
-      "name": "SWARM",
-      "description": "Its flies boil out for five seconds, biting and slowing everything close. They bite the Bloat too.",
+      "name": "PESTILENCE",
+      "description": "Toggle: the Bloat's flies swarm around it, biting and slowing every enemy close by every half second. They bite the Bloat too. At max rank bitten enemies heal less.",
       "ranks": [
-        { "damage": 90, "range": 0, "cooldown": 14 },
-        { "damage": 130, "range": 0, "cooldown": 13 },
-        { "damage": 170, "range": 0, "cooldown": 12 },
-        { "damage": 210, "range": 0, "cooldown": 11 }
+        {
+          "damage": 20,
+          "range": 0,
+          "cooldown": 4
+        },
+        {
+          "damage": 30,
+          "range": 0,
+          "cooldown": 4
+        },
+        {
+          "damage": 40,
+          "range": 0,
+          "cooldown": 4
+        },
+        {
+          "damage": 50,
+          "range": 0,
+          "cooldown": 4
+        }
       ]
     },
     {
       "key": "E",
-      "name": "BLOATED HIDE",
-      "description": "Swells with rot: a shield, and a fifth of all damage shrugged off for four seconds.",
+      "name": "MEAT STOMP",
+      "description": "The Bloat stomps, and dismembered hands fall from above in front of it (their shadows show first), dealing pure damage and mini-stunning. At max rank they rain in a ring all around it.",
       "damage_label": "Shield",
       "ranks": [
-        { "damage": 140, "range": 0, "cooldown": 16 },
-        { "damage": 190, "range": 0, "cooldown": 15 },
-        { "damage": 240, "range": 0, "cooldown": 14 },
-        { "damage": 290, "range": 0, "cooldown": 13 }
+        {
+          "damage": 40,
+          "range": 600,
+          "cooldown": 12
+        },
+        {
+          "damage": 55,
+          "range": 600,
+          "cooldown": 11
+        },
+        {
+          "damage": 70,
+          "range": 600,
+          "cooldown": 10
+        },
+        {
+          "damage": 85,
+          "range": 600,
+          "cooldown": 9
+        }
       ]
     },
     {
       "key": "R",
       "name": "DEVOUR",
-      "description": "Holds still and chews on whatever is in front of it, stunning it and healing the Bloat.",
+      "description": "Seizes an enemy in reach and chews on it for 2.5 seconds. It is stunned throughout, and the Bloat heals for all the damage. At max rank the victim is dragged in first.",
       "ranks": [
-        { "damage": 150, "range": 180, "cooldown": 70 },
-        { "damage": 205, "range": 180, "cooldown": 60 },
-        { "damage": 260, "range": 180, "cooldown": 50 }
+        {
+          "damage": 25,
+          "range": 250,
+          "cooldown": 70
+        },
+        {
+          "damage": 35,
+          "range": 250,
+          "cooldown": 60
+        },
+        {
+          "damage": 45,
+          "range": 250,
+          "cooldown": 50
+        }
       ]
     }
   ],
@@ -76,12 +136,22 @@
   ],
   "kit": {
     "passive_name": "Flesh heap",
-    "passive": { "type": "flesh_heap", "radius": 450, "minion": 2, "hero": 25 },
+    "passive": {
+      "type": "flesh_heap",
+      "radius": 450,
+      "minion": 3,
+      "hero": 30
+    },
     "abilities": [
       {
         "cost": 70,
         "cooldown": 13,
-        "color": [170, 40, 30],
+        "color": [
+          170,
+          40,
+          30
+        ],
+        "pure": true,
         "actions": [
           {
             "type": "projectile",
@@ -91,64 +161,180 @@
             "damage": 80,
             "width": 80,
             "on_hit": [
-              { "type": "pull", "distance": 1250 }
+              {
+                "type": "pull",
+                "distance": 1250
+              }
             ]
           }
         ]
       },
       {
-        "cost": 60,
-        "cooldown": 14,
-        "color": [90, 110, 40],
+        "cost": 40,
+        "cooldown": 4,
+        "toggle": true,
+        "color": [
+          90,
+          110,
+          40
+        ],
         "actions": [
           {
             "type": "zone",
             "at": "caster",
             "follow": true,
             "radius": 260,
-            "duration": 5,
+            "duration": 9999,
             "tick": 0.5,
-            "damage": 9,
+            "damage": 10,
             "self_damage": 4,
-            "gfx": { "land": 1568, "hit": 1569 },
+            "gfx": {
+              "land": 1568,
+              "hit": 1569
+            },
             "on_tick": [
-              { "type": "slow", "pct": 0.25, "duration": 0.6 }
+              {
+                "type": "slow",
+                "pct": 0.25,
+                "duration": 0.6
+              }
+            ]
+          }
+        ],
+        "mastery": [
+          {
+            "type": "zone",
+            "at": "caster",
+            "follow": true,
+            "radius": 260,
+            "duration": 9999,
+            "tick": 0.5,
+            "damage": 10,
+            "self_damage": 4,
+            "gfx": {
+              "land": 1568,
+              "hit": 1569
+            },
+            "on_tick": [
+              {
+                "type": "slow",
+                "pct": 0.25,
+                "duration": 0.6
+              },
+              {
+                "type": "heal_cut",
+                "duration": 1.0
+              }
             ]
           }
         ]
       },
       {
         "cost": 50,
-        "cooldown": 16,
-        "color": [150, 30, 30],
+        "cooldown": 12,
+        "color": [
+          150,
+          30,
+          30
+        ],
+        "pure": true,
         "actions": [
           {
-            "type": "buff",
-            "shield": 140,
-            "damage_reduction": 0.2,
-            "duration": 4,
-            "gfx": { "cast": 1579 }
+            "type": "area",
+            "at": "point",
+            "range": 320,
+            "radius": 120,
+            "scatter": 260,
+            "delay": 0.45,
+            "repeat": 7,
+            "interval": 0.14,
+            "damage": 40,
+            "on_hit": [
+              {
+                "type": "stun",
+                "duration": 0.3
+              }
+            ]
+          }
+        ],
+        "mastery": [
+          {
+            "type": "area",
+            "at": "caster",
+            "radius": 120,
+            "scatter": 560,
+            "delay": 0.45,
+            "repeat": 12,
+            "interval": 0.09,
+            "damage": 40,
+            "on_hit": [
+              {
+                "type": "stun",
+                "duration": 0.3
+              }
+            ]
           }
         ]
       },
       {
         "cost": 100,
         "cooldown": 70,
-        "color": [190, 20, 20],
+        "color": [
+          190,
+          20,
+          20
+        ],
+        "target": "unit",
+        "cast_range": 250,
         "actions": [
           {
             "type": "channel",
-            "duration": 2.4,
-            "interval": 0.4,
+            "duration": 2.5,
+            "interval": 0.5,
             "action": {
-              "type": "area",
-              "at": "front",
-              "radius": 150,
+              "type": "strike",
               "damage": 25,
-              "heal_per_hit": 15,
-              "gfx": { "hit": 1576 },
+              "caster_health": 0.01,
+              "heal_pct": 1.0,
+              "gfx": {
+                "hit": 1576
+              },
               "on_hit": [
-                { "type": "stun", "duration": 0.5 }
+                {
+                  "type": "stun",
+                  "duration": 0.6
+                }
+              ]
+            }
+          }
+        ],
+        "mastery": [
+          {
+            "type": "strike",
+            "on_hit": [
+              {
+                "type": "pull",
+                "distance": 300
+              }
+            ]
+          },
+          {
+            "type": "channel",
+            "duration": 2.5,
+            "interval": 0.5,
+            "action": {
+              "type": "strike",
+              "damage": 25,
+              "caster_health": 0.01,
+              "heal_pct": 1.0,
+              "gfx": {
+                "hit": 1576
+              },
+              "on_hit": [
+                {
+                  "type": "stun",
+                  "duration": 0.6
+                }
               ]
             }
           }
@@ -159,20 +345,57 @@
   "source_npc": 8359,
   "talents": [
     [
-      {"name": "Bloated Gut", "type": "health", "amount": 225},
-      {"name": "Rotten Fists", "type": "damage", "amount": 15}
+      {
+        "name": "Bloated Gut",
+        "type": "health",
+        "amount": 225
+      },
+      {
+        "name": "Rotten Fists",
+        "type": "damage",
+        "amount": 15
+      }
     ],
     [
-      {"name": "Longer Rope", "type": "slot_range", "slot": 0, "pct": 0.2},
-      {"name": "Thicker Swarm", "type": "slot_damage", "slot": 1, "pct": 0.25}
+      {
+        "name": "Longer Rope",
+        "type": "slot_range",
+        "slot": 0,
+        "pct": 0.2
+      },
+      {
+        "name": "Thicker Swarm",
+        "type": "slot_damage",
+        "slot": 1,
+        "pct": 0.25
+      }
     ],
     [
-      {"name": "Leathery Hide", "type": "armor", "amount": 10},
-      {"name": "Fresh Meat", "type": "slot_cooldown", "slot": 2, "pct": 0.25}
+      {
+        "name": "Leathery Hide",
+        "type": "armor",
+        "amount": 10
+      },
+      {
+        "name": "Fresh Meat",
+        "type": "slot_cooldown",
+        "slot": 2,
+        "pct": 0.25
+      }
     ],
     [
-      {"name": "Endless Hunger", "type": "slot_cooldown", "slot": 3, "pct": 0.3},
-      {"name": "Barbed Anchor", "type": "slot_damage", "slot": 0, "pct": 0.3}
+      {
+        "name": "Endless Hunger",
+        "type": "slot_cooldown",
+        "slot": 3,
+        "pct": 0.3
+      },
+      {
+        "name": "Barbed Anchor",
+        "type": "slot_damage",
+        "slot": 0,
+        "pct": 0.3
+      }
     ]
   ]
 }

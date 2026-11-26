@@ -23,47 +23,102 @@
   "abilities": [
     {
       "key": "Q",
-      "name": "MAUL",
-      "description": "A heavy swipe that knocks enemies back.",
+      "name": "FURY MAUL",
+      "description": "Swipes in front. Every Maul or attack on the same enemy adds a Fury stack, and each stack adds damage to the next hits. At max rank the stacks hold while he keeps hitting.",
       "ranks": [
-        { "damage": 55, "range": 260, "cooldown": 7 },
-        { "damage": 75, "range": 260, "cooldown": 6.5 },
-        { "damage": 95, "range": 260, "cooldown": 6 },
-        { "damage": 115, "range": 260, "cooldown": 5.5 }
+        {
+          "damage": 55,
+          "range": 260,
+          "cooldown": 7
+        },
+        {
+          "damage": 75,
+          "range": 260,
+          "cooldown": 6.5
+        },
+        {
+          "damage": 95,
+          "range": 260,
+          "cooldown": 6
+        },
+        {
+          "damage": 115,
+          "range": 260,
+          "cooldown": 5.5
+        }
       ]
     },
     {
       "key": "W",
-      "name": "CHARGE",
-      "description": "Charges at the cursor and knocks back whatever it hits.",
+      "name": "WILDERNESS CHARGE",
+      "description": "Charges at an enemy from far away, shoving through anything in the way, then bashes and stuns the target. A stun or root stops the charge.",
       "ranks": [
-        { "damage": 40, "range": 800, "cooldown": 12 },
-        { "damage": 60, "range": 800, "cooldown": 11 },
-        { "damage": 80, "range": 850, "cooldown": 10 },
-        { "damage": 100, "range": 900, "cooldown": 9 }
+        {
+          "damage": 40,
+          "range": 2000,
+          "cooldown": 16
+        },
+        {
+          "damage": 60,
+          "range": 2400,
+          "cooldown": 15
+        },
+        {
+          "damage": 80,
+          "range": 2800,
+          "cooldown": 14
+        },
+        {
+          "damage": 100,
+          "range": 3200,
+          "cooldown": 13
+        }
       ]
     },
     {
       "key": "E",
       "name": "HIBERNATE",
-      "description": "Settles for 1.5 seconds to heal a quarter of missing health.",
-      "damage_label": "Heal",
-      "damage_note": "25% of missing health",
+      "description": "Settles for 1.5 seconds to heal a quarter of missing health. Press again to wake early with a roar that taunts nearby enemies.",
+      "damage_note": "Heals 25% of missing health (35% at max rank)",
       "ranks": [
-        { "range": 0, "cooldown": 16 },
-        { "range": 0, "cooldown": 14.5 },
-        { "range": 0, "cooldown": 13 },
-        { "range": 0, "cooldown": 11.5 }
+        {
+          "range": 300,
+          "cooldown": 16
+        },
+        {
+          "range": 300,
+          "cooldown": 14.5
+        },
+        {
+          "range": 300,
+          "cooldown": 13
+        },
+        {
+          "range": 300,
+          "cooldown": 11.5
+        }
       ]
     },
     {
       "key": "R",
-      "name": "SHOCKWAVE",
-      "description": "A huge roar down a line that knocks back and stuns.",
+      "name": "CALLISTO'S ROAR",
+      "description": "A roar down a wide line knocks enemies back and stuns them. At max rank it fans into a cone.",
       "ranks": [
-        { "damage": 140, "range": 1100, "cooldown": 70 },
-        { "damage": 210, "range": 1200, "cooldown": 60 },
-        { "damage": 280, "range": 1300, "cooldown": 50 }
+        {
+          "damage": 140,
+          "range": 1100,
+          "cooldown": 70
+        },
+        {
+          "damage": 210,
+          "range": 1200,
+          "cooldown": 60
+        },
+        {
+          "damage": 280,
+          "range": 1300,
+          "cooldown": 50
+        }
       ]
     }
   ],
@@ -94,35 +149,72 @@
             "at": "front",
             "radius": 260,
             "arc": 120,
-            "damage": 55,
-            "on_hit": [
-              {
-                "type": "knockback",
-                "distance": 160
-              }
-            ]
+            "damage": 55
           }
         ]
       },
       {
-        "cost": 45,
-        "cooldown": 12,
+        "cost": 60,
+        "cooldown": 16,
         "color": [
           190,
           140,
           90
         ],
+        "target": "unit",
         "actions": [
           {
             "type": "dash",
-            "distance": 800,
-            "speed": 1700,
-            "to_cursor": true,
-            "damage": 40,
+            "distance": 3200,
+            "speed": 1500,
+            "to_target": true,
             "on_hit": [
               {
                 "type": "knockback",
-                "distance": 220
+                "distance": 200
+              }
+            ],
+            "land": [
+              {
+                "type": "strike",
+                "damage": 40,
+                "on_hit": [
+                  {
+                    "type": "stun",
+                    "duration": 1.2
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "mastery": [
+          {
+            "type": "buff",
+            "move_speed": 0.2,
+            "duration": 4
+          },
+          {
+            "type": "dash",
+            "distance": 3200,
+            "speed": 1500,
+            "to_target": true,
+            "on_hit": [
+              {
+                "type": "knockback",
+                "distance": 200
+              }
+            ],
+            "land": [
+              {
+                "type": "strike",
+                "damage": 40,
+                "on_hit": [
+                  {
+                    "type": "stun",
+                    "duration": 1.2
+                  }
+                ]
               }
             ]
           }
@@ -144,7 +236,30 @@
             "duration": 1.5,
             "rooted": true
           }
-        ]
+        ],
+        "mastery": [
+          {
+            "type": "buff",
+            "heal_missing": 0.35,
+            "damage_reduction": 0.2,
+            "duration": 1.5,
+            "rooted": true
+          }
+        ],
+        "recast": [
+          {
+            "type": "area",
+            "at": "caster",
+            "radius": 300,
+            "on_hit": [
+              {
+                "type": "taunt",
+                "duration": 1.0
+              }
+            ]
+          }
+        ],
+        "recast_window": 1.5
       },
       {
         "cost": 100,
@@ -174,27 +289,93 @@
               }
             ]
           }
+        ],
+        "mastery": [
+          {
+            "type": "area",
+            "at": "caster",
+            "radius": 1000,
+            "arc": 70,
+            "damage": 140,
+            "on_hit": [
+              {
+                "type": "knockback",
+                "distance": 240
+              },
+              {
+                "type": "stun",
+                "duration": 1.0
+              }
+            ]
+          }
         ]
+      }
+    ],
+    "ability_passives": [
+      {
+        "slot": 0,
+        "passive": {
+          "type": "fury",
+          "per_stack": 8,
+          "max": 5,
+          "duration": 6
+        }
       }
     ]
   },
   "source_npc": 6503,
   "talents": [
     [
-      {"name": "Winter Fat", "type": "health", "amount": 200},
-      {"name": "Heavy Paws", "type": "damage", "amount": 15}
+      {
+        "name": "Winter Fat",
+        "type": "health",
+        "amount": 200
+      },
+      {
+        "name": "Heavy Paws",
+        "type": "damage",
+        "amount": 15
+      }
     ],
     [
-      {"name": "Savage Maul", "type": "slot_damage", "slot": 0, "pct": 0.25},
-      {"name": "Long Charge", "type": "slot_range", "slot": 1, "pct": 0.2}
+      {
+        "name": "Savage Maul",
+        "type": "slot_damage",
+        "slot": 0,
+        "pct": 0.25
+      },
+      {
+        "name": "Long Charge",
+        "type": "slot_range",
+        "slot": 1,
+        "pct": 0.2
+      }
     ],
     [
-      {"name": "Thick Fur", "type": "armor", "amount": 10},
-      {"name": "Restless Sleep", "type": "slot_cooldown", "slot": 2, "pct": 0.25}
+      {
+        "name": "Thick Fur",
+        "type": "armor",
+        "amount": 10
+      },
+      {
+        "name": "Restless Sleep",
+        "type": "slot_cooldown",
+        "slot": 2,
+        "pct": 0.25
+      }
     ],
     [
-      {"name": "Mighty Roar", "type": "slot_damage", "slot": 3, "pct": 0.3},
-      {"name": "Frenzied Swipes", "type": "attack_speed", "pct": 0.25}
+      {
+        "name": "Mighty Roar",
+        "type": "slot_damage",
+        "slot": 3,
+        "pct": 0.3
+      },
+      {
+        "name": "Frenzied Swipes",
+        "type": "attack_speed",
+        "pct": 0.25
+      }
     ]
   ]
 }
