@@ -208,37 +208,27 @@ def code_logo(y, word):
     return x0, width
 
 
-TESTS = 472
+TESTS = 477
 
 GOLD = (255, 210, 90)
-BLOOD = (200, 30, 40)
+GOLD_DK = (150, 105, 30)
 STONE2 = (150, 145, 150)
+STONE_BG = (34, 30, 26)
+SLOT_BG = (52, 46, 38)
 CHIP_BG = (26, 22, 18)
 CHIP_FG = (236, 226, 200)
 FIRE = (255, 140, 40)
-DIRT = (150, 110, 60)
-DIRT_BG = (34, 24, 10)
-CITY_BG = (16, 22, 14)
-AWNING = (236, 232, 220)
-STRIPE = (90, 150, 255)
-LAMP = (255, 230, 120)
-WOOD = (150, 100, 55)
-WATER = (80, 150, 255)
-WATER_BG = (6, 18, 40)
-KEEP_BG = (12, 16, 26)
-SARA = (90, 140, 255)
-TARGET = (255, 80, 60)
-ELF_BG = (6, 26, 26)
-CRYSTAL = (110, 240, 255)
-ELF_LAMP = (235, 245, 255)
-LEAF = (90, 200, 90)
-GNOME_BG = (10, 24, 8)
-SPIRIT = (120, 220, 90)
-TOAD = (230, 80, 50)
+HP = (40, 220, 60)
+MP = (60, 230, 240)
+BLUE_T = (120, 160, 255)
+RED_T = (255, 110, 100)
+SWIFT = (90, 230, 90)
+PANEL_BG = (14, 14, 18)
+KEY_BG = (20, 26, 14)
 
 
-def oracle(x0, y0):
-    """The Oracle's kitchen: an oven of cookies, almost done."""
+def keymaker(x0, y0):
+    """The Keymaker's ring: every key opens a door."""
     clear(x0 - 1, y0, x0 + 21, y0 + 11)
     for j in range(20):
         put(x0 + j, y0, "▄", MID)
@@ -246,24 +236,24 @@ def oracle(x0, y0):
     for k in range(1, 9):
         put(x0, y0 + k, "█", DIM)
         put(x0 + 19, y0 + k, "█", DIM)
-    text(x0 + 2, y0 + 1, "> oracle", DIM)
-    art = ["  ▄▄▄▄▄▄▄  ", " █ ◦ ◦ ◦ █ ", " █ ◦ ◦ ◦ █ ", " ▐▓▓▓▓▓▓▓▌ ", "  ▀▀   ▀▀  "]
+    text(x0 + 2, y0 + 1, "> keymaker", DIM)
+    art = ["   ▄▀▀▀▄   ", "  █  ○  █  ", "   ▀▄█▄▀   ", " ╒══╪══╕ ┐ ", " Q  W  E R "]
     for k, row in enumerate(art):
         for j, ch in enumerate(row):
-            col = GOLD if ch == "◦" else FIRE if ch == "▓" else STONE2
+            col = GOLD if ch in "▄▀█○" else CHIP_FG if ch in "QWER" else GOLD_DK
             if ch != " ":
                 put(x0 + 4 + j, y0 + 2 + k, ch, col)
-    text(x0 + 2, y0 + 7, "> cookies. ok.", HEAD)
+    text(x0 + 2, y0 + 7, "> ctrl+key. ok.", HEAD)
     text(x0 + 6, y0 + 9, "▄▄█████▄▄", DIM)
     text(x0 + 1, y0 + 10, "▄" * 18, MID)
     for j in range(18):
-        put(x0 + 1 + j, y0 + 11, "▪", [AWNING, STRIPE, CRYSTAL, SPIRIT][j % 4] if 0 < j < 17 else DIM)
+        put(x0 + 1 + j, y0 + 11, "+" if j % 3 == 1 else "▪", GOLD if j % 3 == 1 else DIM)
 
 
 LOADED = [
-    "market stalls", "well square", "knight statue", "archery range",
-    "dummy line", "seren fragment", "elven lamps", "crystal trees",
-    "spirit tree", "gnome glider", "gnomeball", "pockets 8/8",
+    "dress_radiant.py", "camp names", "boss lines", "camp groups",
+    "buff holders", "timer colour", "+ buttons", "ctrl+q/w/e/r",
+    "click: cast", "round portrait", "tooltip lift", "potions",
 ]
 
 
@@ -271,49 +261,47 @@ def loaded_list(x0, y0):
     clear(x0 - 1, y0, x0 + 22, y0 + len(LOADED) - 1)
     for k, name in enumerate(LOADED):
         yy = y0 + k
-        last = name.startswith("pockets")
-        hot = name in ("seren fragment", "spirit tree")
-        text(x0, yy, name, GOLD if last else WHITE if hot else CYAN)
+        todo = name == "potions"
+        hot = name in ("+ buttons", "boss lines")
+        text(x0, yy, name, AMBER if todo else WHITE if hot else CYAN)
         text(x0 + len(name), yy, "." * (18 - len(name)), FAINT)
-        text(x0 + 19, yy, "ok", GOLD if last else HEAD if hot else MID)
+        text(x0 + 19, yy, ".." if todo else "ok", AMBER if todo else GOLD if hot else MID)
 
 
-def plot(x0, y0, rows, cols, cells, back, base=" "):
-    """Draw a little map: `cells` maps (row, col) -> (glyph, colour), and
-    `back(row, col, glyph)` gives each cell's background."""
-    for r in range(rows):
-        for c in range(cols):
-            ch, col = cells.get((r, c), (base, FAINT))
-            put(x0 + c, y0 + r, ch, col)
+def paint(x0, y0, rows, palette, back):
+    """Draw rows of glyphs; `palette` maps a glyph to its colour."""
+    for r, row in enumerate(rows):
+        for c, ch in enumerate(row):
+            put(x0 + c, y0 + r, ch, palette.get(ch, DIM))
             shade(x0 + c, y0 + r, x0 + c, y0 + r, back(r, c, ch))
 
 
 clear(2, 2, W - 3, 2)
 lx, lw = code_logo(3, "MOBASCAPE")
-oracle(4, 3)
+keymaker(4, 3)
 loaded_list(125, 3)
-text(3, 2, "▐ oRACLE ▌", DIM)
+text(3, 2, "▐ kEYMAKER ▌", DIM)
 text(W - 18, 2, "▐ lOADED ▌", DIM)
-top = "  fOUR rADIANT pOCKETS dRESSED.   tHE mARKET oPENS.   tHE sPIRIT tREE wAKES.  "
-assert len(top) <= 104, len(top)
+top = "  tHE cAMPS hAVE nAMES.   eVERY aBILITY hAS iTS kEY.   tHE + oPENS tHE dOOR.  "
+assert len(top) <= 100, len(top)
 center(2, top, MID)
 fade_bar(1, 2, W - 3)
 clear(lx - 3, 15, lx + lw + 2, 15)
-ticker = " ◄◄ MARKET STALLS ◄◄ WELL SQUARE ◄◄ KNIGHTS' YARD ◄◄ FRAGMENT OF SEREN ◄◄ SPIRIT TREE"
+ticker = " ◄◄ CRYPT SPIDER 37s ◄◄ ALBINO BAT ALIVE ◄◄ JUNGLE CAMPS 1/3 ◄◄ + + + ◄◄ CTRL+Q/W/E/R"
 run = (ticker * 3)[: lw]
 for i, ch in enumerate(run):
     put(lx + i, 15, ch, ORANGE if ch == "◄" else AMBER)
-center(16, "  ░▒▓  n O D E   2 2 :   t H E   o R A C L E   //   t H E   r A D I A N T   s I D E ,   d R E S S E D  ▓▒░  ", AMBER)
-center(17, "  " + elite("you didn't come here to make the choice.") + "   " + elite("you've already made it.") + "  ", WHITE)
+center(16, "  ░▒▓  n O D E   2 3 :   t H E   k E Y M A K E R   //   o B J E C T I V E S   a N D   t H E   + + +  ▓▒░  ", AMBER)
+center(17, "  " + elite("only the one can open the door.") + "   " + elite("and only during that window.") + "  ", WHITE)
 fade_bar(18, 2, W - 3)
 
 # --- release info -------------------------------------------------------------
 header(19, elite("release info"))
 clear(4, 20, W - 5, 22)
 info = [
-    ("rELEASE dATE", "2026-11-25", "cOMMITS", "252c930 radiant x4 · 37c0dbe ogre + goblin"),
-    ("tYPE", "tHEMED pOCKETS: tHE rADIANT sIDE", "tESTS", f"{TESTS} pass // clippy clean"),
-    ("wAS", "tRANSPLANTED sCENERY, nO sET pIECE", "nOW", "market, yard, grove, tree: 8/8 pockets"),
+    ("rELEASE dATE", "2026-11-25", "cOMMITS", "0574602 + · 8fe3ef5 objectives · e32c66f tool"),
+    ("tYPE", "hUD: rOADMAP 6.3 dONE, 6.4 sTARTED", "tESTS", f"{TESTS} pass // clippy clean"),
+    ("wAS", "8 gENERIC cAMP rOWS; cLICK = rANK uP", "nOW", "6 named lines; + / ctrl ranks, click casts"),
 ]
 for i, (k1, v1, k2, v2) in enumerate(info):
     assert len(v1) <= 50 and 89 + len(v2) <= W - 6, (v1, v2)
@@ -323,125 +311,119 @@ for i, (k1, v1, k2, v2) in enumerate(info):
     text(76, yy, f"{k2:.<12}", DIM)
     text(89, yy, v2, HEAD)
 
-# --- left: the human city ---------------------------------------------------------
-box(4, 24, 74, 46, elite("city.dat // radiant_human_city, by the top lane"))
+# --- left: the ability bar ----------------------------------------------------------
+box(4, 24, 74, 46, elite("bar.dat // the ability bar, roadmap 6.4"))
 LX = 6
-text(LX + 1, 26, "THE MARKET STREET", HEAD)
-text(LX + 19, 26, "// stalls face the road, a well by the river", DIM)
-PX, PY, PR, PC = LX + 2, 28, 8, 36
-city = {}
-for r in range(PR):
-    for c in range(7 + 2 * r, 11 + 2 * r):
-        city[(r, c)] = ("░", DIRT)  # the top lane
-    for c in range(max(0, 29 - 2 * max(0, r - 3)), PC):
-        city[(r, c)] = ("≈", WATER)  # the river, bending south under the lane
-for r in range(PR):
-    for c in range(7 + 2 * r, 11 + 2 * r):
-        if city.get((r, c), ("",))[0] == "≈" or (r >= 6 and c >= 19):
-            city[(r, c)] = ("╪", WOOD)  # the bridge
-for r in range(7):
-    city[(r, 3 + 2 * r)] = ("Π", STRIPE if r in (0, 3) else AWNING)
-    if r % 2 == 0:
-        city[(r, 6 + 2 * r)] = ("¡", LAMP)
-for rc, g in {
-    (2, 0): ("o", WOOD), (3, 1): ("o", WOOD), (4, 0): ("▪", WOOD), (5, 2): ("▪", WOOD),
-    (7, 4): ("╤", WOOD), (1, 20): ("¡", LAMP), (3, 24): ("¡", LAMP),
-    (2, 22): ("◎", CRYSTAL), (1, 24): ("═", WOOD), (3, 20): ("═", WOOD),
-    (0, 21): ("¶", AWNING), (0, 26): ("♔", WHITE),
-}.items():
-    city[rc] = g
-plot(PX, PY, PR, PC, city,
-     lambda r, c, ch: WATER_BG if ch == "≈" else DIRT_BG if ch in "░╪" else CITY_BG)
-leg = [("Π", AWNING, "stalls 1421 + five goods"), (" ", AWNING, "  striped 24905 · 24903"),
-       ("¡", LAMP, "hanging lamps 1324"), ("◎", CRYSTAL, "roofed well 1410, plaza 3"),
-       ("♔", WHITE, "king's statue 1527"), ("¶", AWNING, "noticeboard 2040"),
-       ("═", WOOD, "benches 1496 · ╤ 1453"), ("o", WOOD, "barrels 1460 · ▪ 7699")]
-for k, (ch, col, label) in enumerate(leg):
-    yy = PY + k
-    assert PX + 40 + len(label) <= 73, label
-    put(PX + 38, yy, ch, col)
-    text(PX + 40, yy, label, MID)
-text(LX + 1, 37, "─" * 66, FAINT)
+text(LX + 1, 26, "THE SKILL-POINT DOOR", HEAD)
+text(LX + 22, 26, "// a + over every slot that can learn", DIM)
+bar = [
+    "            [+]  [+]  [+]                       ",
+    " ▄▀▀▀▀▄   ┌──┐ ┌──┐ ┌──┐ ┌──┐   ┌──┐ ┌──┐  ┌─┐┌─┐ ",
+    "█ ◕‿◕  █  │Q │ │W │ │E │ │R │   │D │ │F │  │1││2│ ",
+    "█  ▐▌  █  └──┘ └──┘ └──┘ └──┘   └──┘ └──┘  │3││T│ ",
+    " ▀▄▄▄▄▀▣  ▪▪▪▫ ▪▪▫▫ ▪▫▫▫ ▪▪▫         ",
+    "          ████████████████████ 740/740         ",
+    "          ▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒ 320/320         ",
+]
+pal = {"+": (40, 25, 5), "[": GOLD, "]": GOLD, "▄": GOLD, "▀": GOLD_DK, "█": GOLD,
+       "◕": CHIP_FG, "‿": CHIP_FG, "▐": STONE2, "▌": STONE2, "▣": FIRE,
+       "┌": STONE2, "┐": STONE2, "└": STONE2, "┘": STONE2, "│": STONE2, "─": STONE2,
+       "Q": GOLD, "W": GOLD, "E": GOLD, "R": CHIP_FG, "D": STONE2, "F": STONE2,
+       "1": STONE2, "2": STONE2, "3": STONE2, "T": GOLD, "▪": GOLD, "▫": DIM, "0": CHIP_FG,
+       "7": CHIP_FG, "4": CHIP_FG, "2": STONE2, "/": CHIP_FG}
+
+
+def bar_back(r, c, ch):
+    if ch == "+" and r == 0:
+        return GOLD
+    if r == 5 and ch == "█":
+        return (10, 60, 14)
+    if r == 6 and ch == "▒":
+        return (6, 50, 60)
+    return STONE_BG
+
+
+paint(LX + 2, 28, bar, pal, bar_back)
+for k, (glyph, label, col) in enumerate([("[+]", "gold, 16 px, 4 above the slot", GOLD),
+                                         ("◯", "76 px portrait, ringed in gold", GOLD)]):
+    text(LX + 2, 36 + k, glyph, col)
+    text(LX + 8, 36 + k, label, MID)
+text(LX + 1, 38, "─" * 66, FAINT)
 notes = [
-    ("cut", "the top lane and the river split the pocket in three"),
-    ("row", "seven stalls 7.6 tiles off the lane, yaw down the road"),
-    ("fix", "five spots failed the lane/river check; moved, not forced"),
+    ("+", "click the + to rank up · or ctrl + q/w/e/r"),
+    ("click", "learns a rank-0 ability, casts a learned one"),
+    ("was", "a free point turned every slot click into a rank-up"),
+    ("tip", "\"click + or ctrl+w to rank up (2 left)\", lifted 22 px"),
 ]
 for k, (key, line) in enumerate(notes):
-    text(LX + 1, 38 + k, key, AMBER)
-    text(LX + 8, 38 + k, line, MID)
-term = [
-    ("> ", "bakery stall 1445. the cookies are almost done."),
-    ("> ", "and by the time you've had one, you'll feel right as rain."),
-]
-for k, (prompt, line) in enumerate(term):
-    yy = 43 + k
-    text(LX + 1, yy, prompt, DIM)
-    text(LX + 3, yy, line, BRIGHT if k == 0 else HEAD)
-put(LX + 3 + len(term[-1][1]) + 1, 44, "█", BRIGHT)
+    text(LX + 1, 39 + k, key, AMBER)
+    text(LX + 8, 39 + k, line, RED if key == "was" else MID)
+term = "> i only do what i was meant to do: make keys. ctrl+w."
+text(LX + 1, 44, term, BRIGHT)
+put(LX + 2 + len(term), 44, "█", BRIGHT)
 
-# --- right: keep, elves, gnomes ---------------------------------------------------
-box(76, 24, W - 5, 46, elite("radiant.dat // keep, grove, stronghold"))
+# --- right: objectives --------------------------------------------------------------
+box(76, 24, W - 5, 46, elite("objectives.pnl // roadmap 6.3"))
 RX = 79
-IX = RX + 19
-
-
-def section(y, title, sub, art, back, items):
-    text(RX, y, title, HEAD)
-    text(RX + len(title) + 1, y, sub, DIM)
-    plot(RX, y + 1, 5, 17, art, back)
-    for k, (oid, what) in enumerate(items):
-        assert IX + 8 + len(what) <= W - 7, what
-        text(IX, y + 1 + k, oid, CYAN)
-        text(IX + 8, y + 1 + k, what, MID)
-
-
-keep = {(r, 1): ("◉", TARGET) for r in range(5)}
-keep.update({(r, 15): ("¥", WOOD) for r in range(5)})
-keep.update({(1, 6): ("¶", SARA), (1, 10): ("¶", SARA), (3, 6): ("¶", SARA), (3, 10): ("¶", SARA),
-             (2, 8): ("♞", WHITE), (4, 5): ("╫", WOOD), (4, 11): ("╫", WOOD),
-             (4, 7): ("Ж", STONE2), (4, 9): ("Ж", STONE2), (0, 8): ("♞", STONE2)})
-section(26, "THE KNIGHTS' YARD", "// radiant_human_keep", keep, lambda r, c, ch: KEEP_BG, [
-    ("40158", "knight statue, four blue banners"),
-    ("1451", "archery range x4 + 12896, west"),
-    ("1286", "dummy line 25177 32307, east"),
-    ("5946", "weapon racks · armour stands"),
-    ("budget", "falador transplant 100 -> 35"),
-])
-
-elf = {(2, 8): ("✶", CRYSTAL)}
-for rc in [(0, 6), (0, 10), (2, 4), (2, 12), (4, 6), (4, 10)]:
-    elf[rc] = ("o", ELF_LAMP)
-elf.update({(2, 1): ("Ψ", STONE2), (2, 15): ("Ψ", LEAF), (0, 2): ("♣", CRYSTAL), (0, 14): ("♣", CRYSTAL),
-            (4, 2): ("♣", CRYSTAL), (4, 14): ("♣", CRYSTAL), (1, 8): ("◆", CRYSTAL), (3, 0): ("◆", CRYSTAL),
-            (3, 16): ("◆", CRYSTAL), (4, 8): ("⌂", ELF_LAMP)})
-section(33, "THE CRYSTAL GROVE", "// radiant_elven_lands", elf, lambda r, c, ch: ELF_BG, [
-    ("38604", "fragment of seren, six lamps 37359"),
-    ("38323", "glarial · 38322 baxtorian"),
-    ("37353", "crystal trees x5, saplings"),
-    ("30686", "arcane crystals at x0.6, not x1.3"),
-    ("budget", "jungle transplant 110 -> 60"),
-])
-
-gno = {(0, 7): ("▄", SPIRIT), (0, 8): ("█", SPIRIT), (0, 9): ("▄", SPIRIT),
-       (1, 6): ("♣", SPIRIT), (1, 7): ("♣", SPIRIT), (1, 8): ("♣", SPIRIT), (1, 9): ("♣", SPIRIT), (1, 10): ("♣", SPIRIT),
-       (2, 8): ("┃", WOOD), (4, 2): ("∩", AWNING), (4, 14): ("∩", AWNING), (4, 8): ("⚑", GOLD),
-       (0, 14): ("✈", AWNING), (0, 12): ("°", LAMP), (0, 16): ("°", LAMP),
-       (1, 1): ("π", WOOD), (2, 2): ("π", WOOD), (3, 15): ("Ħ", WOOD),
-       (2, 5): ("Ψ", STONE2), (2, 11): ("Ψ", STONE2), (3, 4): ("♠", TOAD), (0, 1): ("♠", TOAD)}
-section(40, "THE STRONGHOLD", "// radiant_gnome_stronghold", gno, lambda r, c, ch: GNOME_BG, [
-    ("8110", "spirit tree x2.3, cache leaf canopy"),
-    ("1323", "glider between landing lights 5647"),
-    ("1317", "gnomeball goals · flag 10348"),
-    ("17144", "cafe: tables, chairs, cooker"),
-    ("24742", "swings · net 1439 · toadstools"),
-])
+text(RX, 26, "NAMED OBJECTIVES", HEAD)
+text(RX + 17, 26, "// bosses by cache name, camps by buff", DIM)
+panel = [
+    ("Objectives", "", "", GOLD, None),
+    ("", "BLUE", "RED", None, None),
+    (" Top", "■ ■ ▣", "■ ■ ▣", CHIP_FG, None),
+    (" Mid", "■ ■ ▣", "■ □ ▣", CHIP_FG, None),
+    (" Bot", "■ □ ▣", "■ ■ ▣", CHIP_FG, None),
+]
+PXR = RX + 1
+for k, (name, a, b, col, _) in enumerate(panel):
+    yy = 28 + k
+    shade(PXR, yy, PXR + 33, yy, PANEL_BG)
+    text(PXR + 1, yy, name, col or DIM)
+    text(PXR + 13, yy, a, BLUE_T)
+    text(PXR + 24, yy, b, RED_T)
+lines = [
+    ("■ Blue nexus", "Shielded", BLUE_T, DIM),
+    ("■ Red nexus", "620", RED_T, ORANGE),
+    ("■ Crypt spider", "Swift 37s", SWIFT, ORANGE),
+    ("    Red holds Swift 52s", "", DIM, DIM),
+    ("■ Albino bat", "Might Alive", ORANGE, SWIFT),
+    ("■ Jungle camps", "Might 1/3 12s", ORANGE, ORANGE),
+    ("    Blue holds Might 42s", "", DIM, DIM),
+    ("■ Jungle camps", "Swift Alive", SWIFT, SWIFT),
+]
+for k, (name, state, ncol, scol) in enumerate(lines):
+    yy = 33 + k
+    shade(PXR, yy, PXR + 33, yy, PANEL_BG)
+    text(PXR + 1, yy, name, ncol)
+    text(PXR + 33 - len(state), yy, state, scol)
+shade(PXR, 41, PXR + 33, 41, PANEL_BG)
+side = [
+    ("data", "camp names from cache"),
+    ("", "JalTok-Jad, Crypt"),
+    ("", "spider, Albino bat"),
+    ("boss", "own line + timer"),
+    ("camps", "one line per buff:"),
+    ("", "Alive, or 1/3 + next"),
+    ("buff", "holder on line two"),
+    ("ui", "timers in title orange"),
+    ("lines", "six, as stage 3 plans"),
+]
+for k, (key, what) in enumerate(side):
+    yy = 28 + k
+    assert RX + 42 + len(what) <= W - 7, what
+    text(RX + 36, yy, key, AMBER)
+    text(RX + 42, yy, what, MID)
+text(RX, 43, "─" * 64, FAINT)
+text(RX, 44, "TOOL", HEAD)
+text(RX + 6, 44, "tools/dress_radiant.py: validate, then write; idempotent", MID)
+text(RX, 45, "SHOTS", HEAD)
+text(RX + 6, 45, "--ui-live · --ui-layout · --demo-ranks 1", MID)
 
 # --- sysop's note ------------------------------------------------------------
-header(48, elite("sysop's note // the oracle"))
+header(48, elite("sysop's note // the keymaker"))
 clear(4, 49, W - 5, 50)
-open_ = "aLL eIGHT pOCKETS dRESSED fROM cACHE oBJECTS (8/8), nO fOG, nO mIST. sTILL oPEN: tHE oBJECTIVES pANEL (p6.3)."
-refs = "radiant_human_city + radiant_human_keep + radiant_elven_lands + radiant_gnome_stronghold // shipped_pockets_have_their_set_pieces"
+open_ = "6.3 dONE. 6.4 hALF-wAY: tHE + aND tHE rOUND pORTRAIT aRE iN; sLIM bAR, pOTIONS (nEED cONSUMABLES), eQUIPMENT gRID aRE nOT."
+refs = "ui_live::camp_lines + ability_bar::upgrade_at + learn_slot // bosses_get_named_lines... + plus_buttons_float_over_upgradable_slots_only"
 assert len(open_) <= 142 and len(refs) <= 142, (len(open_), len(refs))
 center(49, open_, HEAD)
 center(50, refs, DIM)
@@ -451,7 +433,7 @@ header(51, elite("roadmap // docs/ROADMAPPLAN.md"))
 clear(4, 52, W - 5, 56)
 phases = [
     ("P1 LIGHT", 5), ("P2 MINIMAP", 6), ("P3 SHOP", 7), ("P4 SELECT", 9),
-    ("P5 ARENA", 9), ("POCKETS", 10), ("P6 HUD", 4), ("P7 POST", 0),
+    ("P5 ARENA", 9), ("POCKETS", 10), ("P6 HUD", 7), ("P7 POST", 0),
 ]
 for i, (name, done) in enumerate(phases):
     x = 8 + (i % 4) * 35
@@ -461,18 +443,18 @@ for i, (name, done) in enumerate(phases):
     for j in range(10):
         put(x + 12 + j, yy, "▓" if j < done else "░", (GOLD if done == 10 else BRIGHT) if j < done else FAINT)
     text(x + 22, yy, f"] {done * 10:>3}%", GOLD if done == 10 else HEAD if done else FAINT)
-nxt = ">> next: P6.3 objectives panel: named objectives with respawn timers and per-lane tower states"
+nxt = ">> next: the rest of 6.4 (slim bar, equipment grid from cache slot sprites), then 6.5 yellow announcements"
 assert 8 + len(nxt) <= W - 6, len(nxt)
 text(8, 56, nxt, MID)
 
 fade_bar(57, 2, W - 3)
 clear(10, 58, W - 11, 61)
-greetz = "gREETZ: tHE oRACLE * sERAPH * tHE kEYMAKER * kING rOALD * sIR aMIK vARZE * gLARIAL * bAXTORIAN * kING nARNODE"
+greetz = "gREETZ: tHE kEYMAKER * tHE tWINS * nIOBE * gHOST * tHE cRYPT sPIDER * tHE aLBINO bAT * jALtOK-jAD"
 assert len(greetz) <= 128, len(greetz)
 center(58, greetz, MID)
 center(59, "nOT AFFILIATED WITH JAGEX. cACHE ASSETS STAY OUT OF GIT. aLWAYS.", DIM)
-center(60, "  y o u ' r e   n o t   t h e   o n e .   b u t   t h e   m a p   i s   d o n e .  ", HEAD)
-foot = "-=[ mObAsCaPe // 2026 // nODE 22: tHE oRACLE // 57.6k // sYSoP: rIFT // 8/8 pOCKETS, 0 mIST, 100% cACHE ]=-"
+center(60, "  t h e r e   i s   a   b u i l d i n g .   i n s i d e ,   a   f l o o r   w h e r e   n o   a l a r m s   r i n g .  ", HEAD)
+foot = "-=[ mObAsCaPe // 2026 // nODE 23: tHE kEYMAKER // 57.6k // sYSoP: rIFT // 6 lINES, 3 pLUSES, cTRL+wHATEVER ]=-"
 assert len(foot) <= 128, len(foot)
 center(61, foot, AMBER)
 

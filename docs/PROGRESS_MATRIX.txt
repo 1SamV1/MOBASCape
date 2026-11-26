@@ -1,62 +1,62 @@
    Z        4  ^8 :? : ~TQ  9T    -k7 ~ X  @           AA +     .     7  -D -  A    $B         |  97 7 :             6           X     $       ~ :.
   ░▒▓▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▓▒░
-   ▐ oRACLE ▌                         fOUR rADIANT pOCKETS dRESSED.   tHE mARKET oPENS.   tHE sPIRIT tREE wAKES.                    ▐ lOADED ▌
-    ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄  +- .%%. '  #M  :BX@M&   &X0B0QW  -  %0MW$     Z8$MB$   :%#ZZ@Z'  -X8B8M   W&8&@Z@   %ZQX#XZQW'     market stalls..... ok
-    █ > oracle         █  8:  Q8@ : %%0  BW&00X8  @B&0Z0QQ ' $%$&WB#   %WW##&#B  %&%@$$&Z  0Z0QWBM  &Q0WQX8X  80XZW8#X&`     well square....... ok
-    █     ▄▄▄▄▄▄▄      █  E   Z$$   $8&,@%     XB #$     %8:00     88 80 : :    Q$        &W   ' &X 0$     XZ QB :     :     knight statue..... ok
-    █    █ ◦ ◦ ◦ █     █  ?   QMX$ MBZ$`QX  :  0& 8B     8M M&     $Q QX :     :&8      . B#   : %# X%     0% BX `           archery range..... ok
-    █    █ ◦ ◦ ◦ █     █  &  .ZB QM@:$Z:&X  '  %0 MW%##X&&  00Z0BWZW&' WM$%%Q  .0#        ZB$W8M&MM %$0$$XB&  MWBZ8$X        dummy line........ ok
-    █    ▐▓▓▓▓▓▓▓▌     █  =   Z&  Q  8X $M  :  ZB &B#M&Z$   @#WZ0%Q8X.. 0#M%8Z,:8Q        %WXXB%%&Z #@@$@BQ   M%0BX0Q        seren fragment.... ok
-    █     ▀▀   ▀▀      █  :   08.    0# &Z     WM.$B     $%.&Z . . WZ:  :    W@ BZ   :    @@     @M Q8 ,.:    MB             elven lamps....... ok
-    █ > cookies. ok.   █  >   XW`    ZB M#     QX:QW     #X BB : ' 8W   :    XW $%   `    0X     0M 8Q `'   ' BZ             crystal trees..... ok
-    █▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄█  2   @M:    BQ 80     Q#:M0   ` 0M %Q   : BZ        &8 ZQ . :  . WM     QZ &Z ::   - W%             spirit tree....... ok
-          ▄▄█████▄▄       B   @B   ' W$ BX   . Z$ %Q   , WB WX     0@  .     MZ #W        WW     ZZ 8%      : @%             gnome glider...... ok
-     ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄   k   M8   . 0X  M%MQQQ0  %&@#Z0@&  X$     Q% #8Q#ZMB$   %&&QW8%$ X$     QQ 8$    .   M&@&Q$Z0Q      gnomeball......... ok
-     ▪▪▪▪▪▪▪▪▪▪▪▪▪▪▪▪▪▪   +.  WW   : W#   B&@B@   0QM80MQ  .Z$: `  W0  $WW@XZ   : Q%B##Q  XM     @% MZ    `   Z%0#QB&$Q  :   pockets 8/8....... ok
-    % *  ^>       @7 0.$E>     ◄◄ MARKET STALLS ◄◄ WELL SQUARE ◄◄ KNIGHTS' YARD ◄◄ FRAGMENT OF SEREN ◄◄ SPIRIT TREE ◄◄       6  ? X  .      ~ B    F
-    % &  @F       06   ░▒▓  n O D E   2 2 :   t H E   o R A C L E   //   t H E   r A D I A N T   s I D E ,   d R E S S E D  ▓▒░   5  B      7 %    Q
-    7 4  2=       T2 Q?^ D  3   -  :      You DiDN'T CoMe HeRe To MaKe THe CHoiCe.   You'Ve aLReaDY MaDe iT.      =C         @  6 <  6      X !    J5
+   ▐ kEYMAKER ▌                       tHE cAMPS hAVE nAMES.   eVERY aBILITY hAS iTS kEY.   tHE + oPENS tHE dOOR.                    ▐ lOADED ▌
+    ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄  +- .%%. '  #M  :BX@M&   &X0B0QW  -  %0MW$     Z8$MB$   :%#ZZ@Z'  -X8B8M   W&8&@Z@   %ZQX#XZQW'     dress_radiant.py.. ok
+    █ > keymaker       █  8:  Q8@ : %%0  BW&00X8  @B&0Z0QQ ' $%$&WB#   %WW##&#B  %&%@$$&Z  0Z0QWBM  &Q0WQX8X  80XZW8#X&`     camp names........ ok
+    █      ▄▀▀▀▄       █  E   Z$$   $8&,@%     XB #$     %8:00     88 80 : :    Q$        &W   ' &X 0$     XZ QB :     :     boss lines........ ok
+    █     █  ○  █      █  ?   QMX$ MBZ$`QX  :  0& 8B     8M M&     $Q QX :     :&8      . B#   : %# X%     0% BX `           camp groups....... ok
+    █      ▀▄█▄▀       █  &  .ZB QM@:$Z:&X  '  %0 MW%##X&&  00Z0BWZW&' WM$%%Q  .0#        ZB$W8M&MM %$0$$XB&  MWBZ8$X        buff holders...... ok
+    █    ╒══╪══╕ ┐     █  =   Z&  Q  8X $M  :  ZB &B#M&Z$   @#WZ0%Q8X.. 0#M%8Z,:8Q        %WXXB%%&Z #@@$@BQ   M%0BX0Q        timer colour...... ok
+    █    Q  W  E R     █  :   08.    0# &Z     WM.$B     $%.&Z . . WZ:  :    W@ BZ   :    @@     @M Q8 ,.:    MB             + buttons......... ok
+    █ > ctrl+key. ok.  █  >   XW`    ZB M#     QX:QW     #X BB : ' 8W   :    XW $%   `    0X     0M 8Q `'   ' BZ             ctrl+q/w/e/r...... ok
+    █▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄█  2   @M:    BQ 80     Q#:M0   ` 0M %Q   : BZ        &8 ZQ . :  . WM     QZ &Z ::   - W%             click: cast....... ok
+          ▄▄█████▄▄       B   @B   ' W$ BX   . Z$ %Q   , WB WX     0@  .     MZ #W        WW     ZZ 8%      : @%             round portrait.... ok
+     ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄   k   M8   . 0X  M%MQQQ0  %&@#Z0@&  X$     Q% #8Q#ZMB$   %&&QW8%$ X$     QQ 8$    .   M&@&Q$Z0Q      tooltip lift...... ok
+     ▪+▪▪+▪▪+▪▪+▪▪+▪▪+▪   +.  WW   : W#   B&@B@   0QM80MQ  .Z$: `  W0  $WW@XZ   : Q%B##Q  XM     @% MZ    `   Z%0#QB&$Q  :   potions........... ..
+    % *  ^>       @7 0.$E>     ◄◄ CRYPT SPIDER 37s ◄◄ ALBINO BAT ALIVE ◄◄ JUNGLE CAMPS 1/3 ◄◄ + + + ◄◄ CTRL+Q/W/E/R ◄◄       6  ? X  .      ~ B    F
+    % &  @F       06 ~  ░▒▓  n O D E   2 3 :   t H E   k E Y M A K E R   //   o B J E C T I V E S   a N D   t H E   + + +  ▓▒░  < 5  B      7 %    Q
+    7 4  2=       T2 Q?^ D  3   -  :        oNLY THe oNe CaN oPeN THe DooR.   aND oNLY DuRiNG THaT WiNDoW.  7     =C         @  6 <  6      X !    J5
   ░▒▓▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▓▒░E
     ■─────────────────────────────────────────────────────────  -=[ ReLeaSe iNFo ]=-  ───────────────────────────────────────────────────────────■ #.
-        rELEASE dATE.... 2026-11-25                                         cOMMITS..... 252c930 radiant x4 · 37c0dbe ogre + goblin                3&
-        tYPE............ tHEMED pOCKETS: tHE rADIANT sIDE                   tESTS....... 472 pass // clippy clean                                  B1
-        wAS............. tRANSPLANTED sCENERY, nO sET pIECE                 nOW......... market, yard, grove, tree: 8/8 pockets                    <Q
+        rELEASE dATE.... 2026-11-25                                         cOMMITS..... 0574602 + · 8fe3ef5 objectives · e32c66f tool             3&
+        tYPE............ hUD: rOADMAP 6.3 dONE, 6.4 sTARTED                 tESTS....... 477 pass // clippy clean                                  B1
+        wAS............. 8 gENERIC cAMP rOWS; cLICK = rANK uP               nOW......... 6 named lines; + / ctrl ranks, click casts                <Q
     $ T   =       1  *56    #   B   2    %@       > J  %^  3      <        1&4  E Z ^           =  |        B      9         1  1 &  B        8    +&
-    ▄▀▀▐ CiTY.DaT // RaDiaNT_HuMaN_CiTY, BY THe ToP LaNe ▌▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▄5▄▀▀▐ RaDiaNT.DaT // KeeP, GRoVe, STRoNGHoLD ▌▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▄ ~T
+    ▄▀▀▐ BaR.DaT // THe aBiLiTY BaR, RoaDMaP 6.4 ▌▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▄5▄▀▀▐ oBJeCTiVeS.PNL // RoaDMaP 6.3 ▌▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▄ ~T
     █                                                                     █.█                                                                    █  ?
-    █  THE MARKET STREET // stalls face the road, a well by the river     █&█  THE KNIGHTS' YARD // radiant_human_keep                           █  $
-    █                                                                     █5█   ◉      ♞      ¥   40158   knight statue, four blue banners       █  T
-    █      Π  ¡░░░░          ¶    ♔  ≈≈≈≈≈≈≈  Π stalls 1421 + five goods  █5█   ◉    ¶   ¶    ¥   1451    archery range x4 + 12896, west         █ 1%
-    █        Π   ░░░░       ¡   ═    ≈≈≈≈≈≈≈      striped 24905 · 24903   █D█   ◉      ♞      ¥   1286    dummy line 25177 32307, east           █ #D
-    █   o      Π  ¡░░░░       ◎      ≈≈≈≈≈≈≈  ¡ hanging lamps 1324        █T█   ◉    ¶   ¶    ¥   5946    weapon racks · armour stands           █ !-
-    █    o       Π   ░░░░   ═   ¡    ≈≈≈≈≈≈≈  ◎ roofed well 1410, plaza 3 █>█   ◉   ╫ Ж Ж ╫   ¥   budget  falador transplant 100 -> 35           █ <+
-    █   ▪          Π  ¡░░░░        ≈≈≈≈≈≈≈≈≈  ♔ king's statue 1527        █4█                                                                    █ |X
-    █     ▪          Π   ░░░░    ≈≈≈≈≈≈≈≈≈≈≈  ¶ noticeboard 2040          █^█  THE CRYSTAL GROVE // radiant_elven_lands                          █ D-
-    █                  Π  ¡╪╪╪╪≈≈≈≈≈≈≈≈≈≈≈≈≈  ═ benches 1496 · ╤ 1453     █Z█    ♣   o   o   ♣    38604   fragment of seren, six lamps 37359     █ ~F
-    █       ╤                ╪╪╪╪≈≈≈≈≈≈≈≈≈≈≈  o barrels 1460 · ▪ 7699     █ █          ◆          38323   glarial · 38322 baxtorian              █ 4k
-    █                                                                     █ █   Ψ  o   ✶   o  Ψ   37353   crystal trees x5, saplings             █ 4
-    █  ────────────────────────────────────────────────────────────────── █ █  ◆               ◆  30686   arcane crystals at x0.6, not x1.3      █ 6
-    █  cut    the top lane and the river split the pocket in three        █ █    ♣   o ⌂ o   ♣    budget  jungle transplant 110 -> 60            █ @
-  ? █  row    seven stalls 7.6 tiles off the lane, yaw down the road      █ █                                                                    █ J
-  > █  fix    five spots failed the lane/river check; moved, not forced   █ █  THE STRONGHOLD // radiant_gnome_stronghold                        █ :
-  B █                                                                     █ █   ♠     ▄█▄  ° ✈ °  8110    spirit tree x2.3, cache leaf canopy    █ -
-  3 █                                                                     █ █   π    ♣♣♣♣♣        1323    glider between landing lights 5647     █ B
-  . █  > bakery stall 1445. the cookies are almost done.                  █ █    π  Ψ  ┃  Ψ       1317    gnomeball goals · flag 10348           █ J
-  9 █  > and by the time you've had one, you'll feel right as rain. █     █ █      ♠          Ħ   17144   cafe: tables, chairs, cooker           █ C
-  3 █                                                                     █ █    ∩     ⚑     ∩    24742   swings · net 1439 · toadstools         █ 2
+    █  THE SKILL-POINT DOOR // a + over every slot that can learn         █&█  NAMED OBJECTIVES // bosses by cache name, camps by buff           █  $
+    █                                                                     █5█                                                                    █  T
+    █               [+]  [+]  [+]                                         █5█    Objectives                        data  camp names from cache   █ 1%
+    █    ▄▀▀▀▀▄   ┌──┐ ┌──┐ ┌──┐ ┌──┐   ┌──┐ ┌──┐  ┌─┐┌─┐                 █D█                BLUE       RED              JalTok-Jad, Crypt       █ #D
+    █   █ ◕‿◕  █  │Q │ │W │ │E │ │R │   │D │ │F │  │1││2│                 █T█     Top        ■ ■ ▣      ■ ■ ▣            spider, Albino bat      █ !-
+    █   █  ▐▌  █  └──┘ └──┘ └──┘ └──┘   └──┘ └──┘  │3││T│                 █>█     Mid        ■ ■ ▣      ■ □ ▣      boss  own line + timer        █ <+
+    █    ▀▄▄▄▄▀▣  ▪▪▪▫ ▪▪▫▫ ▪▫▫▫ ▪▪▫                                      █4█     Bot        ■ □ ▣      ■ ■ ▣      camps one line per buff:      █ |X
+    █             ████████████████████ 740/740                            █^█    ■ Blue nexus            Shielded        Alive, or 1/3 + next    █ D-
+    █             ▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒ 320/320                            █Z█    ■ Red nexus                  620  buff  holder on line two      █ ~F
+    █                                                                     █ █    ■ Crypt spider         Swift 37s  ui    timers in title orange  █ 4k
+    █   [+]   gold, 16 px, 4 above the slot                               █ █        Red holds Swift 52s           lines six, as stage 3 plans   █ 4
+    █   ◯     76 px portrait, ringed in gold                              █ █    ■ Albino bat         Might Alive                                █ 6
+    █  ────────────────────────────────────────────────────────────────── █ █    ■ Jungle camps     Might 1/3 12s                                █ @
+  ? █  +      click the + to rank up · or ctrl + q/w/e/r                  █ █        Blue holds Might 42s                                        █ J
+  > █  click  learns a rank-0 ability, casts a learned one                █ █    ■ Jungle camps       Swift Alive                                █ :
+  B █  was    a free point turned every slot click into a rank-up         █ █                                                                    █ -
+  3 █  tip    "click + or ctrl+w to rank up (2 left)", lifted 22 px       █ █                                                                    █ B
+  . █                                                                     █ █  ────────────────────────────────────────────────────────────────  █ J
+  9 █  > i only do what i was meant to do: make keys. ctrl+w. █           █ █  TOOL  tools/dress_radiant.py: validate, then write; idempotent    █ C
+  3 █                                                                     █ █  SHOTS --ui-live · --ui-layout · --demo-ranks 1                    █ 2
   k █▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄█ █▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄█ C
            - k   -     ~  .0  #: ~  Q| T    -       k    ?6      <   ?  D @  4   :X    ! D  9=2  T>  A :   *  +J*     X *    8 6      k   &     7  D
-    ■──────────────────────────────────────────────────  -=[ SYSoP'S NoTe // THe oRaCLe ]=-  ────────────────────────────────────────────────────■ 4
-                    aLL eIGHT pOCKETS dRESSED fROM cACHE oBJECTS (8/8), nO fOG, nO mIST. sTILL oPEN: tHE oBJECTIVES pANEL (p6.3).                  E
-          radiant_human_city + radiant_human_keep + radiant_elven_lands + radiant_gnome_stronghold // shipped_pockets_have_their_set_pieces        B
+    ■─────────────────────────────────────────────────  -=[ SYSoP'S NoTe // THe KeYMaKeR ]=-  ───────────────────────────────────────────────────■ 4
+              6.3 dONE. 6.4 hALF-wAY: tHE + aND tHE rOUND pORTRAIT aRE iN; sLIM bAR, pOTIONS (nEED cONSUMABLES), eQUIPMENT gRID aRE nOT.           E
+       ui_live::camp_lines + ability_bar::upgrade_at + learn_slot // bosses_get_named_lines... + plus_buttons_float_over_upgradable_slots_only     B
     ■────────────────────────────────────────────────  -=[ RoaDMaP // DoCS/RoaDMaPPLaN.MD ]=-  ──────────────────────────────────────────────────■ 1
         P1 LIGHT   [▓▓▓▓▓░░░░░]  50%       P2 MINIMAP [▓▓▓▓▓▓░░░░]  60%       P3 SHOP    [▓▓▓▓▓▓▓░░░]  70%       P4 SELECT  [▓▓▓▓▓▓▓▓▓░]  90%     3k
                                                                                                                                                   BB
-        P5 ARENA   [▓▓▓▓▓▓▓▓▓░]  90%       POCKETS    [▓▓▓▓▓▓▓▓▓▓] 100%       P6 HUD     [▓▓▓▓░░░░░░]  40%       P7 POST    [░░░░░░░░░░]   0%     @
+        P5 ARENA   [▓▓▓▓▓▓▓▓▓░]  90%       POCKETS    [▓▓▓▓▓▓▓▓▓▓] 100%       P6 HUD     [▓▓▓▓▓▓▓░░░]  70%       P7 POST    [░░░░░░░░░░]   0%     @
                                                                                                                                                   7
-        >> next: P6.3 objectives panel: named objectives with respawn timers and per-lane tower states                                            1
+        >> next: the rest of 6.4 (slim bar, equipment grid from cache slot sprites), then 6.5 yellow announcements                                1
   ░▒▓▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▀▄▄▀▓▒░
-  3      B          gREETZ: tHE oRACLE * sERAPH * tHE kEYMAKER * kING rOALD * sIR aMIK vARZE * gLARIAL * bAXTORIAN * kING nARNODE               E @  &
+  3      B                gREETZ: tHE kEYMAKER * tHE tWINS * nIOBE * gHOST * tHE cRYPT sPIDER * tHE aLBINO bAT * jALtOK-jAD                     E @  &
   D      %                                 nOT AFFILIATED WITH JAGEX. cACHE ASSETS STAY OUT OF GIT. aLWAYS.                                     -    E
-  7      %                         y o u ' r e   n o t   t h e   o n e .   b u t   t h e   m a p   i s   d o n e .                              .    >
-  A      0           -=[ mObAsCaPe // 2026 // nODE 22: tHE oRACLE // 57.6k // sYSoP: rIFT // 8/8 pOCKETS, 0 mIST, 100% cACHE ]=-                T    &
+  7      %       t h e r e   i s   a   b u i l d i n g .   i n s i d e ,   a   f l o o r   w h e r e   n o   a l a r m s   r i n g .            .    >
+  A      0          -=[ mObAsCaPe // 2026 // nODE 23: tHE kEYMAKER // 57.6k // sYSoP: rIFT // 6 lINES, 3 pLUSES, cTRL+wHATEVER ]=-              T    &
