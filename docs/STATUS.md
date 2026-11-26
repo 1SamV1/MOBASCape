@@ -50,9 +50,8 @@ Last updated: kit runtime for every hero, levels to 25 and talents,
   casts in `--demo-abilities`. Known gaps: the Bloat's wall grapple and
   rope reel-in, Icy Breath's shatter, Hop's third-hop splash, Plague's
   three-frog count (it hexes everyone still in the circle), Gale Shot's
-  wall stun, Feather Flurry's knockback, Web Nest hiding and speed, Pounce's
-  cooldown refund, YARRRRRRR!'s kill refund, the Tongue Lash zip, and a
-  charge bar on the HUD. The Blowpipe Ranger now runs on the kit too: Toxic build-up
+  wall stun, Feather Flurry's knockback, Pounce's
+  cooldown refund, YARRRRRRR!'s kill refund, and the Tongue Lash zip. The Blowpipe Ranger now runs on the kit too: Toxic build-up
   (venom stacks to three, heal cut at three), piercing dart, seven-dart
   volley, caltrop hop and a three-stack Deadshot execute at max rank. Bots
   switch toggles off when no fight is near. King Awowogei's rework is in
@@ -62,6 +61,12 @@ Last updated: kit runtime for every hero, levels to 25 and talents,
   Greegree slams that mini-stun, a 6/7/8 s extension on a hero kill and
   10 s at max rank. `--demo-abilities --demo-level 25` casts every max-rank
   bonus; all 72 cast.
+- **Charge bar and Web Nest.** Held charge abilities (Gale Shot) show a
+  gold bar over the slot on both HUDs, white when fully drawn
+  (`--hold-indicator 0` holds Q for screenshots). Web Nest gives Venenatis
+  +20% speed inside her own web and hides her from enemies outside it,
+  for the player's view and bot targeting, while she isn't attacking.
+  Passing through scenery is still to do.
 - **Levels to 25 and talents (SYS-3, SYS-7).** Abilities start unlearned;
   level 1 gives the first point. R ranks unlock at 6/11/16. Levels 10, 15,
   20 and 25 give a pick between two talents (`talents` in each champion

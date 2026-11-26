@@ -326,6 +326,36 @@ pub fn draw(theme: &Theme, list: &mut DrawList, area: Rect, state: &AbilityState
         draw_plus(list, upgrade_button(area, s, n), s, pulse);
     }
 
+    // A held charge ability: its slot fills from the bottom, gold, and a
+    // thin bar over the slot shows the draw; it flashes white when full.
+    if let Some((slot, frac)) = state.charge {
+        let frac = frac.clamp(0.0, 1.0);
+        let left = area.x + (92 + slot as i32 * 42) * s;
+        let full = frac >= 1.0;
+        let flash = 0.5 + 0.5 * (state.time * 12.0).sin();
+        let fill = (40.0 * frac).round() as i32;
+        list.rect(
+            Rect::new(left, area.y + (50 - fill) * s, 40 * s, fill * s),
+            [1.0, 0.8, 0.25, 0.35],
+        );
+        let track = Rect::new(left, area.y - 7 * s, 40 * s, 5 * s);
+        list.rect(track, [0.05, 0.04, 0.03, 0.9]);
+        let colour = if full {
+            [1.0, 0.95 * flash + 0.05, 0.7 * flash + 0.3, 1.0]
+        } else {
+            [1.0, 0.75, 0.2, 1.0]
+        };
+        list.rect(
+            Rect::new(
+                track.x + s,
+                track.y + s,
+                ((38.0 * frac).round() as i32) * s,
+                3 * s,
+            ),
+            colour,
+        );
+    }
+
     // An open talent pick: two gold-edged buttons, Ctrl+1 / Ctrl+2.
     if let Some((level, lines)) = &state.talent_pick {
         let pulse = 0.5 + 0.5 * (state.time * 4.0).sin();

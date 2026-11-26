@@ -432,6 +432,8 @@ pub struct AbilityState {
     /// An open talent pick: the level and the two choices' lines, drawn as
     /// two buttons above the bar.
     pub talent_pick: Option<(u32, [String; 2])>,
+    /// A held charge ability: its slot and how full the charge is (0..1).
+    pub charge: Option<(usize, f32)>,
 }
 
 /// The ability tooltip shown over a hovered Q, W, E or R slot:

@@ -210,6 +210,8 @@ pub struct PlayerHud {
     pub cooldowns: [f32; 4],
     /// Maximum cooldown per slot, so the HUD fill bar matches the kit.
     pub cooldown_maxima: [f32; 4],
+    /// A held charge ability: its slot and how full the draw is (0..1).
+    pub charge: Option<(usize, f32)>,
     pub armor: f32,
     pub attack_damage: f32,
     /// Ranged level for the OSRS-style stats panel.
@@ -1243,6 +1245,25 @@ impl Hud {
                     ["Q", "W", "E", "R"][i],
                     *color,
                 );
+                // A held charge: a gold bar over the slot fills with the
+                // draw and turns white when full.
+                if let Some((_, frac)) = player.charge.filter(|c| c.0 == i) {
+                    let frac = frac.clamp(0.0, 1.0);
+                    self.quad(width, height, bx, y0 - 9.0, box_size, 6.0, [8, 8, 10]);
+                    self.quad(
+                        width,
+                        height,
+                        bx + 1.0,
+                        y0 - 8.0,
+                        (box_size - 2.0) * frac,
+                        4.0,
+                        if frac >= 1.0 {
+                            [255, 250, 220]
+                        } else {
+                            [255, 190, 50]
+                        },
+                    );
+                }
                 if cooldown > 0.0 {
                     self.text_centered(
                         width,

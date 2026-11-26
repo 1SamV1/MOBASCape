@@ -164,6 +164,8 @@ struct Zone {
     pure: bool,
     /// The toggle slot that laid it; turning the toggle off removes it.
     slot: Option<usize>,
+    /// Web Nest speed for its caster inside (0 for an ordinary zone).
+    nest: f32,
 }
 
 struct DashState {
@@ -1257,7 +1259,6 @@ impl AnimatedScene {
     }
 
     /// Seconds the player has held a charge ability, and its full charge.
-    #[allow(dead_code)] // read by the charge-bar HUD, next step
     pub fn kit_charging(&self) -> Option<(usize, f32, f32)> {
         let rt = self.casters.get(&self.player_index)?;
         let pending = rt.pending?;
@@ -1675,6 +1676,7 @@ impl AnimatedScene {
                 heal_caster,
                 follow,
                 self_damage,
+                nest,
                 on_tick,
                 gfx,
             } => {
@@ -1711,6 +1713,7 @@ impl AnimatedScene {
                         gfx: gfx.clone(),
                         pure: ctx.pure,
                         slot: Some(ctx.slot),
+                        nest: *nest,
                     });
                 }
             }
@@ -2234,7 +2237,34 @@ impl AnimatedScene {
         };
         let haste = if rt.haste_timer > 0.0 { rt.haste } else { 0.0 };
         let transform = rt.transform.as_ref().map_or(0.0, |t| t.move_speed);
-        1.0 + swift + haste + transform
+        1.0 + swift + haste + transform + self.nest_speed(unit)
+    }
+
+    /// The Web Nest `unit` stands in, if any of its own.
+    fn own_nest(&self, unit: usize) -> Option<(Vec3, f32, f32)> {
+        let pos = self.units.get(unit)?.pos;
+        self.kit_world
+            .zones
+            .iter()
+            .filter(|z| z.nest > 0.0 && z.caster == unit && z.remaining > 0.0)
+            .find(|z| planar_delta(z.pos, pos).length() <= z.radius)
+            .map(|z| (z.pos, z.radius, z.nest))
+    }
+
+    fn nest_speed(&self, unit: usize) -> f32 {
+        self.own_nest(unit).map_or(0.0, |n| n.2)
+    }
+
+    /// True when `unit` hides in its own Web Nest from a viewer at
+    /// `viewer`: the viewer is outside the web and `unit` isn't attacking.
+    pub(super) fn kit_hidden_from(&self, unit: usize, viewer: Vec3) -> bool {
+        let Some((center, radius, _)) = self.own_nest(unit) else {
+            return false;
+        };
+        let u = &self.units[unit];
+        u.attack_target.is_none()
+            && !u.attack_pending
+            && planar_delta(center, viewer).length() > radius
     }
 
     /// A kit dash or buff makes `unit` untargetable right now.

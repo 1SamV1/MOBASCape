@@ -2553,10 +2553,19 @@ impl App {
             let indicator = if let Some(slot) = self.hold_indicator {
                 animated.last_cast_slot = Some(slot.min(3));
                 let from = animated.player_pos();
-                animated
+                let aim = animated
                     .nearest_camp(from)
                     .and_then(|camp| animated.unit_pos(camp))
-                    .or(Some(from + Vec3::new(600.0, 0.0, 0.0)))
+                    .unwrap_or(from + Vec3::new(600.0, 0.0, 0.0));
+                // A charge ability starts drawing and is held, so the
+                // charge bar shows; others just show their indicator.
+                if slot == 0 && animated.kit_charging().is_none() {
+                    animated.upgrade_ability(0);
+                    animated.debug_refill_mana();
+                    animated.upgrade_ability(0);
+                    animated.cast_q(aim);
+                }
+                Some(aim)
             } else if self.rmb_down && !self.shop.open {
                 renderer.pick_ground(self.mouse_pos.0, self.mouse_pos.1, height)
             } else {
@@ -2918,6 +2927,9 @@ impl App {
                 xp_next: stats.xp_next,
                 cooldowns: stats.cooldowns,
                 cooldown_maxima: stats.cooldown_maxima,
+                charge: animated
+                    .kit_charging()
+                    .map(|(slot, held, full)| (slot, held / full)),
                 armor: stats.armor,
                 ranged: stats.ranged,
                 attack_interval: stats.attack_interval,

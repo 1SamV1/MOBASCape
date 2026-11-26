@@ -951,6 +951,7 @@ pub fn ability_from(
         spells: Default::default(),
         scroll: Default::default(),
         talent_pick: None,
+        charge: None,
     }
 }
 
@@ -965,6 +966,9 @@ pub fn ability_ranks(state: &mut AbilityState, animated: &AnimatedScene) {
         let line = |n: usize| format!("{}: {}", pair[n].name, pair[n].effect.describe(&names));
         (crate::talents::TALENT_LEVELS[tier], [line(0), line(1)])
     });
+    state.charge = animated
+        .kit_charging()
+        .map(|(slot, held, full)| (slot, held / full));
     state.time = animated.hud_time;
 }
 

@@ -5210,8 +5210,11 @@ impl AnimatedScene {
 
         let player_pos = self.player_pos();
         let brush = self.brush.clone();
-        for unit in &mut self.units {
-            if unit.team == 0 {
+        let nested: Vec<bool> = (0..self.units.len())
+            .map(|i| self.units[i].team == 1 && self.kit_hidden_from(i, player_pos))
+            .collect();
+        for (index, unit) in self.units.iter_mut().enumerate() {
+            if unit.team == 0 || nested[index] {
                 continue;
             }
             let tx = (unit.pos.x / 128.0).floor() as i32 - ox;

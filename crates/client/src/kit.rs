@@ -293,6 +293,10 @@ pub enum Action {
         /// rotting aura.
         #[serde(default)]
         self_damage: f32,
+        /// A nest (Web Nest): inside it the caster moves this much faster
+        /// and is hidden from enemies outside it while not attacking.
+        #[serde(default)]
+        nest: f32,
         #[serde(default)]
         on_tick: Vec<Status>,
         #[serde(default)]
@@ -1407,6 +1411,20 @@ impl Passive {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn web_nest_zones_carry_their_speed() {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../data/champions/venenatis.json");
+        let text = std::fs::read_to_string(path).expect("venenatis.json");
+        let config: crate::champion::ChampionConfig = serde_json::from_str(&text).expect("parses");
+        let kit = config.kit.expect("a kit");
+        let nest = kit.abilities[2].actions.iter().find_map(|a| match a {
+            Action::Zone { nest, .. } => Some(*nest),
+            _ => None,
+        });
+        assert_eq!(nest, Some(0.2));
+    }
+
     use super::*;
     use glam::Vec2;
 

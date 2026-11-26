@@ -755,7 +755,9 @@ impl AnimatedScene {
             if i == index || u.team == team || u.team >= 2 || u.health <= 0.0 {
                 continue;
             }
-            if i == self.player_index && self.player_untargetable() {
+            if (i == self.player_index && self.player_untargetable())
+                || self.kit_hidden_from(i, me.pos)
+            {
                 continue;
             }
             let d = me.pos.distance(u.pos);
