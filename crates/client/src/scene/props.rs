@@ -661,7 +661,7 @@ mod tests {
     }
 
     #[test]
-    fn shipped_dire_pockets_have_their_set_pieces() {
+    fn shipped_pockets_have_their_set_pieces() {
         let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
         let text = std::fs::read_to_string(root.join("data/maps/karamja_rift/map.json"))
             .expect("map.json");
@@ -690,7 +690,24 @@ mod tests {
         // Ogre war camp round its bone fire pit; goblins round the Bandos altar.
         assert!(props.place.iter().any(|p| p.model == 6794));
         assert!(props.place.iter().any(|p| p.model == 27752));
-        for pocket in ["dire_dark_magic", "dire_ogre", "dire_goblin"] {
+        // Radiant: stall row and well, the White Knight statue among archery
+        // targets, the Fragment of Seren among elven lamps, the spirit tree.
+        assert!(props.place.iter().filter(|p| p.model == 1421).count() >= 4);
+        assert!(props.place.iter().any(|p| p.model == 1410));
+        assert!(props.place.iter().any(|p| p.model == 40158));
+        assert!(props.place.iter().filter(|p| p.model == 1451).count() >= 4);
+        assert!(props.place.iter().any(|p| p.model == 38604));
+        assert!(props.place.iter().filter(|p| p.model == 37359).count() >= 6);
+        assert!(props.place.iter().any(|p| p.model == 8110));
+        for pocket in [
+            "dire_dark_magic",
+            "dire_ogre",
+            "dire_goblin",
+            "radiant_human_city",
+            "radiant_human_keep",
+            "radiant_elven_lands",
+            "radiant_gnome_stronghold",
+        ] {
             assert!(
                 props
                     .scatter

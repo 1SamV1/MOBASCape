@@ -1,6 +1,43 @@
 # Status
 
-Last updated: all four dire pockets dressed from cache objects, 2026-11-25.
+Last updated: all eight biome pockets dressed from cache objects, 2026-11-25.
+
+## 2026-11-25 — Radiant pockets dressed
+
+Same method as the dire side: pieces picked from contact sheets as bare
+models (no object recolours), every placement checked against the lanes,
+river, camps and structures before it is written.
+
+- **Human City** (`radiant_human_city`): the pocket is cut by the top lane
+  and the river, so the city is a market street down the west side of the
+  road. Seven stalls face the lane (the white-awning base 1421 stacked with
+  bakery 1445, silk 1485, gem 1524, veg 4631 and spice 1484 goods, plus the
+  blue-striped 24905 and 24903), hanging lamps (1324) between them, barrels,
+  stacked barrels and crates (1460, 4615, 7699, 3817) and a picnic bench
+  (1453). Between the lane and the river, a well square: the roofed well
+  (1410), two lamps, two benches (1496), a noticeboard (2040) and a king's
+  statue (1527).
+- **Human Keep** (`radiant_human_keep`): a knights' training yard. The knight
+  statue (40158) between four blue banners (14664), an archery range of
+  four targets (1451, 12896) down the west side, a dummy line (1286, 25177,
+  32307) down the east, two weapon racks (5946 with 5944 / 5945), armour
+  stands (12561, 47426, 30875), a second statue (40149) and benches.
+  Transplanted Falador scenery budget 100 -> 35.
+- **Elven Lands** (`radiant_elven_lands`): a crystal grove round the Fragment
+  of Seren (38604) in a ring of six elven lamps (37359), with the statues of
+  Glarial (38323) and Baxtorian (38322), five crystal trees (37353), arcane
+  crystals (30686, 30691, 30693, kept small: at x1.3 they swallowed the
+  pocket), an elven crystal chest (37905) and the ornamental fountain
+  (13191); scattered crystal clusters, saplings and blue flowers. Jungle
+  budget 110 -> 60.
+- **Gnome Stronghold** (`radiant_gnome_stronghold`): the spirit tree (8110,
+  x2.3, its canopy keeps the cache leaf texture), a glider (1323) between
+  landing lights (5647), a gnomeball pitch (goals 1317, flag 10348), gnome
+  statues (1302-1304), a cafe of tables, chairs and a cooker (17144, 17136,
+  17137), gnome barrels and crates, swings (24742) and an obstacle net
+  (1439); toadstools and flowers scattered. Budget 90 -> 50.
+- Verified with `--shots` (top and low) over all four. The pocket test now
+  checks the radiant set pieces as well.
 
 ## 2026-11-25 — Ogre Ruins and Goblin Camp dressed
 
