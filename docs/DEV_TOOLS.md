@@ -180,6 +180,11 @@ it to see where load time goes before optimising.
 - `rift-tools model-sheet 9146 o587 o3248 --out props.png` renders cache
   models (or objects, `o` + object id) in a labelled contact sheet with
   their sizes, for picking map props by eye.
+- `python3 tools/dress_radiant.py` rewrites the radiant pockets' set
+  dressing in `map.json` (places, biome scatters, scenery budgets). It
+  checks every placement against lanes, river, camps, structures and pocket
+  bounds and writes nothing if one fails. Re-running replaces only the
+  radiant entries, so edit the script, run it, then `--shots` to check.
 
 ## Existing switches (for reference)
 
