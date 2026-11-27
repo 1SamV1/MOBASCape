@@ -225,8 +225,12 @@ All objects from the cache, placed through the map format
 
 ### Phase 7: Death, end of match and meta
 
-1. **Death:** greyscale world while dead (a post-grade flag) with the
-   respawn count centred.
+1. ~~**Death:** greyscale world while dead (a post-grade flag) with the
+   respawn count centred.~~ Done 2026-11-27: the post pass drains the
+   world to a cool, flat grey with darker edges over 0.6 s and brings the
+   colour back in 0.25 s on respawn; the HUD (both the dev overlay and
+   `--ui-live`'s "Oh dear, you are dead!" panel with its centred count)
+   stays in colour on top.
 2. **Scoreboard** on Tab: both teams' K/D/A, CS, gold and items.
 3. **Victory and defeat screen:** per-player K/D/A, CS, gold, items, damage
    bars; Play again and Main menu.
@@ -274,3 +278,5 @@ All objects from the cache, placed through the map format
 
 - 2026-11-25: phase 6.4 started: round portrait and the skill-point "+"
   buttons with Ctrl + key learning.
+- 2026-11-27: phase 7.1 done: grey world while dead (post-pass death
+  grade).

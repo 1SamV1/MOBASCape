@@ -19,6 +19,28 @@ use crate::ui_pass::UiPass;
 /// The bloom chain's fixed working size. The glow is deliberately soft, so
 /// 320x180 (16.7% of 1920x1008, 25% of 1280x720) cuts the three full-screen
 /// bloom passes by ~75% without a visible change at the default bloom weight.
+/// The post pass's grade parameters (post.wgsl `PostParams`).
+#[repr(C)]
+#[derive(Copy, Clone, Default, bytemuck::Pod, bytemuck::Zeroable)]
+struct PostUniform {
+    /// x: death grade 0..1 (grey, flat, darker edges); yzw unused.
+    grade: [f32; 4],
+}
+
+/// Seconds for the world to drain to grey after the player dies, and to
+/// come back on respawn (quicker, so the fight is readable at once).
+const DEATH_FADE_IN: f32 = 0.6;
+const DEATH_FADE_OUT: f32 = 0.25;
+
+/// Step the death grade towards 1 while dead and 0 while alive.
+pub fn ease_death_grade(current: f32, dead: bool, dt: f32) -> f32 {
+    if dead {
+        (current + dt / DEATH_FADE_IN).min(1.0)
+    } else {
+        (current - dt / DEATH_FADE_OUT).max(0.0)
+    }
+}
+
 /// Bright-pass target size; the mip chain (crate::bloom_chain) halves it
 /// five times below this.
 const BLOOM_SIZE: (u32, u32) = (640, 360);
@@ -429,6 +451,9 @@ pub struct Renderer {
     post_pipeline: wgpu::RenderPipeline,
     post_no_fxaa_pipeline: wgpu::RenderPipeline,
     post_bind_group: wgpu::BindGroup,
+    post_uniform: wgpu::Buffer,
+    /// How far the world is graded to grey for the dead player, 0..1.
+    death_grade: f32,
     post_bind_group_layout: wgpu::BindGroupLayout,
     _post_sampler: wgpu::Sampler,
     ssao: crate::ssao::Ssao,
@@ -1280,6 +1305,17 @@ impl Renderer {
                         },
                         count: None,
                     },
+                    // Grade parameters (PostUniform): the death grade.
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 4,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Uniform,
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
+                    },
                 ],
             });
         let post_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -1385,6 +1421,11 @@ impl Renderer {
             render_size,
             crate::lighting::Lighting::default().ssao(),
         );
+        let post_uniform = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("post uniform"),
+            contents: bytemuck::bytes_of(&PostUniform::default()),
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+        });
         let post_bind_group = create_post_bind_group(
             &device,
             &post_bind_group_layout,
@@ -1392,6 +1433,7 @@ impl Renderer {
             &bloom_final_view,
             ssao.output_view(),
             &post_sampler,
+            &post_uniform,
         );
 
         let chunk_size = chunk_tiles.max(4) as f32 * 128.0;
@@ -1502,6 +1544,8 @@ impl Renderer {
             post_pipeline,
             post_no_fxaa_pipeline,
             post_bind_group,
+            post_uniform,
+            death_grade: 0.0,
             post_bind_group_layout,
             _post_sampler: post_sampler,
             ssao,
@@ -1732,6 +1776,7 @@ impl Renderer {
             &self.bloom_final_view,
             self.ssao.output_view(),
             &self._post_sampler,
+            &self.post_uniform,
         );
     }
 
@@ -1857,6 +1902,20 @@ impl Renderer {
     }
 
     /// Apply light and fog-of-war tuning (`data/lighting.json`).
+    /// Grade the world grey while the player is dead (crate's death
+    /// screen, roadmap 7.1). Call every frame; it eases in and out.
+    pub fn update_death_grade(&mut self, dead: bool, dt: f32) {
+        let next = ease_death_grade(self.death_grade, dead, dt);
+        if next != self.death_grade {
+            self.death_grade = next;
+            let uniform = PostUniform {
+                grade: [next, 0.0, 0.0, 0.0],
+            };
+            self.queue
+                .write_buffer(&self.post_uniform, 0, bytemuck::bytes_of(&uniform));
+        }
+    }
+
     pub fn set_lighting(&mut self, lighting: &crate::lighting::Lighting) {
         let [light, hidden, grass] = lighting.uniforms();
         self.scene_globals.light_params = light;
@@ -2919,6 +2978,7 @@ fn create_post_bind_group(
     bloom_view: &wgpu::TextureView,
     ao_view: &wgpu::TextureView,
     sampler: &wgpu::Sampler,
+    uniform: &wgpu::Buffer,
 ) -> wgpu::BindGroup {
     device.create_bind_group(&wgpu::BindGroupDescriptor {
         label: Some("post scene bind group"),
@@ -2939,6 +2999,10 @@ fn create_post_bind_group(
             wgpu::BindGroupEntry {
                 binding: 3,
                 resource: wgpu::BindingResource::TextureView(ao_view),
+            },
+            wgpu::BindGroupEntry {
+                binding: 4,
+                resource: uniform.as_entire_binding(),
             },
         ],
     })
@@ -2971,6 +3035,25 @@ fn create_depth_view(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_death_grade_drains_in_and_snaps_back_quicker() {
+        let mut grade = 0.0;
+        let mut frames_in = 0;
+        while grade < 1.0 {
+            grade = ease_death_grade(grade, true, 1.0 / 60.0);
+            frames_in += 1;
+        }
+        let mut frames_out = 0;
+        while grade > 0.0 {
+            grade = ease_death_grade(grade, false, 1.0 / 60.0);
+            frames_out += 1;
+        }
+        assert!((35..=37).contains(&frames_in), "{frames_in}");
+        assert!((14..=16).contains(&frames_out), "{frames_out}");
+        assert_eq!(ease_death_grade(1.0, true, 5.0), 1.0);
+        assert_eq!(ease_death_grade(0.0, false, 5.0), 0.0);
+    }
 
     #[test]
     fn shadow_matrix_centers_the_frustum() {

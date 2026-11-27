@@ -3,6 +3,17 @@
 Last updated: kit runtime for every hero, levels to 25 and talents,
 2026-11-25.
 
+## 2026-11-27 — Death greys the world (roadmap 7.1)
+
+- **Death grade.** The post pass gained a uniform (`PostUniform`, binding
+  4). While the player is dead the world drains to a cool, flat grey with
+  darker edges; it eases in over 0.6 s and back out over 0.25 s on respawn
+  (`renderer::ease_death_grade`, tested). The HUD is drawn after post, so
+  the respawn count, kill text and `--ui-live` damage panel stay in colour.
+  A spectator watching another unit keeps the colour.
+- Checked with `--demo-death` on both HUDs: mid-frame saturation 114
+  before, 14 while dead, 110 after respawn.
+
 ## 2026-11-27 — Renderer: SSAO, soft shadows, rim light, mip-chain bloom
 
 - **Screen-space ambient occlusion** (`ssao.rs`, `ssao.wgsl`). Three

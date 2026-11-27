@@ -3,8 +3,9 @@
 //! dark panel with who dealt the killing blow and a bar for each source of
 //! damage with its total.
 //!
-//! Stage 3 draws a sample death. The scene is only dimmed; drawing the world
-//! in grey is a later rendering task.
+//! The client's post pass grades the world grey underneath while the player
+//! is dead (`Renderer::update_death_grade`, roadmap 7.1); this overlay only
+//! dims it and draws the text and panel in colour on top.
 
 use crate::draw::{DrawList, Rect};
 use crate::hud::state::DeathState;

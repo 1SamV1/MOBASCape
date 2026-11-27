@@ -9,6 +9,12 @@ struct VsOut {
 // Ambient occlusion multiplier, half resolution (crates/client/src/ssao.rs).
 @group(0) @binding(3) var ao_texture: texture_2d<f32>;
 
+struct PostParams {
+    // x: death grade 0..1 (renderer.rs `update_death_grade`); yzw unused.
+    grade: vec4<f32>,
+};
+@group(0) @binding(4) var<uniform> post: PostParams;
+
 @vertex
 fn vs(@builtin(vertex_index) vertex_index: u32) -> VsOut {
     var positions = array<vec2<f32>, 3>(
@@ -133,6 +139,20 @@ fn grade(uv: vec2<f32>, base: vec3<f32>, dimensions: vec2<f32>) -> vec3<f32> {
     let centred = uv - vec2<f32>(0.5);
     let vignette = 1.0 - smoothstep(0.28, 1.00, length(centred * vec2<f32>(1.0, 1.22)));
     color *= mix(0.86, 1.0, vignette);
+
+    // ---- Death grade (roadmap 7.1) ----------------------------------------
+    // While the player is dead the world drains to a cold, flat grey with
+    // darker edges, so the colour HUD over it (respawn count, damage
+    // panel) reads first and the match still shows through.
+    let death = post.grade.x;
+    if (death > 0.0) {
+        let grey = luma(color);
+        // Flatten towards mid grey a little, then cool the tone.
+        let flat = mix(grey, 0.32, 0.18);
+        let dead = vec3<f32>(flat) * vec3<f32>(0.94, 0.98, 1.06);
+        let edge = mix(0.62, 1.0, 1.0 - smoothstep(0.18, 0.95, length(centred * vec2<f32>(1.0, 1.22))));
+        color = mix(color, dead * edge, death);
+    }
 
     let dither = fract(sin(dot(uv * dimensions, vec2<f32>(12.9898, 78.233))) * 43758.5453);
     color += (dither - 0.5) / 255.0;

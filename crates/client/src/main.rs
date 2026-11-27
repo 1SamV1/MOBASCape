@@ -3199,6 +3199,14 @@ impl App {
                 self.ui_placed = placed;
             }
             phase_ui = ui_start.elapsed().as_secs_f32() * 1000.0;
+            // The world goes grey while the player waits to respawn; a
+            // spectator watching someone else keeps the colour.
+            let player_dead = self.spectator.is_none()
+                && animated
+                    .units
+                    .get(animated.player_index)
+                    .is_some_and(|unit| unit.health <= 0.0);
+            renderer.update_death_grade(player_dead, dt);
             if let Some(index) = self.spectator {
                 if let Some(unit) = animated.units.get(index) {
                     renderer.camera.target = unit.pos + Vec3::Y * 140.0;
