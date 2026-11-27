@@ -133,6 +133,13 @@ pub struct BotBrain {
     pub landing: Option<super::bot_cast::Landing>,
 }
 
+impl BotBrain {
+    /// The items bought so far, in buying order.
+    pub fn items(&self) -> &[ItemConfig] {
+        &self.build[..self.bought.min(self.build.len())]
+    }
+}
+
 /// Team-wide timers that pick when to gank and when to take the boss.
 #[derive(Debug, Clone, Copy)]
 pub struct TeamPlan {

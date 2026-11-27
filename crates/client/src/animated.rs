@@ -12,6 +12,7 @@ pub mod bot_cast;
 pub mod bots;
 mod kit_runtime;
 pub mod ranks;
+pub mod score;
 mod teleport;
 mod thrall;
 
@@ -917,12 +918,9 @@ pub struct AnimatedScene {
     /// Team scoreboard counters.
     pub kills: [u32; 2],
     pub deaths: [u32; 2],
-    /// The local player's own match line, shown in the scoreboard strip.
-    pub player_kills: u32,
-    pub player_deaths: u32,
-    pub player_assists: u32,
-    /// Creep score: enemy lane minions last-hit by the player.
-    pub player_cs: u32,
+    /// Every hero's kills, deaths, assists and creep score, by unit index
+    /// (the scoreboard; the player's own line feeds the score strip).
+    pub score: score::ScoreBook,
     /// Damage the player has taken recently: source, amount, seconds left.
     /// Used by the death overlay's breakdown.
     recent_damage: Vec<(String, f32, f32)>,
@@ -1483,10 +1481,7 @@ impl AnimatedScene {
             wave_serial: 0,
             kills: [0, 0],
             deaths: [0, 0],
-            player_kills: 0,
-            player_deaths: 0,
-            player_assists: 0,
-            player_cs: 0,
+            score: score::ScoreBook::default(),
             recent_damage: Vec::new(),
             wave_interval: scene.map.wave_interval,
             gold_income: 0.0,
@@ -1709,10 +1704,10 @@ impl AnimatedScene {
             },
             speed: p.speed,
             ability_power: p.ability_power,
-            kills: self.player_kills,
-            deaths: self.player_deaths,
-            assists: self.player_assists,
-            cs: self.player_cs,
+            kills: self.score.get(self.player_index).kills,
+            deaths: self.score.get(self.player_index).deaths,
+            assists: self.score.get(self.player_index).assists,
+            cs: self.score.get(self.player_index).cs,
         }
     }
 
@@ -3750,6 +3745,7 @@ impl AnimatedScene {
             *timer -= dt;
             *timer > 0.0
         });
+        self.score.tick(dt);
         if let Some((_, timer)) = &mut self.ping {
             *timer -= dt;
             if *timer <= 0.0 {
@@ -4887,6 +4883,15 @@ impl AnimatedScene {
         if amount > 0.0 && self.casters.contains_key(&index) {
             self.kit_after_hit(index, amount, aggressor);
         }
+        // Hero-on-hero hits earn kill and assist credit for a while.
+        if let Some(attacker) = aggressor.filter(|&a| {
+            amount > 0.0
+                && target_kind.is_champion()
+                && self.units[a].kind.is_champion()
+                && self.units[a].team != self.units[index].team
+        }) {
+            self.score.hero_hit(index, attacker);
+        }
         let hero_aggressor = match aggressor {
             Some(aggressor) => self.units[aggressor].kind == UnitKind::Player,
             None => attacker_team == 0,
@@ -4977,20 +4982,21 @@ impl AnimatedScene {
                     .push((format!("{killer} HAS SLAIN {victim}"), 8.0));
             }
         }
-        // Personal scoreboard line. Only damage attributed directly to the
-        // player counts, so allied minions do not feed the player's CS.
-        if aggressor == Some(self.player_index) {
-            if matches!(target_kind, UnitKind::MeleeMinion | UnitKind::RangedMinion) {
-                self.player_cs += 1;
-            }
-            if matches!(target_kind, UnitKind::Player | UnitKind::BotChampion) {
-                self.player_kills += 1;
-            }
+        // Scoreboard lines. Only a hero's own last hit counts as creep
+        // score, so allied minions do not feed it.
+        let hero_killer = aggressor.filter(|&a| {
+            self.units[a].kind.is_champion() && self.units[a].team != self.units[index].team
+        });
+        if target_kind.is_champion() {
+            self.score.hero_died(index, hero_killer);
+        } else if matches!(target_kind, UnitKind::MeleeMinion | UnitKind::RangedMinion)
+            && let Some(hero) = hero_killer
+        {
+            self.score.minion_last_hit(hero);
         }
-        if index == self.player_index {
-            self.player_deaths += 1;
-        }
-        if attacker_team < 2 && target_kind != UnitKind::Camp {
+        // Team kills and deaths count heroes only, as the score strip and
+        // the scoreboard read them (they once counted every minion too).
+        if attacker_team < 2 && target_kind.is_champion() {
             self.kills[attacker_team as usize] += 1;
             let victim_team = self.units[index].team;
             if victim_team < 2 {

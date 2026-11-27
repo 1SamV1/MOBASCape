@@ -3,6 +3,28 @@
 Last updated: kit runtime for every hero, levels to 25 and talents,
 2026-11-25.
 
+## 2026-11-27 — Tab scoreboard (roadmap 7.2)
+
+- **Every hero's match line** (`animated/score.rs`, `ScoreBook`, tested).
+  Only the player's K/D/A/CS used to be tracked, and assists never were.
+  Now each hero gets kills, deaths, assists and creep score. The killing
+  blow takes the kill; when a tower, minion or camp finishes a hero, the
+  last enemy hero to hit them within 10 s takes it; every other enemy hero
+  who hit them in that window assists. The score strip reads the player's
+  line from the same book.
+- **The board** (`rift_ui::hud::scoreboard`, design in
+  INTERFACE_STAGE3_PLAN 5.12): hold Tab under `--ui-live`. Blue and red
+  kill totals round the clock, then per team its gold and a row per hero:
+  portrait or initial (grey with the respawn count while dead), name,
+  level, K/D/A, CS, six cache item icons and net worth (gold plus item
+  cost). The player's row is picked out in gold. Works in spectator mode
+  and over the death panel. `--demo-scoreboard` holds it open.
+- **Team kills fixed.** The score strip's team counters (and the dev HUD's
+  objectives KILLS/DEATHS) counted every minion and structure kill: 173 to
+  155 at 8:00. They count heroes only now, matching the board.
+- Checked in an 8-minute `--bots` match: bots' names, K/D/A, CS, items and
+  net worth fill in; strip and board agree (1 to 3).
+
 ## 2026-11-27 — Death greys the world (roadmap 7.1)
 
 - **Death grade.** The post pass gained a uniform (`PostUniform`, binding

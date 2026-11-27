@@ -15,6 +15,7 @@ pub mod objectives;
 pub mod overhead;
 pub mod sample;
 pub mod score_strip;
+pub mod scoreboard;
 pub mod shop;
 pub mod sketch;
 pub mod stage3;

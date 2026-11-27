@@ -932,10 +932,23 @@ A whole screen for a lobby that does not exist, whose way of working has
 not been decided. It is not built in stage 3. Its measurements are kept in
 appendix A for when a lobby is designed.
 
-**Scoreboard:** put off
+**Scoreboard** (5.12, `hud/scoreboard.rs`): designed 2026-11-27
 
-There is no reference frame of one and no design. It is not in this stage
-and has no file in the tree until it has one or the other.
+Roadmap 7.2 gave the design brief, so it now has a file. Held open on Tab
+(`--demo-scoreboard` holds it for captures). A dark panel centred on the
+window, 540 wide at scale 1 and 374 tall for five a side (cut to the window
+and clipped when the window is smaller):
+
+- Title band (28): "Blue N" left in the team colour, the clock centred in
+  yellow, "N Red" right. Team kills are the sum of the rows.
+- Column header (16, quiet): Hero, Lvl, K / D / A, CS, Items, Gold.
+- Per team a header line (18) with the team name and its total gold, then
+  one 28-pixel row per hero: a 24-pixel portrait (the team-coloured initial
+  when none is baked; grey with the respawn count while dead), name
+  (clipped), level, K/D/A, CS, six 20-pixel item slots with the cache item
+  icons, and net worth in yellow ("12.4k" from ten thousand). The player's
+  row has a faint gold backing.
+- It draws above everything, including the death panel.
 
 ## 6. Behaviour at each scale and window size
 
@@ -1413,7 +1426,7 @@ checked and a separate go-ahead for stage 3.
 | Our own objectives | Done (section 5.4) |
 | Do not imply eighteen inventory cells | Six slots drawn; the reference's panel kept only as a measurement (section 5.7) |
 | Hero selection optional | Put off (section 5.11) |
-| Scoreboard | Put off, and out of the file tree |
+| Scoreboard | Built 2026-11-27 (5.12, `hud/scoreboard.rs`) |
 | Pre-match screens apart from overlays | Done (section 5.11) |
 | Unit plates are placed by the world | Done, with visibility and depth (section 5.6) |
 | Shop, death and hero select as separate steps | Shop and death are separate steps; hero select is out |

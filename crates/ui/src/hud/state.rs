@@ -236,6 +236,49 @@ impl DeathState {
     }
 }
 
+/// One hero's line on the scoreboard.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ScoreRow {
+    pub name: String,
+    pub level: u8,
+    pub kills: u32,
+    pub deaths: u32,
+    pub assists: u32,
+    pub creep_score: u32,
+    /// Net worth: gold in hand plus what the items cost.
+    pub gold: u32,
+    /// Theme sprite roles for up to six items, in buying order.
+    pub items: Vec<String>,
+    /// Theme sprite role for the portrait, when one is baked.
+    pub portrait: Option<String>,
+    /// Seconds to respawn while dead.
+    pub respawn_seconds: Option<u32>,
+    /// The local player's own line, picked out with a gold backing.
+    pub me: bool,
+}
+
+/// The scoreboard held open on Tab (roadmap 7.2): both teams' heroes with
+/// K/D/A, creep score, items and gold, under the team kill totals and the
+/// clock.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ScoreboardState {
+    pub clock: String,
+    pub blue: Vec<ScoreRow>,
+    pub red: Vec<ScoreRow>,
+}
+
+impl ScoreboardState {
+    /// A team's kills are the sum of its heroes' kills, so the header and
+    /// the rows can't disagree.
+    pub fn kills(rows: &[ScoreRow]) -> u32 {
+        rows.iter().map(|row| row.kills).sum()
+    }
+
+    pub fn gold(rows: &[ScoreRow]) -> u32 {
+        rows.iter().map(|row| row.gold).sum()
+    }
+}
+
 /// The item tooltip: the title and price, green stat lines, and a passive
 /// whose name is orange and whose text wraps in white. `at` is the cursor in
 /// window pixels; the tooltip is placed beside it and kept in the window.
@@ -376,6 +419,8 @@ pub struct HudState {
     pub ability_tooltip: Option<AbilityTooltipState>,
     pub shop: ShopState,
     pub death: Option<DeathState>,
+    /// Shown while Tab is held.
+    pub scoreboard: Option<ScoreboardState>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

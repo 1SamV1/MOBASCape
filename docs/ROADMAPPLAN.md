@@ -231,7 +231,9 @@ All objects from the cache, placed through the map format
    colour back in 0.25 s on respawn; the HUD (both the dev overlay and
    `--ui-live`'s "Oh dear, you are dead!" panel with its centred count)
    stays in colour on top.
-2. **Scoreboard** on Tab: both teams' K/D/A, CS, gold and items.
+2. ~~**Scoreboard** on Tab: both teams' K/D/A, CS, gold and items.~~ Done
+   2026-11-27 under `--ui-live`: every hero's K/D/A with kill credit and
+   assists (`animated::score`), CS, net worth and cache item icons.
 3. **Victory and defeat screen:** per-player K/D/A, CS, gold, items, damage
    bars; Play again and Main menu.
 4. Tier list and match history need the server (M7/M8); park until then.
@@ -280,3 +282,4 @@ All objects from the cache, placed through the map format
   buttons with Ctrl + key learning.
 - 2026-11-27: phase 7.1 done: grey world while dead (post-pass death
   grade).
+- 2026-11-27: phase 7.2 done: Tab scoreboard with per-hero K/D/A/CS.

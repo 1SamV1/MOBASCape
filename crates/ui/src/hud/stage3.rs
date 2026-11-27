@@ -6,8 +6,8 @@ use crate::draw::DrawList;
 use crate::hud::layout::{Layout, Piece};
 use crate::hud::{
     ability_bar, ability_tooltip, announcements, chat, death, hitmarks, inventory, kill_feed,
-    minimap, objectives, overhead, score_strip, shop, sketch, state::HudState, target_panel,
-    team_frames, tooltip, unit_plates,
+    minimap, objectives, overhead, score_strip, scoreboard, shop, sketch, state::HudState,
+    target_panel, team_frames, tooltip, unit_plates,
 };
 use crate::theme::Theme;
 
@@ -74,6 +74,10 @@ pub fn build(theme: &Theme, layout: &Layout, state: &HudState) -> DrawList {
         if let Some(tip) = state.ability_tooltip.as_ref() {
             ability_tooltip::draw(theme, &mut list, tip);
         }
+    }
+    // Tab works while dead too: the board draws over the death panel.
+    if let Some(board) = state.scoreboard.as_ref() {
+        scoreboard::draw(theme, &mut list, board);
     }
     list
 }

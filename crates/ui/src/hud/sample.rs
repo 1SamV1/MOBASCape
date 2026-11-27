@@ -5,8 +5,8 @@
 use crate::hud::state::{
     AbilityState, AllyState, CampState, ChatKind, ChatLine, DamageSource, DeathState, HudState,
     InventoryItem, KillFeedEntry, LaneState, MapPoint, MinimapState, NexusState, ObjectivesState,
-    PlateKind, ScoreState, ShopItem, ShopState, StructureMark, TargetStat, TargetState,
-    TooltipState, UnitPlate,
+    PlateKind, ScoreRow, ScoreState, ScoreboardState, ShopItem, ShopState, StructureMark,
+    TargetStat, TargetState, TooltipState, UnitPlate,
 };
 
 pub fn state() -> HudState {
@@ -502,6 +502,7 @@ fn base() -> HudState {
                 },
             ],
         }),
+        scoreboard: None,
     }
 }
 
@@ -631,5 +632,45 @@ fn shop_item(name: &str, price: u32, colour: [u8; 3], stats: &[&str]) -> ShopIte
         owned: false,
         from: Vec::new(),
         into: Vec::new(),
+    }
+}
+
+/// A mid-game scoreboard: five a side, the player second on blue, one red
+/// hero dead, item counts from none to a full six.
+pub fn scoreboard() -> ScoreboardState {
+    let row = |name: &str, level: u8, kda: [u32; 3], cs: u32, gold: u32, items: usize| ScoreRow {
+        name: name.to_string(),
+        level,
+        kills: kda[0],
+        deaths: kda[1],
+        assists: kda[2],
+        creep_score: cs,
+        gold,
+        items: (0..items).map(|n| format!("icon.item.sample{n}")).collect(),
+        portrait: None,
+        respawn_seconds: None,
+        me: false,
+    };
+    let mut blue = vec![
+        row("Venenatis", 11, [2, 1, 6], 31, 6120, 3),
+        row("General Graardor", 12, [3, 1, 4], 86, 7450, 4),
+        row("Kolodion", 10, [1, 2, 5], 64, 5230, 3),
+        row("JalTok-Jad", 13, [4, 0, 2], 112, 9800, 5),
+        row("Bloat", 9, [0, 3, 8], 12, 3900, 2),
+    ];
+    blue[1].me = true;
+    blue[1].portrait = Some("portrait.self".to_string());
+    let mut red = vec![
+        row("Kree'arra", 12, [3, 2, 1], 94, 8100, 4),
+        row("Cerberus", 11, [1, 3, 2], 70, 6400, 3),
+        row("Vorkath", 14, [5, 1, 3], 140, 12_350, 6),
+        row("Zulrah", 10, [0, 2, 3], 41, 4700, 2),
+        row("Callisto", 8, [0, 2, 1], 22, 3100, 0),
+    ];
+    red[3].respawn_seconds = Some(14);
+    ScoreboardState {
+        clock: "12:34".to_string(),
+        blue,
+        red,
     }
 }

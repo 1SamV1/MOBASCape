@@ -17,6 +17,94 @@ use rift_ui::hud::state::{
     StructureMark, TargetStat, TargetState, TooltipState, UnitPlate, VisionMask,
 };
 
+/// The Tab scoreboard: every hero in the match, blue then red, the player
+/// first on their team.
+pub fn scoreboard(
+    animated: &AnimatedScene,
+    shop: Option<&ItemShop>,
+    match_time: f32,
+) -> rift_ui::hud::state::ScoreboardState {
+    let mut blue = Vec::new();
+    let mut red = Vec::new();
+    let mut order: Vec<usize> = (0..animated.units.len())
+        .filter(|&i| animated.units[i].is_champion && animated.units[i].team < 2)
+        .collect();
+    order.sort_by_key(|&i| i != animated.player_index);
+    for index in order {
+        let unit = &animated.units[index];
+        let me = index == animated.player_index;
+        let items: Vec<&ItemConfig> = if me {
+            shop.map(|shop| {
+                shop.owned
+                    .iter()
+                    .filter_map(|slot| slot.and_then(|i| shop.items.get(i)))
+                    .collect()
+            })
+            .unwrap_or_default()
+        } else {
+            animated
+                .bot_of(index)
+                .map(|bot| bot.items().iter().collect())
+                .unwrap_or_default()
+        };
+        // A bot's own name keeps its case; `unit_info` shouts it for plates.
+        let name = animated
+            .bot_of(index)
+            .map(|bot| bot.name.clone())
+            .or_else(|| animated.unit_info(index).map(|(name, _, _)| name))
+            .unwrap_or_else(|| "Hero".to_string());
+        let row = score_row(
+            name,
+            unit.level,
+            animated.score.get(index),
+            unit.gold,
+            &items,
+            (unit.health <= 0.0).then_some(unit.dead_timer),
+            me,
+        );
+        if unit.team == 0 {
+            blue.push(row);
+        } else {
+            red.push(row);
+        }
+    }
+    rift_ui::hud::state::ScoreboardState {
+        clock: crate::hud::format_clock(match_time),
+        blue,
+        red,
+    }
+}
+
+/// One scoreboard line. Net worth is the gold in hand plus what the items
+/// cost; the item icons are the shop's `icon.item.<id>` roles.
+pub fn score_row(
+    name: String,
+    level: u32,
+    score: crate::animated::score::HeroScore,
+    gold: u32,
+    items: &[&ItemConfig],
+    dead_timer: Option<f32>,
+    me: bool,
+) -> rift_ui::hud::state::ScoreRow {
+    rift_ui::hud::state::ScoreRow {
+        name,
+        level: level.min(u8::MAX as u32) as u8,
+        kills: score.kills,
+        deaths: score.deaths,
+        assists: score.assists,
+        creep_score: score.cs,
+        gold: gold + items.iter().map(|item| item.cost).sum::<u32>(),
+        items: items
+            .iter()
+            .filter(|item| item.obj.is_some())
+            .map(|item| format!("icon.item.{}", item.id))
+            .collect(),
+        portrait: me.then(|| "portrait.self".to_string()),
+        respawn_seconds: dead_timer.map(|t| t.max(0.0).ceil() as u32),
+        me,
+    }
+}
+
 pub fn score(player: &PlayerHud) -> ScoreState {
     score_from(
         player.match_time,
@@ -1134,6 +1222,56 @@ fn count(value: f32) -> u32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_score_row_counts_item_cost_in_net_worth_and_rounds_the_respawn_up() {
+        let item = |id: &str, cost: u32, obj: Option<u32>| ItemConfig {
+            id: id.to_string(),
+            name: id.to_string(),
+            obj,
+            category: "melee".to_string(),
+            color: [0, 0, 0],
+            cost,
+            damage: 0.0,
+            health: 0.0,
+            mana: 0.0,
+            speed: 0.0,
+            ability: 0.0,
+            tier: None,
+            builds_from: Vec::new(),
+            thrall: None,
+        };
+        let sword = item("sword", 1200, Some(1277));
+        let charm = item("charm", 300, None);
+        let score = crate::animated::score::HeroScore {
+            kills: 2,
+            deaths: 1,
+            assists: 3,
+            cs: 40,
+        };
+        let row = score_row(
+            "Cerberus".to_string(),
+            300,
+            score,
+            450,
+            &[&sword, &charm],
+            Some(6.2),
+            false,
+        );
+        assert_eq!(row.gold, 1950);
+        // Only items with a cache model have an icon to draw.
+        assert_eq!(row.items, vec!["icon.item.sword".to_string()]);
+        assert_eq!(row.respawn_seconds, Some(7));
+        assert_eq!(row.level, 255);
+        assert_eq!(
+            (row.kills, row.deaths, row.assists, row.creep_score),
+            (2, 1, 3, 40)
+        );
+        assert!(!row.me && row.portrait.is_none());
+        let me = score_row("You".into(), 5, score, 0, &[], None, true);
+        assert_eq!(me.portrait.as_deref(), Some("portrait.self"));
+        assert_eq!(me.respawn_seconds, None);
+    }
 
     #[test]
     fn ability_names_and_numbers_read_cleanly() {

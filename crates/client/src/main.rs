@@ -333,6 +333,9 @@ struct Cli {
     /// Dev: kill the player after one second to verify the respawn overlay.
     #[arg(long)]
     demo_death: bool,
+    /// Dev: hold the Tab scoreboard open (with `--ui-live`).
+    #[arg(long)]
+    demo_scoreboard: bool,
 }
 
 fn main() -> Result<()> {
@@ -809,6 +812,7 @@ fn main() -> Result<()> {
         demo_shop_stage: 0,
         demo_death: cli.demo_death,
         demo_death_timer: 0.0,
+        demo_scoreboard: cli.demo_scoreboard,
         demo_base: cli.demo_base,
         demo_base_timer: 0.0,
         demo_base_stage: 0,
@@ -990,6 +994,7 @@ struct App {
     demo_shop_stage: u8,
     demo_death: bool,
     demo_death_timer: f32,
+    demo_scoreboard: bool,
     demo_base: bool,
     demo_base_timer: f32,
     demo_base_stage: u8,
@@ -3194,6 +3199,7 @@ impl App {
                 ui_camera,
                 (self.mouse_pos.0 as i32, self.mouse_pos.1 as i32),
                 self.selected,
+                self.demo_scoreboard || self.held.contains(&KeyCode::Tab),
             );
             if self.ui_live {
                 self.ui_placed = placed;
@@ -4562,6 +4568,7 @@ fn draw_ui_overlay(
     camera: (f32, f32, f32, f32),
     mouse: (i32, i32),
     selected: Option<usize>,
+    scoreboard: bool,
 ) -> Option<rift_ui::hud::Layout> {
     let theme = theme?;
     let mut placed_out = None;
@@ -4586,6 +4593,14 @@ fn draw_ui_overlay(
             }
             if let (Some(player), Some(animated)) = (player, animated) {
                 state.death = crate::ui_live::death(player, animated);
+                // Held Tab opens the scoreboard (roadmap 7.2).
+                if scoreboard {
+                    state.scoreboard = Some(crate::ui_live::scoreboard(
+                        animated,
+                        shop,
+                        player.match_time,
+                    ));
+                }
                 state.allies = crate::ui_live::allies(animated);
                 state.target = crate::ui_live::target(animated, selected);
             }
