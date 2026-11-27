@@ -115,7 +115,9 @@ around frame 400 to see the channel, and after frame 760 to see the arrival.
 - `--hot-shaders` watches `crates/client/src/scene.wgsl` and recompiles it
   on save (it checks every 15 frames).
 - **F5** reloads it on demand, with or without the flag, and reloads
-  `data/lighting.json` (ambient, sun, shadow floor, fog-of-war tint, grass).
+  `data/lighting.json` (ambient, sun, shadow floor, fog-of-war tint, grass,
+  `unit_rim`, `shadow_softness`, and `ssao_strength` / `ssao_radius` /
+  `ssao_power`; set `ssao_strength` to 0 to turn SSAO off for comparisons).
 - The WGSL is parsed and validated with naga first. A broken edit logs the
   naga diagnostic, with line and column, and keeps the old pipelines, so the
   client never panics. The reload rebuilds the scene and water pipelines in

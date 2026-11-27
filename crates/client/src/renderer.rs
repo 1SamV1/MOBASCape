@@ -19,7 +19,9 @@ use crate::ui_pass::UiPass;
 /// The bloom chain's fixed working size. The glow is deliberately soft, so
 /// 320x180 (16.7% of 1920x1008, 25% of 1280x720) cuts the three full-screen
 /// bloom passes by ~75% without a visible change at the default bloom weight.
-const BLOOM_SIZE: (u32, u32) = (320, 180);
+/// Bright-pass target size; the mip chain (crate::bloom_chain) halves it
+/// five times below this.
+const BLOOM_SIZE: (u32, u32) = (640, 360);
 
 #[repr(C)]
 #[derive(Copy, Clone, Default, bytemuck::Pod, bytemuck::Zeroable)]
@@ -27,13 +29,6 @@ struct GpuLight {
     position: [f32; 4],
     color: [f32; 4],
     params: [f32; 4],
-}
-
-#[repr(C)]
-#[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
-struct BloomUniform {
-    direction: [f32; 2],
-    texel: [f32; 2],
 }
 
 /// Edge of the team vision texture in tiles (maps are far smaller).
@@ -136,7 +131,7 @@ impl SceneGlobals {
             sky_horizon: color(atmosphere.sky_horizon),
             sun_screen: [0.0; 4],
             light_view_proj: Mat4::IDENTITY.to_cols_array_2d(),
-            shadow_params: [1.0 / 1024.0, 0.0032, 0.0, 0.0],
+            shadow_params: [1.0 / SHADOW_MAP_SIZE as f32, 0.0032, 0.0, 0.0],
             tuning: [1.0, 4.0, 0.0, 0.0],
             vision: [0.0, 0.0, 0.0, 1500.0],
             vision_grid: [0.0; 4],
@@ -148,6 +143,11 @@ impl SceneGlobals {
         }
     }
 }
+
+/// Sun shadow map edge in texels. It spans 120 tiles round the camera, so
+/// 2048 gives about seven world units a texel; the soft disk filter
+/// (`shadow_softness`) then blurs the edge without losing the shapes.
+const SHADOW_MAP_SIZE: u32 = 2048;
 
 pub struct Camera {
     pub target: Vec3,
@@ -190,8 +190,13 @@ impl Camera {
 
     pub fn view_proj(&self, aspect: f32) -> Mat4 {
         let view = Mat4::look_at_rh(self.eye(), self.focus(), Vec3::Y);
-        let proj = Mat4::perspective_rh(50f32.to_radians(), aspect, 8.0, 60_000.0);
-        proj * view
+        Self::projection(aspect) * view
+    }
+
+    /// The perspective projection alone (screen-space passes rebuild view
+    /// positions from depth with its inverse).
+    pub fn projection(aspect: f32) -> Mat4 {
+        Mat4::perspective_rh(50f32.to_radians(), aspect, 8.0, 60_000.0)
     }
 }
 
@@ -426,26 +431,21 @@ pub struct Renderer {
     post_bind_group: wgpu::BindGroup,
     post_bind_group_layout: wgpu::BindGroupLayout,
     _post_sampler: wgpu::Sampler,
+    ssao: crate::ssao::Ssao,
     scene_color_view: wgpu::TextureView,
     _scene_color_texture: wgpu::Texture,
     scene_msaa_view: wgpu::TextureView,
     _scene_msaa_texture: wgpu::Texture,
     msaa_samples: u32,
     bloom_bright_pipeline: wgpu::RenderPipeline,
-    bloom_blur_pipeline: wgpu::RenderPipeline,
     bloom_bright_bind_group_layout: wgpu::BindGroupLayout,
     bloom_bright_bind_group: wgpu::BindGroup,
-    bloom_h_bind_group: wgpu::BindGroup,
-    bloom_v_bind_group: wgpu::BindGroup,
     _bloom_sampler: wgpu::Sampler,
     _bloom_half_texture: wgpu::Texture,
     bloom_half_view: wgpu::TextureView,
-    _bloom_temp_texture: wgpu::Texture,
-    bloom_temp_view: wgpu::TextureView,
     _bloom_final_texture: wgpu::Texture,
     bloom_final_view: wgpu::TextureView,
-    _bloom_h_uniform: wgpu::Buffer,
-    _bloom_v_uniform: wgpu::Buffer,
+    bloom_chain: crate::bloom_chain::BloomChain,
     sky_pipeline: wgpu::RenderPipeline,
     blob_pipeline: wgpu::RenderPipeline,
     shadow_pipeline: wgpu::RenderPipeline,
@@ -628,10 +628,6 @@ impl Renderer {
             label: Some("rift bloom bright shader"),
             source: wgpu::ShaderSource::Wgsl(include_str!("bloom_bright.wgsl").into()),
         });
-        let bloom_blur_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: Some("rift bloom blur shader"),
-            source: wgpu::ShaderSource::Wgsl(include_str!("bloom_blur.wgsl").into()),
-        });
         let sky_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("rift sky shader"),
             source: wgpu::ShaderSource::Wgsl(include_str!("sky.wgsl").into()),
@@ -748,7 +744,7 @@ impl Renderer {
         });
         queue.write_buffer(&scene_buffer, 0, bytemuck::bytes_of(&scene_globals));
 
-        let shadow_size = 1024u32;
+        let shadow_size = SHADOW_MAP_SIZE;
         let shadow_texture = device.create_texture(&wgpu::TextureDescriptor {
             label: Some("sun shadow map"),
             size: wgpu::Extent3d {
@@ -1273,6 +1269,17 @@ impl Renderer {
                         ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
                         count: None,
                     },
+                    // Ambient occlusion multiplier (crate::ssao).
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 3,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Texture {
+                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                            view_dimension: wgpu::TextureViewDimension::D2,
+                            multisampled: false,
+                        },
+                        count: None,
+                    },
                 ],
             });
         let post_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -1319,48 +1326,10 @@ impl Renderer {
                     },
                 ],
             });
-        let bloom_blur_bind_group_layout =
-            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                label: Some("bloom blur layout"),
-                entries: &[
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 0,
-                        visibility: wgpu::ShaderStages::FRAGMENT,
-                        ty: wgpu::BindingType::Texture {
-                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                            view_dimension: wgpu::TextureViewDimension::D2,
-                            multisampled: false,
-                        },
-                        count: None,
-                    },
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 1,
-                        visibility: wgpu::ShaderStages::FRAGMENT,
-                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                        count: None,
-                    },
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 2,
-                        visibility: wgpu::ShaderStages::FRAGMENT,
-                        ty: wgpu::BindingType::Buffer {
-                            ty: wgpu::BufferBindingType::Uniform,
-                            has_dynamic_offset: false,
-                            min_binding_size: None,
-                        },
-                        count: None,
-                    },
-                ],
-            });
         let bloom_bright_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("bloom bright pipeline layout"),
                 bind_group_layouts: &[Some(&bloom_bright_bind_group_layout)],
-                immediate_size: 0,
-            });
-        let bloom_blur_pipeline_layout =
-            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                label: Some("bloom blur pipeline layout"),
-                bind_group_layouts: &[Some(&bloom_blur_bind_group_layout)],
                 immediate_size: 0,
             });
         let bloom_bright_pipeline = create_fullscreen_pipeline(
@@ -1369,14 +1338,6 @@ impl Renderer {
             &bloom_bright_pipeline_layout,
             wgpu::TextureFormat::Rgba16Float,
             "bloom bright pipeline",
-            "fs",
-        );
-        let bloom_blur_pipeline = create_fullscreen_pipeline(
-            &device,
-            &bloom_blur_shader,
-            &bloom_blur_pipeline_layout,
-            wgpu::TextureFormat::Rgba16Float,
-            "bloom blur pipeline",
             "fs",
         );
 
@@ -1393,27 +1354,8 @@ impl Renderer {
         );
         let (bloom_half_texture, bloom_half_view) =
             create_hdr_target(&device, BLOOM_SIZE.0, BLOOM_SIZE.1, "bloom half");
-        let (bloom_temp_texture, bloom_temp_view) =
-            create_hdr_target(&device, BLOOM_SIZE.0, BLOOM_SIZE.1, "bloom temp");
         let (bloom_final_texture, bloom_final_view) =
             create_hdr_target(&device, BLOOM_SIZE.0, BLOOM_SIZE.1, "bloom final");
-
-        let bloom_h_uniform = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("bloom horizontal uniform"),
-            contents: bytemuck::bytes_of(&BloomUniform {
-                direction: [1.0, 0.0],
-                texel: [1.0 / BLOOM_SIZE.0 as f32, 1.0 / BLOOM_SIZE.1 as f32],
-            }),
-            usage: wgpu::BufferUsages::UNIFORM,
-        });
-        let bloom_v_uniform = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("bloom vertical uniform"),
-            contents: bytemuck::bytes_of(&BloomUniform {
-                direction: [0.0, 1.0],
-                texel: [1.0 / BLOOM_SIZE.0 as f32, 1.0 / BLOOM_SIZE.1 as f32],
-            }),
-            usage: wgpu::BufferUsages::UNIFORM,
-        });
 
         let bloom_bright_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("bloom bright bind group"),
@@ -1429,51 +1371,29 @@ impl Renderer {
                 },
             ],
         });
-        let bloom_h_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("bloom horizontal bind group"),
-            layout: &bloom_blur_bind_group_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: wgpu::BindingResource::TextureView(&bloom_half_view),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: wgpu::BindingResource::Sampler(&bloom_sampler),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 2,
-                    resource: bloom_h_uniform.as_entire_binding(),
-                },
-            ],
-        });
-        let bloom_v_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("bloom vertical bind group"),
-            layout: &bloom_blur_bind_group_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: wgpu::BindingResource::TextureView(&bloom_temp_view),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: wgpu::BindingResource::Sampler(&bloom_sampler),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 2,
-                    resource: bloom_v_uniform.as_entire_binding(),
-                },
-            ],
-        });
+        let bloom_chain = crate::bloom_chain::BloomChain::new(
+            &device,
+            &bloom_half_view,
+            BLOOM_SIZE,
+            &bloom_sampler,
+        );
+        let depth_view = create_depth_view(&device, render_size.0, render_size.1, msaa_samples);
+        let ssao = crate::ssao::Ssao::new(
+            &device,
+            &depth_view,
+            msaa_samples > 1,
+            render_size,
+            crate::lighting::Lighting::default().ssao(),
+        );
         let post_bind_group = create_post_bind_group(
             &device,
             &post_bind_group_layout,
             &scene_color_view,
             &bloom_final_view,
+            ssao.output_view(),
             &post_sampler,
         );
 
-        let depth_view = create_depth_view(&device, render_size.0, render_size.1, msaa_samples);
         let chunk_size = chunk_tiles.max(4) as f32 * 128.0;
         let terrain = ChunkedMesh::upload(&device, &scene.terrain, chunk_size, "terrain");
         let models = ChunkedMesh::upload(&device, &scene.models, chunk_size, "models");
@@ -1584,26 +1504,21 @@ impl Renderer {
             post_bind_group,
             post_bind_group_layout,
             _post_sampler: post_sampler,
+            ssao,
             scene_color_view,
             _scene_color_texture: scene_color_texture,
             scene_msaa_view,
             _scene_msaa_texture: scene_msaa_texture,
             msaa_samples,
             bloom_bright_pipeline,
-            bloom_blur_pipeline,
             bloom_bright_bind_group_layout,
             bloom_bright_bind_group,
-            bloom_h_bind_group,
-            bloom_v_bind_group,
             _bloom_sampler: bloom_sampler,
             _bloom_half_texture: bloom_half_texture,
             bloom_half_view,
-            _bloom_temp_texture: bloom_temp_texture,
-            bloom_temp_view,
             _bloom_final_texture: bloom_final_texture,
             bloom_final_view,
-            _bloom_h_uniform: bloom_h_uniform,
-            _bloom_v_uniform: bloom_v_uniform,
+            bloom_chain,
             sky_pipeline,
             blob_pipeline,
             shadow_pipeline,
@@ -1781,6 +1696,8 @@ impl Renderer {
         let (render_width, render_height) = self.render_size;
         self.depth_view =
             create_depth_view(&self.device, render_width, render_height, self.msaa_samples);
+        self.ssao
+            .resize(&self.device, &self.depth_view, self.render_size);
         let (texture, view) =
             create_hdr_target(&self.device, render_width, render_height, "hdr scene");
         self._scene_color_texture = texture;
@@ -1813,6 +1730,7 @@ impl Renderer {
             &self.post_bind_group_layout,
             &self.scene_color_view,
             &self.bloom_final_view,
+            self.ssao.output_view(),
             &self._post_sampler,
         );
     }
@@ -1842,9 +1760,10 @@ impl Renderer {
         let extent = 60.0 * 128.0;
         self.scene_globals.light_view_proj =
             directional_shadow_matrix(self.camera.target, sun_dir, extent).to_cols_array_2d();
-        self.scene_globals.shadow_params[0] = 1.0 / 1024.0;
+        self.scene_globals.shadow_params[0] = 1.0 / SHADOW_MAP_SIZE as f32;
         self.scene_globals.shadow_params[1] = 0.0020;
         self.upload_globals();
+        self.ssao.update(&self.queue, Camera::projection(aspect));
     }
 
     fn upload_globals(&mut self) {
@@ -1943,7 +1862,9 @@ impl Renderer {
         self.scene_globals.light_params = light;
         self.scene_globals.fog_hidden = hidden;
         self.scene_globals.grass_params = grass;
+        self.scene_globals.shadow_params[2] = lighting.shadow_softness;
         self.upload_globals();
+        self.ssao.set_settings(lighting.ssao());
     }
 
     /// Back to the circle fog (menus, demos without a team grid).
@@ -2435,54 +2356,22 @@ impl Renderer {
             bright_pass.draw(0..3, 0..1);
         }
 
-        {
-            let mut blur_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("bloom horizontal pass"),
-                timestamp_writes: self.gpu_timer.as_ref().and_then(|timer| timer.writes(3)),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &self.bloom_temp_view,
-                    depth_slice: None,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
-                        store: wgpu::StoreOp::Store,
-                    },
-                })],
-                depth_stencil_attachment: None,
-                occlusion_query_set: None,
-                multiview_mask: None,
-            });
-            blur_pass.set_pipeline(&self.bloom_blur_pipeline);
-            blur_pass.set_bind_group(0, &self.bloom_h_bind_group, &[]);
-            blur_pass.draw(0..3, 0..1);
-        }
+        self.bloom_chain.encode(
+            &mut encoder,
+            &self.bloom_final_view,
+            self.gpu_timer.as_ref().and_then(|timer| timer.writes(3)),
+            self.gpu_timer.as_ref().and_then(|timer| timer.writes(4)),
+        );
 
-        {
-            let mut blur_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("bloom vertical pass"),
-                timestamp_writes: self.gpu_timer.as_ref().and_then(|timer| timer.writes(4)),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &self.bloom_final_view,
-                    depth_slice: None,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
-                        store: wgpu::StoreOp::Store,
-                    },
-                })],
-                depth_stencil_attachment: None,
-                occlusion_query_set: None,
-                multiview_mask: None,
-            });
-            blur_pass.set_pipeline(&self.bloom_blur_pipeline);
-            blur_pass.set_bind_group(0, &self.bloom_v_bind_group, &[]);
-            blur_pass.draw(0..3, 0..1);
-        }
+        self.ssao.encode(
+            &mut encoder,
+            self.gpu_timer.as_ref().and_then(|timer| timer.writes(5)),
+        );
 
         {
             let mut post_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("post pass"),
-                timestamp_writes: self.gpu_timer.as_ref().and_then(|timer| timer.writes(5)),
+                timestamp_writes: self.gpu_timer.as_ref().and_then(|timer| timer.writes(6)),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                     view: &view,
                     depth_slice: None,
@@ -2511,7 +2400,7 @@ impl Renderer {
         {
             let mut hud_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("hud pass"),
-                timestamp_writes: self.gpu_timer.as_ref().and_then(|timer| timer.writes(6)),
+                timestamp_writes: self.gpu_timer.as_ref().and_then(|timer| timer.writes(7)),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                     view: &view,
                     depth_slice: None,
@@ -2540,7 +2429,7 @@ impl Renderer {
             let drew = ui.draw(
                 &mut encoder,
                 &view,
-                self.gpu_timer.as_ref().and_then(|timer| timer.writes(7)),
+                self.gpu_timer.as_ref().and_then(|timer| timer.writes(8)),
             );
             if drew && let Some(timer) = self.gpu_timer.as_mut() {
                 timer.mark(7);
@@ -3028,6 +2917,7 @@ fn create_post_bind_group(
     layout: &wgpu::BindGroupLayout,
     scene_view: &wgpu::TextureView,
     bloom_view: &wgpu::TextureView,
+    ao_view: &wgpu::TextureView,
     sampler: &wgpu::Sampler,
 ) -> wgpu::BindGroup {
     device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -3045,6 +2935,10 @@ fn create_post_bind_group(
             wgpu::BindGroupEntry {
                 binding: 2,
                 resource: wgpu::BindingResource::Sampler(sampler),
+            },
+            wgpu::BindGroupEntry {
+                binding: 3,
+                resource: wgpu::BindingResource::TextureView(ao_view),
             },
         ],
     })
@@ -3067,7 +2961,8 @@ fn create_depth_view(
         sample_count,
         dimension: wgpu::TextureDimension::D2,
         format: wgpu::TextureFormat::Depth32Float,
-        usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+        // Sampled by the SSAO pass after the scene.
+        usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
         view_formats: &[],
     });
     texture.create_view(&wgpu::TextureViewDescriptor::default())
@@ -3116,7 +3011,7 @@ mod tests {
     #[test]
     fn shadow_defaults_are_disabled_until_requested() {
         let globals = SceneGlobals::from_atmosphere(&Atmosphere::default());
-        assert!((globals.shadow_params[0] - 1.0 / 1024.0).abs() < 1e-9);
+        assert!((globals.shadow_params[0] - 1.0 / SHADOW_MAP_SIZE as f32).abs() < 1e-9);
         assert!(globals.shadow_params[1] > 0.0);
         assert_eq!(globals.shadow_params[3], 0.0);
     }

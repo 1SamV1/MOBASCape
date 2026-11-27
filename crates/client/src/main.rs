@@ -1,6 +1,7 @@
 mod animated;
 mod audio;
 mod balance;
+mod bloom_chain;
 mod champion;
 mod devtools;
 mod font;
@@ -23,6 +24,7 @@ mod scene;
 mod scroll;
 mod spells;
 mod spotlight;
+mod ssao;
 mod stone;
 mod talents;
 mod terrain_textures;

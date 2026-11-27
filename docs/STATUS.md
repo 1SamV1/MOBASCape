@@ -3,6 +3,38 @@
 Last updated: kit runtime for every hero, levels to 25 and talents,
 2026-11-25.
 
+## 2026-11-27 — Renderer: SSAO, soft shadows, rim light, mip-chain bloom
+
+- **Screen-space ambient occlusion** (`ssao.rs`, `ssao.wgsl`). Three
+  half-resolution passes after the scene: linear depth from the (MSAA)
+  depth buffer, 12 hemisphere samples on a 4x4 rotated pattern, then a
+  depth-aware 4x4 blur. The post pass multiplies the lit scene by it before
+  bloom. Walls, crenellations, statue feet, tree clusters and units get
+  contact shade, with no halos round silhouettes at the shipped strength.
+  Works with and without MSAA (`--msaa 1` checked).
+- **Soft sun shadows.** The shadow map is 2048 (was 1024). The lookup takes
+  8 Vogel-disk taps turned per pixel by interleaved gradient noise, so edges
+  get a penumbra instead of stair-steps. Faces turned away from the sun skip
+  the lookup.
+- **Rim light on units.** A Fresnel term (`pow(1 - N·V, 3)`), tinted from
+  sky and sun and stronger against the light, picks heroes, minions and
+  monsters out of the grass.
+- **Mip-chain bloom** (`bloom_chain.rs`, `bloom_chain.wgsl`), after
+  Jimenez's Call of Duty: AW talk. The bright pass now renders at 640x360.
+  A 13-tap downsample (Karis-averaged on the first step so lone sparks
+  don't flicker) runs five levels down, then tent-filtered additive
+  upsamples run back up. Spell glows get a tight core with wide soft rings,
+  in place of the old single 9-tap blur.
+- **New `data/lighting.json` knobs** (hot-reload with F5): `unit_rim`
+  0.45, `shadow_softness` 3.0 (disk radius in shadow texels),
+  `ssao_strength` 0.85 (0 turns the pass off), `ssao_radius` 150 (world
+  units), `ssao_power` 1.6.
+- **GPU timing** (`--gpu-timing`, benchmark) now reports `bloom down`,
+  `bloom up` and `ssao`, each spanning all of its passes.
+- **Cost** (graardor benchmark, 15 s, immediate present): GPU frame 8.19 ms
+  before, 10.82 ms after. SSAO 1.27 ms, bloom chain 0.6 ms, scene +0.8 ms
+  (shadow taps). That's 115 fps before, 89 fps after.
+
 ## 2026-11-27 — Reworked abilities get their own cache sounds
 
 - **Per-action sounds.** A kit action's `gfx` block takes `sounds`:

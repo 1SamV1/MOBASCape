@@ -116,13 +116,22 @@ fn shadow_factor(input: VsOut) -> f32 {
     let texel = scene.shadow_params.x;
     let bias = scene.shadow_params.y;
     let depth = proj.z - bias;
-    // Wide four-tap PCF. The static tree casters are coarse boxes, and a
-    // single bilinear tap gave their canopy shadows a hard, stencilled edge
-    // that read as a hole in the ground rather than an out-of-focus shadow.
-    let o = texel * 1.8;
-    let sum = textureSampleCompare(shadow_map, shadow_sampler, uv + vec2<f32>(-o, -o), depth)
-        + textureSampleCompare(shadow_map, shadow_sampler, uv + vec2<f32>(o, o), depth);
-    return sum * 0.5;
+    // Soft penumbra: eight taps on a Vogel (golden-angle) disk, turned per
+    // pixel by interleaved gradient noise so the banding of a fixed kernel
+    // becomes fine grain the MSAA resolve and tone map smooth out. The
+    // static tree casters are coarse boxes; a hard edge read as a hole in
+    // the ground rather than an out-of-focus shadow.
+    let radius = texel * max(scene.shadow_params.z, 0.5);
+    let ign = fract(52.9829189 * fract(dot(input.clip.xy, vec2<f32>(0.06711056, 0.00583715))));
+    let spin = ign * 6.2831853;
+    var sum = 0.0;
+    for (var i = 0u; i < 8u; i = i + 1u) {
+        let r = sqrt((f32(i) + 0.5) / 8.0) * radius;
+        let a = f32(i) * 2.3999632 + spin;
+        let o = vec2<f32>(cos(a), sin(a)) * r;
+        sum += textureSampleCompareLevel(shadow_map, shadow_sampler, uv + o, depth);
+    }
+    return sum / 8.0;
 }
 
 fn lighting(input: VsOut) -> vec3<f32> {
@@ -147,11 +156,12 @@ fn lighting(input: VsOut) -> vec3<f32> {
         N.y * 0.5 + 0.5
     );
 
-    let shadow = select(
-        shadow_factor(input),
-        1.0,
-        input.material == 7u || input.material == 8u
-    );
+    // Faces turned from the sun get no sunlight to shade, so they skip the
+    // eight-tap lookup (select would evaluate it anyway).
+    var shadow = 1.0;
+    if (ndotl > 0.0 && input.material != 7u && input.material != 8u) {
+        shadow = shadow_factor(input);
+    }
     // Keep a fifth of the sunlight inside shadow so the shadowed ground
     // retains its albedo instead of collapsing to a black polygon.
     // Phase 1 retune: a stronger key light and deeper shadows over a lower
@@ -162,7 +172,18 @@ fn lighting(input: VsOut) -> vec3<f32> {
     let unit_fill = select(0.24, 0.40, input.material == 3u);
     let fill = max(dot(N, V), 0.0) * unit_fill;
     let ambient = select(scene.light_params.x, scene.light_params.y, input.material == 3u);
-    var lit = albedo(input) * (hemi * ambient + sun * ndotl + fill) * input.ao * 1.02;
+    let base = albedo(input);
+    var lit = base * (hemi * ambient + sun * ndotl + fill) * input.ao * 1.02;
+
+    // Rim light on units: their silhouette edges catch the sky, which
+    // lifts heroes off a busy ground the way a studio back light does.
+    // Strongest on the side facing away from the sun.
+    if (input.material == 3u && scene.grass_params.w > 0.0) {
+        let edge = pow(1.0 - clamp(dot(N, V), 0.0, 1.0), 3.0);
+        let back = 0.6 + 0.4 * (1.0 - max(dot(N, L), 0.0));
+        let tint = scene.ambient_sky.rgb * 0.7 + scene.sun_color.rgb * 0.3;
+        lit += (base * 0.6 + vec3<f32>(0.08)) * tint * edge * back * scene.grass_params.w;
+    }
 
     lit += input.color.rgb * dynamic_lighting(input);
     return lit;

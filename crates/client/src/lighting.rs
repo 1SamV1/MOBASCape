@@ -33,6 +33,17 @@ pub struct Lighting {
     pub grass_brightness: f32,
     /// How much the slow noise mottle brightens grass patches.
     pub grass_mottle: f32,
+    /// Rim light on units: a sky-tinted edge glow on their silhouettes
+    /// that lifts heroes off the ground (0 = off).
+    pub unit_rim: f32,
+    /// Sun shadow blur radius in shadow-map texels (soft penumbra).
+    pub shadow_softness: f32,
+    /// Ambient occlusion strength (0 = off, 1 = full).
+    pub ssao_strength: f32,
+    /// How far ambient occlusion reaches, in world units (a tile is 128).
+    pub ssao_radius: f32,
+    /// Ambient occlusion contrast (above 1 deepens the creases).
+    pub ssao_power: f32,
 }
 
 impl Default for Lighting {
@@ -51,6 +62,11 @@ impl Default for Lighting {
             grass_saturation: 1.24,
             grass_brightness: 0.58,
             grass_mottle: 0.30,
+            unit_rim: 0.45,
+            shadow_softness: 3.0,
+            ssao_strength: 0.85,
+            ssao_radius: 150.0,
+            ssao_power: 1.6,
         }
     }
 }
@@ -93,6 +109,11 @@ impl Lighting {
         check("grass_saturation", self.grass_saturation, 0.0, 3.0)?;
         check("grass_brightness", self.grass_brightness, 0.0, 2.0)?;
         check("grass_mottle", self.grass_mottle, 0.0, 2.0)?;
+        check("unit_rim", self.unit_rim, 0.0, 2.0)?;
+        check("shadow_softness", self.shadow_softness, 0.0, 8.0)?;
+        check("ssao_strength", self.ssao_strength, 0.0, 1.0)?;
+        check("ssao_radius", self.ssao_radius, 8.0, 512.0)?;
+        check("ssao_power", self.ssao_power, 0.25, 4.0)?;
         for (i, &c) in self.hidden_tint.iter().enumerate() {
             check(&format!("hidden_tint[{i}]"), c, 0.0, 1.0)?;
         }
@@ -114,9 +135,18 @@ impl Lighting {
                 self.grass_saturation,
                 self.grass_brightness,
                 self.grass_mottle,
-                0.0,
+                self.unit_rim,
             ],
         ]
+    }
+
+    /// Ambient occlusion tuning for [`crate::ssao::Ssao`].
+    pub fn ssao(&self) -> crate::ssao::SsaoSettings {
+        crate::ssao::SsaoSettings {
+            radius: self.ssao_radius,
+            strength: self.ssao_strength,
+            power: self.ssao_power,
+        }
     }
 }
 
@@ -166,13 +196,15 @@ mod tests {
             grass_saturation: 9.0,
             grass_brightness: 10.0,
             grass_mottle: 11.0,
+            unit_rim: 12.0,
+            ..Lighting::default()
         };
         assert_eq!(
             lighting.uniforms(),
             [
                 [1.0, 2.0, 3.0, 0.4],
                 [0.5, 0.6, 0.7, 0.8],
-                [9.0, 10.0, 11.0, 0.0]
+                [9.0, 10.0, 11.0, 12.0]
             ]
         );
     }

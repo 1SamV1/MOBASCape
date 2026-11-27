@@ -12,15 +12,16 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicU8, Ordering};
 
 /// One begin/end pair per render pass.
-pub const SLOTS: usize = 8;
+pub const SLOTS: usize = 9;
 /// Pass names in query-slot order. Keep in step with the `mark` calls in
 /// `Renderer::render`.
 pub const PASS_NAMES: [&str; SLOTS] = [
     "shadow",
     "scene",
     "bloom bright",
-    "bloom h",
-    "bloom v",
+    "bloom down",
+    "bloom up",
+    "ssao",
     "post",
     "hud",
     "interface",

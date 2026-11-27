@@ -6,6 +6,8 @@ struct VsOut {
 @group(0) @binding(0) var scene_texture: texture_2d<f32>;
 @group(0) @binding(1) var bloom_texture: texture_2d<f32>;
 @group(0) @binding(2) var scene_sampler: sampler;
+// Ambient occlusion multiplier, half resolution (crates/client/src/ssao.rs).
+@group(0) @binding(3) var ao_texture: texture_2d<f32>;
 
 @vertex
 fn vs(@builtin(vertex_index) vertex_index: u32) -> VsOut {
@@ -31,7 +33,8 @@ fn tonemap(c: vec3<f32>) -> vec3<f32> {
 }
 
 fn composite(uv: vec2<f32>) -> vec3<f32> {
-    let scene = textureSample(scene_texture, scene_sampler, uv).rgb;
+    let ao = textureSample(ao_texture, scene_sampler, uv).r;
+    let scene = textureSample(scene_texture, scene_sampler, uv).rgb * ao;
     let bloom = textureSample(bloom_texture, scene_sampler, uv).rgb;
     // Bloom is a glint on metal and magic, not a neon halo around every
     // sword. The reference client has almost no visible bloom.
