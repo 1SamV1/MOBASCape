@@ -156,7 +156,19 @@
             "radius": 220,
             "range": 1100,
             "delay": 0.7,
-            "damage": 80
+            "damage": 80,
+            "gfx": {
+              "sounds": {
+                "cast": {
+                  "id": 3752,
+                  "volume": 0.7
+                },
+                "land": {
+                  "id": 2600,
+                  "volume": 0.6
+                }
+              }
+            }
           }
         ],
         "mastery": [
@@ -165,7 +177,19 @@
             "radius": 220,
             "range": 1100,
             "delay": 0.7,
-            "damage": 80
+            "damage": 80,
+            "gfx": {
+              "sounds": {
+                "cast": {
+                  "id": 3752,
+                  "volume": 0.7
+                },
+                "land": {
+                  "id": 2600,
+                  "volume": 0.6
+                }
+              }
+            }
           },
           {
             "type": "zone",
@@ -202,7 +226,15 @@
                 "pct": 0.2,
                 "duration": 0.8
               }
-            ]
+            ],
+            "gfx": {
+              "sounds": {
+                "land": {
+                  "id": 2577,
+                  "volume": 0.5
+                }
+              }
+            }
           }
         ],
         "mastery": [
@@ -221,7 +253,15 @@
                 "pct": 0.2,
                 "duration": 0.8
               }
-            ]
+            ],
+            "gfx": {
+              "sounds": {
+                "land": {
+                  "id": 2577,
+                  "volume": 0.5
+                }
+              }
+            }
           }
         ]
       },
@@ -256,7 +296,15 @@
             "health": 80,
             "damage": 8,
             "scale": 2.5,
-            "at": "front"
+            "at": "front",
+            "gfx": {
+              "sounds": {
+                "land": {
+                  "id": 3798,
+                  "volume": 0.6
+                }
+              }
+            }
           }
         ],
         "mastery": [
@@ -282,7 +330,15 @@
             "health": 80,
             "damage": 8,
             "scale": 2.5,
-            "at": "front"
+            "at": "front",
+            "gfx": {
+              "sounds": {
+                "land": {
+                  "id": 3798,
+                  "volume": 0.6
+                }
+              }
+            }
           }
         ]
       },
@@ -306,7 +362,16 @@
               "range": 1150,
               "damage": 35,
               "width": 110,
-              "explode": 150
+              "explode": 150,
+              "gfx": {
+                "sounds": {
+                  "cast": {
+                    "id": 3752,
+                    "volume": 0.5,
+                    "speed": 1.3
+                  }
+                }
+              }
             }
           }
         ]

@@ -167,7 +167,15 @@
                 "pct": 0.2,
                 "duration": 1.0
               }
-            ]
+            ],
+            "gfx": {
+              "sounds": {
+                "land": {
+                  "id": 2682,
+                  "volume": 0.6
+                }
+              }
+            }
           }
         ],
         "mastery": [
@@ -185,7 +193,15 @@
                 "pct": 0.2,
                 "duration": 1.0
               }
-            ]
+            ],
+            "gfx": {
+              "sounds": {
+                "land": {
+                  "id": 2682,
+                  "volume": 0.6
+                }
+              }
+            }
           }
         ]
       },
@@ -223,7 +239,15 @@
             "heal": 90,
             "allies": 500,
             "cleanse": false,
-            "duration": 1
+            "duration": 1,
+            "gfx": {
+              "sounds": {
+                "cast": {
+                  "id": 7898,
+                  "volume": 0.6
+                }
+              }
+            }
           }
         ],
         "mastery": [
@@ -232,7 +256,15 @@
             "heal": 90,
             "allies": 500,
             "cleanse": true,
-            "duration": 1
+            "duration": 1,
+            "gfx": {
+              "sounds": {
+                "cast": {
+                  "id": 7898,
+                  "volume": 0.6
+                }
+              }
+            }
           }
         ]
       },
@@ -251,7 +283,15 @@
             "bonus": 150,
             "missing_health": 0.15,
             "heal_pct": 0.5,
-            "reset_on_kill": 1
+            "reset_on_kill": 1,
+            "gfx": {
+              "sounds": {
+                "cast": {
+                  "id": 3825,
+                  "volume": 0.6
+                }
+              }
+            }
           }
         ]
       }

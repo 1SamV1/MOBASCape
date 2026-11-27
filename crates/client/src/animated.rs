@@ -2698,10 +2698,11 @@ impl AnimatedScene {
 
     /// One copy of a sound per frame: an area spell striking five minions,
     /// or a kit hit sound landing with the shared hit sound, plays once.
-    fn queue_sound(&mut self, spec: crate::champion::SoundSpec, pos: Vec3) {
+    pub(super) fn queue_sound(&mut self, spec: crate::champion::SoundSpec, pos: Vec3) {
         if self.sound_cues.len() >= 32 || self.sound_cues.iter().any(|cue| cue.id == spec.id) {
             return;
         }
+        tracing::trace!(id = spec.id, speed = spec.speed, "sound: queued");
         self.sound_cues.push(crate::audio::SoundCue {
             id: spec.id,
             pos,

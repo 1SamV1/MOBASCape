@@ -3,6 +3,40 @@
 Last updated: kit runtime for every hero, levels to 25 and talents,
 2026-11-25.
 
+## 2026-11-27 — Reworked abilities get their own cache sounds
+
+- **Per-action sounds.** A kit action's `gfx` block takes `sounds`:
+  `cast`, `land` and `hit`, each a cache sound id with volume and speed
+  (`kit::GfxSounds`). Own sounds replace the shared action sound, and they
+  travel with the action, so bots playing a hero sound like it too (a
+  champion file's `sounds` map only ever reached the player's hero). A
+  unit the player can't see stays silent.
+- **Picks.** 16 reworked heroes, 54 picks, mirrored onto their mastery
+  actions. Sources, in order: the hero's own animation sounds (Graardor
+  3843 attack, 3834 stomp, 3889 roar; Kree 3865, 3882; K'ril 3836, 3865,
+  3889; the Bloat 3935, 3998, 3976 fly drone, 3931 squelch), then sounds
+  from its nearest OSRS relative's animations, found by mapping NPC
+  skeletons to the 1,429 sequences that play sounds (dragons 3752 growl
+  and 3808 thud for Vorkath, the Ancient Wyvern and Callisto's roar;
+  hellhounds 6952 howl, 5860 snarl and 6928 for Cerberus; spiders 6963
+  and 6958 for Venenatis and the Kalphite swarm; aviansies 3883 and 3886
+  for Kree; Starlight's 7898 for Zilyana's Starlight), then RuneLite-named
+  effects chosen by measured character (2581 bloop for frog hops and
+  balloons, 2735 chop for Mandible Crush, 2577 sizzle for Acid Spray, 4960
+  for Tongue Lash, 2682 Retribution for holy hits, 3825 Piety).
+- **New mechanics.** Shared sounds in `data/sounds.json`: `kit_shatter`
+  (10665, a crack and crumble, picked by measurement), `kit_wall_stun`
+  (3834 stomp, lower), `kit_hex` (2663 prayer-off vwoop), `kit_grapple`
+  (2735 tree chop, the hook biting) and `kit_refund` (3925 chime, the
+  player's own cooldowns only).
+- **Checks.** All 54 ids decode in the pinned cache. A trace line
+  (`sound: queued`, at trace level) shows them firing in `--demo-abilities`
+  for Venenatis, Cerberus, Graardor, the Bloat, Kree and Vorkath, with no
+  shared sound doubling an own one. New test: every own sound has an id
+  and a sane volume and speed, and the mechanic sound names exist. Not yet
+  heard by a person; ids outside the heroes' own animations were chosen by
+  name and measured character, so some may need swapping by ear.
+
 ## 2026-11-25 — Vine Swing goes the distance; the Flesh Hook is an anchor; ability proposals
 
 - **Vine Swing was short.** It landed on the cursor (never under 300

@@ -725,6 +725,8 @@ impl AnimatedScene {
         } else if let Some(id) = gfx.hit {
             self.gfx_on(id, index, size);
         }
+        let at = self.units[index].pos;
+        self.play_kit_sound(gfx.sounds.hit, at, index);
         for status in statuses {
             self.apply_status_from(index, status, from, caster);
         }
@@ -889,6 +891,8 @@ impl AnimatedScene {
                 if cc.hex_stacks >= *count {
                     cc.hex_stacks = 0;
                     tracing::debug!("kit: unit {index} hexed by {count} stacked hits");
+                    let at = self.units[index].pos;
+                    self.play_shared_kit_sound("kit_hex", at, index);
                     self.apply_status_from(
                         index,
                         &Status::Hex {
@@ -1069,6 +1073,7 @@ impl AnimatedScene {
                     unit.cc.wall_stun = 0.0;
                     let pos = unit.pos;
                     self.emit_burst(pos + Vec3::Y * 60.0, [230, 230, 255], 14, 240.0, 14.0, 0.5);
+                    self.play_shared_kit_sound("kit_wall_stun", pos, index);
                     tracing::debug!("kit: unit {index} stunned against a wall");
                     return true;
                 }
@@ -1157,6 +1162,7 @@ impl AnimatedScene {
             reset_below: 0.0,
         });
         self.emit_burst(at + Vec3::Y * 40.0, [150, 120, 90], 14, 220.0, 14.0, 0.5);
+        self.play_shared_kit_sound("kit_grapple", at, pi);
         tracing::debug!("kit: unit {pi} grappled terrain {distance:.0} away");
     }
 
@@ -1172,6 +1178,10 @@ impl AnimatedScene {
             unit.cooldowns[slot] *= keep;
             let pos = unit.pos;
             self.emit_burst(pos + Vec3::Y * 90.0, [120, 220, 255], 10, 160.0, 12.0, 0.5);
+            // A personal cue: only the player hears its own cooldown return.
+            if caster == self.player_index {
+                self.play_shared_kit_sound("kit_refund", pos, caster);
+            }
         }
         tracing::debug!("kit: unit {caster} slot {slot} refunded {pct}");
     }
@@ -1204,6 +1214,7 @@ impl AnimatedScene {
             let pos = self.units[index].pos;
             self.emit_burst(pos + Vec3::Y * 50.0, [190, 240, 255], 22, 300.0, 16.0, 0.6);
             self.gfx_on(kit::spot::ICE_BLOCK, index, self.gfx_size(index));
+            self.play_shared_kit_sound("kit_shatter", pos, index);
             tracing::debug!("kit: unit {index} shattered for {damage}");
         }
     }
@@ -1767,7 +1778,17 @@ impl AnimatedScene {
 
     fn run_action(&mut self, action: &Action, ctx: &CastCtx) {
         let pi = ctx.caster;
-        if ctx.shared_sounds
+        // An action's own sounds replace the shared action sound: its cast
+        // plays now, its land where it lands.
+        let own = action.gfx().sounds;
+        if let Some(spec) = own.cast
+            && !matches!(action, Action::Channel { .. })
+        {
+            let pos = self.units[pi].pos;
+            self.play_kit_sound(Some(spec), pos, pi);
+        } else if ctx.shared_sounds
+            && own.cast.is_none()
+            && own.land.is_none()
             && let Some(name) = action.sound_name()
         {
             let pos = self.units[pi].pos;
@@ -1919,6 +1940,9 @@ impl AnimatedScene {
                         if let Some(id) = gfx.land {
                             self.gfx_at(id, pos, gfx.scale);
                         }
+                    }
+                    if i == 0 {
+                        self.play_kit_sound(gfx.sounds.land, pos, pi);
                     }
                     self.kit_world.zones.push(Zone {
                         caster: pi,
@@ -2200,6 +2224,7 @@ impl AnimatedScene {
                 if let Some(id) = gfx.land {
                     self.gfx_at(id, center, gfx.scale);
                 }
+                self.play_kit_sound(gfx.sounds.land, center, pi);
                 for i in 0..(*count).max(1) {
                     let id = npcs.get(i as usize).copied().unwrap_or(*npc);
                     let Some(asset) = self.kit_world.npc_assets.get(&id) else {
@@ -2511,6 +2536,31 @@ impl AnimatedScene {
         } else {
             Cow::Owned(collision.opened(&discs))
         }
+    }
+
+    /// Play a kit action's own cache sound at `pos`. `unit` is who makes
+    /// it (the caster, or the unit hit): a unit the player can't see stays
+    /// silent, so sound never gives a hidden hero away.
+    pub(super) fn play_kit_sound(
+        &mut self,
+        spec: Option<crate::champion::SoundSpec>,
+        pos: Vec3,
+        unit: usize,
+    ) {
+        let Some(spec) = spec else {
+            return;
+        };
+        let heard = unit == self.player_index || self.units.get(unit).is_some_and(|u| u.visible);
+        if heard {
+            self.queue_sound(spec, pos);
+        }
+    }
+
+    /// Play a shared mechanic sound (`data/sounds.json`) made by `unit`,
+    /// silent when the player can't see that unit.
+    pub(super) fn play_shared_kit_sound(&mut self, name: &str, pos: Vec3, unit: usize) {
+        let spec = self.default_sounds.get(name).copied();
+        self.play_kit_sound(spec, pos, unit);
     }
 
     fn nest_speed(&self, unit: usize) -> f32 {
@@ -3441,6 +3491,7 @@ impl AnimatedScene {
                 shot.hit.push(index);
                 if !shot.landed {
                     shot.landed = true;
+                    self.play_kit_sound(shot.gfx.sounds.land, shot.pos, shot.caster);
                     if let Some(id) = shot.gfx.land {
                         let ground = Vec3::new(
                             shot.pos.x,
@@ -3637,7 +3688,9 @@ impl AnimatedScene {
                 waiting.push(area);
                 continue;
             }
-            if area.sound {
+            if area.gfx.sounds.land.is_some() {
+                self.play_kit_sound(area.gfx.sounds.land, area.pos, area.caster);
+            } else if area.sound {
                 self.play_sound("kit_area", area.pos);
             }
             if let Some(id) = area.gfx.land {

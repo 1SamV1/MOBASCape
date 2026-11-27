@@ -159,6 +159,16 @@ any `q_*` (`w_*`, `e_*`, `r_*`) sound: the shared action sounds go quiet
 for that slot and `q_cast` plays on cast. Check an id with
 `rift-tools sounds --ids <id>[,<id>...] --out <dir>`.
 
+An action can carry its own cache sounds in its `gfx` block, which beats
+both: `"gfx": {"sounds": {"cast": {"id": 6963, "volume": 0.6},
+"land": {...}, "hit": {...}}}`. `cast` plays as the action starts (and
+replaces the shared action sound, as does `land`), `land` where an area
+lands, a zone is laid, a summon arrives or a projectile first strikes, and
+`hit` on each unit hit. These follow the action, so bots sound the same as
+the player. Copy them onto the `mastery` actions too, which replace
+`actions` at max rank. Find a creature's sounds with `rift-tools
+skeleton-anims <idle>` and `rift-tools sounds --sequences <ids>`.
+
 ## Statuses (`on_hit`, `on_tick`)
 
 `slow {pct, duration}`, `root`, `stun`, `knockup`, `fear`, `taunt`

@@ -165,7 +165,13 @@
             "type": "area",
             "gfx": {
               "land": 77,
-              "hit": 77
+              "hit": 77,
+              "sounds": {
+                "land": {
+                  "id": 2379,
+                  "volume": 0.6
+                }
+              }
             },
             "radius": 200,
             "range": 900,
@@ -185,7 +191,13 @@
             "type": "area",
             "gfx": {
               "land": 77,
-              "hit": 77
+              "hit": 77,
+              "sounds": {
+                "land": {
+                  "id": 2379,
+                  "volume": 0.6
+                }
+              }
             },
             "radius": 200,
             "range": 900,
@@ -213,7 +225,14 @@
           {
             "type": "area",
             "gfx": {
-              "land": 78
+              "land": 78,
+              "sounds": {
+                "land": {
+                  "id": 2596,
+                  "volume": 0.6,
+                  "speed": 1.1
+                }
+              }
             },
             "radius": 170,
             "range": 900,
@@ -233,7 +252,14 @@
           {
             "type": "area",
             "gfx": {
-              "land": 78
+              "land": 78,
+              "sounds": {
+                "land": {
+                  "id": 2596,
+                  "volume": 0.6,
+                  "speed": 1.1
+                }
+              }
             },
             "radius": 170,
             "range": 900,
@@ -262,7 +288,13 @@
           {
             "type": "projectile",
             "gfx": {
-              "hit": 76
+              "hit": 76,
+              "sounds": {
+                "hit": {
+                  "id": 2682,
+                  "volume": 0.6
+                }
+              }
             },
             "visual": "trident",
             "speed": 1700,
@@ -276,7 +308,13 @@
           {
             "type": "projectile",
             "gfx": {
-              "hit": 76
+              "hit": 76,
+              "sounds": {
+                "hit": {
+                  "id": 2682,
+                  "volume": 0.6
+                }
+              }
             },
             "visual": "trident",
             "speed": 1700,

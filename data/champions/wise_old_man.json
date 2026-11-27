@@ -170,7 +170,15 @@
                 "type": "knockup",
                 "duration": 1.2
               }
-            ]
+            ],
+            "gfx": {
+              "sounds": {
+                "cast": {
+                  "id": 2603,
+                  "volume": 0.6
+                }
+              }
+            }
           }
         ],
         "recast": [
@@ -207,7 +215,14 @@
           {
             "type": "area",
             "gfx": {
-              "hit": 111
+              "hit": 111,
+              "sounds": {
+                "land": {
+                  "id": 200,
+                  "volume": 0.6,
+                  "speed": 1.2
+                }
+              }
             },
             "at": "caster",
             "radius": 360,
@@ -224,7 +239,14 @@
           {
             "type": "area",
             "gfx": {
-              "hit": 111
+              "hit": 111,
+              "sounds": {
+                "land": {
+                  "id": 200,
+                  "volume": 0.6,
+                  "speed": 1.2
+                }
+              }
             },
             "at": "caster",
             "radius": 360,
@@ -306,7 +328,16 @@
                 "type": "stun",
                 "duration": 0.7
               }
-            ]
+            ],
+            "gfx": {
+              "sounds": {
+                "land": {
+                  "id": 2581,
+                  "volume": 0.7,
+                  "speed": 1.8
+                }
+              }
+            }
           }
         ],
         "mastery": [
@@ -325,7 +356,16 @@
                 "type": "stun",
                 "duration": 0.7
               }
-            ]
+            ],
+            "gfx": {
+              "sounds": {
+                "land": {
+                  "id": 2581,
+                  "volume": 0.7,
+                  "speed": 1.8
+                }
+              }
+            }
           },
           {
             "type": "buff",

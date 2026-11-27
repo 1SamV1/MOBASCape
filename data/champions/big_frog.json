@@ -171,7 +171,15 @@
                   }
                 ]
               }
-            ]
+            ],
+            "gfx": {
+              "sounds": {
+                "cast": {
+                  "id": 4960,
+                  "volume": 0.6
+                }
+              }
+            }
           }
         ],
         "mastery": [
@@ -196,7 +204,15 @@
                   }
                 ]
               }
-            ]
+            ],
+            "gfx": {
+              "sounds": {
+                "cast": {
+                  "id": 4960,
+                  "volume": 0.6
+                }
+              }
+            }
           }
         ],
         "ally_actions": [
@@ -212,7 +228,15 @@
                 "shield": 80,
                 "duration": 3
               }
-            ]
+            ],
+            "gfx": {
+              "sounds": {
+                "cast": {
+                  "id": 4960,
+                  "volume": 0.6
+                }
+              }
+            }
           }
         ]
       },
@@ -238,7 +262,16 @@
                 "at": "caster",
                 "radius": 200,
                 "damage": 30,
-                "on_hit": []
+                "on_hit": [],
+                "gfx": {
+                  "sounds": {
+                    "land": {
+                      "id": 2581,
+                      "volume": 0.7,
+                      "speed": 0.7
+                    }
+                  }
+                }
               }
             ]
           }
@@ -263,7 +296,16 @@
                     "type": "knockup",
                     "duration": 0.6
                   }
-                ]
+                ],
+                "gfx": {
+                  "sounds": {
+                    "land": {
+                      "id": 2581,
+                      "volume": 0.7,
+                      "speed": 0.7
+                    }
+                  }
+                }
               }
             ]
           }
@@ -293,7 +335,16 @@
                 "type": "hex",
                 "duration": 1.25
               }
-            ]
+            ],
+            "gfx": {
+              "sounds": {
+                "cast": {
+                  "id": 2581,
+                  "volume": 0.6,
+                  "speed": 1.5
+                }
+              }
+            }
           }
         ],
         "mastery": [
@@ -314,7 +365,16 @@
                 "pct": 0.15,
                 "duration": 1.25
               }
-            ]
+            ],
+            "gfx": {
+              "sounds": {
+                "cast": {
+                  "id": 2581,
+                  "volume": 0.6,
+                  "speed": 1.5
+                }
+              }
+            }
           }
         ]
       },
@@ -347,7 +407,16 @@
                 "count": 3,
                 "duration": 1.0
               }
-            ]
+            ],
+            "gfx": {
+              "sounds": {
+                "land": {
+                  "id": 2581,
+                  "volume": 0.7,
+                  "speed": 0.6
+                }
+              }
+            }
           }
         ],
         "mastery": [
@@ -371,7 +440,16 @@
                 "count": 3,
                 "duration": 1.0
               }
-            ]
+            ],
+            "gfx": {
+              "sounds": {
+                "land": {
+                  "id": 2581,
+                  "volume": 0.7,
+                  "speed": 0.6
+                }
+              }
+            }
           },
           {
             "type": "summon",

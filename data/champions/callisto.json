@@ -149,7 +149,16 @@
             "at": "front",
             "radius": 260,
             "arc": 120,
-            "damage": 55
+            "damage": 55,
+            "gfx": {
+              "sounds": {
+                "land": {
+                  "id": 3808,
+                  "volume": 0.75,
+                  "speed": 0.8
+                }
+              }
+            }
           }
         ]
       },
@@ -185,7 +194,16 @@
                   }
                 ]
               }
-            ]
+            ],
+            "gfx": {
+              "sounds": {
+                "cast": {
+                  "id": 3834,
+                  "volume": 0.7,
+                  "speed": 0.8
+                }
+              }
+            }
           }
         ],
         "mastery": [
@@ -287,7 +305,16 @@
                 "type": "stun",
                 "duration": 1.0
               }
-            ]
+            ],
+            "gfx": {
+              "sounds": {
+                "cast": {
+                  "id": 3752,
+                  "volume": 0.8,
+                  "speed": 0.7
+                }
+              }
+            }
           }
         ],
         "mastery": [

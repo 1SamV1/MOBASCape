@@ -157,7 +157,16 @@
                 "damage": 10,
                 "duration": 3
               }
-            ]
+            ],
+            "gfx": {
+              "sounds": {
+                "cast": {
+                  "id": 2596,
+                  "volume": 0.6,
+                  "speed": 0.8
+                }
+              }
+            }
           }
         ],
         "mastery": [
@@ -175,7 +184,16 @@
                 "damage": 10,
                 "duration": 3
               }
-            ]
+            ],
+            "gfx": {
+              "sounds": {
+                "cast": {
+                  "id": 2596,
+                  "volume": 0.6,
+                  "speed": 0.8
+                }
+              }
+            }
           },
           {
             "type": "zone",
@@ -203,7 +221,16 @@
             "radius": 250,
             "range": 1100,
             "delay": 1.2,
-            "damage": 90
+            "damage": 90,
+            "gfx": {
+              "sounds": {
+                "land": {
+                  "id": 3808,
+                  "volume": 0.7,
+                  "speed": 0.9
+                }
+              }
+            }
           },
           {
             "type": "area",
@@ -224,7 +251,16 @@
             "radius": 250,
             "range": 1100,
             "delay": 1.2,
-            "damage": 90
+            "damage": 90,
+            "gfx": {
+              "sounds": {
+                "land": {
+                  "id": 3808,
+                  "volume": 0.7,
+                  "speed": 0.9
+                }
+              }
+            }
           },
           {
             "type": "area",
@@ -306,7 +342,16 @@
             "type": "buff",
             "jad_every": 2,
             "jad_windup": 0.3,
-            "duration": 10
+            "duration": 10,
+            "gfx": {
+              "sounds": {
+                "cast": {
+                  "id": 2600,
+                  "volume": 0.6,
+                  "speed": 0.7
+                }
+              }
+            }
           }
         ]
       }

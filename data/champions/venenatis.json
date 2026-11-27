@@ -171,7 +171,15 @@
                 "damage": 6,
                 "duration": 6
               }
-            ]
+            ],
+            "gfx": {
+              "sounds": {
+                "cast": {
+                  "id": 6963,
+                  "volume": 0.6
+                }
+              }
+            }
           }
         ],
         "mastery": [
@@ -194,7 +202,15 @@
                 "damage": 6,
                 "duration": 6
               }
-            ]
+            ],
+            "gfx": {
+              "sounds": {
+                "cast": {
+                  "id": 6963,
+                  "volume": 0.6
+                }
+              }
+            }
           }
         ]
       },
@@ -224,7 +240,15 @@
                     "damage": 6,
                     "duration": 6
                   }
-                ]
+                ],
+                "gfx": {
+                  "sounds": {
+                    "land": {
+                      "id": 6958,
+                      "volume": 0.7
+                    }
+                  }
+                }
               }
             ]
           }
@@ -252,7 +276,15 @@
                     "damage": 6,
                     "duration": 6
                   }
-                ]
+                ],
+                "gfx": {
+                  "sounds": {
+                    "land": {
+                      "id": 6958,
+                      "volume": 0.7
+                    }
+                  }
+                }
               }
             ]
           }
@@ -277,7 +309,16 @@
             "range": 700,
             "heal_caster": 4,
             "on_tick": [],
-            "nest": 0.2
+            "nest": 0.2,
+            "gfx": {
+              "sounds": {
+                "land": {
+                  "id": 6958,
+                  "volume": 0.5,
+                  "speed": 0.7
+                }
+              }
+            }
           }
         ],
         "mastery": [
@@ -295,7 +336,16 @@
                 "duration": 0.6
               }
             ],
-            "nest": 0.2
+            "nest": 0.2,
+            "gfx": {
+              "sounds": {
+                "land": {
+                  "id": 6958,
+                  "volume": 0.5,
+                  "speed": 0.7
+                }
+              }
+            }
           }
         ]
       },
@@ -318,7 +368,16 @@
             "damage": 9,
             "scale": 0.35,
             "speed": 470,
-            "at": "caster"
+            "at": "caster",
+            "gfx": {
+              "sounds": {
+                "land": {
+                  "id": 6963,
+                  "volume": 0.6,
+                  "speed": 0.8
+                }
+              }
+            }
           },
           {
             "type": "buff",

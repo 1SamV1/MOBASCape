@@ -160,7 +160,15 @@
                 "pct": 0.35,
                 "duration": 1.5
               }
-            ]
+            ],
+            "gfx": {
+              "sounds": {
+                "land": {
+                  "id": 3843,
+                  "volume": 0.75
+                }
+              }
+            }
           }
         ],
         "mastery": [
@@ -176,7 +184,15 @@
                 "pct": 0.35,
                 "duration": 1.5
               }
-            ]
+            ],
+            "gfx": {
+              "sounds": {
+                "land": {
+                  "id": 3843,
+                  "volume": 0.75
+                }
+              }
+            }
           },
           {
             "type": "area",
@@ -214,7 +230,15 @@
             "health": 160,
             "damage": 11,
             "scale": 1.25,
-            "at": "caster"
+            "at": "caster",
+            "gfx": {
+              "sounds": {
+                "land": {
+                  "id": 3834,
+                  "volume": 0.7
+                }
+              }
+            }
           }
         ],
         "mastery": [
@@ -231,7 +255,15 @@
             "health": 160,
             "damage": 11,
             "scale": 1.25,
-            "at": "caster"
+            "at": "caster",
+            "gfx": {
+              "sounds": {
+                "land": {
+                  "id": 3834,
+                  "volume": 0.7
+                }
+              }
+            }
           }
         ]
       },
@@ -247,7 +279,15 @@
           {
             "type": "buff",
             "damage_reduction": 0.3,
-            "duration": 4
+            "duration": 4,
+            "gfx": {
+              "sounds": {
+                "cast": {
+                  "id": 3889,
+                  "volume": 0.7
+                }
+              }
+            }
           },
           {
             "type": "area",
@@ -265,7 +305,15 @@
           {
             "type": "buff",
             "damage_reduction": 0.3,
-            "duration": 4
+            "duration": 4,
+            "gfx": {
+              "sounds": {
+                "cast": {
+                  "id": 3889,
+                  "volume": 0.7
+                }
+              }
+            }
           },
           {
             "type": "area",
@@ -308,9 +356,26 @@
                     "duration": 3.0,
                     "reward": 8
                   }
-                ]
+                ],
+                "gfx": {
+                  "sounds": {
+                    "hit": {
+                      "id": 3843,
+                      "volume": 0.7
+                    }
+                  }
+                }
               }
-            ]
+            ],
+            "gfx": {
+              "sounds": {
+                "cast": {
+                  "id": 3834,
+                  "volume": 0.7,
+                  "speed": 0.9
+                }
+              }
+            }
           }
         ],
         "mastery": [

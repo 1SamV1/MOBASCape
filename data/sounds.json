@@ -24,5 +24,10 @@
   "kit_channel": { "id": 2670, "volume": 0.55 },
   "kit_empower": { "id": 2691, "volume": 0.6 },
   "kit_transform": { "id": 200, "volume": 0.7, "speed": 0.8 },
-  "structure_fall": { "id": 2734, "volume": 0.85, "speed": 0.85 }
+  "structure_fall": { "id": 2734, "volume": 0.85, "speed": 0.85 },
+  "kit_shatter": { "id": 10665, "volume": 0.65 },
+  "kit_wall_stun": { "id": 3834, "volume": 0.75, "speed": 0.75 },
+  "kit_hex": { "id": 2663, "volume": 0.6, "speed": 0.85 },
+  "kit_grapple": { "id": 2735, "volume": 0.7, "speed": 0.8 },
+  "kit_refund": { "id": 3925, "volume": 0.45, "speed": 1.2 }
 }

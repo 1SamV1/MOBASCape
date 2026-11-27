@@ -166,6 +166,9 @@ pub struct Gfx {
     /// Size multiplier for every graphic in the block.
     #[serde(default = "one")]
     pub scale: f32,
+    /// Cache sounds that go with the graphics.
+    #[serde(default)]
+    pub sounds: GfxSounds,
 }
 
 impl Default for Gfx {
@@ -176,8 +179,25 @@ impl Default for Gfx {
             hit: None,
             hold: None,
             scale: 1.0,
+            sounds: GfxSounds::default(),
         }
     }
+}
+
+/// Cache sound effects for an action, beside its graphics. Picked from the
+/// sounds the hero's own NPC animations play (`rift-tools sounds
+/// --sequences`). `cast` replaces the shared action sound
+/// (`data/sounds.json`); `land` plays where an area lands, a zone is laid,
+/// a summon arrives or a projectile first strikes; `hit` on every unit hit.
+/// They follow the action, so a bot playing the hero sounds the same.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Deserialize)]
+pub struct GfxSounds {
+    #[serde(default)]
+    pub cast: Option<crate::champion::SoundSpec>,
+    #[serde(default)]
+    pub land: Option<crate::champion::SoundSpec>,
+    #[serde(default)]
+    pub hit: Option<crate::champion::SoundSpec>,
 }
 
 impl Gfx {
@@ -1815,6 +1835,63 @@ mod tests {
             );
         }
         assert!(passives >= 12, "the twelve kit passives, found {passives}");
+    }
+
+    #[test]
+    fn kit_heroes_carry_their_own_cache_sounds() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data");
+        fn walk(action: &Action, out: &mut Vec<crate::champion::SoundSpec>) {
+            let own = action.gfx().sounds;
+            out.extend([own.cast, own.land, own.hit].into_iter().flatten());
+            match action {
+                Action::Dash { land, .. } => land.iter().for_each(|a| walk(a, out)),
+                Action::Channel { action, .. } => walk(action, out),
+                _ => {}
+            }
+        }
+        let mut voiced = 0;
+        for entry in std::fs::read_dir(root.join("champions")).unwrap() {
+            let path = entry.unwrap().path();
+            let config: serde_json::Value =
+                serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+            let Some(kit) = config.get("kit") else {
+                continue;
+            };
+            let kit: Kit = serde_json::from_value(kit.clone()).unwrap();
+            let mut specs = Vec::new();
+            for ability in &kit.abilities {
+                for list in [&ability.actions, &ability.mastery] {
+                    list.iter().for_each(|a| walk(a, &mut specs));
+                }
+            }
+            for spec in &specs {
+                assert!(spec.id > 0, "{path:?}: a sound needs a cache id");
+                assert!(
+                    (0.05..=1.0).contains(&spec.volume) && (0.25..=4.0).contains(&spec.speed),
+                    "{path:?}: sound {} has volume {} speed {}",
+                    spec.id,
+                    spec.volume,
+                    spec.speed
+                );
+            }
+            voiced += usize::from(!specs.is_empty());
+        }
+        assert!(
+            voiced >= 16,
+            "the reworked heroes have their own sounds ({voiced})"
+        );
+        let table: std::collections::BTreeMap<String, serde_json::Value> =
+            serde_json::from_str(&std::fs::read_to_string(root.join("sounds.json")).unwrap())
+                .unwrap();
+        for name in [
+            "kit_shatter",
+            "kit_wall_stun",
+            "kit_hex",
+            "kit_grapple",
+            "kit_refund",
+        ] {
+            assert!(table.contains_key(name), "data/sounds.json lacks {name}");
+        }
     }
 
     #[test]

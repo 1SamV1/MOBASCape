@@ -166,7 +166,19 @@
                 "distance": 1250,
                 "speed": 1500
               }
-            ]
+            ],
+            "gfx": {
+              "sounds": {
+                "cast": {
+                  "id": 3935,
+                  "volume": 0.7
+                },
+                "hit": {
+                  "id": 3998,
+                  "volume": 0.7
+                }
+              }
+            }
           }
         ],
         "mastery": [
@@ -184,7 +196,19 @@
                 "speed": 1500
               }
             ],
-            "grapple": true
+            "grapple": true,
+            "gfx": {
+              "sounds": {
+                "cast": {
+                  "id": 3935,
+                  "volume": 0.7
+                },
+                "hit": {
+                  "id": 3998,
+                  "volume": 0.7
+                }
+              }
+            }
           }
         ]
       },
@@ -209,7 +233,13 @@
             "self_damage": 4,
             "gfx": {
               "land": 1568,
-              "hit": 1569
+              "hit": 1569,
+              "sounds": {
+                "land": {
+                  "id": 3976,
+                  "volume": 0.5
+                }
+              }
             },
             "on_tick": [
               {
@@ -232,7 +262,13 @@
             "self_damage": 4,
             "gfx": {
               "land": 1568,
-              "hit": 1569
+              "hit": 1569,
+              "sounds": {
+                "land": {
+                  "id": 3976,
+                  "volume": 0.5
+                }
+              }
             },
             "on_tick": [
               {
@@ -273,7 +309,16 @@
                 "type": "stun",
                 "duration": 0.3
               }
-            ]
+            ],
+            "gfx": {
+              "sounds": {
+                "land": {
+                  "id": 3931,
+                  "volume": 0.8,
+                  "speed": 0.7
+                }
+              }
+            }
           }
         ],
         "mastery": [
@@ -291,7 +336,16 @@
                 "type": "stun",
                 "duration": 0.3
               }
-            ]
+            ],
+            "gfx": {
+              "sounds": {
+                "land": {
+                  "id": 3931,
+                  "volume": 0.8,
+                  "speed": 0.7
+                }
+              }
+            }
           }
         ]
       },
@@ -316,7 +370,14 @@
               "caster_health": 0.01,
               "heal_pct": 1.0,
               "gfx": {
-                "hit": 1576
+                "hit": 1576,
+                "sounds": {
+                  "hit": {
+                    "id": 3998,
+                    "volume": 0.6,
+                    "speed": 0.8
+                  }
+                }
               },
               "on_hit": [
                 {

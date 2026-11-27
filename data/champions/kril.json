@@ -162,7 +162,15 @@
             "range": 950,
             "damage": 55,
             "width": 120,
-            "pierce": true
+            "pierce": true,
+            "gfx": {
+              "sounds": {
+                "cast": {
+                  "id": 3836,
+                  "volume": 0.7
+                }
+              }
+            }
           }
         ],
         "mastery": [
@@ -173,7 +181,15 @@
             "range": 950,
             "damage": 55,
             "width": 120,
-            "pierce": true
+            "pierce": true,
+            "gfx": {
+              "sounds": {
+                "cast": {
+                  "id": 3836,
+                  "volume": 0.7
+                }
+              }
+            }
           },
           {
             "type": "zone",
@@ -208,7 +224,15 @@
                 "pct": 0.25,
                 "duration": 1.0
               }
-            ]
+            ],
+            "gfx": {
+              "sounds": {
+                "cast": {
+                  "id": 3834,
+                  "volume": 0.7
+                }
+              }
+            }
           }
         ],
         "mastery": [
@@ -224,7 +248,15 @@
                 "pct": 0.25,
                 "duration": 1.0
               }
-            ]
+            ],
+            "gfx": {
+              "sounds": {
+                "cast": {
+                  "id": 3834,
+                  "volume": 0.7
+                }
+              }
+            }
           }
         ]
       },
@@ -249,7 +281,15 @@
                 "type": "stun",
                 "duration": 0.15
               }
-            ]
+            ],
+            "gfx": {
+              "sounds": {
+                "cast": {
+                  "id": 3865,
+                  "volume": 0.7
+                }
+              }
+            }
           }
         ],
         "mastery": [
@@ -264,7 +304,15 @@
                 "type": "stun",
                 "duration": 0.15
               }
-            ]
+            ],
+            "gfx": {
+              "sounds": {
+                "cast": {
+                  "id": 3865,
+                  "volume": 0.7
+                }
+              }
+            }
           }
         ]
       },
@@ -292,7 +340,15 @@
                 "type": "heal_cut",
                 "duration": 5
               }
-            ]
+            ],
+            "gfx": {
+              "sounds": {
+                "land": {
+                  "id": 3889,
+                  "volume": 0.8
+                }
+              }
+            }
           }
         ],
         "mastery": [
@@ -316,7 +372,15 @@
                 "slot": 3,
                 "pct": 0.5
               }
-            ]
+            ],
+            "gfx": {
+              "sounds": {
+                "land": {
+                  "id": 3889,
+                  "volume": 0.8
+                }
+              }
+            }
           }
         ]
       }

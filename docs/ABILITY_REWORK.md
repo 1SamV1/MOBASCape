@@ -247,7 +247,8 @@ lands in SPELLS.md before a kit may use it. Sounds: each reworked ability
 gets its own cache sounds in its champion file (`q_*`, `w_*`, ... names, as
 Awowogei has today), picked from the sounds the OSRS NPC's own animations
 play (`rift-tools sounds --sequences`). Until then the shared kit sounds in
-`data/sounds.json` play.
+`data/sounds.json` play. Done 2026-11-27 through per-action `gfx.sounds`
+(docs/STATUS.md).
 
 ## 4. Heroes
 

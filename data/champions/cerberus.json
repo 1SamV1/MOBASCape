@@ -158,7 +158,15 @@
             "arc": 120,
             "damage": 22,
             "repeat": 3,
-            "interval": 0.18
+            "interval": 0.18,
+            "gfx": {
+              "sounds": {
+                "land": {
+                  "id": 5860,
+                  "volume": 0.7
+                }
+              }
+            }
           },
           {
             "type": "area",
@@ -183,7 +191,15 @@
             "arc": 120,
             "damage": 22,
             "repeat": 3,
-            "interval": 0.18
+            "interval": 0.18,
+            "gfx": {
+              "sounds": {
+                "land": {
+                  "id": 5860,
+                  "volume": 0.7
+                }
+              }
+            }
           },
           {
             "type": "area",
@@ -295,7 +311,15 @@
                   }
                 ]
               }
-            ]
+            ],
+            "gfx": {
+              "sounds": {
+                "cast": {
+                  "id": 6928,
+                  "volume": 0.5
+                }
+              }
+            }
           }
         ]
       },
@@ -320,7 +344,15 @@
                 "type": "fear",
                 "duration": 1.6
               }
-            ]
+            ],
+            "gfx": {
+              "sounds": {
+                "cast": {
+                  "id": 6952,
+                  "volume": 0.6
+                }
+              }
+            }
           },
           {
             "type": "summon",
@@ -350,7 +382,15 @@
                 "pct": 0.2,
                 "duration": 1.6
               }
-            ]
+            ],
+            "gfx": {
+              "sounds": {
+                "cast": {
+                  "id": 6952,
+                  "volume": 0.6
+                }
+              }
+            }
           },
           {
             "type": "summon",
