@@ -537,9 +537,10 @@ impl AnimatedScene {
                     );
                 }
             }
+            let rate = self.team_cooldown_rate(self.units[self.bots[b].unit].team);
             let u = &mut self.units[self.bots[b].unit];
             for cd in &mut u.cooldowns {
-                *cd = (*cd - dt).max(0.0);
+                *cd = (*cd - dt * rate).max(0.0);
             }
             if u.health > 0.0 {
                 u.mana = (u.mana + u.max_mana * MANA_REGEN * dt).min(u.max_mana);

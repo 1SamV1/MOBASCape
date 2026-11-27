@@ -455,15 +455,17 @@ impl AnimatedScene {
         }
     }
 
-    /// The living region boss on `team`'s side of the river.
+    /// A living region boss on `team`'s side of the river, preferring one
+    /// whose buff the team doesn't already hold.
     fn region_boss(&self, team: u8) -> Option<usize> {
+        let held = &self.team_buffs[team as usize];
         self.units
             .iter()
             .enumerate()
             .filter(|(_, u)| u.kind == UnitKind::Camp && u.camp_boss && u.health > 0.0)
             .filter(|(_, u)| self.own_side(team, u.pos))
+            .min_by_key(|(_, u)| held.iter().any(|b| Some(b.kind) == u.camp_buff))
             .map(|(i, _)| i)
-            .next()
     }
 
     /// True when `pos` is nearer `team`'s nexus than the enemy's.
@@ -500,10 +502,9 @@ impl AnimatedScene {
         }
     }
 
-    /// Experience and gold for a bot's last hit on a `kind`, with level-ups
-    /// on the player's table (+40 health, +2 damage a level).
-    pub(super) fn bot_reward(&mut self, unit: usize, kind: UnitKind) {
-        let (xp, gold) = super::reward_for(kind);
+    /// Experience and gold for a bot's last hit (`kill_reward`), with
+    /// level-ups on the player's table (+40 health, +2 damage a level).
+    pub(super) fn bot_reward(&mut self, unit: usize, xp: f32, gold: u32) {
         if xp <= 0.0 {
             return;
         }

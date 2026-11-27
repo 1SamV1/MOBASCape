@@ -384,9 +384,15 @@ pub fn objectives(scene: &SceneData, animated: &AnimatedScene) -> ObjectivesStat
             respawn: (unit.health <= 0.0).then(|| unit.dead_timer.max(0.0)),
         })
         .collect();
-    let buffs = [animated.team_buff(0), animated.team_buff(1)]
-        .map(|b| b.map(|(remaining, _, kind)| (kind, remaining)));
-    let camps = camp_lines(&snapshots, buffs);
+    let held: Vec<(u8, CampBuff, f32)> = (0..2u8)
+        .flat_map(|team| {
+            animated
+                .team_buff_list(team)
+                .into_iter()
+                .map(move |(remaining, kind)| (team, kind, remaining))
+        })
+        .collect();
+    let camps = camp_lines(&snapshots, &held);
     let second_lines = camps.iter().filter(|c| c.detail.is_some()).count();
 
     ObjectivesState {
@@ -409,22 +415,20 @@ struct CampSnapshot {
 }
 
 fn grant_name(buff: CampBuff) -> &'static str {
-    match buff {
-        CampBuff::Might => "Might",
-        CampBuff::Swift => "Swift",
-    }
+    buff.name()
 }
 
 /// The objective lines below the nexuses (roadmap 6.3): every region boss on
 /// a line of its own under its creature's name with its respawn timer, then
 /// one line per buff for the plain camps, "Alive" when all stand, else how
 /// many stand and the soonest respawn. A team holding a buff shows it as the
-/// second line of that buff's camp line.
-fn camp_lines(camps: &[CampSnapshot], buffs: [Option<(CampBuff, f32)>; 2]) -> Vec<CampState> {
+/// second line of that buff's camp line; a buff only a boss grants (Speed
+/// Demon, Brood Venom) shows its holder under that boss instead. `held` is
+/// every (team, buff, seconds left) in force.
+fn camp_lines(camps: &[CampSnapshot], held: &[(u8, CampBuff, f32)]) -> Vec<CampState> {
     let timer = |seconds: f32| format!("{:.0}s", seconds.ceil());
     let holder = |buff: CampBuff| {
-        buffs.iter().enumerate().find_map(|(team, held)| {
-            let (kind, remaining) = (*held)?;
+        held.iter().find_map(|&(team, kind, remaining)| {
             (kind == buff).then(|| {
                 format!(
                     "{} holds {} {}",
@@ -445,7 +449,11 @@ fn camp_lines(camps: &[CampSnapshot], buffs: [Option<(CampBuff, f32)>; 2]) -> Ve
                 .unwrap_or_else(|| format!("{} boss", grant_name(camp.buff))),
             grant: grant_name(camp.buff).to_string(),
             state: camp.respawn.map_or_else(|| "Alive".to_string(), timer),
-            detail: None,
+            detail: camps
+                .iter()
+                .all(|other| other.boss || other.buff != camp.buff)
+                .then(|| holder(camp.buff))
+                .flatten(),
         })
         .collect();
     for buff in [CampBuff::Might, CampBuff::Swift] {
@@ -1429,7 +1437,7 @@ mod tests {
             camp("Albino bat", CampBuff::Might, true, None),
             camp("Kree'arra Jr.", CampBuff::Might, false, Some(12.0)),
         ];
-        let lines = camp_lines(&camps, [Some((CampBuff::Might, 41.5)), None]);
+        let lines = camp_lines(&camps, &[(0, CampBuff::Might, 41.5)]);
         let view: Vec<(&str, &str, &str, Option<&str>)> = lines
             .iter()
             .map(|l| {
@@ -1457,6 +1465,23 @@ mod tests {
         );
         // Six objective lines with the two nexuses: the panel's usual height.
         assert_eq!(lines.len() + 2, 6);
+
+        // A boss with a buff of its own names its holder on its own line;
+        // a team can hold several buffs at once.
+        let mut camps = camps.to_vec();
+        camps.push(camp("Sarachnis", CampBuff::BroodVenom, true, Some(80.0)));
+        let held = [(0, CampBuff::Might, 41.5), (1, CampBuff::BroodVenom, 20.2)];
+        let lines = camp_lines(&camps, &held);
+        let sarachnis = lines.iter().find(|l| l.name == "Sarachnis").unwrap();
+        assert_eq!(sarachnis.grant, "Brood Venom");
+        assert_eq!(
+            sarachnis.detail.as_deref(),
+            Some("Red holds Brood Venom 21s")
+        );
+        // Albino bat's Might is also a plain-camp buff, so its holder stays
+        // on the Jungle camps line.
+        let albino = lines.iter().find(|l| l.name == "Albino bat").unwrap();
+        assert_eq!(albino.detail, None);
     }
 
     #[test]

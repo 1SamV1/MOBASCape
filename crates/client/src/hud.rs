@@ -121,6 +121,7 @@ pub fn unit_name_color(team: u8, hero: bool, camp: bool, buff: Option<CampBuff>)
         return match buff {
             Some(CampBuff::Might) => [255, 150, 80],
             Some(CampBuff::Swift) => [120, 235, 160],
+            Some(kind) => kind.colour(),
             None => [245, 205, 85],
         };
     }

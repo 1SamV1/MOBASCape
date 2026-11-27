@@ -669,10 +669,51 @@ pub enum CastleCorner {
     TopRight,
 }
 
+/// The team buff a camp grants its killers for a minute. Might and Swift
+/// come from the plain camps and the first two bosses; each later region
+/// boss has a buff of its own.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CampBuff {
     Might,
     Swift,
+    /// The Thermonuclear smoke devil (Human City): +40% movement speed and
+    /// ability cooldowns recover 60% faster.
+    SpeedDemon,
+    /// Sarachnis (Vampire Swamp): the team's basic attacks envenom.
+    BroodVenom,
+}
+
+impl CampBuff {
+    /// The map file's name for it (`"buff"` on a camp).
+    pub fn parse(name: &str) -> Option<Self> {
+        match name.to_ascii_lowercase().as_str() {
+            "might" => Some(Self::Might),
+            "swift" => Some(Self::Swift),
+            "speed_demon" => Some(Self::SpeedDemon),
+            "brood_venom" => Some(Self::BroodVenom),
+            _ => None,
+        }
+    }
+
+    /// How players read it.
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Might => "Might",
+            Self::Swift => "Swift",
+            Self::SpeedDemon => "Speed Demon",
+            Self::BroodVenom => "Brood Venom",
+        }
+    }
+
+    /// The colour its name, timer and camp plates take.
+    pub fn colour(self) -> [u8; 3] {
+        match self {
+            Self::Might => [255, 160, 60],
+            Self::Swift => [90, 220, 255],
+            Self::SpeedDemon => [255, 90, 200],
+            Self::BroodVenom => [120, 230, 70],
+        }
+    }
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -1083,11 +1124,14 @@ impl MapLayout {
                 walk_sequence: camp.walk,
                 health: camp.health,
                 respawn: camp.respawn,
-                buff: if camp.buff.eq_ignore_ascii_case("swift") {
-                    CampBuff::Swift
-                } else {
+                buff: CampBuff::parse(&camp.buff).unwrap_or_else(|| {
+                    tracing::warn!(
+                        "map: camp {} has unknown buff {:?}; Might",
+                        camp.id,
+                        camp.buff
+                    );
                     CampBuff::Might
-                },
+                }),
                 scale: camp.scale,
                 damage: camp.damage,
                 range: camp.range,
@@ -3245,6 +3289,18 @@ pub fn build(
 
     let collision = WorldCollision::new(collision_grid, sight_grid, origin_tile_x, origin_tile_y)
         .with_solid(solid_grid);
+    // A camp placed on scenery can't walk home or be reached in melee.
+    for camp in &map.camps {
+        let (x, z) = (camp.pos.x, camp.pos.z);
+        if !collision.is_walkable_world(x, z) {
+            tracing::warn!(
+                "map: camp {} stands on a blocked tile {:?}; nearest open {:?}",
+                camp.id,
+                collision.tile_of(x, z),
+                collision.nearest_walkable_world(x, z)
+            );
+        }
+    }
 
     let spawn_hint = map
         .spawn

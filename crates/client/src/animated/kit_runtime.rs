@@ -930,6 +930,7 @@ impl AnimatedScene {
         }
         let pi = caster;
         let structure = self.units[index].kind.is_structure();
+        let caster_team = self.units[caster].team;
         let unit = &mut self.units[index];
         match *status {
             Status::Venom { damage, duration } | Status::Bleed { damage, duration } => {
@@ -938,7 +939,9 @@ impl AnimatedScene {
                 }
                 unit.venom_timer = unit.venom_timer.max(duration);
                 unit.venom_damage = unit.venom_damage.max(damage);
-                unit.venom_team = 0;
+                // Credit the caster's side (this said team 0, so a red
+                // hero's venom counted as blue damage).
+                unit.venom_team = caster_team;
             }
             Status::ManaDrain { amount } => unit.mana = (unit.mana - amount).max(0.0),
             Status::ArmorShred { amount, duration } => {
@@ -1237,6 +1240,7 @@ impl AnimatedScene {
         }
         let growth =
             1.0 + rt.kit.innate_per_level * self.units[caster].level.saturating_sub(1) as f32;
+        let caster_team = self.units[caster].team;
         let unit = &mut self.units[index];
         unit.cc.venom_stacks = (unit.cc.venom_stacks + add).min(max);
         unit.cc.venom_stack_timer = duration;
@@ -1245,7 +1249,7 @@ impl AnimatedScene {
         }
         unit.venom_timer = unit.venom_timer.max(duration);
         unit.venom_damage = per_stack * growth * unit.cc.venom_stacks as f32;
-        unit.venom_team = 0;
+        unit.venom_team = caster_team;
         if unit.cc.venom_stacks >= max {
             unit.cc.heal_cut_timer = unit.cc.heal_cut_timer.max(duration);
         }
@@ -2806,6 +2810,8 @@ impl AnimatedScene {
             self.push_hitsplat(target, 0.0, super::HitsplatKind::Miss, tint);
             return;
         }
+        // Brood Venom (Sarachnis's team buff) rides on every basic attack.
+        let brood = self.brood_venom(pi);
         let Some(rt) = self.casters.get_mut(&pi) else {
             return;
         };
@@ -2844,6 +2850,12 @@ impl AnimatedScene {
         if rt.shot_timer > 0.0 {
             damage *= rt.shot_mult;
             statuses.extend(rt.shot_on_hit.iter().cloned());
+        }
+        if let Some(damage) = brood {
+            statuses.push(Status::Venom {
+                damage,
+                duration: super::BROOD_VENOM_SECONDS,
+            });
         }
         // Flesh heap: the whole bank goes into this hit.
         let banked = std::mem::take(&mut rt.flesh_heap);

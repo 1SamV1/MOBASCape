@@ -2760,10 +2760,13 @@ impl App {
                 );
             }
             let buff_data = animated.team_buff(0).map(|(remaining, duration, kind)| {
-                let (color, label) = match kind {
-                    CampBuff::Might => ([255, 160, 60], "MIGHT"),
-                    CampBuff::Swift => ([90, 220, 255], "SWIFT"),
+                let label = match kind {
+                    CampBuff::Might => "MIGHT",
+                    CampBuff::Swift => "SWIFT",
+                    CampBuff::SpeedDemon => "SPEED DEMON",
+                    CampBuff::BroodVenom => "BROOD VENOM",
                 };
+                let color = kind.colour();
                 (remaining, duration, color, label)
             });
             let buff =

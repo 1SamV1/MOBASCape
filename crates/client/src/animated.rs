@@ -638,13 +638,68 @@ impl VisibilityGrid {
     }
 }
 
-#[derive(Clone, Copy)]
+/// Seconds a camp or boss buff lasts.
+const TEAM_BUFF_SECONDS: f32 = 60.0;
+/// Brood Venom's venom: damage a second at hero level 1 and per level
+/// after, and how long one basic attack's dose lasts.
+const BROOD_VENOM_BASE: f32 = 6.0;
+const BROOD_VENOM_PER_LEVEL: f32 = 1.5;
+const BROOD_VENOM_SECONDS: f32 = 4.0;
+
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct TeamBuff {
     pub remaining: f32,
     pub duration: f32,
     pub damage_mult: f32,
     pub speed_mult: f32,
+    /// How fast ability cooldowns recover (1 = normal).
+    pub cooldown_rate: f32,
+    /// Basic attacks envenom (Brood Venom).
+    pub venom: bool,
     pub kind: CampBuff,
+}
+
+impl TeamBuff {
+    /// A fresh minute of `kind`.
+    pub fn of(kind: CampBuff) -> Self {
+        let (damage_mult, speed_mult, cooldown_rate, venom) = match kind {
+            CampBuff::Might => (1.25, 1.0, 1.0, false),
+            CampBuff::Swift => (1.0, 1.2, 1.0, false),
+            CampBuff::SpeedDemon => (1.0, 1.4, 1.6, false),
+            CampBuff::BroodVenom => (1.0, 1.0, 1.0, true),
+        };
+        Self {
+            remaining: TEAM_BUFF_SECONDS,
+            duration: TEAM_BUFF_SECONDS,
+            damage_mult,
+            speed_mult,
+            cooldown_rate,
+            venom,
+            kind,
+        }
+    }
+
+    /// Boss buffs (one boss each) lead the HUD over the camp buffs.
+    fn is_boss_buff(&self) -> bool {
+        matches!(self.kind, CampBuff::SpeedDemon | CampBuff::BroodVenom)
+    }
+}
+
+/// What a team's held buffs add up to: damage multiplies, while movement
+/// speed and cooldown recovery take the best one held (Swift under Speed
+/// Demon would otherwise make a 68% sprint).
+pub fn combine_buffs(buffs: &[TeamBuff]) -> (f32, f32, f32, bool) {
+    let damage = buffs.iter().map(|b| b.damage_mult).product();
+    let speed = buffs.iter().map(|b| b.speed_mult).fold(1.0, f32::max);
+    let cooldown = buffs.iter().map(|b| b.cooldown_rate).fold(1.0, f32::max);
+    let venom = buffs.iter().any(|b| b.venom);
+    (damage, speed, cooldown, venom)
+}
+
+/// Add a minute of `kind` to a team's buffs; the same buff refreshes.
+pub fn grant_buff(buffs: &mut Vec<TeamBuff>, kind: CampBuff) {
+    buffs.retain(|b| b.kind != kind);
+    buffs.push(TeamBuff::of(kind));
 }
 
 /// Which OSRS hitmark a floating combat number uses. The sprite and the
@@ -923,6 +978,8 @@ pub struct AnimatedScene {
     /// Team scoreboard counters.
     pub kills: [u32; 2],
     pub deaths: [u32; 2],
+    /// Region bosses killed this match, which picks each one's gold.
+    boss_kills: u32,
     /// Every hero's kills, deaths, assists and creep score, by unit index
     /// (the scoreboard; the player's own line feeds the score strip).
     pub score: score::ScoreBook,
@@ -959,7 +1016,8 @@ pub struct AnimatedScene {
     delivery_home: Vec3,
     delivered_queue: Vec<usize>,
     pub vision_origin: (i32, i32),
-    pub team_buffs: [Option<TeamBuff>; 2],
+    /// Each team's held camp and boss buffs, several at once.
+    pub team_buffs: [Vec<TeamBuff>; 2],
     /// Bot heroes' minds (one per bot champion unit).
     pub bots: Vec<bots::BotBrain>,
     /// When each team next ganks or takes its region boss.
@@ -1487,6 +1545,7 @@ impl AnimatedScene {
             kills: [0, 0],
             deaths: [0, 0],
             score: score::ScoreBook::default(),
+            boss_kills: 0,
             recent_damage: Vec::new(),
             wave_interval: scene.map.wave_interval,
             gold_income: 0.0,
@@ -1516,7 +1575,7 @@ impl AnimatedScene {
             delivery_home: guard_home,
             delivered_queue: Vec::new(),
             vision_origin: (vision_origin_x, vision_origin_y),
-            team_buffs: [None, None],
+            team_buffs: [Vec::new(), Vec::new()],
             bots: Vec::new(),
             team_plans: [bots::TeamPlan::default(); 2],
             bot_status_timer: 30.0,
@@ -2264,7 +2323,7 @@ impl AnimatedScene {
         let look = unit.look;
         let target_pos = self.unit_chest(target);
         if ranged {
-            self.projectiles.push(Projectile::homing(
+            let mut shot = Projectile::homing(
                 from,
                 target,
                 target_pos,
@@ -2273,12 +2332,15 @@ impl AnimatedScene {
                 team,
                 Some(pi),
                 look,
-            ));
+            );
+            shot.venom = self.brood_venom(pi).unwrap_or(0.0);
+            self.projectiles.push(shot);
             self.muzzle_flash(from, look);
             self.play_release_sound(pi, from);
         } else {
             self.melee_slash(pi, target, [255, 235, 200]);
             self.damage_unit_by(target, damage, 0, Some(pi));
+            self.apply_brood_venom(pi, target);
             if pi == self.player_index {
                 self.madness_attack(target);
             }
@@ -2474,7 +2536,7 @@ impl AnimatedScene {
                 _ => 1400.0,
             };
             let look = self.units[index].look;
-            self.projectiles.push(Projectile::homing(
+            let mut shot = Projectile::homing(
                 from,
                 strike.target,
                 target_pos,
@@ -2483,7 +2545,9 @@ impl AnimatedScene {
                 team,
                 Some(index),
                 look,
-            ));
+            );
+            shot.venom = self.brood_venom(index).unwrap_or(0.0);
+            self.projectiles.push(shot);
             self.muzzle_flash(from, look);
             self.play_release_sound(index, from);
         } else {
@@ -2494,6 +2558,7 @@ impl AnimatedScene {
             };
             self.melee_slash(index, strike.target, color);
             self.damage_unit_by(strike.target, strike.damage, team, Some(index));
+            self.apply_brood_venom(index, strike.target);
         }
     }
 
@@ -3612,6 +3677,8 @@ impl AnimatedScene {
                 let buff = match unit.camp_buff {
                     Some(CampBuff::Might) => "MIGHT",
                     Some(CampBuff::Swift) => "SWIFT",
+                    Some(CampBuff::SpeedDemon) => "SPEED DEMON",
+                    Some(CampBuff::BroodVenom) => "BROOD VENOM",
                     None => "NEUTRAL",
                 };
                 format!("{buff} JUNGLE CREATURE")
@@ -3759,10 +3826,11 @@ impl AnimatedScene {
         }
         let pi = self.player_index;
         let player_spawn = self.player_spawn;
+        let cooldown_rate = self.team_cooldown_rate(self.units[pi].team);
         {
             let player = &mut self.units[pi];
             for cd in &mut player.cooldowns {
-                *cd = (*cd - dt).max(0.0);
+                *cd = (*cd - dt * cooldown_rate).max(0.0);
             }
             player.mana = (player.mana + 8.0 * dt).min(player.max_mana);
             if player.health > 0.0 && player.pos.distance(player_spawn) <= 900.0 {
@@ -3896,13 +3964,11 @@ impl AnimatedScene {
             }
         }
 
-        for buff in &mut self.team_buffs {
-            if let Some(b) = buff {
-                b.remaining -= dt;
-                if b.remaining <= 0.0 {
-                    *buff = None;
-                }
+        for buffs in &mut self.team_buffs {
+            for buff in buffs.iter_mut() {
+                buff.remaining -= dt;
             }
+            buffs.retain(|buff| buff.remaining > 0.0);
         }
 
         let mut venom_ticks: Vec<(usize, f32, u8)> = Vec::new();
@@ -4957,9 +5023,10 @@ impl AnimatedScene {
                 aggressor.map_or_else(|| "the rift".to_string(), name)
             );
         }
+        let (reward_xp, reward_gold) = self.kill_reward(index, target_kind);
         if attacker_team == 0 && hero_aggressor {
-            self.grant_reward(target_kind);
-            let (_, gold) = reward_for(target_kind);
+            self.grant_reward(reward_xp, reward_gold);
+            let gold = if reward_xp > 0.0 { reward_gold } else { 0 };
             tracing::debug!("gold: last hit {target_kind:?} +{gold}");
             if gold > 0 {
                 // Above the victim's plate, clear of the hitsplats on it.
@@ -4968,7 +5035,7 @@ impl AnimatedScene {
             }
         }
         if let Some(bot) = aggressor.filter(|&a| self.units[a].kind == UnitKind::BotChampion) {
-            self.bot_reward(bot, target_kind);
+            self.bot_reward(bot, reward_xp, reward_gold);
         }
         self.pay_team_bounty(target_kind, attacker_team);
         self.share_xp(index, target_kind, attacker_team, aggressor);
@@ -5055,20 +5122,11 @@ impl AnimatedScene {
                 unit.target = None;
                 unit.path.clear();
                 unit.path_index = 0;
-                if let Some(kind) = camp_buff {
-                    let (damage_mult, speed_mult) = match kind {
-                        CampBuff::Might => (1.25, 1.0),
-                        CampBuff::Swift => (1.0, 1.2),
-                    };
-                    if attacker_team < 2 {
-                        self.team_buffs[attacker_team as usize] = Some(TeamBuff {
-                            remaining: 60.0,
-                            duration: 60.0,
-                            damage_mult,
-                            speed_mult,
-                            kind,
-                        });
-                    }
+                if let Some(kind) = camp_buff
+                    && attacker_team < 2
+                {
+                    grant_buff(&mut self.team_buffs[attacker_team as usize], kind);
+                    tracing::info!("buff: team {attacker_team} takes {}", kind.name());
                 }
             }
             _ => {}
@@ -5142,8 +5200,20 @@ impl AnimatedScene {
         });
     }
 
-    fn grant_reward(&mut self, kind: UnitKind) {
+    /// The last hitter's experience and gold for killing `victim`: the
+    /// table in [`reward_for`], except a region boss pays 275 to 325 gold
+    /// (a different figure each kill, from a counter, so runs repeat).
+    fn kill_reward(&mut self, victim: usize, kind: UnitKind) -> (f32, u32) {
         let (xp, gold) = reward_for(kind);
+        if kind == UnitKind::Camp && self.units[victim].camp_boss {
+            let gold = boss_gold(self.boss_kills);
+            self.boss_kills += 1;
+            return (xp, gold);
+        }
+        (xp, gold)
+    }
+
+    fn grant_reward(&mut self, xp: f32, gold: u32) {
         if xp <= 0.0 {
             return;
         }
@@ -5374,27 +5444,73 @@ impl AnimatedScene {
             .count()
     }
 
+    fn team_totals(&self, team: u8) -> (f32, f32, f32, bool) {
+        combine_buffs(
+            self.team_buffs
+                .get(team as usize)
+                .map_or(&[], |b| b.as_slice()),
+        )
+    }
+
     fn team_damage_mult(&self, team: u8) -> f32 {
-        self.team_buffs
-            .get(team as usize)
-            .and_then(|b| *b)
-            .map(|b| b.damage_mult)
-            .unwrap_or(1.0)
+        self.team_totals(team).0
     }
 
     fn team_speed_mult(&self, team: u8) -> f32 {
-        self.team_buffs
-            .get(team as usize)
-            .and_then(|b| *b)
-            .map(|b| b.speed_mult)
-            .unwrap_or(1.0)
+        self.team_totals(team).1
     }
 
+    /// How fast `team`'s ability cooldowns recover (Speed Demon: 1.6).
+    pub(crate) fn team_cooldown_rate(&self, team: u8) -> f32 {
+        self.team_totals(team).2
+    }
+
+    /// The venom a basic attack by `attacker` carries under Brood Venom:
+    /// damage a second, growing with the hero's level. Heroes only.
+    pub(crate) fn brood_venom(&self, attacker: usize) -> Option<f32> {
+        let unit = self.units.get(attacker)?;
+        (unit.kind.is_champion() && unit.team < 2 && self.team_totals(unit.team).3)
+            .then(|| BROOD_VENOM_BASE + BROOD_VENOM_PER_LEVEL * unit.level.saturating_sub(1) as f32)
+    }
+
+    /// Envenom `target` with a Brood Venom dose from `attacker`.
+    fn apply_brood_venom(&mut self, attacker: usize, target: usize) {
+        let Some(dps) = self.brood_venom(attacker) else {
+            return;
+        };
+        let team = self.units[attacker].team;
+        let unit = &mut self.units[target];
+        if unit.kind.is_structure() || unit.team == team || unit.health <= 0.0 {
+            return;
+        }
+        if unit.venom_timer <= 0.0 {
+            unit.venom_tick = 1.0;
+        }
+        unit.venom_timer = unit.venom_timer.max(BROOD_VENOM_SECONDS);
+        unit.venom_damage = unit.venom_damage.max(dps);
+        unit.venom_team = team;
+    }
+
+    /// The buff the HUD shows for `team`: a boss buff first, then the one
+    /// with the most time left.
     pub fn team_buff(&self, team: u8) -> Option<(f32, f32, CampBuff)> {
         self.team_buffs
-            .get(team as usize)
-            .and_then(|b| *b)
+            .get(team as usize)?
+            .iter()
+            .max_by(|a, b| {
+                (a.is_boss_buff(), a.remaining)
+                    .partial_cmp(&(b.is_boss_buff(), b.remaining))
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
             .map(|b| (b.remaining, b.duration, b.kind))
+    }
+
+    /// Every buff `team` holds: (seconds left, kind).
+    pub fn team_buff_list(&self, team: u8) -> Vec<(f32, CampBuff)> {
+        self.team_buffs
+            .get(team as usize)
+            .map(|buffs| buffs.iter().map(|b| (b.remaining, b.kind)).collect())
+            .unwrap_or_default()
     }
 
     fn update_projectiles(&mut self, dt: f32, height: &HeightGrid) {
@@ -6940,6 +7056,12 @@ fn reward_for(kind: UnitKind) -> (f32, u32) {
     }
 }
 
+/// A region boss's last-hit gold, 275 to 325: the `n`th boss kill of the
+/// match steps through the range in a scrambled order.
+fn boss_gold(n: u32) -> u32 {
+    275 + (n.wrapping_mul(29).wrapping_add(17)) % 51
+}
+
 /// Gold every hero of the destroying side gets for a structure, whoever
 /// landed the blow: towers 100, watchtowers 75.
 fn team_bounty(kind: UnitKind) -> u32 {
@@ -7898,6 +8020,41 @@ fn draw_rope(scene: &mut AnimatedScene, from: Vec3, to: Vec3, color: [u8; 3], fo
 #[cfg(test)]
 mod tests {
     #[test]
+    fn team_buffs_stack_refresh_and_take_the_best_speed() {
+        let mut buffs = Vec::new();
+        grant_buff(&mut buffs, CampBuff::Might);
+        grant_buff(&mut buffs, CampBuff::Swift);
+        grant_buff(&mut buffs, CampBuff::SpeedDemon);
+        buffs[0].remaining = 5.0;
+        // The same buff refreshes instead of stacking twice.
+        grant_buff(&mut buffs, CampBuff::Might);
+        assert_eq!(buffs.len(), 3);
+        assert!(buffs.iter().all(|b| b.remaining == TEAM_BUFF_SECONDS));
+        let (damage, speed, cooldown, venom) = combine_buffs(&buffs);
+        assert_eq!(damage, 1.25);
+        // Speed Demon's 40% wins over Swift's 20%; they don't multiply.
+        assert_eq!(speed, 1.4);
+        assert_eq!(cooldown, 1.6);
+        assert!(!venom);
+        grant_buff(&mut buffs, CampBuff::BroodVenom);
+        assert!(combine_buffs(&buffs).3);
+        assert_eq!(combine_buffs(&[]), (1.0, 1.0, 1.0, false));
+        assert_eq!(TEAM_BUFF_SECONDS, 60.0);
+    }
+
+    #[test]
+    fn boss_buffs_parse_from_the_map_and_read_by_name() {
+        assert_eq!(CampBuff::parse("speed_demon"), Some(CampBuff::SpeedDemon));
+        assert_eq!(CampBuff::parse("Brood_Venom"), Some(CampBuff::BroodVenom));
+        assert_eq!(CampBuff::parse("might"), Some(CampBuff::Might));
+        assert_eq!(CampBuff::parse("nope"), None);
+        assert_eq!(CampBuff::SpeedDemon.name(), "Speed Demon");
+        // Brood Venom grows with the hero: 6 a second at level 1, 42 at 25.
+        assert_eq!(BROOD_VENOM_BASE, 6.0);
+        assert_eq!(BROOD_VENOM_BASE + BROOD_VENOM_PER_LEVEL * 24.0, 42.0);
+    }
+
+    #[test]
     fn last_hits_pay_dota_sized_bounties_and_structures_pay_the_team() {
         assert_eq!(reward_for(UnitKind::MeleeMinion).1, 59);
         assert_eq!(reward_for(UnitKind::RangedMinion).1, 70);
@@ -7908,6 +8065,11 @@ mod tests {
         assert_eq!(team_bounty(UnitKind::Watchtower), 75);
         assert_eq!(team_bounty(UnitKind::MeleeMinion), 0);
         assert_eq!(team_bounty(UnitKind::Inhibitor), 0);
+        // Region bosses: 275 to 325, every figure in the range turning up.
+        let golds: std::collections::BTreeSet<u32> = (0..51).map(boss_gold).collect();
+        assert_eq!(golds.len(), 51);
+        assert_eq!(golds.first(), Some(&275));
+        assert_eq!(golds.last(), Some(&325));
         const { assert!(PASSIVE_GOLD < 8.0 && PASSIVE_GOLD >= 6.5) };
     }
 

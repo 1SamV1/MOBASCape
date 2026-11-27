@@ -3,6 +3,38 @@
 Last updated: kit runtime for every hero, levels to 25 and talents,
 2026-11-25.
 
+## 2026-11-27 — Two new region bosses with their own buffs; bosses pay 275-325
+
+- **Boss gold.** A region boss's last hit pays 275 to 325 gold (it paid a
+  camp's 90). Each boss kill of the match steps through the range in a
+  scrambled order (`boss_gold`, tested), so runs repeat.
+- **Thermonuclear smoke devil** (cache npc 499, model 36012) in the Human
+  City, west of the top bridge on the Radiant side, 17 tiles off the top
+  lane. Ranged; 340 health; respawns in 2 minutes. Grants **Speed Demon**
+  for a minute: +40% movement speed and ability cooldowns recover 60%
+  faster (the buff as you specified it).
+- **Sarachnis** (npc 8713, model 37292) in the Vampire Swamp, Dire side, 24
+  tiles off any lane. Melee; 360 health; 2 minutes. Grants **Brood Venom**
+  for a minute: every hero's basic attacks envenom for 4 s at 6 damage a
+  second plus 1.5 a level (42 at level 25), on kit and plain attacks, melee
+  and ranged.
+- **Teams hold several buffs at once.** There was one slot per team, so a
+  small camp's Might would have wiped a boss buff. Same-kind buffs refresh;
+  damage multiplies, while movement speed and cooldown recovery take the
+  best held (Swift under Speed Demon stays 40%, not 68%). The HUD shows a
+  boss buff first. The objectives panel names a boss buff's holder on that
+  boss's line ("Red holds Brood Venom 21s").
+- **Bots** take a boss whose buff their team doesn't hold first. In a
+  10-minute `--bots` run red took Sarachnis (Brood Venom) and blue took the
+  smoke devil (Speed Demon), then each went for its other boss.
+- **Fixes on the way:** kit venom always credited team 0, so a red hero's
+  venom counted as blue damage; it credits the caster's side now. The map
+  loader warns when a camp stands on a blocked tile (none do).
+- Unit tests cover buff stacking and refresh, the buff parse and names,
+  boss gold and the objectives holder line. Not yet checked live: the
+  cooldown speed-up and venom ticks in a fight (the run above only shows
+  the buffs being granted).
+
 ## 2026-11-27 — Last-hit gold, structure team bounties, slower passive income
 
 - **Last-hit bounties** (Dota 2 style, ADR-020a): the hero who lands the

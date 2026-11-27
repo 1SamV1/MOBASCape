@@ -223,7 +223,8 @@ must own gold, healing, and shop range before multiplayer.
 
 Gold comes mostly from last hits, as in Dota 2. The hero who lands the
 killing blow on a lane imp (melee minion) gets 59 gold, on a fairy (ranged
-minion) 70, and on a jungle creature 90 (they paid 10, 10 and 50). A
+minion) 70, and on a jungle creature 90 (they paid 10, 10 and 50); a region
+boss pays 275 to 325 (a different figure each boss kill). A
 destroyed tower pays 100 to every hero of the destroying side, alive or
 dead, and a hero who lands its last hit gets 150 on top. A watchtower pays
 its destroyers 75 each. Passive income drops from 8 to 7 gold a second for
