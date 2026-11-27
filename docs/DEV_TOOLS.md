@@ -174,6 +174,12 @@ it to see where load time goes before optimising.
   cursor on slot 0-3 so its ability tooltip is in the screenshot.
 - Combine with `--screenshot out.png --screenshot-after N` and step `N` to
   capture a projectile in flight.
+- `--bots --bot-heroes venenatis,big_frog`: those heroes take the bot
+  slots first (blue's allies, then red), so one kit can be watched in a
+  bot match.
+- `--demo-abilities --demo-nest`: stands the hero 300 short of the
+  nearest scenery, lays E on it and walks straight across, logging how
+  many frames were spent on tiles that normally block (Web Nest check).
 - `--fixed-dt SECONDS` advances every frame by that much game time instead
   of the wall clock, so `--screenshot-after N` lands on the same moment of
   a demo every run (N frames = N x SECONDS). Without it the frame rate,

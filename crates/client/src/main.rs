@@ -141,6 +141,11 @@ struct Cli {
     /// as a match from hero select does.
     #[arg(long)]
     bots: bool,
+    /// With `--bots`: these heroes (champion ids, comma separated) fill
+    /// the bot slots first, blue's allies then red, before the default
+    /// order. For watching one hero's kit played by a bot.
+    #[arg(long, value_delimiter = ',')]
+    bot_heroes: Vec<String>,
     /// Demo: King Awowogei's kit against a rival champion: Bananarang,
     /// a peel thrown under the rival, Greegree, then Vine Swing.
     #[arg(long)]
@@ -178,6 +183,11 @@ struct Cli {
     /// of the camp (checks grapples).
     #[arg(long)]
     demo_grapple: bool,
+    /// With `--demo-abilities`: lay E on the nearest scenery and walk the
+    /// hero straight across it, logging each frame spent on a tile that
+    /// normally blocks (checks Web Nest's walking through scenery).
+    #[arg(long)]
+    demo_nest: bool,
     /// Demo: play these cache spot animations (comma separated ids) in a
     /// labelled grid beside the hero, over and over, for checking spell
     /// graphics by eye.
@@ -461,7 +471,18 @@ fn main() -> Result<()> {
             .iter()
             .position(|c| c.id == champion.id)
             .unwrap_or(0);
-        let others: Vec<usize> = (0..champions.len()).filter(|&i| i != me).collect();
+        let mut others: Vec<usize> = Vec::new();
+        for id in &cli.bot_heroes {
+            match champions.iter().position(|c| &c.id == id) {
+                Some(i) if i != me && !others.contains(&i) => others.push(i),
+                Some(_) => {}
+                None => tracing::warn!("bots: unknown hero '{id}' in --bot-heroes"),
+            }
+        }
+        let rest: Vec<usize> = (0..champions.len())
+            .filter(|&i| i != me && !others.contains(&i))
+            .collect();
+        others.extend(rest);
         let pick = |n: usize| others[n % others.len().max(1)];
         let blue: Vec<usize> = std::iter::once(me).chain((0..4).map(pick)).collect();
         let red: Vec<usize> = (4..9).map(pick).collect();
@@ -751,6 +772,8 @@ fn main() -> Result<()> {
         demo_abilities: cli.demo_abilities,
         demo_level: cli.demo_level,
         demo_grapple: cli.demo_grapple,
+        demo_nest: cli.demo_nest,
+        demo_nest_walk: None,
         demo_abilities_timer: 0.0,
         demo_abilities_stage: 0,
         demo_gfx: cli.demo_gfx.clone(),
@@ -932,6 +955,9 @@ struct App {
     demo_abilities: bool,
     demo_level: Option<u32>,
     demo_grapple: bool,
+    demo_nest: bool,
+    /// `--demo-nest` walk: (goal, seconds walked, frames on blocked tiles).
+    demo_nest_walk: Option<(Vec3, f32, u32)>,
     demo_abilities_timer: f32,
     demo_abilities_stage: u8,
     demo_gfx: Vec<u32>,
@@ -2273,6 +2299,20 @@ impl App {
                     animated.say(player, &format!("{} spot animations", self.demo_gfx.len()));
                 }
             }
+            if let Some((goal, walked, blocked)) = self.demo_nest_walk.as_mut() {
+                *walked += dt;
+                let pos = animated.player_pos();
+                if !collision.is_walkable_world(pos.x, pos.z) {
+                    *blocked += 1;
+                }
+                let left = (*goal - pos).with_y(0.0).length();
+                if left < 40.0 || *walked > 4.0 {
+                    tracing::info!(
+                        "demo nest: {blocked} frames on scenery, {left:.0} from the goal after {walked:.1}s",
+                    );
+                    self.demo_nest_walk = None;
+                }
+            }
             if self.demo_abilities {
                 self.demo_abilities_timer += dt;
                 let t = self.demo_abilities_timer;
@@ -2349,6 +2389,44 @@ impl App {
                                 spot.z,
                             ));
                         }
+                        // Web Nest check: stand 300 short of the nearest
+                        // scenery and lay the web on it.
+                        let aim = if self.demo_nest && slot == 2 {
+                            let from = animated.player_pos();
+                            let wall = (1..=120)
+                                .flat_map(|step| {
+                                    (0..32).map(move |k| {
+                                        let a = k as f32 / 32.0 * std::f32::consts::TAU;
+                                        from + Vec3::new(a.cos(), 0.0, a.sin())
+                                            * (step as f32 * 25.0)
+                                    })
+                                })
+                                .find(|p| !collision.is_walkable_world(p.x, p.z));
+                            match wall {
+                                Some(wall) => {
+                                    let dir = (wall - from).with_y(0.0).normalize_or_zero();
+                                    let spot = wall - dir * 300.0;
+                                    animated.teleport_player(Vec3::new(
+                                        spot.x,
+                                        height.height_at(spot.x, spot.z),
+                                        spot.z,
+                                    ));
+                                    let goal = wall + dir * 300.0;
+                                    self.demo_nest_walk = Some((goal, 0.0, 0));
+                                    tracing::info!(
+                                        "demo nest: scenery {:.0} from the start, walking 600 across it",
+                                        (wall - from).length()
+                                    );
+                                    wall
+                                }
+                                None => {
+                                    tracing::info!("demo nest: no scenery within 3000");
+                                    aim
+                                }
+                            }
+                        } else {
+                            aim
+                        };
                         if self.demo_grapple && slot == 0 {
                             tracing::info!(
                                 "demo abilities: grapple aim {:.0} away",
@@ -2365,6 +2443,12 @@ impl App {
                         // Held (vector or charge) abilities fire on release.
                         let ok = ok || animated.release_slot(slot, aim);
                         tracing::info!("demo abilities: slot {slot} cast={ok}");
+                        if slot == 2
+                            && let Some((goal, _, _)) = self.demo_nest_walk
+                        {
+                            let legs = animated.set_player_target(goal, collision, height);
+                            tracing::info!("demo nest: path has {legs} leg(s)");
+                        }
                         self.demo_abilities_stage += 1;
                     }
                 }

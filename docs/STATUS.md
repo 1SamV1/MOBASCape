@@ -47,8 +47,8 @@ Last updated: kit runtime for every hero, levels to 25 and talents,
 - **Reworked kits for the 16 data-driven heroes** (docs/ABILITY_REWORK.md
   approval log): masteries at max rank, unit/ally targeting, recast,
   toggles, vector and charge casts, and the new statuses. Every ability
-  casts in `--demo-abilities`. Known gap: Web Nest passing through scenery.
-  Since closed: the Bloat's reel-in at hook speed and max-rank wall
+  casts in `--demo-abilities`. Every kit gap on the list is closed:
+  Web Nest's walking through scenery, the Bloat's reel-in at hook speed and max-rank wall
   grapple (`--demo-abilities --demo-grapple` aims Q at the nearest wall),
   Feather Flurry's 60/70/80% shots locked on the target with a max-rank
   push, Tongue Lash on an ally (zip and shield), Icy Breath's shatter, Hop's
@@ -70,7 +70,11 @@ Last updated: kit runtime for every hero, levels to 25 and talents,
   (`--hold-indicator 0` holds Q for screenshots). Web Nest gives Venenatis
   +20% speed inside her own web and hides her from enemies outside it,
   for the player's view and bot targeting, while she isn't attacking.
-  Passing through scenery is still to do.
+  Inside her own webs she also walks and paths straight through trees,
+  rocks and cliffs; structures and castle walls stay shut. A web that runs
+  out while she stands in scenery steps her onto the nearest open tile.
+  `--demo-abilities --demo-nest` lays E on the nearest scenery and walks
+  her across it.
 - **Levels to 25 and talents (SYS-3, SYS-7).** Abilities start unlearned;
   level 1 gives the first point. R ranks unlock at 6/11/16. Levels 10, 15,
   20 and 25 give a pick between two talents (`talents` in each champion

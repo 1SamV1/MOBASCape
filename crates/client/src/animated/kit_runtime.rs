@@ -8,6 +8,7 @@
 //! caster's enemies: the other team's minions, champions and structures,
 //! and neutral camps. Structures take damage but ignore crowd control.
 
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -2490,6 +2491,28 @@ impl AnimatedScene {
             .map(|z| (z.pos, z.radius, z.nest))
     }
 
+    /// Collision as `unit` meets it. Its own live Web Nests open the
+    /// scenery inside them, so it walks and paths straight through trees and
+    /// rocks there. Everyone else still meets the plain collision.
+    pub(super) fn kit_passage<'a>(
+        &self,
+        unit: usize,
+        collision: &'a WorldCollision,
+    ) -> Cow<'a, WorldCollision> {
+        let discs: Vec<(Vec3, f32)> = self
+            .kit_world
+            .zones
+            .iter()
+            .filter(|z| z.nest > 0.0 && z.caster == unit && z.remaining > 0.0)
+            .map(|z| (z.pos, z.radius))
+            .collect();
+        if discs.is_empty() {
+            Cow::Borrowed(collision)
+        } else {
+            Cow::Owned(collision.opened(&discs))
+        }
+    }
+
     fn nest_speed(&self, unit: usize) -> f32 {
         self.own_nest(unit).map_or(0.0, |n| n.2)
     }
@@ -3103,7 +3126,7 @@ impl AnimatedScene {
         self.update_kit_shots(dt, height, collision);
         self.update_kit_reels(dt);
         self.update_kit_areas(dt);
-        self.update_kit_zones(dt);
+        self.update_kit_zones(dt, height, collision);
         self.update_hexes(dt);
         self.update_healers(dt);
     }
@@ -3654,9 +3677,10 @@ impl AnimatedScene {
         self.kit_world.areas.extend(waiting);
     }
 
-    fn update_kit_zones(&mut self, dt: f32) {
+    fn update_kit_zones(&mut self, dt: f32, height: &HeightGrid, collision: &WorldCollision) {
         let zones = std::mem::take(&mut self.kit_world.zones);
         let mut alive = Vec::with_capacity(zones.len());
+        let mut lapsed_nests = Vec::new();
         for mut zone in zones {
             let pi = zone.caster;
             if zone.follow {
@@ -3697,9 +3721,34 @@ impl AnimatedScene {
             }
             if zone.remaining > 0.0 {
                 alive.push(zone);
+            } else if zone.nest > 0.0 {
+                lapsed_nests.push(zone.caster);
             }
         }
         self.kit_world.zones.extend(alive);
+        for caster in lapsed_nests {
+            self.leave_scenery(caster, height, collision);
+        }
+    }
+
+    /// A Web Nest ran out while its caster stood in the scenery it had
+    /// opened: step it out onto the nearest open ground it may stand on.
+    fn leave_scenery(&mut self, unit: usize, height: &HeightGrid, collision: &WorldCollision) {
+        let passage = self.kit_passage(unit, collision);
+        let pos = self.units[unit].pos;
+        if passage.is_walkable_world(pos.x, pos.z) {
+            return;
+        }
+        let Some((tx, ty)) = passage.nearest_walkable_world(pos.x, pos.z) else {
+            return;
+        };
+        let to = passage.world_of_tile(tx, ty, height);
+        drop(passage);
+        tracing::debug!("web nest: unit {unit} steps out of scenery to {to:?}");
+        let u = &mut self.units[unit];
+        u.pos = to;
+        u.path.clear();
+        u.path_index = 0;
     }
 }
 

@@ -314,8 +314,9 @@ pub enum Action {
         /// rotting aura.
         #[serde(default)]
         self_damage: f32,
-        /// A nest (Web Nest): inside it the caster moves this much faster
-        /// and is hidden from enemies outside it while not attacking.
+        /// A nest (Web Nest): inside it the caster moves this much faster,
+        /// walks through scenery (not structures or castle walls) and is
+        /// hidden from enemies outside it while not attacking.
         #[serde(default)]
         nest: f32,
         #[serde(default)]

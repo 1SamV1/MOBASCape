@@ -2102,7 +2102,8 @@ impl AnimatedScene {
         self.cancel_scroll(self.player_index);
         self.steer_wish = None;
         let start = self.player_pos();
-        let path = collision.path_world(start, target, height);
+        let passage = self.kit_passage(self.player_index, collision);
+        let path = passage.path_world(start, target, height);
         let unit = &mut self.units[self.player_index];
         unit.path = path;
         unit.path_index = 0;
@@ -2133,6 +2134,8 @@ impl AnimatedScene {
         let target_pos = target.pos;
         self.steer_wish = None;
         let pi = self.player_index;
+        let passage = self.kit_passage(pi, collision);
+        let collision = &*passage;
         let in_range = self.in_reach(pi, index, self.units[pi].attack_range);
         let player = &mut self.units[pi];
         player.attack_target = Some(index);
@@ -4127,6 +4130,9 @@ impl AnimatedScene {
 
     fn update_player(&mut self, dt: f32, height: &HeightGrid, collision: &WorldCollision) {
         let pi = self.player_index;
+        // Inside her own Web Nest, Venenatis walks through the scenery.
+        let passage = self.kit_passage(pi, collision);
+        let collision = &*passage;
         let speed_mult = self.team_speed_mult(0) * self.kit_move_mult(self.player_index);
         let steer = self.steer_wish.take();
         if self.units[pi].stun_timer > 0.0 {

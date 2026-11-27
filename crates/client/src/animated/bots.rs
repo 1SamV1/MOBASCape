@@ -883,7 +883,9 @@ impl AnimatedScene {
         let stale = self.bots[b].path.is_empty() || self.bots[b].path_goal.distance(goal) > 256.0;
         if stale && self.bots[b].repath <= 0.0 {
             self.bots[b].repath = REPATH;
-            let mut path = collision.path_world(pos, goal, height);
+            let mut path = self
+                .kit_passage(index, collision)
+                .path_world(pos, goal, height);
             if path.is_empty() {
                 path.push(goal);
             }

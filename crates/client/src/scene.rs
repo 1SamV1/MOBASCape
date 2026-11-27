@@ -179,18 +179,33 @@ impl HeightGrid {
 pub struct WorldCollision {
     grid: Grid,
     sight_grid: Grid,
+    /// Structures and castle walls: blocked tiles that no Web Nest opens.
+    solid: Grid,
     origin_tile_x: i32,
     origin_tile_y: i32,
 }
 
 impl WorldCollision {
     pub fn new(grid: Grid, sight_grid: Grid, origin_tile_x: i32, origin_tile_y: i32) -> Self {
+        let solid = Grid::new(grid.width() as usize, grid.height() as usize);
         Self {
             grid,
             sight_grid,
+            solid,
             origin_tile_x,
             origin_tile_y,
         }
+    }
+
+    /// Mark the tiles that stay shut even inside a Web Nest (towers, the
+    /// nexus, castle walls). The grid must match the collision grid's size.
+    pub fn with_solid(mut self, solid: Grid) -> Self {
+        debug_assert_eq!(
+            (solid.width(), solid.height()),
+            (self.grid.width(), self.grid.height())
+        );
+        self.solid = solid;
+        self
     }
 
     pub fn width(&self) -> i32 {
@@ -259,6 +274,44 @@ impl WorldCollision {
             .skip(1)
             .map(|(tx, ty)| self.world_of_tile(tx, ty, height))
             .collect()
+    }
+
+    /// A copy in which every tile whose middle lies inside one of `discs`
+    /// (centre, radius in world units) is open ground, unless it is solid
+    /// (a structure or castle wall). Web Nest lets its caster walk through
+    /// the trees, rocks and cliffs inside the web; sight still stops at them.
+    pub fn opened(&self, discs: &[(Vec3, f32)]) -> WorldCollision {
+        let mut grid = self.grid.clone();
+        let (ox, oz) = (
+            self.origin_tile_x as f32 * 128.0,
+            self.origin_tile_y as f32 * 128.0,
+        );
+        for &(centre, radius) in discs {
+            let (cx, cz) = (
+                (centre.x - ox).round() as i32,
+                (centre.z - oz).round() as i32,
+            );
+            let radius = radius.max(0.0) as i32;
+            let (lo_x, lo_y) = grid.cell_at(cx - radius, cz - radius);
+            let (hi_x, hi_y) = grid.cell_at(cx + radius, cz + radius);
+            let reach = radius as i64 * radius as i64;
+            for ty in lo_y..=hi_y {
+                for tx in lo_x..=hi_x {
+                    let (mx, my) = grid.centre_of(tx, ty);
+                    let (dx, dy) = ((mx - cx) as i64, (my - cz) as i64);
+                    if dx * dx + dy * dy <= reach && !self.solid.is_blocked(tx, ty) {
+                        grid.set_blocked(tx, ty, false);
+                    }
+                }
+            }
+        }
+        WorldCollision {
+            grid,
+            sight_grid: self.sight_grid.clone(),
+            solid: self.solid.clone(),
+            origin_tile_x: self.origin_tile_x,
+            origin_tile_y: self.origin_tile_y,
+        }
     }
 
     /// Move with axis-separated collision sliding. Used by hold-to-steer.
@@ -2865,6 +2918,9 @@ pub fn build(
     map.clear_collision(&mut collision_grid, origin_tile_x, origin_tile_y, 4.5);
     map.block_structures(&mut collision_grid, origin_tile_x, origin_tile_y);
     map.block_structures(&mut sight_grid, origin_tile_x, origin_tile_y);
+    // What stays shut even inside a Web Nest: structures and castle walls.
+    let mut solid_grid = Grid::new(tiles_x, tiles_y);
+    map.block_structures(&mut solid_grid, origin_tile_x, origin_tile_y);
 
     // Castle walls, towers and gatehouses. Collision is applied after the
     // lane clearing pass so the walls always win, while gate pieces stay
@@ -2879,6 +2935,7 @@ pub fn build(
         let half = footprint / 2;
         collision_grid.block_rect(gx - half, gy - half, footprint, footprint);
         sight_grid.block_rect(gx - half, gy - half, footprint, footprint);
+        solid_grid.block_rect(gx - half, gy - half, footprint, footprint);
     }
     let castle_count = append_castle_mesh(
         &castle_pieces,
@@ -3186,7 +3243,8 @@ pub fn build(
         );
     }
 
-    let collision = WorldCollision::new(collision_grid, sight_grid, origin_tile_x, origin_tile_y);
+    let collision = WorldCollision::new(collision_grid, sight_grid, origin_tile_x, origin_tile_y)
+        .with_solid(solid_grid);
 
     let spawn_hint = map
         .spawn
@@ -5740,6 +5798,67 @@ pub fn model_vertex_animated(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn an_opened_disc_lets_a_walker_through_scenery_inside_it_only() {
+        // A wall of scenery along x = 10 with a gap at the far end, origin offset so world and grid
+        // coordinates differ.
+        let mut grid = Grid::new(20, 20);
+        for y in 0..16 {
+            grid.set_blocked(10, y, true);
+        }
+        // A castle wall tile inside the web: it stays shut.
+        let mut solid = Grid::new(20, 20);
+        solid.set_blocked(10, 3, true);
+        grid.set_blocked(10, 3, true);
+        let sight = grid.clone();
+        let collision = WorldCollision::new(grid, sight, 5, 7).with_solid(solid);
+        let world = |tx: i32, ty: i32| {
+            (
+                (5 + tx) as f32 * 128.0 + 64.0,
+                (7 + ty) as f32 * 128.0 + 64.0,
+            )
+        };
+        let (wx, wz) = world(10, 4);
+        assert!(!collision.is_walkable_world(wx, wz));
+
+        let web = Vec3::new(wx, 0.0, wz);
+        let opened = collision.opened(&[(web, 300.0)]);
+        assert!(
+            opened.is_walkable_world(wx, wz),
+            "the wall inside the web opens"
+        );
+        let (fx, fz) = world(10, 12);
+        assert!(
+            !opened.is_walkable_world(fx, fz),
+            "the wall outside the web stays"
+        );
+        let (sx, sz) = world(10, 3);
+        assert!(
+            !opened.is_walkable_world(sx, sz),
+            "castle walls stay shut in a web"
+        );
+        assert!(opened.blocks_sight_tile(10, 4), "trees still block sight");
+        assert!(
+            !collision.is_walkable_world(wx, wz),
+            "the shared collision is untouched"
+        );
+
+        // Straight across the web, not around the end of the wall.
+        let height = HeightGrid {
+            origin_tile_x: 5,
+            origin_tile_y: 7,
+            step: 128.0,
+            size: 2,
+            heights: vec![0.0; 4],
+        };
+        let (ax, az) = world(7, 4);
+        let (bx, bz) = world(13, 4);
+        let path = opened.path_world(Vec3::new(ax, 0.0, az), Vec3::new(bx, 0.0, bz), &height);
+        assert_eq!(path.len(), 1, "one straight leg through the web: {path:?}");
+        let around = collision.path_world(Vec3::new(ax, 0.0, az), Vec3::new(bx, 0.0, bz), &height);
+        assert!(around.len() > 1, "without the web the path goes round");
+    }
 
     #[test]
     fn srgb_endpoints_are_stable() {

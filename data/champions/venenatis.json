@@ -80,7 +80,7 @@
     {
       "key": "E",
       "name": "WEB NEST",
-      "description": "Lays a web that lasts 40 seconds. Inside it she mends, moves 20% faster and is hidden from enemies outside the web while she isn't attacking. Holds two charges. At max rank three charges, and webs slow enemies.",
+      "description": "Lays a web that lasts 40 seconds. Inside it she mends, moves 20% faster, walks through trees and rocks and is hidden from enemies outside the web while she isn't attacking. Holds two charges. At max rank three charges, and webs slow enemies.",
       "ranks": [
         {
           "range": 700,
