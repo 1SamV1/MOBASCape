@@ -209,11 +209,27 @@ font atlas can replace it later behind the same `Hud::text` call sites.
 
 **Status:** accepted for the prototype.
 
-The player earns 8 gold per second and, within 900 world units of spawn, heals
+The player earns 7 gold per second (8 until 2026-11-27, see ADR-020a) and,
+within 900 world units of spawn, heals
 6% max HP and MP per second. The shop uses the same 900-unit radius, so the
 fountain is a real base interaction instead of a global menu. Two persistent
 world rings mark the area. The client owns this in the prototype; the server
 must own gold, healing, and shop range before multiplayer.
+
+
+## ADR-020a — Last-hit economy (Dota 2 style)
+
+**Status:** accepted 2026-11-27.
+
+Gold comes mostly from last hits, as in Dota 2. The hero who lands the
+killing blow on a lane imp (melee minion) gets 59 gold, on a fairy (ranged
+minion) 70, and on a jungle creature 90 (they paid 10, 10 and 50). A
+destroyed tower pays 100 to every hero of the destroying side, alive or
+dead, and a hero who lands its last hit gets 150 on top. A watchtower pays
+its destroyers 75 each. Passive income drops from 8 to 7 gold a second for
+the player and the bots alike. The player sees a gold "+N" float up for
+each bounty. The values live in `animated.rs` (`reward_for`, `team_bounty`,
+`PASSIVE_GOLD`); the server must own them before multiplayer.
 
 ## ADR-021 — Inhibitor respawn and lane super minions
 

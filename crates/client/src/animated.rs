@@ -41,6 +41,11 @@ const MINION_AGGRO: f32 = 520.0;
 /// Radius and share of experience for heroes near a kill they did not land.
 const SHARE_RADIUS: f32 = 1400.0;
 const SHARE_XP: f32 = 0.6;
+/// Passive gold per second for every living hero, the player and the bots
+/// alike (8 before last-hit bounties grew to Dota 2 sizes).
+pub(crate) const PASSIVE_GOLD: f32 = 7.0;
+/// Gold the last-hit pop-up floats in: Dota 2's bounty yellow.
+const GOLD_POP: [u8; 3] = [255, 205, 60];
 /// Extra aggro reach minions have toward enemy structures, matching the
 /// 5-tile clearance the scene keeps between towers and the lane centre.
 const STRUCTURE_REACH: f32 = 400.0;
@@ -3772,7 +3777,7 @@ impl AnimatedScene {
                 }
             }
         }
-        self.gold_income += 8.0 * dt;
+        self.gold_income += PASSIVE_GOLD * dt;
         if self.gold_income >= 1.0 {
             let amount = self.gold_income.floor() as u32;
             self.gold_income -= amount as f32;
@@ -4954,10 +4959,18 @@ impl AnimatedScene {
         }
         if attacker_team == 0 && hero_aggressor {
             self.grant_reward(target_kind);
+            let (_, gold) = reward_for(target_kind);
+            tracing::debug!("gold: last hit {target_kind:?} +{gold}");
+            if gold > 0 {
+                // Above the victim's plate, clear of the hitsplats on it.
+                let pos = self.units[index].pos + Vec3::Y * (self.units[index].bar_height + 240.0);
+                self.gold_pop(pos, gold);
+            }
         }
         if let Some(bot) = aggressor.filter(|&a| self.units[a].kind == UnitKind::BotChampion) {
             self.bot_reward(bot, target_kind);
         }
+        self.pay_team_bounty(target_kind, attacker_team);
         self.share_xp(index, target_kind, attacker_team, aggressor);
         self.kit_flesh_heap(index);
         self.kit_on_kill(index);
@@ -5092,6 +5105,41 @@ impl AnimatedScene {
         } else {
             self.play_shared_sound(name, pos);
         }
+    }
+
+    /// A structure's team bounty: every hero of the side that destroyed it
+    /// is paid, alive or dead, wherever they stand (the last hitter's own
+    /// bounty comes on top, from `reward_for`).
+    fn pay_team_bounty(&mut self, kind: UnitKind, team: u8) {
+        let bounty = team_bounty(kind);
+        if bounty == 0 || team > 1 {
+            return;
+        }
+        for unit in self.units.iter_mut() {
+            if unit.team == team && unit.kind.is_champion() {
+                unit.gold = unit.gold.saturating_add(bounty);
+            }
+        }
+        tracing::info!("gold: team {team} paid {bounty} each for {kind:?}");
+        if self.units[self.player_index].team == team {
+            let player = &self.units[self.player_index];
+            let pos = player.pos + Vec3::Y * (player.bar_height + 140.0);
+            self.gold_pop(pos, bounty);
+        }
+    }
+
+    /// A gold "+N" that floats up from `pos`, for gold the player earned.
+    fn gold_pop(&mut self, pos: Vec3, gold: u32) {
+        self.floats.push(FloatText {
+            pos,
+            text: format!("+{gold}"),
+            style: FloatStyle::Label(GOLD_POP),
+            life: 1.5,
+            scale: 1.7,
+            stack: 0,
+            unit: None,
+            tint: None,
+        });
     }
 
     fn grant_reward(&mut self, kind: UnitKind) {
@@ -6875,15 +6923,30 @@ fn level_up_stats(unit: &mut AnimatedUnit) {
 }
 
 /// Experience and gold for the last hit on a `kind` (player and bots).
+/// Experience and gold for the hero who lands the last hit. Lane and
+/// jungle bounties follow Dota 2's last-hit economy: the imp (melee) 59,
+/// the fairy (ranged) 70, a jungle creature 90. A tower's 150 is the last
+/// hitter's extra on top of its team bounty ([`team_bounty`]).
 fn reward_for(kind: UnitKind) -> (f32, u32) {
     match kind {
-        UnitKind::MeleeMinion | UnitKind::RangedMinion => (20.0, 10),
-        UnitKind::Tower => (100.0, 100),
+        UnitKind::MeleeMinion => (20.0, 59),
+        UnitKind::RangedMinion => (20.0, 70),
+        UnitKind::Tower => (100.0, 150),
         UnitKind::Inhibitor => (150.0, 150),
-        UnitKind::Camp => (80.0, 50),
+        UnitKind::Camp => (80.0, 90),
         UnitKind::Dummy => (50.0, 20),
         UnitKind::Player | UnitKind::BotChampion => (200.0, 300),
         _ => (0.0, 0),
+    }
+}
+
+/// Gold every hero of the destroying side gets for a structure, whoever
+/// landed the blow: towers 100, watchtowers 75.
+fn team_bounty(kind: UnitKind) -> u32 {
+    match kind {
+        UnitKind::Tower => 100,
+        UnitKind::Watchtower => 75,
+        _ => 0,
     }
 }
 
@@ -7834,6 +7897,20 @@ fn draw_rope(scene: &mut AnimatedScene, from: Vec3, to: Vec3, color: [u8; 3], fo
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn last_hits_pay_dota_sized_bounties_and_structures_pay_the_team() {
+        assert_eq!(reward_for(UnitKind::MeleeMinion).1, 59);
+        assert_eq!(reward_for(UnitKind::RangedMinion).1, 70);
+        assert_eq!(reward_for(UnitKind::Camp).1, 90);
+        // A tower's last hitter gets an extra 150 over the team's 100 each.
+        assert_eq!(reward_for(UnitKind::Tower).1, 150);
+        assert_eq!(team_bounty(UnitKind::Tower), 100);
+        assert_eq!(team_bounty(UnitKind::Watchtower), 75);
+        assert_eq!(team_bounty(UnitKind::MeleeMinion), 0);
+        assert_eq!(team_bounty(UnitKind::Inhibitor), 0);
+        const { assert!(PASSIVE_GOLD < 8.0 && PASSIVE_GOLD >= 6.5) };
+    }
+
     use super::*;
 
     #[test]

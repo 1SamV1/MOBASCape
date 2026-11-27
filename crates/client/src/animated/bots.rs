@@ -52,7 +52,7 @@ const BOSS_LEVEL: u32 = 5;
 const HOME_RADIUS: f32 = 900.0;
 const HOME_HEAL: f32 = 0.06;
 /// Passive gold per second, the same as the player's.
-const PASSIVE_GOLD: f32 = 8.0;
+use super::PASSIVE_GOLD;
 /// Gold beyond the next item's price before a bot walks home to buy it.
 const RECALL_SPARE: u32 = 400;
 /// A hero this close to its own fountain is in its base: no gank goes in.

@@ -3,6 +3,25 @@
 Last updated: kit runtime for every hero, levels to 25 and talents,
 2026-11-25.
 
+## 2026-11-27 — Last-hit gold, structure team bounties, slower passive income
+
+- **Last-hit bounties** (Dota 2 style, ADR-020a): the hero who lands the
+  killing blow gets 59 for an imp (melee minion), 70 for a fairy (ranged
+  minion) and 90 for a jungle creature (were 10, 10 and 50). Bots are paid
+  by the same table.
+- **Team bounties:** a destroyed tower pays 100 to every hero of the
+  destroying side, and a hero landing its last hit gets 150 more (it paid
+  100 to the last hitter only). A destroyed watchtower pays its side 75 each
+  (it paid nothing).
+- **Passive income** 8 to 7 gold a second, one constant for the player and
+  bots (`PASSIVE_GOLD`).
+- **Gold pop-up:** a bounty-yellow "+59" floats up over the victim for the
+  player's last hits and over the player for team bounties, on both HUDs
+  (`--ui-live` draws economy labels as overhead text).
+- Checked: `--demo-camp` shows "+90" on the camp kill; an 8-minute `--bots`
+  match puts an idle player at 3607 net worth (about 3900 before). No tower
+  fell in that run, so the team payout is checked by its values' test only.
+
 ## 2026-11-27 — Tab scoreboard (roadmap 7.2)
 
 - **Every hero's match line** (`animated/score.rs`, `ScoreBook`, tested).

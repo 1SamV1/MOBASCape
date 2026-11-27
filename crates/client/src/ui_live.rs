@@ -953,16 +953,26 @@ pub fn hitmarks(player: &PlayerHud) -> Vec<HitmarkState> {
 }
 
 /// Projected OSRS overhead chat as the assembled interface's plain state.
+/// Overhead chat, plus the economy labels (the gold "+59" of a last hit),
+/// which the interface draws the same way: yellow over a black shadow.
 pub fn overhead(player: &PlayerHud) -> Vec<OverheadState> {
-    player
+    let chat = player
         .overhead
         .iter()
         .map(|(x, y, text, alpha)| OverheadState {
             at: (x.round() as i32, y.round() as i32),
             text: text.clone(),
             alpha: *alpha,
-        })
-        .collect()
+        });
+    let labels = player
+        .damage_numbers
+        .iter()
+        .map(|(x, y, text, _, _)| OverheadState {
+            at: (x.round() as i32, y.round() as i32),
+            text: text.clone(),
+            alpha: 1.0,
+        });
+    chat.chain(labels).collect()
 }
 
 pub fn ability(player: &PlayerHud) -> AbilityState {
