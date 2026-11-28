@@ -10,6 +10,7 @@ mod gpu_timing;
 mod grass_textures;
 mod hero_select;
 mod hud;
+mod item_effects;
 mod item_icons;
 mod items;
 mod kit;
@@ -242,6 +243,10 @@ struct Cli {
     /// Demo: grant gold, open the shop, and buy one of every item.
     #[arg(long)]
     demo_shop: bool,
+    /// Demo: buy this fusion's parts and recipe with Buy, let the bag fuse
+    /// them, then use its active once the shop closes (docs/ITEMS.md).
+    #[arg(long)]
+    demo_fusion: Option<String>,
     /// Demo: damage the player and verify fountain healing plus passive gold.
     #[arg(long)]
     demo_base: bool,
@@ -808,6 +813,8 @@ fn main() -> Result<()> {
         last_inhib0: (3, 3),
         last_inhib1: (3, 3),
         demo_shop: cli.demo_shop,
+        demo_fusion: cli.demo_fusion.clone(),
+        demo_fusion_timer: 0.0,
         demo_shop_timer: 0.0,
         demo_shop_stage: 0,
         demo_death: cli.demo_death,
@@ -990,6 +997,8 @@ struct App {
     last_inhib0: (usize, usize),
     last_inhib1: (usize, usize),
     demo_shop: bool,
+    demo_fusion: Option<String>,
+    demo_fusion_timer: f32,
     demo_shop_timer: f32,
     demo_shop_stage: u8,
     demo_death: bool,
@@ -1817,6 +1826,9 @@ impl App {
         }
 
         self.sync_weapon();
+        if let Some(id) = self.demo_fusion.clone() {
+            self.demo_fusion_step(&id, dt);
+        }
         if self.demo_shop {
             self.demo_shop_timer += dt;
             if self.demo_shop_stage == 0 && self.demo_shop_timer >= 0.5 {
@@ -2825,6 +2837,7 @@ impl App {
                     tracing::info!("delivery: handed over {}", item.name);
                 }
             }
+            fuse_ready(&mut self.shop, animated, &mut self.event_log);
             let scores = animated.team_scores();
             let heroes: Vec<HeroMarker> = animated
                 .units
@@ -3784,6 +3797,15 @@ impl App {
         let Some(item) = self.shop.items.get(index).cloned() else {
             return;
         };
+        // A fusion cannot be bought outright: Buy gets its next missing
+        // part (the recipe last), and the bag fuses them when all are in.
+        if item.is_fusion() {
+            match self.shop.missing_parts(index).first() {
+                Some(&part) => self.purchase_item(part),
+                None => self.try_fuse(),
+            }
+            return;
+        }
         let plan = self.shop.upgrade(index);
         let pending = self
             .animated
@@ -3843,8 +3865,85 @@ impl App {
                 );
                 let what = if stored { "STORED" } else { verb };
                 log_event(&mut self.event_log, format!("{what} {}", item.name));
+                self.try_fuse();
             }
             Err(err) => tracing::info!("shop: {} failed: {err}", item.name),
+        }
+    }
+
+    /// `--demo-fusion`: half a second in, gold and the shop on the Fusions
+    /// tab with the fusion selected; Buy every half second until it fuses;
+    /// at four seconds close the shop and use its active from its slot.
+    fn demo_fusion_step(&mut self, id: &str, dt: f32) {
+        let before = self.demo_fusion_timer;
+        self.demo_fusion_timer += dt;
+        let now = self.demo_fusion_timer;
+        let crossed = |t: f32| before < t && now >= t;
+        let Some(index) = self.shop.items.iter().position(|item| item.id == id) else {
+            tracing::warn!("demo fusion: unknown item {id}");
+            self.demo_fusion = None;
+            return;
+        };
+        if crossed(0.5) {
+            if let Some(animated) = self.animated.as_mut() {
+                animated.debug_grant_gold(20_000);
+            }
+            self.shop.open = true;
+            self.shop.category = items::CATEGORY_LABELS
+                .iter()
+                .position(|&label| label == "FUSIONS")
+                .unwrap_or(1);
+            self.shop.selected = Some(index);
+            tracing::info!(
+                "demo fusion: {} needs {:?}",
+                self.shop.items[index].name,
+                self.shop
+                    .missing_parts(index)
+                    .iter()
+                    .map(|&i| self.shop.items[i].name.as_str())
+                    .collect::<Vec<_>>()
+            );
+        }
+        for step in 1..=4 {
+            if crossed(0.5 + step as f32 * 0.5) && !self.shop.is_owned(index) {
+                self.purchase_item(index);
+                let bag: Vec<&str> = self
+                    .shop
+                    .owned
+                    .iter()
+                    .flatten()
+                    .map(|&i| self.shop.items[i].name.as_str())
+                    .collect();
+                tracing::info!("demo fusion: buy {step}, bag {bag:?}");
+            }
+        }
+        if crossed(4.0) {
+            self.shop.open = false;
+            if let Some(slot) = self.shop.owned.iter().position(|s| *s == Some(index)) {
+                let stats = self.animated.as_ref().map(|a| a.player_stats());
+                self.use_item(slot);
+                if let Some(stats) = stats {
+                    tracing::info!(
+                        "demo fusion: used slot {} (dmg {:.0}, hp {:.0}/{:.0}, armor {:.0})",
+                        slot + 1,
+                        stats.attack_damage,
+                        stats.health,
+                        stats.max_health,
+                        stats.armor
+                    );
+                }
+            } else {
+                tracing::warn!("demo fusion: {id} never fused");
+            }
+        }
+    }
+
+    /// Fuse every fusion whose parts and recipe are all in the bag. The
+    /// parts leave the bag and the fusion takes a slot. Fusing is final, so
+    /// this visit's Undo history is cleared.
+    fn try_fuse(&mut self) {
+        if let Some(animated) = self.animated.as_mut() {
+            fuse_ready(&mut self.shop, animated, &mut self.event_log);
         }
     }
 
@@ -4277,8 +4376,8 @@ impl App {
         }
     }
 
-    /// 1-6 with the shop closed: use the item in that bag slot. Only thrall
-    /// scrolls do anything; reading one uses it up.
+    /// 1-6 with the shop closed: use the item in that bag slot. Items with
+    /// an active use it (docs/ITEMS.md); reading a thrall scroll uses it up.
     fn use_item(&mut self, slot: usize) {
         let Some(index) = self.shop.owned.get(slot).copied().flatten() else {
             return;
@@ -4286,6 +4385,30 @@ impl App {
         let Some(item) = self.shop.items.get(index).cloned() else {
             return;
         };
+        if item.active.is_some() {
+            let Some(animated) = self.animated.as_mut() else {
+                return;
+            };
+            let player = animated.player_index;
+            match animated.use_gear_active(player, &item.id) {
+                Ok(name) => {
+                    log_event(
+                        &mut self.event_log,
+                        format!("{} ({})", name.to_uppercase(), item.name),
+                    );
+                }
+                Err(err) => {
+                    tracing::info!("gear: {} active failed: {err}", item.name);
+                    if err != "dead" {
+                        log_event(
+                            &mut self.event_log,
+                            format!("{}: {}", item.name, err.to_uppercase()),
+                        );
+                    }
+                }
+            }
+            return;
+        }
         let Some(spec) = item.thrall.as_ref() else {
             return;
         };
@@ -4619,7 +4742,7 @@ fn draw_ui_overlay(
                     crate::ui_live::delivery_label(player.delivery_pending, player.delivery_state)
                 });
                 state.tooltip = crate::ui_live::tooltip(shop, mouse);
-                state.inventory = crate::ui_live::inventory(shop);
+                state.inventory = crate::ui_live::inventory_with(shop, animated);
             }
         }
         let placed = rift_ui::hud::place(&state, renderer.size, scale);
@@ -4725,6 +4848,27 @@ fn has_dev_demo_flags(cli: &Cli) -> bool {
         || cli.demo_shop
         || cli.demo_base
         || cli.demo_inhibitor
+}
+
+/// Fuse every fusion whose parts and recipe are all in the bag. The parts
+/// leave the bag and the fusion takes a slot. Fusing is final, so this
+/// visit's Undo history is cleared.
+fn fuse_ready(shop: &mut ItemShop, animated: &mut AnimatedScene, events: &mut Vec<String>) {
+    while let Some((fusion, parts)) = shop.ready_fusion() {
+        let configs: Vec<items::ItemConfig> =
+            parts.iter().map(|&i| shop.items[i].clone()).collect();
+        let result = shop.items[fusion].clone();
+        if !animated.fuse_items(&configs, &result) {
+            return;
+        }
+        for &part in &parts {
+            shop.remove_owned(part);
+        }
+        shop.add_owned(fusion);
+        shop.undo.clear();
+        tracing::info!("shop: fused {} from {} parts", result.name, parts.len());
+        log_event(events, format!("FUSED {}", result.name));
+    }
 }
 
 fn log_event(events: &mut Vec<String>, message: String) {

@@ -124,6 +124,8 @@ pub struct BotBrain {
     /// Items to buy, in order, and how many are bought.
     build: Vec<ItemConfig>,
     pub bought: usize,
+    /// What the bot is carrying (at most six).
+    bag: Vec<ItemConfig>,
     gold_income: f32,
     /// Q..R read from the champion data (see `bot_cast`).
     pub spells: Vec<super::bot_cast::BotSpell>,
@@ -134,9 +136,9 @@ pub struct BotBrain {
 }
 
 impl BotBrain {
-    /// The items bought so far, in buying order.
+    /// What the bot carries, in buying order.
     pub fn items(&self) -> &[ItemConfig] {
-        &self.build[..self.bought.min(self.build.len())]
+        &self.bag
     }
 }
 
@@ -243,6 +245,7 @@ impl AnimatedScene {
                 repath: 0.0,
                 build: builds.get(n).cloned().unwrap_or_default(),
                 bought: 0,
+                bag: Vec::new(),
                 gold_income: 0.0,
                 spells: super::bot_cast::spells_for(&champion.abilities),
                 cast_gap: 0.0,
@@ -312,7 +315,7 @@ impl AnimatedScene {
                     u.team,
                     u.level,
                     u.gold,
-                    bot.bought,
+                    bot.bag.len(),
                     bot.mode.label(),
                     u.pos.x / 128.0,
                     u.pos.z / 128.0,
@@ -324,26 +327,62 @@ impl AnimatedScene {
     }
 
     /// Buy every next build item the bot can afford (only at the fountain).
+    /// A fusion uses up the parts the bot carries and costs that much less.
+    /// With a full bag the cheapest item is sold (for the usual refund) to
+    /// make room for a dearer one.
     fn bot_shop(&mut self, b: usize) {
         loop {
             let bot = &self.bots[b];
-            if bot.bought >= MAX_ITEMS.min(bot.build.len()) {
+            let Some(item) = bot.build.get(bot.bought).cloned() else {
+                return;
+            };
+            let at = bot.unit;
+            let parts: Vec<usize> = {
+                let mut used = Vec::new();
+                for id in &item.fuse {
+                    if let Some(k) =
+                        (0..bot.bag.len()).find(|k| !used.contains(k) && &bot.bag[*k].id == id)
+                    {
+                        used.push(k);
+                    }
+                }
+                used
+            };
+            let price = item.cost
+                - parts
+                    .iter()
+                    .map(|&k| bot.bag[k].cost)
+                    .sum::<u32>()
+                    .min(item.cost);
+            let room = bot.bag.len() - parts.len() < MAX_ITEMS;
+            // The cheapest carried item that is not a part and is worth
+            // less than the new one.
+            let swap = (!room)
+                .then(|| {
+                    (0..bot.bag.len())
+                        .filter(|k| !parts.contains(k) && bot.bag[*k].cost < item.cost)
+                        .min_by_key(|&k| bot.bag[k].cost)
+                })
+                .flatten();
+            if !room && swap.is_none() {
                 return;
             }
-            let item = bot.build[bot.bought].clone();
-            let unit = &mut self.units[bot.unit];
-            if unit.gold < item.cost {
+            let refund = swap.map_or(0, |k| crate::items::sell_price(bot.bag[k].cost));
+            if self.units[at].gold + refund < price {
                 return;
             }
-            unit.gold -= item.cost;
-            unit.attack_damage += item.damage;
-            if item.health > 0.0 {
-                unit.max_health += item.health;
-                unit.health += item.health;
+            let mut gone: Vec<usize> = parts.clone();
+            gone.extend(swap);
+            gone.sort_unstable_by(|a, b| b.cmp(a));
+            for k in gone {
+                let old = self.bots[b].bag.remove(k);
+                self.equip(at, &old, false);
             }
-            unit.speed += item.speed;
-            unit.ability_power += item.ability;
-            tracing::debug!("bots: {} bought {}", bot.name, item.name);
+            let unit = &mut self.units[at];
+            unit.gold = unit.gold + refund - price;
+            self.equip(at, &item, true);
+            tracing::debug!("bots: {} bought {}", self.bots[b].name, item.name);
+            self.bots[b].bag.push(item);
             self.bots[b].bought += 1;
         }
     }
@@ -491,7 +530,7 @@ impl AnimatedScene {
             tracing::debug!(
                 "bots: {} (lv {level}, {} items) {} -> {}",
                 bot.name,
-                bot.bought,
+                bot.bag.len(),
                 bot.mode.label(),
                 mode.label()
             );
@@ -508,6 +547,7 @@ impl AnimatedScene {
         if xp <= 0.0 {
             return;
         }
+        let gold = (gold as f32 * self.gear_bounty(unit)).round() as u32;
         self.units[unit].gold = self.units[unit].gold.saturating_add(gold);
         self.bot_xp(unit, xp);
     }
@@ -557,6 +597,7 @@ impl AnimatedScene {
             self.bots[b].think += THINK_INTERVAL;
             self.bot_think(b);
             self.bot_battle_spells(index, collision, height);
+            self.gear_bot_actives(index);
         }
         match self.bots[b].mode {
             BotMode::Retreat => {
@@ -642,7 +683,7 @@ impl AnimatedScene {
         let gold = self.units[bot.unit].gold;
         bot.build
             .get(bot.bought)
-            .is_some_and(|item| bot.bought < MAX_ITEMS && gold >= item.cost + RECALL_SPARE)
+            .is_some_and(|item| gold >= item.cost + RECALL_SPARE)
     }
 
     /// Lane: push along the assigned lane, fighting what is in reach.

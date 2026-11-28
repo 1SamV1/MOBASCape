@@ -2627,22 +2627,16 @@ impl Hud {
                 );
                 self.draw_item_icon(width, height, dx + 10.0, dy + 40.0, 52.0, item, 1.0);
 
-                let mut lines = Vec::new();
-                if item.damage > 0.0 {
-                    lines.push(format!("+{:.0} DAMAGE", item.damage));
-                }
-                if item.health > 0.0 {
-                    lines.push(format!("+{:.0} HEALTH", item.health));
-                }
-                if item.mana > 0.0 {
-                    lines.push(format!("+{:.0} MANA", item.mana));
-                }
-                if item.speed > 0.0 {
-                    lines.push(format!("+{:.0} SPEED", item.speed));
-                }
-                if item.ability > 0.0 {
-                    lines.push(format!("+{:.0}% ABILITY", item.ability));
-                }
+                let mut lines: Vec<String> = item
+                    .stat_lines()
+                    .iter()
+                    .map(|l| l.to_ascii_uppercase())
+                    .collect();
+                lines.extend(
+                    item.effect_lines()
+                        .iter()
+                        .map(|(heading, _)| heading.to_ascii_uppercase()),
+                );
                 lines.extend(item.use_lines().iter().map(|l| l.to_ascii_uppercase()));
                 if lines.is_empty() {
                     lines.push("NO BONUS".to_string());

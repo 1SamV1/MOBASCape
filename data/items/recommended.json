@@ -1,26 +1,33 @@
 {
-  "_doc": "Shop 'Recommended' tab. Keys are tried in order: the champion id, each word of its role (e.g. TANK), then its class (MELEE, RANGED, MAGIC). Values are item ids from items.json; the shop groups them by tier.",
+  "_doc": "Shop 'Recommended' tab. Keys are tried in order: the champion id, each word of its role (e.g. TANK), then its class (MELEE, RANGED, MAGIC). Values are item ids from items.json; the shop groups them by tier, and a fusion's recipe is listed with it. Bots buy the list cheapest tier first, swapping out their cheapest item once the bag is full.",
   "MELEE": [
-    "bronze_sword", "leather_boots", "amulet_of_accuracy", "warrior_ring",
-    "boots", "rune_sword", "fighter_torso", "dragon_scimitar",
-    "amulet_of_torture", "primordial_boots", "abyssal_whip", "bandos_chestplate",
-    "ultor_ring"
+    "bronze_sword", "leather_boots", "amulet_of_accuracy", "kraken_tentacle",
+    "warrior_ring", "boots", "rune_sword", "dragon_scimitar", "abyssal_whip",
+    "guthans_warspear", "amulet_of_torture", "primordial_boots", "bandos_chestplate",
+    "abyssal_tentacle", "infernal_cape"
   ],
   "RANGED": [
     "shortbow", "leather_boots", "amulet_of_accuracy", "ranger_boots",
-    "archers_ring", "black_dhide_body", "magic_shortbow", "necklace_of_anguish",
-    "rune_crossbow", "pegasian_boots", "armadyl_chestplate", "venator_ring"
+    "archers_ring", "black_dhide_body", "karils_crossbow", "magic_shortbow",
+    "necklace_of_anguish", "rune_crossbow", "pegasian_boots", "venator_ring",
+    "armadyl_crossbow", "venator_bow", "zaryte_crossbow"
   ],
   "MAGIC": [
     "staff_of_air", "leather_boots", "mystic_boots", "mystic_robe_top",
-    "seers_ring", "staff_of_fire", "mystic_fire_staff", "occult_necklace",
-    "ahrims_robetop", "trident_of_the_seas", "eternal_boots",
-    "ancestral_robe_top", "magus_ring"
+    "tome_of_fire", "seers_ring", "infinity_boots", "ancient_staff",
+    "occult_necklace", "ahrims_robetop", "trident_of_the_seas", "eternal_boots",
+    "ancestral_robe_top", "volatile_nightmare_staff", "ancient_sceptre"
   ],
   "TANK": [
-    "bronze_platebody", "leather_boots", "ring_of_life", "amulet_of_glory",
-    "steel_platebody", "rune_platebody", "rune_platelegs", "bandos_boots",
-    "guardian_boots", "dragon_platebody", "ring_of_suffering",
-    "bandos_chestplate", "torva_platebody"
+    "bronze_platebody", "leather_boots", "ring_of_recoil", "ring_of_life",
+    "amulet_of_glory", "steel_platebody", "rune_platebody", "bandos_boots",
+    "dragon_platelegs", "guardian_boots", "dragon_platebody", "bandos_tassets",
+    "ring_of_suffering", "elysian_spirit_shield", "dinhs_bulwark"
+  ],
+  "SUPPORT": [
+    "staff_of_air", "leather_boots", "ring_of_wealth", "book_of_the_dead",
+    "mystic_boots", "amulet_of_glory", "infinity_boots", "salve_amulet_ei",
+    "ancient_staff", "fury", "staff_of_the_dead", "eternal_boots",
+    "amulet_of_blood_fury", "lightbearer", "harmonised_nightmare_staff"
   ]
 }

@@ -26,7 +26,7 @@ const TIER_HEADER: i32 = 22;
 const VIEW: (i32, i32, i32, i32) = (178, 82, 360, 398);
 
 /// Section labels, by [`ShopItem::tier`].
-pub const TIERS: [&str; 4] = ["Starter", "Early", "Core", "Late"];
+pub const TIERS: [&str; 5] = ["Starter", "Early", "Core", "Late", "Fusion"];
 
 /// Width of a `+` or `>` mark between recipe cells.
 const MARK_W: i32 = 14;
@@ -52,7 +52,7 @@ pub struct Grid {
 /// the same list (`ShopItem::recipe`).
 pub fn layout(items: &[ShopItem]) -> Grid {
     let n = items.len();
-    let key = |i: usize| (items[i].tier.min(3), items[i].price, i);
+    let key = |i: usize| (items[i].tier.min(4), items[i].price, i);
     let recipe = |i: usize| -> Vec<usize> {
         items[i]
             .recipe
@@ -96,8 +96,9 @@ pub fn layout(items: &[ShopItem]) -> Grid {
     }
     let mut multi: Vec<usize> = (0..n).filter(|&i| recipe(i).len() >= 2).collect();
     multi.sort_by_key(|&i| key(i));
+    // Recipe scrolls only appear inside their fusion's row.
     let mut plain: Vec<usize> = (0..n)
-        .filter(|&i| !in_ladder[i] && recipe(i).len() < 2)
+        .filter(|&i| !in_ladder[i] && recipe(i).len() < 2 && !items[i].recipe_scroll)
         .collect();
     plain.sort_by_key(|&i| key(i));
 
@@ -110,10 +111,10 @@ pub fn layout(items: &[ShopItem]) -> Grid {
     let mut y = 6;
     let mut i = 0;
     while i < plain.len() {
-        let tier = items[plain[i]].tier.min(3);
+        let tier = items[plain[i]].tier.min(4);
         let run = plain[i..]
             .iter()
-            .take_while(|&&k| items[k].tier.min(3) == tier)
+            .take_while(|&&k| items[k].tier.min(4) == tier)
             .count();
         grid.headers.push((TIERS[tier as usize], y));
         y += TIER_HEADER;
@@ -572,6 +573,25 @@ pub fn draw(theme: &Theme, list: &mut DrawList, shop: &ShopState, gold: u32) {
             }
         }
         let trade_top = detail.bottom() - 82 * s;
+        // Passives and the active: an orange heading, the sentence wrapped.
+        if let Some(font) = small {
+            let width = detail.w / s - 24;
+            for (heading, sentence) in &item.effects {
+                if y + 15 * s > trade_top {
+                    break;
+                }
+                y += 4 * s;
+                list.text(font, heading, detail.x + 12 * s, y, title);
+                y += 14 * s;
+                for line in crate::wrap::wrap(font, sentence, width) {
+                    if y + 4 * s > trade_top {
+                        break;
+                    }
+                    list.text(font, &line, detail.x + 12 * s, y, text);
+                    y += 13 * s;
+                }
+            }
+        }
         for (heading, links) in [("Builds from", &item.from), ("Builds into", &item.into)] {
             if links.is_empty() {
                 continue;

@@ -103,6 +103,16 @@ target/release/rift-client --ui-live --champion kolodion --demo-attack \
     --items thrall_ghostly --demo-thrall --screenshot out.png --screenshot-after 900
 ```
 
+`--demo-fusion abyssal_tentacle` grants gold, opens the shop on Fusions
+with that fusion selected, presses Buy every half second (each press buys
+the next missing part, the recipe last) until the bag fuses it, then at
+four seconds closes the shop and uses its active from its slot:
+
+```sh
+target/release/rift-client --ui-live --champion kril --demo-duel \
+    --demo-fusion dinhs_bulwark --screenshot out.png --screenshot-after 262
+```
+
 On hero select (`--start-select bot`), `--spell-picker 0` or `1` opens the
 battle spell picker for D or F, so it can be screenshotted.
 

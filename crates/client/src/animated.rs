@@ -10,6 +10,7 @@ pub mod awowogei;
 mod battle;
 pub mod bot_cast;
 pub mod bots;
+mod gear;
 mod kit_runtime;
 pub mod ranks;
 pub mod score;
@@ -178,6 +179,10 @@ pub struct AnimatedUnit {
     /// Attack speed multiplier from Footwork; 1.0 is the base rate.
     pub attack_speed_mult: f32,
     pub attack_speed_timer: f32,
+    /// Attack speed from items (0.25 = 25% faster), on top of buffs.
+    pub item_attack_speed: f32,
+    /// Ability cooldown recovery from items (0.2 = 20% faster).
+    pub item_haste: f32,
     /// Ranged level, used to scale ranged damage.
     pub ranged: f32,
     pub is_champion: bool,
@@ -810,6 +815,11 @@ pub struct Projectile {
     pub execute: f32,
     /// A battle spell bolt's statuses and graphics, landed on its target.
     pub spell: Option<Box<battle::SpellHit>>,
+    /// A basic attack: item on-hit effects run when it lands.
+    pub basic: bool,
+    /// An item's own damage (a ricochet or an active's bolt): it never
+    /// triggers item effects itself.
+    pub proc_hit: bool,
 }
 
 impl Projectile {
@@ -843,6 +853,8 @@ impl Projectile {
             venom: 0.0,
             execute: 0.0,
             spell: None,
+            basic: false,
+            proc_hit: false,
         }
     }
 
@@ -972,6 +984,14 @@ pub struct AnimatedScene {
     /// True while Vengeance's own damage is being dealt, so it cannot set
     /// off another.
     reflecting: bool,
+    /// Item passives, actives and their timers, by unit (heroes only).
+    gear: HashMap<usize, gear::Gear>,
+    /// Set just before a basic attack's damage call; the damage path takes
+    /// it, so item on-hit effects know a basic attack landed.
+    basic_hit: bool,
+    /// Above zero while item procs deal their own damage, so procs never
+    /// trigger more procs.
+    gear_depth: u32,
     pub wave_timer: f32,
     /// Monotonic wave counter used to stagger formation jitter deterministically.
     pub wave_serial: u32,
@@ -1540,6 +1560,9 @@ impl AnimatedScene {
             scroll_pings: Vec::new(),
             spell_book,
             reflecting: false,
+            gear: HashMap::new(),
+            basic_hit: false,
+            gear_depth: 0,
             wave_timer: 0.0,
             wave_serial: 0,
             kills: [0, 0],
@@ -1789,17 +1812,8 @@ impl AnimatedScene {
             return Err("dead");
         }
         player.gold = player.gold.saturating_add(gold);
-        player.attack_damage = (player.attack_damage - item.damage).max(1.0);
-        if item.health > 0.0 {
-            player.max_health = (player.max_health - item.health).max(100.0);
-            player.health = player.health.min(player.max_health);
-        }
-        if item.mana > 0.0 {
-            player.max_mana = (player.max_mana - item.mana).max(50.0);
-            player.mana = player.mana.min(player.max_mana);
-        }
-        player.speed = (player.speed - item.speed).max(100.0);
-        player.ability_power = (player.ability_power - item.ability).max(0.0);
+        self.equip(pi, item, false);
+        let player = &self.units[pi];
         let pos = player.pos;
         self.play_sound("shop_sell", pos);
         Ok(())
@@ -1950,18 +1964,7 @@ impl AnimatedScene {
     }
 
     fn apply_item(&mut self, item: &ItemConfig) {
-        let player = &mut self.units[self.player_index];
-        player.attack_damage += item.damage;
-        if item.health > 0.0 {
-            player.max_health += item.health;
-            player.health += item.health;
-        }
-        if item.mana > 0.0 {
-            player.max_mana += item.mana;
-            player.mana += item.mana;
-        }
-        player.speed += item.speed;
-        player.ability_power += item.ability;
+        self.equip(self.player_index, item, true);
     }
 
     /// Undo a purchase still waiting in the chest: it leaves the delivery
@@ -2312,7 +2315,7 @@ impl AnimatedScene {
         }
         let pi = self.player_index;
         let unit = &mut self.units[pi];
-        unit.attack_cooldown = unit.attack_interval / unit.attack_speed_mult.max(0.1);
+        unit.attack_cooldown = unit.attack_interval / unit.attack_rate();
         let mut damage = unit.attack_damage;
         if unit.ranged_auto {
             damage *= unit.ranged_scale();
@@ -2334,11 +2337,13 @@ impl AnimatedScene {
                 look,
             );
             shot.venom = self.brood_venom(pi).unwrap_or(0.0);
+            shot.basic = true;
             self.projectiles.push(shot);
             self.muzzle_flash(from, look);
             self.play_release_sound(pi, from);
         } else {
             self.melee_slash(pi, target, [255, 235, 200]);
+            self.basic_hit = true;
             self.damage_unit_by(target, damage, 0, Some(pi));
             self.apply_brood_venom(pi, target);
             if pi == self.player_index {
@@ -2467,7 +2472,7 @@ impl AnimatedScene {
             unit.attack_cooldown = unit.attack_cooldown.max(0.2);
             return;
         }
-        let interval = unit.attack_interval / unit.attack_speed_mult.max(0.1);
+        let interval = unit.attack_interval / unit.attack_rate();
         unit.attack_cooldown = interval;
         let strike = PendingStrike {
             target,
@@ -2547,6 +2552,7 @@ impl AnimatedScene {
                 look,
             );
             shot.venom = self.brood_venom(index).unwrap_or(0.0);
+            shot.basic = true;
             self.projectiles.push(shot);
             self.muzzle_flash(from, look);
             self.play_release_sound(index, from);
@@ -2557,6 +2563,7 @@ impl AnimatedScene {
                 _ => [255, 230, 170],
             };
             self.melee_slash(index, strike.target, color);
+            self.basic_hit = true;
             self.damage_unit_by(strike.target, strike.damage, team, Some(index));
             self.apply_brood_venom(index, strike.target);
         }
@@ -3824,13 +3831,15 @@ impl AnimatedScene {
                 self.ping = None;
             }
         }
+        self.gear_tick(dt);
         let pi = self.player_index;
         let player_spawn = self.player_spawn;
         let cooldown_rate = self.team_cooldown_rate(self.units[pi].team);
         {
             let player = &mut self.units[pi];
+            let rate = cooldown_rate * (1.0 + player.item_haste);
             for cd in &mut player.cooldowns {
-                *cd = (*cd - dt * cooldown_rate).max(0.0);
+                *cd = (*cd - dt * rate).max(0.0);
             }
             player.mana = (player.mana + 8.0 * dt).min(player.max_mana);
             if player.health > 0.0 && player.pos.distance(player_spawn) <= 900.0 {
@@ -4295,7 +4304,7 @@ impl AnimatedScene {
                     } else if cooldown <= 0.0 && facing < 0.35 {
                         // Wind-up shortens with attack speed, like the
                         // interval does.
-                        let windup = windup / self.units[pi].attack_speed_mult.max(0.1);
+                        let windup = windup / self.units[pi].attack_rate();
                         self.start_action(pi, false, windup);
                         if windup > 0.0 {
                             self.units[pi].attack_pending = true;
@@ -4894,6 +4903,9 @@ impl AnimatedScene {
         aggressor: Option<usize>,
         hitsplat: HitsplatKind,
     ) {
+        // Whether this is a basic attack's hit: taken first, so no early
+        // return leaves it set for the next hit.
+        let basic = std::mem::take(&mut self.basic_hit);
         if index >= self.units.len() {
             return;
         }
@@ -4919,13 +4931,19 @@ impl AnimatedScene {
         } else {
             physical
         };
-        let team_mult = self.team_damage_mult(attacker_team) * incoming;
+        let gear_mult = self.gear_outgoing_mult(aggressor, index, basic)
+            * self.gear_incoming_mult(index, aggressor);
+        let armor_pen = self.gear_armor_pen(aggressor);
+        let team_mult = self.team_damage_mult(attacker_team) * incoming * gear_mult;
         let (target_kind, camp_buff, respawn_time, killed, amount) = {
             let unit = &mut self.units[index];
             if unit.health <= 0.0 {
                 return;
             }
-            let armor = (unit.armor - unit.armor_reduction).clamp(-80.0, 500.0);
+            let mut armor = (unit.armor - unit.armor_reduction).clamp(-80.0, 500.0);
+            if armor > 0.0 {
+                armor *= 1.0 - armor_pen;
+            }
             let multiplier = armor_damage_multiplier(armor);
             let mut amount = (physical * multiplier + pure) * team_mult;
             if unit.shield > 0.0 {
@@ -4991,6 +5009,9 @@ impl AnimatedScene {
         if index != self.player_index && self.units[index].team == 1 && hero_aggressor {
             // Ping the target on the minimap, like the reference client.
             self.ping = Some((self.units[index].pos, 6.0));
+        }
+        if amount > 0.0 {
+            self.gear_after_damage(aggressor, index, amount, basic);
         }
         if !killed && amount > 0.0 && !self.reflecting {
             self.vengeance_check(index, aggressor, amount);
@@ -5218,6 +5239,7 @@ impl AnimatedScene {
             return;
         }
         let pi = self.player_index;
+        let gold = (gold as f32 * self.gear_bounty(pi)).round() as u32;
         self.units[pi].gold = self.units[pi].gold.saturating_add(gold);
         self.grant_xp(xp);
     }
@@ -5640,7 +5662,15 @@ impl AnimatedScene {
         }
         let damage = damage * self.kit_projectile_taken(index);
         let splashed = damage > 0.0 && self.units[index].shield > 0.0;
+        self.basic_hit = projectile.basic;
+        if projectile.proc_hit {
+            self.gear_depth += 1;
+        }
         self.damage_unit_by(index, damage, projectile.team, projectile.attacker);
+        if projectile.proc_hit {
+            self.gear_depth -= 1;
+        }
+        self.basic_hit = false;
         if let Some(hit) = projectile.spell.as_deref()
             && self.units[index].health > 0.0
         {
@@ -5874,6 +5904,8 @@ impl AnimatedScene {
                 attack_speed_mult: 1.0,
                 talent: crate::talents::TalentMods::default(),
                 attack_speed_timer: 0.0,
+                item_attack_speed: 0.0,
+                item_haste: 0.0,
                 ranged: 0.0,
                 is_champion: false,
                 spawn_delay,
@@ -6932,6 +6964,11 @@ impl AnimatedScene {
 }
 
 impl AnimatedUnit {
+    /// Attack speed multiplier: buffs times items.
+    fn attack_rate(&self) -> f32 {
+        self.attack_speed_mult.max(0.1) * (1.0 + self.item_attack_speed).max(0.2)
+    }
+
     /// Ranged level scaling, matching the OSRS stat panel.
     fn ranged_scale(&self) -> f32 {
         1.0 + self.ranged / 100.0
@@ -7321,6 +7358,8 @@ fn build_unit(
         attack_speed_mult: 1.0,
         talent: crate::talents::TalentMods::default(),
         attack_speed_timer: 0.0,
+        item_attack_speed: 0.0,
+        item_haste: 0.0,
         ranged: 0.0,
         is_champion: kind.is_champion(),
         spawn_delay: 0.0,

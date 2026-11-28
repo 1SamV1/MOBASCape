@@ -360,16 +360,22 @@ fn base() -> HudState {
                 name: "Bronze sword".to_string(),
                 colour: [170, 112, 66],
                 icon: None,
+                active: false,
+                cooldown: 0,
             }),
             Some(InventoryItem {
                 name: "Iron platebody".to_string(),
                 colour: [150, 150, 160],
                 icon: None,
+                active: false,
+                cooldown: 0,
             }),
             Some(InventoryItem {
                 name: "Amulet of fury".to_string(),
                 colour: [210, 170, 60],
                 icon: None,
+                active: false,
+                cooldown: 0,
             }),
             None,
             None,
@@ -632,6 +638,8 @@ fn shop_item(name: &str, price: u32, colour: [u8; 3], stats: &[&str]) -> ShopIte
         owned: false,
         from: Vec::new(),
         into: Vec::new(),
+        effects: Vec::new(),
+        recipe_scroll: false,
     }
 }
 

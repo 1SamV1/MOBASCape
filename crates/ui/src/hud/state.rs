@@ -130,6 +130,10 @@ pub struct InventoryItem {
     pub colour: [u8; 3],
     /// Theme role of the cache-baked inventory icon, when one was made.
     pub icon: Option<String>,
+    /// The item has an active (used with its slot key).
+    pub active: bool,
+    /// Share of the active's cooldown still to run, in percent (0 ready).
+    pub cooldown: u8,
 }
 
 /// One item in the shop's list.
@@ -147,9 +151,15 @@ pub struct ShopItem {
     pub builds_from: Vec<String>,
     /// The full cost; `price` is lower when owned parts make it an upgrade.
     pub full_price: u32,
-    /// Shop section: 0 starter, 1 early, 2 core, 3 late (see
+    /// Shop section: 0 starter, 1 early, 2 core, 3 late, 4 fusion (see
     /// `hud::shop::TIERS`).
     pub tier: u8,
+    /// Passives and the active, as (heading, sentence), drawn wrapped in
+    /// the detail pane.
+    pub effects: Vec<(String, String)>,
+    /// A fusion's recipe scroll: shown only inside its recipe row, never
+    /// as a loose cell.
+    pub recipe_scroll: bool,
     /// The parts this item is made from that are in the same list, as
     /// indices into [`ShopState::items`]. The grid draws them as a recipe
     /// row (`a > b > c` for upgrade ladders, `a + b > c` otherwise).

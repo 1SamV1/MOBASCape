@@ -1,7 +1,9 @@
 use anyhow::{Context, Result};
 use serde::Deserialize;
 
-#[derive(Debug, Clone, Deserialize)]
+use crate::item_effects::{NamedActive, NamedPassive};
+
+#[derive(Debug, Clone, Default, Deserialize)]
 pub struct ItemConfig {
     pub id: String,
     pub name: String,
@@ -11,6 +13,9 @@ pub struct ItemConfig {
     #[serde(default = "default_category")]
     pub category: String,
     pub color: [u8; 3],
+    /// Gold. A fusion's cost is worked out at load: its parts plus its
+    /// recipe (see [`finish_items`]).
+    #[serde(default)]
     pub cost: u32,
     #[serde(default)]
     pub damage: f32,
@@ -22,6 +27,34 @@ pub struct ItemConfig {
     pub speed: f32,
     #[serde(default)]
     pub ability: f32,
+    /// Armor (each point cuts physical damage, 100 armor halves it).
+    #[serde(default)]
+    pub armor: f32,
+    /// Attack speed, in percent.
+    #[serde(default)]
+    pub attack_speed: f32,
+    /// Ability cooldown recovery, in percent.
+    #[serde(default)]
+    pub haste: f32,
+    /// Basic attack reach, in world units.
+    #[serde(default)]
+    pub range: f32,
+    /// What owning it does (docs/ITEMS.md).
+    #[serde(default)]
+    pub passives: Vec<NamedPassive>,
+    /// What using it does, from its bag slot (1-6 with the shop closed).
+    #[serde(default)]
+    pub active: Option<NamedActive>,
+    /// A fusion: these items plus the recipe scroll fuse into this one in
+    /// the bag. It cannot be bought outright.
+    #[serde(default)]
+    pub fuse: Vec<String>,
+    /// What the fusion's recipe scroll costs.
+    #[serde(default)]
+    pub recipe_cost: u32,
+    /// Set at load on the generated recipe scroll: the fusion it unlocks.
+    #[serde(skip)]
+    pub recipe_for: Option<String>,
     /// Shop section override (0 starter .. 3 late); by cost when absent.
     #[serde(default)]
     pub tier: Option<u8>,
@@ -109,14 +142,77 @@ impl ItemConfig {
                     "Press its slot key (1-6) to read".to_string(),
                 ]
             }
-            None => Vec::new(),
+            None => match &self.recipe_for {
+                Some(_) => vec!["Fuses its parts in your bag".to_string()],
+                None => Vec::new(),
+            },
         }
+    }
+
+    /// The stat lines ("+12 damage", "+10% attack speed").
+    pub fn stat_lines(&self) -> Vec<String> {
+        let mut stats = Vec::new();
+        let flat = [
+            (self.damage, "damage"),
+            (self.health, "health"),
+            (self.mana, "mana"),
+            (self.armor, "armor"),
+            (self.speed, "move speed"),
+            (self.range, "range"),
+        ];
+        for (value, label) in flat {
+            if value != 0.0 {
+                stats.push(format!("{value:+.0} {label}"));
+            }
+        }
+        let percent = [
+            (self.ability, "ability power"),
+            (self.attack_speed, "attack speed"),
+            (self.haste, "cooldown recovery"),
+        ];
+        for (value, label) in percent {
+            if value != 0.0 {
+                stats.push(format!("{value:+.0}% {label}"));
+            }
+        }
+        stats
+    }
+
+    /// Passives then the active, as (heading, sentence) pairs:
+    /// ("Passive: Energy drain", "Basic attacks ...").
+    pub fn effect_lines(&self) -> Vec<(String, String)> {
+        let mut lines: Vec<(String, String)> = self
+            .passives
+            .iter()
+            .map(|p| (format!("Passive: {}", p.name), p.effect.describe()))
+            .collect();
+        if let Some(active) = &self.active {
+            lines.push((
+                format!("Active: {} ({:.0} s)", active.name, active.cooldown),
+                active.effect.describe(),
+            ));
+        }
+        lines
+    }
+
+    /// True for an item made only by fusing its parts and recipe.
+    pub fn is_fusion(&self) -> bool {
+        !self.fuse.is_empty()
+    }
+
+    /// True for a fusion's generated recipe scroll.
+    pub fn is_recipe(&self) -> bool {
+        self.recipe_for.is_some()
     }
 
     /// The shop section this item is listed under: the file's `tier` when
     /// given, else by cost (starter up to 500 gold, early up to 1200, core
-    /// up to 3000, late above).
+    /// up to 3000, late above). Fusions and their recipes have their own
+    /// section (4).
     pub fn tier(&self) -> u8 {
+        if self.is_fusion() || self.is_recipe() {
+            return FUSION_TIER;
+        }
         self.tier
             .unwrap_or(match self.cost {
                 0..=500 => 0,
@@ -126,6 +222,71 @@ impl ItemConfig {
             })
             .min(3)
     }
+}
+
+/// The shop section of fusions and recipe scrolls.
+pub const FUSION_TIER: u8 = 4;
+
+/// Cache item drawn for every recipe scroll (a rolled clue scroll).
+pub const RECIPE_OBJ: u32 = 2677;
+
+/// Finish the loaded list: each fusion's cost becomes its parts plus its
+/// recipe, and its recipe scroll is added to the end of the list
+/// (`recipe_<id>`). Fails on unknown, nested or repeated fusion parts.
+pub fn finish_items(items: &mut Vec<ItemConfig>) -> Result<()> {
+    let mut recipes = Vec::new();
+    for i in 0..items.len() {
+        if !items[i].is_fusion() {
+            continue;
+        }
+        let mut total = items[i].recipe_cost;
+        for id in &items[i].fuse {
+            let Some(part) = items.iter().find(|other| &other.id == id) else {
+                anyhow::bail!("{} fuses from unknown item {id}", items[i].id);
+            };
+            if part.is_fusion() || part.id == items[i].id {
+                anyhow::bail!("{} fuses from {id}, another fusion", items[i].id);
+            }
+            total += part.cost;
+        }
+        if items[i].recipe_cost == 0 {
+            anyhow::bail!("{} is a fusion without a recipe_cost", items[i].id);
+        }
+        items[i].cost = total;
+        let fusion = &items[i];
+        recipes.push(ItemConfig {
+            id: format!("recipe_{}", fusion.id),
+            name: format!("{} recipe", fusion.name),
+            obj: Some(RECIPE_OBJ),
+            category: "recipes".to_string(),
+            color: [214, 196, 150],
+            cost: fusion.recipe_cost,
+            damage: 0.0,
+            health: 0.0,
+            mana: 0.0,
+            speed: 0.0,
+            ability: 0.0,
+            armor: 0.0,
+            attack_speed: 0.0,
+            haste: 0.0,
+            range: 0.0,
+            passives: Vec::new(),
+            active: None,
+            fuse: Vec::new(),
+            recipe_cost: 0,
+            recipe_for: Some(fusion.id.clone()),
+            tier: None,
+            builds_from: Vec::new(),
+            thrall: None,
+        });
+    }
+    for recipe in recipes {
+        if items.iter().any(|item| item.id == recipe.id) {
+            anyhow::bail!("{} is generated for a fusion; rename the item", recipe.id);
+        }
+        items.push(recipe);
+    }
+    Ok(())
 }
 
 fn default_category() -> String {
@@ -212,7 +373,7 @@ pub fn parse_recommendations(
     Ok(out)
 }
 
-pub const CATEGORY_LABELS: [&str; 9] = [
+pub const CATEGORY_LABELS: [&str; 10] = [
     "RECOMMENDED",
     "ALL",
     "MELEE",
@@ -222,13 +383,15 @@ pub const CATEGORY_LABELS: [&str; 9] = [
     "JEWELLERY",
     "BOOTS",
     "SCROLLS",
+    "FUSIONS",
 ];
 
 impl ItemShop {
     pub fn load() -> Result<Self> {
         let data = std::fs::read_to_string("data/items/items.json")
             .context("reading data/items/items.json")?;
-        let items: Vec<ItemConfig> = serde_json::from_str(&data)?;
+        let mut items: Vec<ItemConfig> = serde_json::from_str(&data)?;
+        finish_items(&mut items)?;
         validate_recipes(&items)?;
         let recommendations = match std::fs::read_to_string(RECOMMENDED_PATH) {
             Ok(text) => parse_recommendations(&text, &items)?,
@@ -408,6 +571,15 @@ impl ItemShop {
                 price: 0,
             };
         };
+        // A fusion is never bought outright: its price is what the missing
+        // parts and recipe still cost, and nothing is used up by buying.
+        if item.is_fusion() {
+            let missing = self.missing_parts(index);
+            return Upgrade {
+                consumed: Vec::new(),
+                price: missing.iter().map(|&i| self.items[i].cost).sum(),
+            };
+        }
         let mut consumed: Vec<usize> = Vec::new();
         for id in &item.builds_from {
             if let Some(part) = self.index_of(id) {
@@ -433,11 +605,68 @@ impl ItemShop {
             .items
             .iter()
             .enumerate()
-            .filter(|(_, item)| item.builds_from.iter().any(|from| from == id))
+            .filter(|(_, item)| {
+                item.builds_from.iter().any(|from| from == id)
+                    || item.fuse.iter().any(|from| from == id)
+            })
             .map(|(i, _)| i)
             .collect();
+        if let Some(fusion) = self.items[index].recipe_for.as_deref() {
+            into.extend(self.index_of(fusion));
+        }
         into.sort_by_key(|&i| self.items[i].cost);
         into
+    }
+
+    /// What `index` is made from, as item indices: its `builds_from`, or a
+    /// fusion's parts followed by its recipe scroll.
+    pub fn parts_of(&self, index: usize) -> Vec<usize> {
+        let Some(item) = self.items.get(index) else {
+            return Vec::new();
+        };
+        let mut parts: Vec<usize> = item
+            .builds_from
+            .iter()
+            .chain(&item.fuse)
+            .filter_map(|id| self.index_of(id))
+            .collect();
+        if item.is_fusion() {
+            parts.extend(self.index_of(&format!("recipe_{}", item.id)));
+        }
+        parts
+    }
+
+    /// True when some fusion is made from `index`.
+    pub fn is_fusion_part(&self, index: usize) -> bool {
+        let id = self.items[index].id.as_str();
+        self.items
+            .iter()
+            .any(|item| item.fuse.iter().any(|part| part == id))
+    }
+
+    /// A fusion's parts (recipe last) that are not in the bag. Each owned
+    /// copy covers one part, so a recipe naming an item twice needs two.
+    pub fn missing_parts(&self, index: usize) -> Vec<usize> {
+        let mut used: Vec<usize> = Vec::new();
+        let mut missing = Vec::new();
+        for part in self.parts_of(index) {
+            let taken = used.iter().filter(|&&u| u == part).count();
+            if self.owned_count(part) > taken {
+                used.push(part);
+            } else {
+                missing.push(part);
+            }
+        }
+        missing
+    }
+
+    /// The first fusion whose parts and recipe are all in the bag, with
+    /// the parts it uses up.
+    pub fn ready_fusion(&self) -> Option<(usize, Vec<usize>)> {
+        (0..self.items.len())
+            .filter(|&i| self.items[i].is_fusion())
+            .find(|&i| self.missing_parts(i).is_empty())
+            .map(|i| (i, self.parts_of(i)))
     }
 
     /// End the visit once the window is closed: Undo history and the
@@ -501,10 +730,20 @@ impl ItemShop {
             .iter()
             .enumerate()
             .filter(|(_, item)| matches_query(item, &self.query))
-            .filter(|(index, item)| match CATEGORY_LABELS.get(self.category) {
-                Some(&"RECOMMENDED") => self.recommended.contains(index),
-                Some(&"ALL") | None => true,
-                Some(label) => item.category.eq_ignore_ascii_case(label),
+            .filter(|(index, item)| {
+                // A recipe scroll is listed wherever its fusion is.
+                let (index, item) =
+                    match item.recipe_for.as_deref().and_then(|id| self.index_of(id)) {
+                        Some(fusion) => (fusion, &self.items[fusion]),
+                        None => (*index, *item),
+                    };
+                match CATEGORY_LABELS.get(self.category) {
+                    Some(&"RECOMMENDED") => self.recommended.contains(&index),
+                    Some(&"ALL") | None => true,
+                    // Fusions with their parts, so each reads as one row.
+                    Some(&"FUSIONS") => item.is_fusion() || self.is_fusion_part(index),
+                    Some(label) => item.category.eq_ignore_ascii_case(label),
+                }
             })
             .map(|(index, _)| index)
             .collect()
@@ -527,11 +766,26 @@ pub fn matches_query(item: &ItemConfig, query: &str) -> bool {
         ("mana", item.mana),
         ("speed", item.speed),
         ("ability power", item.ability),
+        ("armor", item.armor),
+        ("attack speed", item.attack_speed),
+        ("cooldown haste", item.haste),
+        ("range", item.range),
     ] {
         if value != 0.0 {
             stats.push_str(word);
             stats.push(' ');
         }
+    }
+    for passive in &item.passives {
+        stats.push_str(&passive.name.to_lowercase());
+        stats.push_str(" passive ");
+    }
+    if let Some(active) = &item.active {
+        stats.push_str(&active.name.to_lowercase());
+        stats.push_str(" active ");
+    }
+    if item.is_fusion() || item.is_recipe() {
+        stats.push_str("fusion recipe ");
     }
     query.to_lowercase().split_whitespace().all(|word| {
         name.contains(word)
@@ -545,10 +799,16 @@ pub fn matches_query(item: &ItemConfig, query: &str) -> bool {
 /// upgrade never pays the player.
 pub fn validate_recipes(items: &[ItemConfig]) -> Result<()> {
     for item in items {
+        if item.is_fusion() && !item.builds_from.is_empty() {
+            anyhow::bail!("{} is a fusion and cannot also build from items", item.id);
+        }
         for id in &item.builds_from {
             let Some(part) = items.iter().find(|other| &other.id == id) else {
                 anyhow::bail!("{} builds from unknown item {id}", item.id);
             };
+            if part.is_fusion() || part.is_recipe() {
+                anyhow::bail!("{} builds from {id}, which is only made by fusing", item.id);
+            }
             if part.id == item.id || part.cost >= item.cost {
                 anyhow::bail!("{} builds from {id}, which must cost less", item.id);
             }
@@ -665,6 +925,15 @@ mod tests {
             mana: 0.0,
             speed: 0.0,
             ability: 0.0,
+            armor: 0.0,
+            attack_speed: 0.0,
+            haste: 0.0,
+            range: 0.0,
+            passives: Vec::new(),
+            active: None,
+            fuse: Vec::new(),
+            recipe_cost: 0,
+            recipe_for: None,
             tier: None,
             builds_from: from.iter().map(|s| s.to_string()).collect(),
             thrall: None,
@@ -883,6 +1152,149 @@ mod tests {
             "the dearest of each slot, the next dearest to fill, no starters"
         );
         assert!(shop.popular_build("x", "", "CHEF", 5).is_none());
+    }
+
+    fn shipped_items() -> Vec<ItemConfig> {
+        let path =
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data/items/items.json");
+        let mut items: Vec<ItemConfig> =
+            serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
+        finish_items(&mut items).expect("fusions finish");
+        validate_recipes(&items).expect("recipes");
+        items
+    }
+
+    #[test]
+    fn fusions_cost_their_parts_plus_a_generated_recipe() {
+        let items = shipped_items();
+        let fusions: Vec<&ItemConfig> = items.iter().filter(|i| i.is_fusion()).collect();
+        assert!(fusions.len() >= 12, "a fusion family per class");
+        for fusion in fusions {
+            let parts: u32 = fusion
+                .fuse
+                .iter()
+                .map(|id| items.iter().find(|i| &i.id == id).expect(id).cost)
+                .sum();
+            assert_eq!(fusion.cost, parts + fusion.recipe_cost, "{}", fusion.id);
+            let recipe = items
+                .iter()
+                .find(|i| i.recipe_for.as_deref() == Some(fusion.id.as_str()))
+                .expect("recipe scroll");
+            assert_eq!(recipe.cost, fusion.recipe_cost);
+            assert_eq!(recipe.tier(), FUSION_TIER);
+            assert!(
+                fusion.fuse.len() < 4,
+                "{}: parts and recipe must fit a bag with room to spare",
+                fusion.id
+            );
+            assert!(
+                !fusion.passives.is_empty(),
+                "{}: a fusion has its own passive",
+                fusion.id
+            );
+        }
+    }
+
+    #[test]
+    fn every_rare_item_does_something_beyond_stats() {
+        for item in shipped_items() {
+            let rare = item.tier() >= 3 && item.thrall.is_none() && !item.is_recipe();
+            if rare {
+                assert!(
+                    !item.passives.is_empty() || item.active.is_some(),
+                    "{} is late-game but has no passive or active",
+                    item.id
+                );
+            }
+            for (heading, sentence) in item.effect_lines() {
+                assert!(
+                    !heading.is_empty() && sentence.ends_with('.'),
+                    "{}",
+                    item.id
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn a_fusion_is_bought_part_by_part_and_fuses_when_the_recipe_is_in() {
+        let mut items = vec![item("whip", 4000, &[]), item("tentacle", 1200, &[])];
+        items.push(ItemConfig {
+            fuse: vec!["whip".to_string(), "tentacle".to_string()],
+            recipe_cost: 800,
+            ..item("abyssal_tentacle", 0, &[])
+        });
+        items.push(ItemConfig {
+            category: "armour".to_string(),
+            ..item("plate", 500, &[])
+        });
+        finish_items(&mut items).expect("finish");
+        assert_eq!(items[2].cost, 6000);
+        assert_eq!(items[4].id, "recipe_abyssal_tentacle");
+        let mut shop = ItemShop {
+            items,
+            owned: [None; 6],
+            undo: Vec::new(),
+            open: true,
+            selected: None,
+            category: 2,
+            scroll: 0,
+            query: String::new(),
+            typing: false,
+            recommended: Vec::new(),
+            recommendations: Default::default(),
+        };
+        assert_eq!(shop.parts_of(2), vec![0, 1, 4]);
+        assert_eq!(shop.upgrade(2).price, 6000);
+        assert!(shop.upgrade(2).consumed.is_empty(), "never bought outright");
+        assert_eq!(
+            shop.filtered_items(),
+            vec![0, 1, 2, 4],
+            "the recipe is listed with its melee fusion"
+        );
+        shop.add_owned(0);
+        shop.add_owned(1);
+        assert_eq!(shop.missing_parts(2), vec![4]);
+        assert_eq!(shop.upgrade(2).price, 800);
+        assert!(shop.ready_fusion().is_none());
+        shop.add_owned(4);
+        assert_eq!(shop.ready_fusion(), Some((2, vec![0, 1, 4])));
+        assert!(shop.builds_into(4).contains(&2));
+        shop.category = CATEGORY_LABELS
+            .iter()
+            .position(|&l| l == "FUSIONS")
+            .unwrap();
+        assert_eq!(
+            shop.filtered_items(),
+            vec![0, 1, 2, 4],
+            "parts, fusion and recipe"
+        );
+    }
+
+    #[test]
+    fn fusions_reject_unknown_or_nested_parts() {
+        let fusion = |id: &str, parts: &[&str]| ItemConfig {
+            fuse: parts.iter().map(|s| s.to_string()).collect(),
+            recipe_cost: 100,
+            ..item(id, 0, &[])
+        };
+        assert!(finish_items(&mut vec![fusion("a", &["ghost"])]).is_err());
+        assert!(
+            finish_items(&mut vec![
+                item("x", 10, &[]),
+                fusion("a", &["x"]),
+                fusion("b", &["a"])
+            ])
+            .is_err()
+        );
+        let mut no_recipe = vec![
+            item("x", 10, &[]),
+            ItemConfig {
+                recipe_cost: 0,
+                ..fusion("a", &["x"])
+            },
+        ];
+        assert!(finish_items(&mut no_recipe).is_err());
     }
 
     #[test]

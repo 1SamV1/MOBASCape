@@ -2790,7 +2790,7 @@ impl AnimatedScene {
         let target_pos = self.units[target].pos;
         let (mut damage, ranged, from, level) = {
             let unit = &mut self.units[pi];
-            unit.attack_cooldown = unit.attack_interval / unit.attack_speed_mult.max(0.1);
+            unit.attack_cooldown = unit.attack_interval / unit.attack_rate();
             if unit.cc.disarmed() {
                 return;
             }
@@ -3025,7 +3025,9 @@ impl AnimatedScene {
         if let Some(stun) = slam {
             statuses.push(Status::Stun { duration: stun });
         }
+        self.basic_hit = true;
         self.kit_hit(pi, team, target, damage, &statuses, at, &gfx, false);
+        self.basic_hit = false;
         let dealt = (before - self.units[target].health).max(0.0);
         if lifesteal + heal_pct > 0.0 && dealt > 0.0 {
             let unit = &mut self.units[pi];
@@ -3514,6 +3516,7 @@ impl AnimatedScene {
                     }
                 }
                 let (caster, team) = (shot.caster, shot.team);
+                self.basic_hit = shot.basic;
                 self.kit_hit(
                     caster,
                     team,
@@ -3524,6 +3527,7 @@ impl AnimatedScene {
                     &shot.gfx,
                     shot.pure,
                 );
+                self.basic_hit = false;
                 if !shot.basic {
                     self.chaos_passive(caster, index, shot.from);
                 }

@@ -101,6 +101,29 @@ pub fn draw(
                         );
                     }
                 }
+                // An active on cooldown greys from the top down, and the
+                // slot key shows which number uses it.
+                if item.active {
+                    if item.cooldown > 0 {
+                        let h = cell.h * i32::from(item.cooldown.min(100)) / 100;
+                        list.rect(Rect::new(cell.x, cell.y, cell.w, h), [0.0, 0.0, 0.0, 0.6]);
+                    }
+                    if let Some(font) = small {
+                        let label = (n + 1).to_string();
+                        let colour = if item.cooldown == 0 {
+                            gold_colour
+                        } else {
+                            quiet
+                        };
+                        list.text(
+                            font,
+                            &label,
+                            cell.x + 3 * s,
+                            cell.y + (font.ascent + 2) * s,
+                            colour,
+                        );
+                    }
+                }
             }
             None => {
                 if let Some(font) = small {

@@ -535,13 +535,22 @@ pub fn tooltip(shop: &ItemShop, mouse: (i32, i32)) -> Option<TooltipState> {
     let index = shop.shown()?;
     let item = shop.items.get(index)?;
     let stats = shop_item(item).stats;
+    let effects = item.effect_lines();
+    let mut names: Vec<String> = item.passives.iter().map(|p| p.name.clone()).collect();
+    names.extend(item.active.iter().map(|a| format!("{} (active)", a.name)));
+    let passive = (!names.is_empty()).then(|| names.join(" / "));
+    let text = effects
+        .iter()
+        .map(|(_, sentence)| sentence.as_str())
+        .collect::<Vec<_>>()
+        .join(" ");
     Some(TooltipState {
         title: item.name.clone(),
         // What it costs now: an upgrade's price when parts are owned.
         price: shop.upgrade(index).price,
         stats,
-        passive: None,
-        text: String::new(),
+        passive,
+        text,
         at: mouse,
     })
 }
@@ -703,11 +712,7 @@ pub fn shop(shop: &ItemShop) -> ShopState {
             // Prices and recipe names depend on the bag.
             let mut entry = shop_item(&shop.items[index]);
             entry.price = shop.upgrade(index).price;
-            let parts: Vec<usize> = shop.items[index]
-                .builds_from
-                .iter()
-                .filter_map(|id| shop.items.iter().position(|item| &item.id == id))
-                .collect();
+            let parts: Vec<usize> = shop.parts_of(index);
             entry.builds_from = parts.iter().map(|&i| shop.items[i].name.clone()).collect();
             entry.from = parts.iter().map(|&i| link(i)).collect();
             // Recipe rows link parts that are in this same list.
@@ -743,7 +748,7 @@ pub fn shop(shop: &ItemShop) -> ShopState {
         items,
         selected,
         scroll: shop.scroll,
-        hint: "Owned parts make upgrades cheaper.".to_string(),
+        hint: "Owned parts make upgrades cheaper; recipes fuse in your bag.".to_string(),
         delivery: None,
         sell_price: shown
             .filter(|&index| shop.is_owned(index))
@@ -790,22 +795,7 @@ pub fn delivery_label(pending: usize, state: u8) -> Option<String> {
 }
 
 pub fn shop_item(item: &ItemConfig) -> ShopItem {
-    let mut stats = Vec::new();
-    if item.damage != 0.0 {
-        stats.push(format!("+{:.0} damage", item.damage));
-    }
-    if item.health != 0.0 {
-        stats.push(format!("+{:.0} health", item.health));
-    }
-    if item.mana != 0.0 {
-        stats.push(format!("+{:.0} mana", item.mana));
-    }
-    if item.speed != 0.0 {
-        stats.push(format!("+{:.0} speed", item.speed));
-    }
-    if item.ability != 0.0 {
-        stats.push(format!("+{:.0}% ability power", item.ability));
-    }
+    let mut stats = item.stat_lines();
     stats.extend(item.use_lines());
     ShopItem {
         name: item.name.clone(),
@@ -821,17 +811,35 @@ pub fn shop_item(item: &ItemConfig) -> ShopItem {
         owned: false,
         from: Vec::new(),
         into: Vec::new(),
+        effects: item.effect_lines(),
+        recipe_scroll: item.is_recipe(),
     }
 }
 
 /// The six inventory slots, in order. Purchases fill `ItemShop::owned` from
 /// the first free slot, so empty slots stay empty and shift nothing.
+#[cfg(test)]
 pub fn inventory(shop: &ItemShop) -> Vec<Option<InventoryItem>> {
+    inventory_with(shop, None)
+}
+
+/// [`inventory`] with each active's cooldown read from the match.
+pub fn inventory_with(
+    shop: &ItemShop,
+    animated: Option<&AnimatedScene>,
+) -> Vec<Option<InventoryItem>> {
     shop.owned
         .iter()
         .map(|slot| {
-            slot.and_then(|index| shop.items.get(index))
-                .map(inventory_item)
+            let item = slot.and_then(|index| shop.items.get(index))?;
+            let mut entry = inventory_item(item);
+            if let Some(animated) = animated
+                && let Some((left, full)) = animated.gear_cooldown(animated.player_index, &item.id)
+                && full > 0.0
+            {
+                entry.cooldown = ((left / full).clamp(0.0, 1.0) * 100.0).ceil() as u8;
+            }
+            Some(entry)
         })
         .collect()
 }
@@ -841,6 +849,8 @@ pub fn inventory_item(item: &ItemConfig) -> InventoryItem {
         name: item.name.clone(),
         colour: item.color,
         icon: item.obj.map(|_| format!("icon.item.{}", item.id)),
+        active: item.active.is_some(),
+        cooldown: 0,
     }
 }
 
@@ -1258,6 +1268,7 @@ mod tests {
             tier: None,
             builds_from: Vec::new(),
             thrall: None,
+            ..Default::default()
         };
         let sword = item("sword", 1200, Some(1277));
         let charm = item("charm", 300, None);
@@ -1578,6 +1589,7 @@ mod tests {
             tier: None,
             builds_from: Vec::new(),
             thrall: None,
+            ..Default::default()
         };
         let converted = shop_item(&item);
         assert_eq!(converted.name, "Test blade");
@@ -1624,6 +1636,7 @@ mod tests {
             tier: None,
             builds_from: Vec::new(),
             thrall: None,
+            ..Default::default()
         };
         let catalog = ItemShop {
             items: vec![item("Sword", [1, 2, 3]), item("Shield", [4, 5, 6])],
@@ -1646,6 +1659,8 @@ mod tests {
                 name: "Shield".to_string(),
                 colour: [4, 5, 6],
                 icon: None,
+                active: false,
+                cooldown: 0,
             })
         );
         assert_eq!(slots[1], None);
@@ -1689,6 +1704,7 @@ mod tests {
             tier: None,
             builds_from: Vec::new(),
             thrall: None,
+            ..Default::default()
         };
         let catalog = ItemShop {
             items: vec![item],

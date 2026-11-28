@@ -539,6 +539,7 @@ impl AnimatedScene {
             }
             let rate = self.team_cooldown_rate(self.units[self.bots[b].unit].team);
             let u = &mut self.units[self.bots[b].unit];
+            let rate = rate * (1.0 + u.item_haste);
             for cd in &mut u.cooldowns {
                 *cd = (*cd - dt * rate).max(0.0);
             }

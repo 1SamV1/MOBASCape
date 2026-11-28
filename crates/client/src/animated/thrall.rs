@@ -19,6 +19,8 @@ impl AnimatedScene {
         if self.units[pi].health <= 0.0 {
             return Err("dead");
         }
+        // Thrall Master items (the Book of the dead) raise a stronger one.
+        let spec = &self.gear_thrall(pi, spec);
         let Some(asset) = self.thrall_assets.get(&spec.npc) else {
             return Err("thrall not loaded");
         };

@@ -276,7 +276,7 @@ Cache location: `.cache/osrs-235/cache` by default. Pass `--cache` and
 - Ambient, non-combat scenery creatures (butterflies, monkey-riding pasture
   cows, shore crabs) share the unit renderer but use `UnitKind::Ambient`, team
   2, no health bars, and no targeting or attacks.
-- Six data-driven items in `data/items/items.json`, six inventory slots, gold
+- Data-driven items in `data/items/items.json`, six inventory slots, gold
   spending, hover tooltips, and a fountain-range shop (`B`, then `1`–`6`).
   Passive gold is 8/s and the fountain heals 6% max HP/MP per second within
   900 units. Purchases are client-side in this prototype. Selling refunds
@@ -285,7 +285,10 @@ Cache location: `.cache/osrs-235/cache` by default. Pass `--cache` and
   chest), and the history ends when the shop closes. Upgrades: an item's
   `builds_from` ids (in `items.json`, checked at load by
   `items::validate_recipes`) make it cost the difference when owned, and
-  buying it uses them up; Undo gives them back. No passives yet.
+  buying it uses them up; Undo gives them back. Rare items carry passives
+  and actives (`item_effects.rs`, run by `animated/gear.rs` for the player
+  and bots alike), and fusions are made only by having their parts plus a
+  generated recipe scroll in the bag at once (docs/ITEMS.md).
 - Fog/brush is **client-side** in this prototype. A 192×192 visibility grid is
   computed from allied units/structures, enemy/neutral units outside vision are
   hidden, and brush rectangles hide units unless the player is close. The
